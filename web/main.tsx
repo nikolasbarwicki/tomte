@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Streamdown } from "streamdown";
 import type {
-  Bot,
   BotFile,
+  BotStatus,
+  BotsEvent,
+  BotSummary,
   ContextEvent,
   FilesEvent,
   MemoryEvent,
@@ -25,6 +27,19 @@ type Item =
   | { kind: "routine"; name: string; trigger: string };
 
 const kTokens = (n: number) => `${Math.round(n / 1000)}k`;
+
+/** Clock time for today, weekday within the past week, otherwise the date. */
+const lastMessageTime = (t: number) => {
+  const d = new Date(t);
+  const now = new Date();
+  const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const daysAgo = Math.round((midnight(now) - midnight(d)) / 86_400_000);
+  if (daysAgo === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (daysAgo > 0 && daysAgo < 7) return d.toLocaleDateString([], { weekday: "short" });
+  return d.toLocaleDateString([], { day: "numeric", month: "short", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+};
+
+const STATUS_LABEL: Record<BotStatus, string> = { idle: "Idle", working: "Working…", unseen: "Finished, not seen yet" };
 
 type Info = { cwd: string; cli: string; auth: string };
 
@@ -75,7 +90,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
   const [info, setInfo] = useState<Info>();
-  const [bots, setBots] = useState<Bot[]>([]);
+  const [bots, setBots] = useState<BotSummary[]>([]);
   const [botId, setBotId] = useState<string>();
   const [creating, setCreating] = useState(false);
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -87,22 +102,19 @@ function App() {
   const bottom = useRef<HTMLDivElement>(null);
   const bot = bots.find((b) => b.id === botId);
 
-  const refreshBots = () =>
-    fetch("/api/bots").then(async (r) => {
-      const list: Bot[] = await r.json();
-      setBots(list);
-      if (!list.length) setCreating(true);
-    });
-
   useEffect(() => {
     post("/api/info", {}).then(async (r) => setInfo(await r.json()));
-    refreshBots();
     const es = new EventSource("/api/events");
     es.onmessage = (m) => {
-      const e = JSON.parse(m.data) as ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent;
+      const e = JSON.parse(m.data) as ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent;
       if (e.type === "memory") return setMemory((prev) => ({ ...prev, [e.scope]: e.text }));
       if (e.type === "files") return setFiles(e);
       if (e.type === "routines") return setRoutines(e);
+      if (e.type === "bots") {
+        setBots(e.bots);
+        if (!e.bots.length) setCreating(true);
+        return;
+      }
       if (e.type === "notify") {
         setNotices((prev) => [e, ...prev].slice(0, 50));
         if (Date.now() - e.at < 5_000) {
@@ -116,20 +128,25 @@ function App() {
         setBusy(false);
         setContext(undefined);
         setBotId(e.botId);
-        refreshBots();
         return;
       }
       if (e.type === "context") return setContext(e);
       if (e.type === "session") setContext(undefined);
       if (e.type === "user" || e.type === "update" || e.type === "routine") setBusy(true);
-      if (e.type === "done" || e.type === "error") {
-        setBusy(false);
-        refreshBots();
-      }
+      if (e.type === "done" || e.type === "error") setBusy(false);
       setItems((prev) => reduce(prev, e));
     };
     return () => es.close();
   }, []);
+
+  // A finished turn counts as seen once the open bot's chat is actually on screen.
+  useEffect(() => {
+    if (!botId || bot?.status !== "unseen") return;
+    const markSeen = () => document.visibilityState === "visible" && post("/api/seen", { botId });
+    markSeen();
+    document.addEventListener("visibilitychange", markSeen);
+    return () => document.removeEventListener("visibilitychange", markSeen);
+  }, [botId, bot?.status]);
 
   const openBot = async (id: string) => {
     const r = await post("/api/open", { botId: id });
@@ -156,15 +173,22 @@ function App() {
   return (
     <div className="shell">
     <aside>
-      <button className="new" onClick={() => setCreating(true)} disabled={busy}>
+      <button className="new" onClick={() => setCreating(true)}>
         + New bot
       </button>
       {creating && <NewBot onDone={() => setCreating(false)} canCancel={bots.length > 0} />}
       {bots.map((b) => (
-        <button key={b.id} className={`chat ${b.id === botId ? "active" : ""}`} disabled={busy} onClick={() => openBot(b.id)} title={b.purpose || b.id}>
-          <span>{b.name}</span>
-          {b.purpose && <small className="purpose">{b.purpose}</small>}
-          <small>{new Date(b.lastActive).toLocaleString()}</small>
+        <button key={b.id} className={`chat ${b.status} ${b.id === botId ? "active" : ""}`} onClick={() => openBot(b.id)} title={b.purpose || b.id}>
+          <span className="chat-head">
+            <span className={`status ${b.status}`} title={STATUS_LABEL[b.status]} aria-label={STATUS_LABEL[b.status]} />
+            <span className="name">{b.name}</span>
+            {b.last && (
+              <small className="time" title={new Date(b.last.at).toLocaleString()}>
+                {lastMessageTime(b.last.at)}
+              </small>
+            )}
+          </span>
+          <small className="preview">{b.last ? `${b.last.from === "user" ? "You: " : ""}${b.last.text}` : "No messages yet"}</small>
         </button>
       ))}
       {notices.length > 0 && (

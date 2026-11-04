@@ -28,6 +28,14 @@ export type ContextEvent = { type: "context"; tokens: number; max: number; perce
 /** A specialized agent: a chain of Claude Code sessions (`sessions`, newest last) plus its own memory. */
 export type Bot = { id: string; name: string; purpose: string; createdAt: number; lastActive: number; sessions: string[] };
 
+/** Newest message in a bot's chat transcript. */
+export type LastMessage = { from: "user" | "bot"; text: string; at: number };
+/** `unseen`: the bot finished a turn the user has not looked at yet. */
+export type BotStatus = "idle" | "working" | "unseen";
+export type BotSummary = Bot & { last: LastMessage | null; status: BotStatus };
+/** Every bot for the sidebar, most recently active first; lives outside chat history. */
+export type BotsEvent = { type: "bots"; bots: BotSummary[] };
+
 /** `user`: facts/preferences about the user, shared by all bots. `bot`: how one bot should operate. */
 export type MemoryScope = "user" | "bot";
 

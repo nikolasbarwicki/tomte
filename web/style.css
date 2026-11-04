@@ -3,9 +3,18 @@ body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #f6f6f4; col
 .shell { display: flex; height: 100vh; }
 aside { width: 260px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid #ddd; background: #efefec; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
 aside .new { margin-bottom: 8px; padding: 8px; }
-aside .chat { background: transparent; color: #222; text-align: left; padding: 8px; display: flex; flex-direction: column; border-radius: 8px; }
-aside .chat span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+aside .chat { background: transparent; color: #222; text-align: left; padding: 8px; display: flex; flex-direction: column; gap: 2px; border-radius: 8px; }
 aside .chat small { color: #888; font-size: 11px; }
+.chat-head { display: flex; align-items: center; gap: 6px; }
+.chat-head .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-head .time { flex-shrink: 0; }
+aside .chat .preview { color: #666; padding-left: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+aside .chat.unseen .name, aside .chat.unseen .time { font-weight: 600; color: #222; }
+.status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.status.idle { border: 1.5px solid #bbb; }
+.status.working { background: #d97757; animation: pulse 1.2s ease-in-out infinite; }
+.status.unseen { background: #2f6fde; }
+@keyframes pulse { 50% { opacity: 0.3; } }
 aside .chat:hover, aside .chat.active { background: #e2e2de; }
 .app { flex: 1; display: flex; flex-direction: column; height: 100vh; max-width: 900px; margin: 0 auto; min-width: 0; }
 header { display: flex; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid #ddd; }
@@ -64,7 +73,6 @@ button.deny { background: #888; }
 aside.memory { width: 280px; border-right: none; border-left: 1px solid #ddd; }
 aside.memory h3 { margin: 12px 0 0; font-size: 13px; }
 aside.memory h3:first-child { margin-top: 0; }
-aside .chat small.purpose { color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .newbot { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .newbot input { padding: 6px; font: inherit; border-radius: 6px; border: 1px solid #ccc; }
 .newbot textarea { height: 60px; }
