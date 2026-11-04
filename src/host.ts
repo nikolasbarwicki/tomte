@@ -160,7 +160,7 @@ async function chat(cwdArg?: string, botArg?: string) {
   }
   t.close();
   rl.close();
-  console.log(`resume later with: npx tsx src/host.ts chat ${cwd} ${bot.id}`);
+  console.log(`resume later with: bun src/host.ts chat ${cwd} ${bot.id}`);
 }
 const [cmd, a1, a2] = process.argv.slice(2);
 try {
