@@ -7,6 +7,8 @@ import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { authCommand, installManagedCli, resolveCli, type ResolvedCli } from "./cli.ts";
 import { Thread, type HostDelegate } from "./thread.ts";
+import { botContext, createBot, currentSession, getBot, newSession, touchBot } from "./bots.ts";
+import { getSessionInfo } from "@anthropic-ai/claude-agent-sdk";
 
 const log = (l: string) => console.error(l);
 
@@ -51,10 +53,14 @@ function banner(cli: ResolvedCli, sessionId: string) {
   console.log(`session=${sessionId}`);
 }
 
+/** Acceptance bots keep user memory inside the throwaway workspace, away from the real one. */
+const testBot = (cwd: string, sessionId: string) =>
+  botContext(cwd, getBot(cwd, sessionId) ?? createBot(cwd, "acceptance", "", sessionId), { user: join(cwd, ".host", "user-memory.md") });
+
 async function phaseCreate(cwd: string, sessionId: string) {
   const cli = preflight();
   banner(cli, sessionId);
-  const t = new Thread({ cli, cwd, sessionId, delegate: delegate("yes"), log });
+  const t = new Thread({ cli, cwd, ...testBot(cwd, sessionId), delegate: delegate("yes"), log });
   const r = await t.send("create hello.txt containing hello");
   t.close();
   const file = join(cwd, "hello.txt");
@@ -65,7 +71,7 @@ async function phaseCreate(cwd: string, sessionId: string) {
 async function phaseResume(cwd: string, sessionId: string) {
   const cli = preflight();
   banner(cli, sessionId);
-  const t = new Thread({ cli, cwd, sessionId, resume: true, idleMs: 5 * 60_000, delegate: delegate("notes.txt"), log });
+  const t = new Thread({ cli, cwd, ...testBot(cwd, sessionId), resume: true, idleMs: 5 * 60_000, delegate: delegate("notes.txt"), log });
   const r1 = await t.send("what file did you create?");
   console.log(`answer=${r1.text}`);
   if (!/hello\.txt/.test(r1.text)) throw new Error("resumed answer did not name hello.txt");
@@ -91,9 +97,11 @@ function runPhase(phase: string, cwd: string, sessionId: string) {
 }
 
 
-async function chat(cwdArg?: string, sessionArg?: string) {
+async function chat(cwdArg?: string, botArg?: string) {
   const cli = preflight();
   const cwd = realpathSync(cwdArg ?? process.cwd());
+  const bot = botArg ? getBot(cwd, botArg) : createBot(cwd, "CLI chat");
+  if (!bot) throw new Error(`no bot ${botArg} in ${cwd}`);
   const rl = createInterface({ input: process.stdin, terminal: false });
   const lines: string[] = [];
   const waiters: ((l: string | null) => void)[] = [];
@@ -116,9 +124,11 @@ async function chat(cwdArg?: string, sessionArg?: string) {
       return /^y/i.test(a) ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: "user declined" };
     },
   };
-  const t = new Thread({ cli, cwd, sessionId: sessionArg, resume: !!sessionArg, idleMs: 10 * 60_000, delegate: ui, log: () => {} });
+  const resume = !!(await getSessionInfo(currentSession(bot), { dir: cwd }));
+  const open = (resume: boolean) => new Thread({ cli, cwd, ...botContext(cwd, bot), resume, idleMs: 10 * 60_000, delegate: ui, log: () => {} });
+  let t = open(resume);
   banner(cli, t.sessionId);
-  console.log(`cwd=${cwd}\ncommands: /model <name>  /effort <low|medium|high|max>  /quit`);
+  console.log(`bot=${bot.name}\ncwd=${cwd}\ncommands: /model <name>  /effort <low|medium|high|max>  /new  /quit`);
   while (true) {
     const raw = await ask("\nyou> ");
     if (raw === null || raw.trim() === "/quit") break;
@@ -128,7 +138,13 @@ async function chat(cwdArg?: string, sessionArg?: string) {
     try {
       if (c === "/model" && arg) await t.setModel(arg);
       else if (c === "/effort" && arg) await t.setEffort(arg as Parameters<Thread["setEffort"]>[0]);
-      else {
+      else if (c === "/new") {
+        t.close("new session");
+        newSession(cwd, bot);
+        t = open(false);
+        console.log(`new session started: ${t.sessionId}`);
+      } else {
+        touchBot(cwd, bot);
         process.stdout.write("claude> ");
         await t.send(line, (m) => {
           if (m.type === "stream_event" && m.event.type === "content_block_delta" && m.event.delta.type === "text_delta")
@@ -144,7 +160,7 @@ async function chat(cwdArg?: string, sessionArg?: string) {
   }
   t.close();
   rl.close();
-  console.log(`resume later with: npx tsx src/host.ts chat ${cwd} ${t.sessionId}`);
+  console.log(`resume later with: npx tsx src/host.ts chat ${cwd} ${bot.id}`);
 }
 const [cmd, a1, a2] = process.argv.slice(2);
 try {

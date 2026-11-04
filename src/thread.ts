@@ -1,4 +1,4 @@
-import { appendFileSync, chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -17,6 +17,8 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { cmdExeSpawner, loginShellPath, type ResolvedCli } from "./cli.ts";
+import { appendMemory, readMemory, writeMemory, type MemoryPaths } from "./memory.ts";
+import type { MemoryScope } from "../web/events.ts";
 
 export const APP = "claudebot";
 export const VERSION = "0.1.0";
@@ -42,12 +44,24 @@ export interface ThreadOptions {
   approveAll?: boolean;
   delegate: HostDelegate;
   log?: (line: string) => void;
+  /** Who this thread is; appended to the system prompt. */
+  persona?: string;
+  memory: MemoryPaths;
+  /** Called with a scope's full memory file after the agent changes it. */
+  onMemory?: (scope: MemoryScope, text: string) => void;
 }
 
 const HOST_INSTRUCTIONS = [
   "You are embedded in a local host application.",
   "When you need a decision or information from the user, call the mcp__host__ask_user tool instead of guessing.",
-  "Use mcp__host__remember to persist durable facts the user wants kept.",
+  "",
+  "## Memory",
+  "Two memory files are loaded into this prompt whenever the session opens:",
+  "- user memory (scope \"user\"): shared by every bot. Durable facts about the user: who they are, their background, environment, and general preferences that apply to any task.",
+  "- bot memory (scope \"bot\"): only this bot. How this bot should operate: directions, workflow, rules, output format, tone, priorities and boundaries for its job.",
+  "When the user tells you how to do your work (do/don't, always/never, format, process, style, which tools or sources to use), save it right away with mcp__host__remember scope \"bot\"; do not ask first. When they reveal a durable fact or general preference about themselves, save it with scope \"user\". If unsure whether a preference is general or specific to this bot's job, use \"bot\".",
+  "Write each entry as one concise, self-contained line. Do not save one-off task details or anything already in memory. When a direction changes or contradicts an existing entry, call mcp__host__rewrite_memory with the complete corrected file for that scope instead of appending.",
+  "Mention briefly what you saved.",
   "",
   "## Other coding agents (herdr)",
   "The user runs other coding agents (omp, Claude Code, Codex, …) in herdr, a terminal multiplexer. Messages wrapped in <external-update> are status updates from them, not from the user.",
@@ -135,9 +149,9 @@ export class Thread {
   };
 
   private hostServer() {
-    const cwd = this.o.cwd;
-    const delegate = this.o.delegate;
+    const { delegate, memory, onMemory } = this.o;
     const log = this.log;
+    const scope = z.enum(["user", "bot"]).describe('"user": about the user, shared by all bots; "bot": how this bot should operate');
     return createSdkMcpServer({
       name: "host",
       version: VERSION,
@@ -147,12 +161,21 @@ export class Thread {
           const answer = await delegate.askUser(question);
           return { content: [{ type: "text", text: answer }] };
         }),
-        tool("remember", "Append one line to the workspace memory file.", { line: z.string() }, async ({ line }) => {
-          const dir = join(cwd, ".host");
-          mkdirSync(dir, { recursive: true });
-          appendFileSync(join(dir, "memory.md"), line.replace(/\n/g, " ") + "\n");
-          return { content: [{ type: "text", text: "saved" }] };
+        tool("remember", "Append one line to user or bot memory.", { scope, line: z.string() }, async ({ scope, line }) => {
+          appendMemory(memory[scope], line);
+          onMemory?.(scope, readMemory(memory[scope]));
+          return { content: [{ type: "text", text: `saved to ${scope} memory` }] };
         }),
+        tool(
+          "rewrite_memory",
+          "Replace the whole user or bot memory file, to revise or drop entries. Pass the complete new content, one entry per line.",
+          { scope, text: z.string() },
+          async ({ scope, text }) => {
+            writeMemory(memory[scope], text);
+            onMemory?.(scope, readMemory(memory[scope]));
+            return { content: [{ type: "text", text: `${scope} memory rewritten` }] };
+          },
+        ),
       ],
     });
   }
@@ -176,6 +199,15 @@ export class Thread {
       chmodSync(mcpFile, 0o600);
       extraArgs["mcp-config"] = mcpFile;
     }
+    const section = (title: string, path: string) => {
+      const text = readMemory(path).trim();
+      return text ? `\n\n# ${title}\n${text}` : "";
+    };
+    const append =
+      HOST_INSTRUCTIONS +
+      (this.o.persona ? `\n\n${this.o.persona}` : "") +
+      section("User memory (about the user)", this.o.memory.user) +
+      section("Bot memory (how you operate)", this.o.memory.bot);
     const q = query({
       prompt: inbox,
       options: {
@@ -185,7 +217,7 @@ export class Thread {
         additionalDirectories: this.o.additionalDirectories,
         ...(this.started ? { resume: this.sessionId } : { sessionId: this.sessionId }),
         persistSession: true,
-        systemPrompt: { type: "preset", preset: "claude_code", append: HOST_INSTRUCTIONS },
+        systemPrompt: { type: "preset", preset: "claude_code", append },
         includePartialMessages: true,
         permissionMode: "default",
         canUseTool: this.canUseTool,
@@ -262,6 +294,13 @@ export class Thread {
     if (!this.live) return;
     await this.live.q.applyFlagSettings({ effortLevel: effort });
     this.log(`[host] applyFlagSettings(effortLevel=${effort}) on live query`);
+  }
+
+  /** Context window usage of the live query; undefined while the CLI is not running. */
+  async contextUsage(): Promise<{ tokens: number; max: number; percentage: number } | undefined> {
+    if (!this.live) return undefined;
+    const u = await this.live.q.getContextUsage({ detail: "summary" });
+    return { tokens: u.totalTokens, max: u.rawMaxTokens, percentage: u.percentage };
   }
 
   get isLive() {
