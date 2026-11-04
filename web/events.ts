@@ -13,6 +13,8 @@ export type ServerEvent =
   | { type: "reset"; botId: string }
   /** A fresh Claude Code session started inside the same bot; earlier messages are no longer in context. */
   | { type: "session" }
+  /** A routine's turn starts in this chat; its prompt stays hidden like other host messages. */
+  | { type: "routine"; name: string; trigger: RunTrigger }
   | { type: "compacted"; trigger: "manual" | "auto"; preTokens: number }
   | ContextEvent
   | Notice;
@@ -37,3 +39,21 @@ export type BotFile = { path: string; size: number; mtime: number };
 
 /** Current contents of the open bot's files folder; lives outside chat history. */
 export type FilesEvent = { type: "files"; dir: string; files: BotFile[] };
+
+export type Schedule = { kind: "cron"; expr: string; tz: string } | { kind: "once"; at: number };
+export type RunTrigger = "schedule" | "manual";
+export type RunStatus = "running" | "succeeded" | "failed" | "interrupted" | "skipped";
+export type RoutineRun = {
+  id: string; routineId: string; trigger: RunTrigger; scheduledFor: number | null; status: RunStatus;
+  sessionId: string | null; output: string | null; error: string | null; startedAt: number; finishedAt: number | null;
+};
+export type Routine = {
+  id: string; botId: string; name: string; instruction: string; schedule: Schedule;
+  active: boolean; catchUp: boolean; createdAt: number; updatedAt: number;
+  /** Derived on read from schedule + lastScheduledFor; null when nothing is left to fire. */
+  nextRunAt: number | null;
+  lastRun: RoutineRun | null;
+  running: boolean;
+};
+/** The open bot's routines; lives outside chat history. */
+export type RoutinesEvent = { type: "routines"; botId: string; routines: Routine[] };

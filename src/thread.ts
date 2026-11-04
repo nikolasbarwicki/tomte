@@ -114,6 +114,8 @@ export class Thread {
   private live?: { q: Query; inbox: Inbox; it: AsyncIterator<SDKMessage> };
   private idleTimer?: NodeJS.Timeout;
   private busy = false;
+  /** Set when `close()` lands while `send()` is still opening the query, which `close()` alone cannot reach. */
+  private closedMidSend = false;
   private model?: string;
   private effort?: EffortLevel;
   private readonly roots: string[];
@@ -248,9 +250,11 @@ export class Thread {
   async send(text: string, onEvent?: (m: SDKMessage) => void): Promise<TurnResult> {
     if (this.busy) throw new Error("a turn is already running on this thread");
     this.busy = true;
+    this.closedMidSend = false;
     clearTimeout(this.idleTimer);
     try {
       if (!this.live) await this.open();
+      if (this.closedMidSend) throw new Error("thread closed while opening");
       const { inbox, it } = this.live!;
       inbox.push({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null });
       let out = "";
@@ -309,6 +313,7 @@ export class Thread {
 
   close(reason = "close") {
     clearTimeout(this.idleTimer);
+    if (this.busy) this.closedMidSend = true;
     if (!this.live) return;
     this.live.inbox.end();
     this.live.q.close();
