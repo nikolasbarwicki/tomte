@@ -61,3 +61,26 @@ button.deny { background: #888; }
 .notice small { color: #888; font-size: 11px; }
 .toasts { position: fixed; right: 16px; bottom: 96px; display: flex; flex-direction: column; gap: 8px; width: 300px; }
 .toasts .notice { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); border-color: #d97757; }
+aside.memory { width: 280px; border-right: none; border-left: 1px solid #ddd; }
+aside.memory h3 { margin: 12px 0 0; font-size: 13px; }
+aside.memory h3:first-child { margin-top: 0; }
+aside .chat small.purpose { color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.newbot { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.newbot input { padding: 6px; font: inherit; border-radius: 6px; border: 1px solid #ccc; }
+.newbot textarea { height: 60px; }
+aside.memory pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+header .context { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #888; white-space: nowrap; }
+header .context meter { width: 60px; }
+header .context.high { color: #b3261e; }
+.session { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #888; }
+.session::before, .session::after { content: ""; flex: 1; border-top: 1px dashed #ccc; }
+aside.memory .files { margin-top: 12px; border-top: 1px solid #ddd; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+aside.memory .files h3 { margin: 0; }
+.files-head { display: flex; align-items: center; justify-content: space-between; }
+.file { display: flex; flex-direction: column; background: white; border: 1px solid #e3e3e0; border-radius: 8px; padding: 6px 8px; font-size: 12px; }
+.file .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.file small { color: #888; font-size: 11px; }
+.file-actions { display: flex; gap: 10px; }
+button.link { background: none; color: #b35a3a; padding: 0; font-size: 12px; }
+button.link:hover { text-decoration: underline; }
+button.link.danger { color: #b3261e; }
