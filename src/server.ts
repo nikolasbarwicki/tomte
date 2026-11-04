@@ -21,7 +21,7 @@ if (!cli && !process.env.ANTHROPIC_API_KEY) {
   process.exit(2);
 }
 if (!cli) {
-  console.error("no claude binary resolved; set CLAUDE_PATH or run `npx tsx src/host.ts install-cli`");
+  console.error("no claude binary resolved; set CLAUDE_PATH or run `bun src/host.ts install-cli`");
   process.exit(2);
 }
 const cwd = realpathSync(cwdArg ?? process.cwd());
@@ -306,7 +306,7 @@ const shutdown = () => {
   current?.thread.close("shutdown");
   stopHerdr();
   filesWatcher?.close();
-  if (current) console.log(`reopen with: npm run ui -- ${cwd} ${current.bot.id}`);
+  if (current) console.log(`reopen with: bun run ui ${cwd} ${current.bot.id}`);
   process.exit(0);
 };
 process.on("SIGINT", shutdown);
