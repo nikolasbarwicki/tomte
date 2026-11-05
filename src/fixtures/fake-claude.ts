@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 // Fake Claude Code speaking just enough of the stream-json control protocol for a Thread turn. Point `cli.path` at this file.
 // FAKE_CLAUDE_DIR holds: `messages.jsonl` (one line per user message received, as text) and an optional `hold` file:
-// while it exists, a received user message is not answered, which keeps the turn running.
-import { appendFileSync, existsSync } from "node:fs";
+// while it exists, a received user message is not answered, which keeps the turn running. An optional `result.txt` is the text each turn answers with (default "ok").
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
@@ -23,7 +23,7 @@ for await (const line of createInterface({ input: process.stdin })) {
       type: "result",
       subtype: "success",
       is_error: false,
-      result: "ok",
+      result: existsSync(join(dir, "result.txt")) ? readFileSync(join(dir, "result.txt"), "utf8") : "ok",
       session_id: m.session_id ?? "fake",
       duration_ms: 1,
       duration_api_ms: 1,

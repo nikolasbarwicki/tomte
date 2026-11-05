@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { authCommand, installManagedCli, resolveCli, type ResolvedCli } from "./cli.ts";
 import { installManagedEngine } from "./browser-engine.ts";
 import { Thread, type HostDelegate } from "./thread.ts";
-import { botContext, createBot, currentSession, getBot, newSession, touchBot } from "./bots.ts";
+import { botContext, botFilesPath, createBot, currentSession, getBot, newSession, touchBot } from "./bots.ts";
 import { getSessionInfo } from "@anthropic-ai/claude-agent-sdk";
 
 const log = (l: string) => console.error(l);
@@ -64,7 +64,7 @@ async function phaseCreate(cwd: string, sessionId: string) {
   const t = new Thread({ cli, cwd, ...testBot(cwd, sessionId), delegate: delegate("yes"), log });
   const r = await t.send("create hello.txt containing hello");
   t.close();
-  const file = join(cwd, "hello.txt");
+  const file = join(botFilesPath(cwd, sessionId), "hello.txt");
   if (!existsSync(file)) throw new Error("hello.txt was not created");
   console.log(`result=${r.result.subtype} hello.txt=${JSON.stringify(readFileSync(file, "utf8"))}`);
 }
@@ -85,7 +85,7 @@ async function phaseResume(cwd: string, sessionId: string) {
   );
   t.close();
   if (!r2.toolsUsed.includes("mcp__host__ask_user")) throw new Error("model did not call ask_user");
-  if (!existsSync(join(cwd, "notes.txt"))) throw new Error("file named by the host answer was not created");
+  if (!existsSync(join(botFilesPath(cwd, sessionId), "notes.txt"))) throw new Error("file named by the host answer was not created");
   console.log(`ask_user ok: tools=${r2.toolsUsed.join(",")}`);
 }
 
@@ -180,6 +180,9 @@ try {
       break;
     case "install-browser":
       console.log(`installed ${await installManagedEngine(a1)}`);
+      break;
+    case "browser-smoke":
+      await (await import("./browser-smoke.ts")).runBrowserSmoke();
       break;
     case "auth-status":
     case "auth-login": {
