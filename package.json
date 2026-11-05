@@ -6,6 +6,7 @@
   "scripts": {
     "host": "bun src/host.ts",
     "ui": "bun src/server.ts",
+    "dev": "bun --watch src/server.ts",
     "typecheck": "tsc",
     "test": "bun test"
   },
