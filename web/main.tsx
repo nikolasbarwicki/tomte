@@ -8,6 +8,8 @@ import type {
   BotSummary,
   ContextEvent,
   FilesEvent,
+  Integration,
+  IntegrationsEvent,
   MemoryEvent,
   MemoryScope,
   Notice,
@@ -16,6 +18,8 @@ import type {
   RoutinesEvent,
   ServerEvent,
 } from "./events.ts";
+import { post } from "./api.ts";
+import { Integrations } from "./integrations.tsx";
 import { DAYS, browserZone, describe, fromSchedule, toSchedule, type Preset } from "./schedule.ts";
 
 type Item =
@@ -43,8 +47,6 @@ const STATUS_LABEL: Record<BotStatus, string> = { idle: "Idle", working: "Workin
 
 type Info = { cwd: string; cli: string; auth: string };
 
-const post = (path: string, body: unknown) =>
-  fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 function reduce(items: Item[], e: ServerEvent): Item[] {
   const last = items[items.length - 1];
@@ -99,6 +101,8 @@ function App() {
   const [context, setContext] = useState<ContextEvent>();
   const [files, setFiles] = useState<FilesEvent>({ type: "files", dir: "", files: [] });
   const [routines, setRoutines] = useState<RoutinesEvent>();
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [view, setView] = useState<"chat" | "integrations">("chat");
   const bottom = useRef<HTMLDivElement>(null);
   const bot = bots.find((b) => b.id === botId);
 
@@ -106,7 +110,8 @@ function App() {
     post("/api/info", {}).then(async (r) => setInfo(await r.json()));
     const es = new EventSource("/api/events");
     es.onmessage = (m) => {
-      const e = JSON.parse(m.data) as ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent;
+      const e = JSON.parse(m.data) as ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent | IntegrationsEvent;
+      if (e.type === "integrations") return setIntegrations(e.integrations);
       if (e.type === "memory") return setMemory((prev) => ({ ...prev, [e.scope]: e.text }));
       if (e.type === "files") return setFiles(e);
       if (e.type === "routines") return setRoutines(e);
@@ -149,6 +154,7 @@ function App() {
   }, [botId, bot?.status]);
 
   const openBot = async (id: string) => {
+    setView("chat");
     const r = await post("/api/open", { botId: id });
     if (!r.ok) alert((await r.json()).error);
   };
@@ -176,6 +182,9 @@ function App() {
       <button className="new" onClick={() => setCreating(true)}>
         + New bot
       </button>
+      <button className={`chat ${view === "integrations" ? "active" : ""}`} aria-pressed={view === "integrations"} onClick={() => setView(view === "integrations" ? "chat" : "integrations")}>
+        <span className="name">Integrations</span>
+      </button>
       {creating && <NewBot onDone={() => setCreating(false)} canCancel={bots.length > 0} />}
       {bots.map((b) => (
         <button key={b.id} className={`chat ${b.status} ${b.id === botId ? "active" : ""}`} onClick={() => openBot(b.id)} title={b.purpose || b.id}>
@@ -200,6 +209,10 @@ function App() {
         </section>
       )}
     </aside>
+    {view === "integrations" ? (
+      <Integrations integrations={integrations} />
+    ) : (
+    <>
     <div className="app">
       <header>
         <strong>{bot?.name ?? "claudebot"}</strong>
@@ -268,6 +281,8 @@ function App() {
       {botId && <Files dir={files.dir} files={files.files} />}
       {botId && routines?.botId === botId && <Routines key={botId} botId={botId} routines={routines.routines} />}
     </aside>
+    </>
+    )}
     <div className="toasts">
       {toasts.map((n) => (
         <NoticeView key={`${n.at}-${n.title}`} n={n} />

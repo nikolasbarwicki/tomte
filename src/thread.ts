@@ -8,7 +8,6 @@ import {
   tool,
   type CanUseTool,
   type EffortLevel,
-  type McpServerConfig,
   type PermissionResult,
   type Query,
   type SDKMessage,
@@ -17,6 +16,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { cmdExeSpawner, loginShellPath, type ResolvedCli } from "./cli.ts";
+import type { IntegrationsSource } from "./integrations.ts";
 import { appendMemory, readMemory, writeMemory, type MemoryPaths } from "./memory.ts";
 import type { MemoryScope } from "../web/events.ts";
 
@@ -37,7 +37,8 @@ export interface ThreadOptions {
   /** True when this session id already has a transcript on disk. */
   resume?: boolean;
   additionalDirectories?: string[];
-  externalMcpServers?: Record<string, McpServerConfig>;
+  /** Asked for its session configuration whenever a live query opens, and for a decision on every integration tool call. */
+  integrations?: IntegrationsSource;
   model?: string;
   idleMs?: number;
   /** Run every tool without asking the delegate. */
@@ -111,7 +112,7 @@ export interface TurnResult {
 export class Thread {
   readonly sessionId: string;
   private started: boolean;
-  private live?: { q: Query; inbox: Inbox; it: AsyncIterator<SDKMessage> };
+  private live?: { q: Query; inbox: Inbox; it: AsyncIterator<SDKMessage>; expiresAt?: number };
   private idleTimer?: NodeJS.Timeout;
   private busy = false;
   /** Set when `close()` lands while `send()` is still opening the query, which `close()` alone cannot reach. */
@@ -139,7 +140,16 @@ export class Thread {
   }
 
   private canUseTool: CanUseTool = async (name, input) => {
-    if (this.o.approveAll || name.startsWith("mcp__host__")) return { behavior: "allow", updatedInput: input };
+    if (name.startsWith("mcp__host__")) return { behavior: "allow", updatedInput: input };
+    switch (this.o.integrations?.decide(name)) {
+      case "allow":
+        return { behavior: "allow", updatedInput: input };
+      case "deny":
+        return { behavior: "deny", message: "this tool is switched off in Integrations" };
+      case "ask":
+        return this.o.delegate.approve(name, input, "integration tool");
+    }
+    if (this.o.approveAll) return { behavior: "allow", updatedInput: input };
     const path = input.file_path ?? input.notebook_path ?? input.path;
     if (READ_TOOLS.has(name) || WRITE_TOOLS.has(name)) {
       if (path === undefined || this.inRoots(path)) return { behavior: "allow", updatedInput: input };
@@ -195,9 +205,10 @@ export class Thread {
     const inbox = new Inbox();
     let mcpFile: string | undefined;
     const extraArgs: Record<string, string | null> = {};
-    if (this.o.externalMcpServers && Object.keys(this.o.externalMcpServers).length) {
+    const session = await this.o.integrations?.session();
+    if (session && Object.keys(session.mcpServers).length) {
       mcpFile = join(tmpdir(), `${APP}-mcp-${randomUUID()}.json`);
-      writeFileSync(mcpFile, JSON.stringify({ mcpServers: this.o.externalMcpServers }), { mode: 0o600 });
+      writeFileSync(mcpFile, JSON.stringify({ mcpServers: session.mcpServers }), { mode: 0o600 });
       chmodSync(mcpFile, 0o600);
       extraArgs["mcp-config"] = mcpFile;
     }
@@ -227,7 +238,8 @@ export class Thread {
         settingSources: ["user"],
         mcpServers: { host: this.hostServer() },
         extraArgs,
-        disallowedTools: [],
+        disallowedTools: session?.disallowedTools ?? [],
+        ...(session?.plugins.length ? { plugins: session.plugins } : {}),
         model: this.model,
         env: this.env(),
         stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
@@ -243,8 +255,18 @@ export class Thread {
     }
     if (this.effort) await q.applyFlagSettings({ effortLevel: this.effort });
     this.started = true;
-    this.live = { q, inbox, it: q[Symbol.asyncIterator]() };
+    this.live = { q, inbox, it: q[Symbol.asyncIterator](), expiresAt: session?.expiresAt };
     this.log(`[host] query opened (${this.o.resume ? "resume" : "new"}) session=${this.sessionId}`);
+    await this.reconcileIntegrations();
+  }
+
+  private async reconcileIntegrations() {
+    if (!this.o.integrations || !this.live) return;
+    try {
+      this.o.integrations.reconcile(await this.live.q.mcpServerStatus());
+    } catch (e) {
+      this.log(`[host] mcpServerStatus failed: ${(e as Error).message}`);
+    }
   }
 
   async send(text: string, onEvent?: (m: SDKMessage) => void): Promise<TurnResult> {
@@ -253,6 +275,10 @@ export class Thread {
     this.closedMidSend = false;
     clearTimeout(this.idleTimer);
     try {
+      if (this.live?.expiresAt !== undefined && Date.now() >= this.live.expiresAt) {
+        this.close("integration token expiring");
+        this.closedMidSend = false;
+      }
       if (!this.live) await this.open();
       if (this.closedMidSend) throw new Error("thread closed while opening");
       const { inbox, it } = this.live!;
@@ -274,6 +300,7 @@ export class Thread {
             const detail = "errors" in m ? m.errors.join("; ") : m.result;
             throw new Error(`turn failed (${m.subtype}): ${detail}`);
           }
+          await this.reconcileIntegrations();
           return { result: m, text: m.result || out, toolsUsed };
         }
       }

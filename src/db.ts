@@ -42,12 +42,47 @@ CREATE TABLE IF NOT EXISTS bot_activity (
 );
 `;
 
+const SCHEMA_V3 = `
+CREATE TABLE IF NOT EXISTS integrations (
+  id TEXT PRIMARY KEY,
+  catalog_id TEXT,                     -- NULL for custom servers
+  name TEXT NOT NULL UNIQUE,           -- the MCP server name: mcp__<name>__<tool>
+  transport TEXT NOT NULL,             -- JSON Transport, never a secret
+  auth TEXT NOT NULL,                  -- JSON Auth, never a secret
+  enabled INTEGER NOT NULL DEFAULT 1,
+  state TEXT NOT NULL CHECK (state IN ('disconnected','connected','needs-auth','failed')),
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS integration_tools (
+  integration_id TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+  tool_name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  read_only INTEGER NOT NULL,
+  destructive INTEGER NOT NULL,
+  policy TEXT NOT NULL CHECK (policy IN ('off','ask','auto')),
+  last_seen INTEGER NOT NULL,
+  PRIMARY KEY (integration_id, tool_name)
+);
+`;
+
+const SCHEMA_V4 = `
+CREATE TABLE IF NOT EXISTS integration_skills (
+  integration_id TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+  skill_name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (integration_id, skill_name)
+);
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
   db.run("PRAGMA foreign_keys = ON");
   const { user_version } = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!;
-  const migrations = [SCHEMA_V1, SCHEMA_V2];
+  const migrations = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;
     db.transaction(() => {

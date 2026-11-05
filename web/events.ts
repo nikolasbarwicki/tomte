@@ -65,3 +65,27 @@ export type Routine = {
 };
 /** The open bot's routines; lives outside chat history. */
 export type RoutinesEvent = { type: "routines"; botId: string; routines: Routine[] };
+
+export type ToolPolicy = "off" | "ask" | "auto";
+export type ConnState = "disconnected" | "connected" | "needs-auth" | "failed";
+export type IntegrationTransport = ({ type: "http" | "sse"; url: string } | { type: "stdio"; command: string; args: string[]; envKeys: string[] }) & {
+  /** Absolute path of a local folder of skills; custom integrations only. */
+  skillsDir?: string;
+};
+/** An OAuth client the user registers with the provider, because the provider rejects dynamic registration. */
+export type OwnClient = { appLabel: string; steps: string[]; scope?: string };
+export type IntegrationAuth =
+  | { kind: "none" }
+  | { kind: "bearer"; tokenLabel?: string; tokenUrl?: string; ownClient?: OwnClient }
+  | { kind: "oauth"; client: "dcr"; alternative?: { tokenLabel: string; tokenUrl: string } }
+  | { kind: "oauth"; client: "own"; ownClient: OwnClient; alternative?: undefined };
+export type IntegrationTool = {
+  name: string; description: string; readOnly: boolean; destructive: boolean; policy: ToolPolicy; lastSeen: number;
+};
+export type IntegrationSkill = { name: string; description: string; enabled: boolean };
+export type Integration = {
+  id: string; catalogId: string | null; label: string; note?: string; name: string; transport: IntegrationTransport; auth: IntegrationAuth; redirectUrl: string;
+  enabled: boolean; state: ConnState; error: string | null; tools: IntegrationTool[]; skills: IntegrationSkill[]; skillsError?: string; createdAt: number; updatedAt: number;
+};
+/** Every integration for the Integrations screen; global, lives outside chat history. */
+export type IntegrationsEvent = { type: "integrations"; integrations: Integration[] };
