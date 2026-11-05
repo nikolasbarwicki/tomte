@@ -15,6 +15,10 @@ import { createLiveView, LIVE_VIEW_PATH, type LiveViewOptions } from "./browser/
 import { sandboxStatus, type SandboxStatus } from "./browser/sandbox.ts";
 import { BROWSER_ENDPOINT_PATH, createBrowserEndpoint, type BrowserEndpoint } from "./browser/endpoint.ts";
 import { createEgressProxy } from "./browser/egress-proxy.ts";
+import { createHumanWaits } from "./browser/human-waits.ts";
+import { Takeover } from "./browser/takeover.ts";
+import { CREDENTIAL_EXCHANGE_PATH, createBrowserLogin } from "./browser/login.ts";
+import { BROWSER_UI_PATHS, createBrowserUiRoutes } from "./browser/ui-routes.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./browser/runtime.ts";
 import { Thread, type TurnResult } from "./thread.ts";
 import { botContext, botFilesPath, botMemoryPath, createBot, currentSession, getBot, listBots, newSession, setBrowserEnabled, setBrowserHeaded, touchBot } from "./bots.ts";
@@ -49,6 +53,8 @@ export interface HostServerOptions {
   sandbox?: () => SandboxStatus;
   /** Pacing overrides for the browser live view. */
   liveView?: Pick<LiveViewOptions, "maxFps" | "retryMs">;
+  /** How long the user may hold a bot's browser without input before control ends; 30 minutes when omitted. */
+  takeoverInactivityMs?: number;
 }
 
 export interface HostServer {
@@ -79,9 +85,21 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         if (!res.headersSent) res.writeHead(500);
         res.end();
       });
+    if (path === CREDENTIAL_EXCHANGE_PATH)
+      return void browserLogin.handle(req, res, port).catch((e) => {
+        console.error(`[browser] credential exchange failed: ${(e as Error).message}`);
+        if (!res.headersSent) res.writeHead(500);
+        res.end();
+      });
     if (path === LIVE_VIEW_PATH)
       return void liveView.handle(req, res).catch((e) => {
         console.error(`[browser] live view failed: ${(e as Error).message}`);
+        if (!res.headersSent) res.writeHead(500);
+        res.end();
+      });
+    if (BROWSER_UI_PATHS.has(path))
+      return void browserUi(req, res, path).catch((e) => {
+        console.error(`[browser] ui route failed: ${(e as Error).message}`);
         if (!res.headersSent) res.writeHead(500);
         res.end();
       });
@@ -112,14 +130,29 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   await egress.start();
   const browserRuntimes = createBrowserRuntimes(secrets, egress, { ...o.browser, headed: (botId) => getBot(cwd, botId)?.browser.headed ?? false });
   browserRuntimes.start();
+  const waits = createHumanWaits({
+    emit: (botId, e) => {
+      const chat = chats.get(botId);
+      if (chat) emit(chat, e);
+    },
+    deliver: (botId, text) => void deliver(botId, text),
+  });
+  const takeover = new Takeover({ runtimes: browserRuntimes, waits, deliver: (botId, text) => void deliver(botId, text), inactivityMs: o.takeoverInactivityMs });
+  const credentials = createCredentials({ db, secrets: secrets, onChange: () => broadcast(credentialsEvent()) });
+  const browserLogin = createBrowserLogin({ credentials, secrets, waits, botName: (botId) => getBot(cwd, botId)?.name ?? "A bot", exchangeUrl: () => `http://127.0.0.1:${port}${CREDENTIAL_EXCHANGE_PATH}` });
+  const unattended = (botId: string) => !!chats.get(botId)?.routineTurn || headlessRuns.has(botId);
   const browserEndpoint = createBrowserEndpoint({
+    takeover,
+    login: browserLogin,
+    unattended,
     port: () => port,
     isEnabled: (botId) => (getBot(cwd, botId)?.browser.enabled ?? false) && sandboxOf().status === "available",
     runtimes: browserRuntimes,
     filesDir: (botId) => botFilesPath(cwd, botId),
     egress,
   });
-  const liveView = createLiveView({ ...o.liveView, port: () => port, isEnabled: (botId) => getBot(cwd, botId)?.browser.enabled ?? false, runtimes: browserRuntimes });
+  const liveView = createLiveView({ ...o.liveView, port: () => port, isEnabled: (botId) => getBot(cwd, botId)?.browser.enabled ?? false, runtimes: browserRuntimes, takeover });
+  const browserUi = createBrowserUiRoutes({ port: () => port, isEnabled: (botId) => getBot(cwd, botId)?.browser.enabled ?? false, takeover, waits, liveView });
   const hostServers = (botId: string) => browserEndpoint.lease(botId);
 
   const clients = new Set<ServerResponse>();
@@ -140,6 +173,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     pending: Map<string, (value: string) => void>;
     /** Integration or bot settings changed during a turn; the thread reopens once the turn ends. */
     configStale: boolean;
+    /** Host messages for the bot (a human wait's outcome) that start the next turn once the bot is free. */
+    inbox: string[];
   };
   const chats = new Map<string, Chat>();
   /** The chat shown in the UI. */
@@ -154,7 +189,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
 
   /** Closes a chat that is neither shown nor running; its session resumes from disk when the bot is opened again. */
   function release(chat: Chat) {
-    if (chat === current || chat.busy) return;
+    if (chat === current || chat.busy || chat.inbox.length) return;
     chat.thread.close("released");
     chats.delete(chat.bot.id);
   }
@@ -235,7 +270,24 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       if (chat) void runRoutine(chat, item);
       else startHeadless(item);
     }
+    for (const chat of chats.values()) {
+      if (!chat.inbox.length || chat.busy || headlessRuns.has(chat.bot.id)) continue;
+      void turn(chat, chat.inbox.splice(0).join("\n\n"));
+    }
     if (current) await narrate(current);
+  }
+
+  /** Sends a host message into a bot's session: queued while the bot is busy, and the session reopens if it is closed. */
+  async function deliver(botId: string, text: string) {
+    const bot = getBot(cwd, botId);
+    if (!bot) return;
+    let chat = chats.get(botId);
+    if (!chat) {
+      const t = await transcript(bot);
+      chat = chats.get(botId) ?? createChat(bot, t);
+    }
+    chat.inbox.push(text);
+    await drain();
   }
 
   async function runRoutine(chat: Chat, item: QueuedRoutine) {
@@ -268,7 +320,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     },
   });
   const integrationsEvent = (): IntegrationsEvent => ({ type: "integrations", integrations: integrations.list() });
-  const credentials = createCredentials({ db, secrets: secrets, onChange: () => broadcast(credentialsEvent()) });
   const credentialsEvent = (): CredentialsEvent => ({ type: "credentials", credentials: credentials.list() });
   const routinesEvent = (chat: Chat): RoutinesEvent => ({ type: "routines", botId: chat.bot.id, routines: routines.list(chat.bot.id) });
 
@@ -437,9 +488,10 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   }
 
   function createChat(bot: Bot, { history, hasSession }: Transcript): Chat {
+    history.push(...waits.pending(bot.id));
     const headless = headlessRuns.get(bot.id);
     if (headless) history.push({ type: "info", text: `routine "${headless}" is running in the background; its reply appears here when it finishes` });
-    const chat: Chat = { bot, history, busy: false, routineTurn: false, pending: new Map(), configStale: false, thread: openThread(bot, hasSession, () => chat) };
+    const chat: Chat = { bot, history, busy: false, routineTurn: false, pending: new Map(), configStale: false, inbox: [], thread: openThread(bot, hasSession, () => chat) };
     chats.set(bot.id, chat);
     return chat;
   }
@@ -600,6 +652,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         newSession(cwd, chat.bot);
         chat.thread = openThread(chat.bot, false, () => chat);
         emit(chat, { type: "session" });
+        takeover.cancelBot(chat.bot.id, "a new session started");
         return json(res, { ok: true });
       }
       case "/api/files/delete": {

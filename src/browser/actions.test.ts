@@ -158,7 +158,7 @@ describe("tools", () => {
   test("schemas expose no profile, path, state, proxy, headed or flag fields", async () => {
     const { tools } = await client.listTools();
     const fields = tools.flatMap((t) => Object.keys((t.inputSchema as { properties?: object }).properties ?? {}));
-    expect(new Set(fields)).toEqual(new Set(["url", "interactive_only", "selector", "ref", "text", "key", "value", "direction", "action", "tab"]));
+    expect(new Set(fields)).toEqual(new Set(["url", "interactive_only", "selector", "ref", "text", "key", "value", "direction", "action", "tab", "reason", "entry"]));
     await closeAll();
   });
 

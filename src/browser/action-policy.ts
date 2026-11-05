@@ -28,6 +28,9 @@ export const ALLOWED_ACTIONS = [
   "tab_close",
   "back",
   "stream_status",
+  // `auth login` is checked as `auth_login`, and again for the credential plugin it asks.
+  "auth_login",
+  "plugin:claudebot:credential.read",
 ] as const;
 
 /** Spelled out as well, so the intent survives someone widening the allow list. */

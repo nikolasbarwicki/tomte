@@ -15,7 +15,10 @@ import { removeBotBrowser } from "./cleanup.ts";
 import { createBrowserEndpoint } from "./endpoint.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
 import { sessionName } from "./engine-cli.ts";
+import { createBrowserLogin } from "./login.ts";
+import { createHumanWaits } from "./human-waits.ts";
 import { isAlive } from "./process.ts";
+import { Takeover } from "./takeover.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./runtime.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "fixtures", "fake-agent-browser.ts");
@@ -274,14 +277,21 @@ describe("sign out and bot deletion", () => {
     const credentials = createCredentials({ db: migrate(new Database(":memory:")), secrets: memorySecrets() });
     const entry = await credentials.add({ label: "GH", signInUrl: "https://github.com/login", username: "me", password: "pw-pw-pw" });
     credentials.grant(BOT, entry.id);
-    const endpoint = createBrowserEndpoint({ port: () => 1, isEnabled: () => true, runtimes: rt, filesDir: () => root, egress: stubEgress() });
+    const waits = createHumanWaits({ emit() {}, deliver: (_botId, text) => void delivered.push(text) });
+    const delivered: string[] = [];
+    const takeover = new Takeover({ runtimes: rt, waits, deliver: (_botId, text) => void delivered.push(text) });
+    const endpoint = createBrowserEndpoint({ port: () => 1, isEnabled: () => true, runtimes: rt, filesDir: () => root, egress: stubEgress(), takeover, login: createBrowserLogin({ credentials, secrets: memorySecrets(), waits, botName: () => "bot", exchangeUrl: () => "http://127.0.0.1:1/x" }), unattended: () => false });
     const token = endpoint.lease(BOT).servers[0].token;
     const rejected = () => fetch(`http://127.0.0.1:1/x`).catch(() => undefined);
     await rt.forBot(BOT).call(["open", "https://a.test"]);
     saveState();
     expect(credentials.hasGrant(BOT, entry.id)).toBe(true);
 
-    await removeBotBrowser({ endpoint, runtimes: rt, credentials }, BOT);
+    takeover.request(BOT, "solve the CAPTCHA");
+    await removeBotBrowser({ endpoint, runtimes: rt, takeover, credentials }, BOT);
+    expect(delivered.join("\n")).toContain("cancelled");
+    expect(waits.pending(BOT)).toEqual([]);
+    expect(rt.forBot(BOT).controlHeld()).toBe(false);
 
     expect(closedSessions()).toEqual([sessionName(BOT)]);
     expect(existsSync(statePath())).toBe(false);

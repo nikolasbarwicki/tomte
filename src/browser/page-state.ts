@@ -19,6 +19,11 @@ export class PageState {
     return snapshot.replace(REF_IN_TEXT, (_, ref) => `ref=r${revision}.${ref}`);
   }
 
+  /** The page changed without a snapshot reaching the bot (a sign-in): refs it holds are stale from now on. */
+  invalidate() {
+    this.revision++;
+  }
+
   /** The engine's `@ref` for a ref from the latest snapshot; any other ref is stale. */
   engineRef(ref: string): string {
     const m = REF_ARG.exec(ref);

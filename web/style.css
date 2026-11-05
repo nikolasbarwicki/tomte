@@ -152,3 +152,14 @@ aside.memory .routines h3 { margin: 0; }
 .browser-tabs span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .browser-tabs span.active { color: #111; font-weight: 600; }
 .browser-placeholder { padding: 16px 8px; border: 1px dashed #ccc; border-radius: 6px; text-align: center; }
+
+.browser-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+.browser-controls label { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.browser-controls button { font-size: 12px; padding: 2px 8px; }
+.browser-takeover { display: flex; gap: 8px; align-items: center; }
+.browser-stage { outline: none; line-height: 0; }
+.browser-stage.user { box-shadow: 0 0 0 2px #2d7ff9; border-radius: 6px; cursor: crosshair; }
+.browser-stage.user .browser-frame { touch-action: none; user-select: none; }
+.browser-error { color: #b00020; }
+.card.wait.takeover { background: #eef5ff; border-color: #9cc2ff; }
+.card button.primary, .browser-takeover button.primary { background: #2d7ff9; color: #fff; border: 0; border-radius: 6px; padding: 4px 12px; }

@@ -6,6 +6,9 @@ export type ServerEvent =
   | { type: "ask"; id: string; question: string }
   | { type: "approve"; id: string; tool: string; reason: string; input: string }
   | { type: "answered"; id: string; value: string }
+  /** The bot asked the user for something and is waiting for an answer; `wait_resolved` closes the card. */
+  | { type: "wait"; id: string; kind: string; title: string; detail?: string; actions: WaitAction[] }
+  | { type: "wait_resolved"; id: string; label: string }
   | { type: "done" }
   | { type: "error"; message: string }
   | { type: "info"; text: string }
@@ -18,6 +21,9 @@ export type ServerEvent =
   | { type: "compacted"; trigger: "manual" | "auto"; preTokens: number }
   | ContextEvent
   | Notice;
+
+/** One button on a wait card. */
+export type WaitAction = { id: string; label: string };
 
 /** External update from herdr or an omp hook; lives outside chat history. */
 export type Notice = { type: "notify"; source: string; title: string; body: string; at: number };
@@ -107,4 +113,6 @@ export type LiveMessage =
   | { type: "frame"; data: string; width: number; height: number }
   | { type: "url"; url: string }
   | { type: "tabs"; tabs: { id: string; title: string; url: string; active: boolean }[] }
-  | { type: "status"; viewport: { width: number; height: number } };
+  | { type: "status"; viewport: { width: number; height: number } }
+  /** Who may act in the browser: the bot, the user once granted, or `draining` while the bot's last call finishes. */
+  | { type: "control"; holder: "bot" | "draining" | "user" };

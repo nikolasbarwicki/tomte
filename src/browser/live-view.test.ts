@@ -138,7 +138,7 @@ describe("live view", () => {
     const view = await watch(id);
     expect(view.res.status).toBe(200);
     expect(view.res.headers.get("content-type")).toBe("text/event-stream");
-    expect(await view.next()).toEqual([{ type: "state", state: "stopped" }]);
+    expect(await view.next(2)).toEqual([{ type: "control", holder: "bot" }, { type: "state", state: "stopped" }]);
     await Bun.sleep(200);
     expect(calls()).toBe(false);
   });
@@ -146,7 +146,7 @@ describe("live view", () => {
   test("the stream resumes when the browser starts, and relays frame, url, tabs and status only", async () => {
     const id = await enabledBot();
     const view = await watch(id);
-    expect(await view.next()).toEqual([{ type: "state", state: "stopped" }]);
+    expect(await view.next(2)).toEqual([{ type: "control", holder: "bot" }, { type: "state", state: "stopped" }]);
 
     await startBrowser(id);
     await until(() => sockets.size === 1);

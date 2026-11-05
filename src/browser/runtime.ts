@@ -11,6 +11,8 @@ import { chromePid, engineTree, isAlive, killTree, readPid, waitForExit } from "
 
 const KEY_SECRET = "browser-encryption-key";
 
+export const USER_HAS_CONTROL = "user has control";
+
 /** The engine or Chrome is missing, so no browser call can run. */
 export class BrowserUnavailable extends Error {}
 
@@ -34,7 +36,7 @@ export interface BrowserRuntimeOptions {
 /** One bot's browser. It has no engine session until the first call. */
 export interface BotBrowser {
   /** Runs an engine command in this bot's session and returns its data; throws `EngineError` or `BrowserUnavailable`. */
-  call(command: string[]): Promise<unknown>;
+  call(command: string[], options?: { env?: Record<string, string> }): Promise<unknown>;
   /** Runs one whole tool call as the bot's only browser call; refused with "previous browser call still running" if the lane stays busy. */
   exclusive<T>(job: () => Promise<T>): Promise<T>;
   /** Counts browser restarts the runtime has seen; element refs from an earlier generation are stale. */
@@ -45,6 +47,13 @@ export interface BotBrowser {
   active(): boolean;
   /** The engine's live stream port for a started session; undefined when the session was never started. Never starts a browser. */
   streamPort(): Promise<number | undefined>;
+  /** The user takes the browser: new bot calls are refused with "user has control" from now on; a call already running is unaffected. */
+  holdControl(): void;
+  /** Resolves once no bot call is running or waiting, so the user can act without a bot call interleaving. Throws `EngineError` if a call outlives its deadline. */
+  awaitIdle(): Promise<void>;
+  /** Returns the browser to the bot. True if any bot call was refused while the user held it. */
+  releaseControl(): boolean;
+  controlHeld(): boolean;
 }
 
 export interface BrowserRuntimes {
@@ -73,6 +82,9 @@ interface BotState {
   /** Daemon and Chrome pids at the last call; a change means the browser went away and came back. */
   fingerprint?: string;
   restoreWarned: boolean;
+  /** The user holds the browser; bot calls are refused. */
+  held: boolean;
+  refused: boolean;
 }
 
 /** The engine key is generated once and lives in the secret store; it is never written to disk. */
@@ -98,7 +110,7 @@ export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy,
 
   const state = (botId: string): BotState => {
     let s = bots.get(botId);
-    if (!s) bots.set(botId, (s = { lane: new Lane(), live: false, lastUsed: now(), restarts: 0, notices: [], restoreWarned: false }));
+    if (!s) bots.set(botId, (s = { lane: new Lane(), live: false, lastUsed: now(), restarts: 0, notices: [], restoreWarned: false, held: false, refused: false }));
     return s;
   };
 
@@ -148,8 +160,9 @@ export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy,
     return runEngine(await launch(), botId, command, timeoutMs);
   }
 
-  async function call(botId: string, command: string[]) {
+  async function call(botId: string, command: string[], extraEnv?: Record<string, string>) {
     const l = await launch(botId);
+    if (extraEnv) l.env = { ...l.env, ...extraEnv };
     const s = state(botId);
     s.live = true;
     try {
@@ -198,7 +211,7 @@ export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy,
 
   async function closeIdle() {
     for (const [botId, s] of bots) {
-      if (!s.live || s.lane.busy || now() - s.lastUsed < idleMs) continue;
+      if (!s.live || s.held || s.lane.busy || now() - s.lastUsed < idleMs) continue;
       // Refused at once if a call slipped in since the check.
       await s.lane.run(() => closeBrowser(botId, "was closed after sitting idle"), 0).catch((e) => {
         if (!(e instanceof EngineError)) throw e;
@@ -240,8 +253,30 @@ export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy,
     forBot(botId) {
       const s = state(botId);
       return {
-        call: (command) => call(botId, command),
-        exclusive: (job) => s.lane.run(job, laneWaitMs),
+        call: (command, options) => call(botId, command, options?.env),
+        exclusive: async (job) => {
+          // Checked again once the call reaches the front of the lane: a takeover may have started while it queued.
+          const refuse = () => {
+            if (!s.held) return;
+            s.refused = true;
+            throw new EngineError(USER_HAS_CONTROL);
+          };
+          refuse();
+          return s.lane.run(async () => {
+            refuse();
+            return job();
+          }, laneWaitMs);
+        },
+        holdControl: () => void (s.held = true),
+        awaitIdle: () => s.lane.run(async () => {}, timeoutMs + laneWaitMs),
+        releaseControl() {
+          const refused = s.refused;
+          s.held = false;
+          s.refused = false;
+          s.lastUsed = now();
+          return refused;
+        },
+        controlHeld: () => s.held,
         generation: () => s.restarts,
         takeNotice: () => s.notices.splice(0).join("\n") || undefined,
         active: () => s.live,

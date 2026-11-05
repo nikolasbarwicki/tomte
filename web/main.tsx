@@ -19,6 +19,7 @@ import type {
   RoutineRun,
   RoutinesEvent,
   ServerEvent,
+  WaitAction,
 } from "./events.ts";
 import { post } from "./api.ts";
 import { BrowserPanel } from "./browser-panel.tsx";
@@ -31,6 +32,7 @@ type Item =
   | { kind: "tool"; name: string; input: string }
   | { kind: "ask"; id: string; question: string; answer?: string }
   | { kind: "approve"; id: string; tool: string; reason: string; input: string; answer?: string }
+  | { kind: "wait"; id: string; waitKind: string; title: string; detail?: string; actions: WaitAction[]; resolved?: string }
   | { kind: "session" }
   | { kind: "routine"; name: string; trigger: string };
 
@@ -72,6 +74,10 @@ function reduce(items: Item[], e: ServerEvent): Item[] {
       return [...items, { kind: "approve", id: e.id, tool: e.tool, reason: e.reason, input: e.input }];
     case "answered":
       return items.map((i) => ((i.kind === "ask" || i.kind === "approve") && i.id === e.id ? { ...i, answer: e.value } : i));
+    case "wait":
+      return [...items, { kind: "wait", id: e.id, waitKind: e.kind, title: e.title, detail: e.detail, actions: e.actions }];
+    case "wait_resolved":
+      return items.map((i) => (i.kind === "wait" && i.id === e.id ? { ...i, resolved: e.label } : i));
     case "error":
       return [...items, { kind: "error", text: e.message }];
     case "info":
@@ -245,23 +251,6 @@ function App() {
           Browser
           {browserUnavailable && <small>unavailable: {browserUnavailable}</small>}
         </label>
-        {bot?.browser.enabled && (
-          <>
-            <label className="browser-switch" title="Show the browser window on this computer; (restarts the browser)">
-              <input type="checkbox" checked={bot.browser.headed} onChange={(e) => post("/api/bots/browser/headed", { botId: bot.id, headed: e.target.checked })} />
-              Show browser window
-            </label>
-            <button title="Close the browser; saved logins are kept" onClick={() => post("/api/bots/browser/restart", { botId: bot.id })}>
-              Restart browser
-            </button>
-            <button
-              title="Close the browser and delete its saved logins"
-              onClick={() => confirm(`Sign ${bot.name} out of everything? Its saved logins will be deleted.`) && post("/api/bots/browser/sign-out", { botId: bot.id })}
-            >
-              Sign out of everything
-            </button>
-          </>
-        )}
         <select defaultValue="" onChange={(e) => e.target.value && post("/api/model", { model: e.target.value })}>
           <option value="">model…</option>
           <option value="opus">opus</option>
@@ -318,7 +307,7 @@ function App() {
       <h3>{bot ? `How ${bot.name} works` : "Bot memory"}</h3>
       <p className="meta">Only this bot</p>
       {memory.bot ? <pre>{memory.bot}</pre> : <p className="meta">No directions yet.</p>}
-      {bot?.browser.enabled && <BrowserPanel key={bot.id} botId={bot.id} />}
+      {bot?.browser.enabled && <BrowserPanel key={bot.id} botId={bot.id} botName={bot.name} headed={bot.browser.headed} />}
       {botId && <Files dir={files.dir} files={files.files} />}
       {botId && routines?.botId === botId && <Routines key={botId} botId={botId} routines={routines.routines} />}
     </aside>
@@ -631,6 +620,26 @@ function Row({ item }: { item: Item }) {
           <summary>🔧 {item.name}</summary>
           <pre>{item.input}</pre>
         </details>
+      );
+    case "wait":
+      return (
+        <div className={`card wait ${item.waitKind}`}>
+          <div>
+            <b>{item.title}</b>
+            {item.detail && <div>{item.detail}</div>}
+          </div>
+          {item.resolved !== undefined ? (
+            <div className="answered">→ {item.resolved}</div>
+          ) : (
+            <div className="actions">
+              {item.actions.map((a, i) => (
+                <button key={a.id} className={i === 0 ? "primary" : ""} onClick={() => post("/api/waits/answer", { id: item.id, action: a.id })}>
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       );
     case "ask":
       return (

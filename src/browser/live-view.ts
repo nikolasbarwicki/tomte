@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LiveMessage } from "../../web/events.ts";
 import type { BotBrowser, BrowserRuntimes } from "./runtime.ts";
+import type { Takeover } from "./takeover.ts";
+import { guardUiRequest, rejectRequest } from "./ui-guard.ts";
 
 export const LIVE_VIEW_PATH = "/api/browser/live";
 
@@ -9,6 +11,7 @@ export interface LiveViewOptions {
   port(): number;
   isEnabled(botId: string): boolean;
   runtimes: BrowserRuntimes;
+  takeover: Takeover;
   /** Frame cap per viewer. Default 15. */
   maxFps?: number;
   /** How often a stopped or unreachable stream is checked again. Default 1000. */
@@ -17,10 +20,6 @@ export interface LiveViewOptions {
 
 const DEFAULT_FPS = 15;
 const DEFAULT_RETRY_MS = 1000;
-
-function reject(res: ServerResponse, status: number, message: string) {
-  res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify({ error: message }));
-}
 
 /** Parses an engine stream message into the shape viewers get, or undefined for anything else. */
 const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
@@ -107,12 +106,14 @@ class Feed {
     private browser: BotBrowser,
     private retryMs: number,
     private onIdle: () => void,
+    private holder: () => LiveMessage,
   ) {
     void this.run();
   }
 
   add(v: Viewer) {
     this.viewers.add(v);
+    v.offer(this.holder());
     for (const m of this.last.values()) v.offer(m);
   }
 
@@ -124,7 +125,14 @@ class Feed {
     this.onIdle();
   }
 
-  private publish(m: LiveMessage) {
+  /** Sends one user input event to the engine's stream; false when the browser is not streaming. */
+  sendInput(message: string): boolean {
+    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    this.socket.send(message);
+    return true;
+  }
+
+  publish(m: LiveMessage) {
     this.last.set(m.type, m);
     for (const v of this.viewers) v.offer(m);
   }
@@ -169,45 +177,31 @@ class Feed {
 export interface LiveView {
   /** Serves a request to `LIVE_VIEW_PATH`. */
   handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
+  /** Forwards one user input event (already validated) to the bot's browser; false when it is not streaming. Never logged. */
+  sendInput(botId: string, message: string): boolean;
   /** Ends every viewer and relay. */
   close(): void;
-}
-
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown> | undefined> {
-  let s = "";
-  for await (const chunk of req) s += chunk;
-  try {
-    const v = s ? JSON.parse(s) : {};
-    return v && typeof v === "object" && !Array.isArray(v) ? v : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 export function createLiveView(o: LiveViewOptions): LiveView {
   const feeds = new Map<string, Feed>();
   const minIntervalMs = 1000 / (o.maxFps ?? DEFAULT_FPS);
   const responses = new Set<ServerResponse>();
+  o.takeover.subscribe((botId, holder) => feeds.get(botId)?.publish({ type: "control", holder }));
 
   return {
     async handle(req, res) {
-      const host = req.headers.host;
-      const port = o.port();
-      if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return reject(res, 403, "bad host");
-      // A page on another origin, or a plain form post, must not be able to watch a bot's browser.
-      if (req.headers.origin !== `http://${host}`) return reject(res, 403, "same-origin requests only");
-      if (req.method !== "POST") return reject(res, 405, "method not allowed");
-      if (!/^application\/json\s*(;|$)/i.test(req.headers["content-type"] ?? "")) return reject(res, 415, "content type must be application/json");
-      const body = await readJson(req);
-      const botId = typeof body?.botId === "string" ? body.botId : "";
-      if (!botId) return reject(res, 400, "botId required");
-      if (!o.isEnabled(botId)) return reject(res, 403, "the browser is switched off for this bot");
+      const body = await guardUiRequest(req, res, o.port());
+      if (!body) return;
+      const botId = typeof body.botId === "string" ? body.botId : "";
+      if (!botId) return rejectRequest(res, 400, "botId required");
+      if (!o.isEnabled(botId)) return rejectRequest(res, 403, "the browser is switched off for this bot");
 
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
       const viewer = new Viewer(res, minIntervalMs);
       let feed = feeds.get(botId);
       if (!feed) {
-        feed = new Feed(o.runtimes.forBot(botId), o.retryMs ?? DEFAULT_RETRY_MS, () => feeds.delete(botId));
+        feed = new Feed(o.runtimes.forBot(botId), o.retryMs ?? DEFAULT_RETRY_MS, () => feeds.delete(botId), () => ({ type: "control", holder: o.takeover.holder(botId) }));
         feeds.set(botId, feed);
       }
       responses.add(res);
@@ -218,6 +212,7 @@ export function createLiveView(o: LiveViewOptions): LiveView {
         f.remove(viewer);
       });
     },
+    sendInput: (botId, message) => feeds.get(botId)?.sendInput(message) ?? false,
     close() {
       for (const res of responses) res.end();
     },

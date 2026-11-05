@@ -4,6 +4,8 @@ import type { HostServerLease } from "../harness.ts";
 import { PageState } from "./page-state.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
 import type { BrowserRuntimes } from "./runtime.ts";
+import type { Takeover } from "./takeover.ts";
+import type { BrowserLogin } from "./login.ts";
 import { browserIsolation } from "./sandbox.ts";
 import { BROWSER_INSTRUCTIONS, BROWSER_SERVER_NAME, createBrowserMcpServer } from "./tools.ts";
 import { TokenRegistry } from "./tokens.ts";
@@ -19,6 +21,10 @@ export interface BrowserEndpointDeps {
   /** The bot's files folder. */
   filesDir(botId: string): string;
   egress: EgressProxy;
+  takeover: Takeover;
+  login: BrowserLogin;
+  /** True while the bot runs a routine, with no user present. */
+  unattended(botId: string): boolean;
 }
 
 export interface BrowserEndpoint {
@@ -55,7 +61,7 @@ export function createBrowserEndpoint(deps: BrowserEndpointDeps): BrowserEndpoin
       if (!deps.isEnabled(botId)) return reject(res, 403, "the browser is switched off for this bot");
       if (req.method !== "POST") return reject(res, 405, "method not allowed");
 
-      const mcp = createBrowserMcpServer({ botId, browser: deps.runtimes.forBot(botId), egress: deps.egress, page: pageOf(botId), filesDir: deps.filesDir(botId) });
+      const mcp = createBrowserMcpServer({ botId, browser: deps.runtimes.forBot(botId), egress: deps.egress, page: pageOf(botId), filesDir: deps.filesDir(botId), takeover: deps.takeover, login: deps.login, unattended: () => deps.unattended(botId) });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       res.on("close", () => {
         void transport.close();
