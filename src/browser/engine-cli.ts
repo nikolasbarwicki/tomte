@@ -13,6 +13,8 @@ export interface EngineLaunch {
   chrome: string;
   /** 64-char hex key; reaches the engine only through its environment. */
   encryptionKey: string;
+  /** The host egress proxy URL; every launch goes through it and Chrome may not bypass it for loopback. */
+  proxy: string;
   /** Extra environment for the engine process (tests, host-chosen settings). */
   env?: Record<string, string>;
 }
@@ -21,6 +23,9 @@ export const DEFAULT_CALL_TIMEOUT_MS = 60_000;
 
 /** Host variables the engine and Chrome need; the rest of the host's environment (API keys, tokens) stays out. */
 const PASSTHROUGH_ENV = ["PATH", "HOME", "TMPDIR", "USER", "LOGNAME", "LANG", "LC_ALL", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "DISPLAY", "SystemRoot", "USERPROFILE", "APPDATA", "LOCALAPPDATA"];
+
+/** Chrome bypasses any proxy for loopback by default; this makes loopback go through the egress proxy, which refuses it. */
+const PROXY_NO_BYPASS = "--proxy-bypass-list=<-loopback>";
 
 /** The engine session for a bot; the prefix marks sessions that belong to claudebot. */
 export function sessionName(botId: string): string {
@@ -31,7 +36,7 @@ export function sessionName(botId: string): string {
 /** Flags every engine call carries, then the command itself. */
 export function engineArgs(launch: EngineLaunch, botId: string, command: string[]): string[] {
   const session = sessionName(botId);
-  return ["--json", "--session", session, "--restore", session, "--executable-path", launch.chrome, ...command];
+  return ["--json", "--session", session, "--restore", session, "--executable-path", launch.chrome, "--proxy", launch.proxy, "--args", PROXY_NO_BYPASS, ...command];
 }
 
 export function engineEnv(launch: EngineLaunch): Record<string, string> {

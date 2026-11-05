@@ -14,9 +14,12 @@ interface Page {
   selectors?: Record<string, string>;
 }
 interface Script {
+  /** `open` fetches the URL through the engine's --proxy first, as the real browser does. */
+  viaProxy?: boolean;
   pages?: Record<string, Page>;
   fail?: Record<string, string>;
   delayMs?: Record<string, number>;
+  streamPort?: number;
 }
 
 const dir = process.env.FAKE_AGENT_BROWSER_DIR;
@@ -29,7 +32,7 @@ const read = <T>(name: string, fallback: T): T => (existsSync(join(dir, name)) ?
 const argv = process.argv.slice(2);
 appendFileSync(join(dir, "calls.jsonl"), JSON.stringify({ argv, env: { AGENT_BROWSER_ENCRYPTION_KEY: process.env.AGENT_BROWSER_ENCRYPTION_KEY } }) + "\n");
 
-const flagsWithValue = new Set(["--session", "--restore", "--executable-path"]);
+const flagsWithValue = new Set(["--session", "--restore", "--executable-path", "--proxy", "--args"]);
 const flags: Record<string, string> = {};
 const rest: string[] = [];
 for (let i = 0; i < argv.length; i++) {
@@ -55,6 +58,7 @@ if (script.fail?.[command]) fail(script.fail[command]);
 
 switch (command) {
   case "open": {
+    if (script.viaProxy && flags["--proxy"]) await fetch(args[0], { proxy: flags["--proxy"] }).then((r) => r.arrayBuffer());
     state[session] = args[0];
     writeFileSync(join(dir, "state.json"), JSON.stringify(state));
     reply({ title: pageAt(args[0]).title ?? "", url: args[0] });
@@ -78,6 +82,9 @@ switch (command) {
     delete state[session];
     writeFileSync(join(dir, "state.json"), JSON.stringify(state));
     reply({ closed: true });
+    break;
+  case "stream":
+    reply({ enabled: script.streamPort !== undefined, port: script.streamPort ?? null });
     break;
   default:
     fail(`Unknown command: ${command}`);

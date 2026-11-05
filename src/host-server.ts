@@ -10,8 +10,11 @@ import { z } from "zod";
 import react from "@vitejs/plugin-react";
 import { getSessionInfo, getSessionMessages, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import type { ResolvedCli } from "./cli.ts";
-import { engineStatus } from "./browser-engine.ts";
+import { engineStatus, type EngineStatus } from "./browser-engine.ts";
+import { createLiveView, LIVE_VIEW_PATH, type LiveViewOptions } from "./browser/live-view.ts";
+import { sandboxStatus, type SandboxStatus } from "./browser/sandbox.ts";
 import { BROWSER_ENDPOINT_PATH, createBrowserEndpoint, type BrowserEndpoint } from "./browser/endpoint.ts";
+import { createEgressProxy } from "./browser/egress-proxy.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./browser/runtime.ts";
 import { Thread, type TurnResult } from "./thread.ts";
 import { botContext, botFilesPath, botMemoryPath, createBot, currentSession, getBot, listBots, newSession, setBrowserEnabled, touchBot } from "./bots.ts";
@@ -42,6 +45,10 @@ export interface HostServerOptions {
   herdr: boolean;
   /** Overrides for the browser engine, Chrome and the engine's environment. */
   browser?: BrowserRuntimeOptions;
+  /** Whether the shell sandbox can run; checks this platform when omitted. */
+  sandbox?: () => SandboxStatus;
+  /** Pacing overrides for the browser live view. */
+  liveView?: Pick<LiveViewOptions, "maxFps" | "retryMs">;
 }
 
 export interface HostServer {
@@ -72,6 +79,12 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         if (!res.headersSent) res.writeHead(500);
         res.end();
       });
+    if (path === LIVE_VIEW_PATH)
+      return void liveView.handle(req, res).catch((e) => {
+        console.error(`[browser] live view failed: ${(e as Error).message}`);
+        if (!res.headersSent) res.writeHead(500);
+        res.end();
+      });
     if (path.startsWith("/api/"))
       return void api(req, res, path).catch((e) => {
         if (!res.headersSent) res.writeHead(500);
@@ -86,12 +99,25 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   await listening.promise;
   const port = (http.address() as AddressInfo).port;
 
-  const browserRuntimes = createBrowserRuntimes(secrets, o.browser);
+  const sandboxOf = o.sandbox ?? (() => sandboxStatus());
+  /** The browser can be switched on only when the engine, Chrome and the shell sandbox are all usable. */
+  const browserStatus = (): EngineStatus => {
+    const engine = engineStatus();
+    if (engine.status === "unavailable") return engine;
+    const sandbox = sandboxOf();
+    return sandbox.status === "unavailable" ? sandbox : engine;
+  };
+
+  const egress = createEgressProxy();
+  await egress.start();
+  const browserRuntimes = createBrowserRuntimes(secrets, egress, o.browser);
   const browserEndpoint = createBrowserEndpoint({
     port: () => port,
-    isEnabled: (botId) => getBot(cwd, botId)?.browser.enabled ?? false,
+    isEnabled: (botId) => (getBot(cwd, botId)?.browser.enabled ?? false) && sandboxOf().status === "available",
     runtimes: browserRuntimes,
+    egress,
   });
+  const liveView = createLiveView({ ...o.liveView, port: () => port, isEnabled: (botId) => getBot(cwd, botId)?.browser.enabled ?? false, runtimes: browserRuntimes });
   const hostServers = (botId: string) => browserEndpoint.lease(botId);
 
   const clients = new Set<ServerResponse>();
@@ -483,7 +509,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     const str = (key: string) => (typeof b[key] === "string" ? (b[key] as string) : "");
     switch (path) {
       case "/api/info":
-        return json(res, { cwd, cli: `${cli.path} (${cli.source})`, auth: process.env.ANTHROPIC_API_KEY ? "api key" : "CLI stored login", browser: engineStatus() });
+        return json(res, { cwd, cli: `${cli.path} (${cli.source})`, auth: process.env.ANTHROPIC_API_KEY ? "api key" : "CLI stored login", browser: browserStatus() });
       case "/api/seen": {
         const bot = getBot(cwd, str("botId"));
         if (!bot) return json(res, { error: "no such bot" }, 404);
@@ -501,7 +527,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         const bot = getBot(cwd, str("botId"));
         if (!bot) return json(res, { error: "no such bot" }, 404);
         if (typeof b.enabled !== "boolean") return json(res, { error: "enabled must be true or false" }, 400);
-        const engine = engineStatus();
+        const engine = browserStatus();
         if (b.enabled && engine.status === "unavailable") return json(res, { error: engine.reason }, 409);
         setBrowserEnabled(cwd, bot.id, b.enabled);
         const chat = chats.get(bot.id);
@@ -727,7 +753,9 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       stopHerdr?.();
       filesWatcher?.close();
       routines.stop();
+      liveView.close();
       await browserRuntimes.closeAll();
+      await egress.stop();
       await vite?.close();
       http.closeAllConnections();
       const closed = Promise.withResolvers<void>();

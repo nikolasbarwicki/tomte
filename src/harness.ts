@@ -17,14 +17,22 @@ export interface HostServerLease {
   servers: HostMcpServer[];
   /** Guidance for the bot about these servers, appended to its system prompt. */
   instructions?: string;
+  /** How the CLI must confine the bot shell while this lease is held; absent for an unconfined bot. */
+  isolation?: IsolationProfile;
   release(): void;
 }
 
 /** Leases the host servers a bot may use; the lease is empty when the bot has none. */
 export type HostServersSource = (botId: string) => HostServerLease;
 
-/** Sandbox/isolation settings a harness renders into its launch options. Empty until a ticket fills it in. */
-export interface IsolationProfile {}
+/** Sandbox/isolation settings a harness renders into its launch options. */
+export interface IsolationProfile {
+  /**
+   * Confines the bot's shell commands: public outbound traffic only (no loopback, no Unix sockets, no keychain
+   * service), and these paths unreadable by the shell and the Read tool. Absent means today's unconfined behaviour.
+   */
+  shell?: { denyRead: string[] };
+}
 
 export interface HarnessLaunchInput {
   hostServers: HostMcpServer[];
@@ -47,7 +55,7 @@ export interface Harness {
 const APP_PREFIX = "claudebot";
 
 export const claudeHarness: Harness = {
-  launch({ hostServers, integrations, systemPromptAppend }) {
+  launch({ hostServers, integrations, systemPromptAppend, isolation }) {
     const mcpServers: Record<string, McpServerConfig> = { ...integrations?.mcpServers };
     for (const s of hostServers) {
       mcpServers[s.name] = { type: "http", url: s.url, headers: { Authorization: `Bearer ${s.token}` } };
@@ -67,7 +75,18 @@ export const claudeHarness: Harness = {
         strictMcpConfig: true,
         settingSources: ["user"],
         extraArgs,
-        disallowedTools: integrations?.disallowedTools ?? [],
+        disallowedTools: [...(integrations?.disallowedTools ?? []), ...(isolation.shell?.denyRead.map((p) => `Read(/${p}/**)`) ?? [])],
+        ...(isolation.shell
+          ? {
+              sandbox: {
+                enabled: true,
+                failIfUnavailable: true,
+                allowUnsandboxedCommands: false,
+                network: { allowedDomains: ["*"] },
+                filesystem: { denyRead: isolation.shell.denyRead },
+              },
+            }
+          : {}),
         ...(integrations?.plugins.length ? { plugins: integrations.plugins } : {}),
       },
       dispose: () => {

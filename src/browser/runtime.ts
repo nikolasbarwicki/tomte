@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { resolveEngine } from "../browser-engine.ts";
 import type { SecretStore } from "../secrets.ts";
+import type { EgressProxy } from "./egress-proxy.ts";
 import { DEFAULT_CALL_TIMEOUT_MS, EngineError, findChrome, runEngine, type EngineLaunch } from "./engine-cli.ts";
 
 const KEY_SECRET = "browser-encryption-key";
@@ -18,6 +19,10 @@ export interface BrowserRuntimeOptions {
 export interface BotBrowser {
   /** Runs an engine command in this bot's session and returns its data; throws `EngineError` or `BrowserUnavailable`. */
   call(command: string[]): Promise<unknown>;
+  /** True once this bot's engine session has been started by a call; reading it never starts anything. */
+  active(): boolean;
+  /** The engine's live stream port for a started session; undefined when the session was never started. Never starts a browser. */
+  streamPort(): Promise<number | undefined>;
 }
 
 export interface BrowserRuntimes {
@@ -35,7 +40,7 @@ async function engineKey(secrets: SecretStore): Promise<string> {
   return key;
 }
 
-export function createBrowserRuntimes(secrets: SecretStore, o: BrowserRuntimeOptions = {}): BrowserRuntimes {
+export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy, o: BrowserRuntimeOptions = {}): BrowserRuntimes {
   const started = new Set<string>();
   let key: Promise<string> | undefined;
 
@@ -48,7 +53,7 @@ export function createBrowserRuntimes(secrets: SecretStore, o: BrowserRuntimeOpt
       key = undefined;
       throw e;
     });
-    return { binary, chrome, encryptionKey: await key, env: o.env };
+    return { binary, chrome, encryptionKey: await key, proxy: egress.url, env: o.env };
   }
 
   const timeoutMs = o.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
@@ -64,7 +69,15 @@ export function createBrowserRuntimes(secrets: SecretStore, o: BrowserRuntimeOpt
   }
 
   return {
-    forBot: (botId) => ({ call: (command) => run(botId, command) }),
+    forBot: (botId) => ({
+      call: (command) => run(botId, command),
+      active: () => started.has(botId),
+      async streamPort() {
+        if (!started.has(botId)) return undefined;
+        const status = (await exec(botId, ["stream", "status"])) as { enabled?: boolean; port?: number };
+        return status.enabled && typeof status.port === "number" ? status.port : undefined;
+      },
+    }),
     async closeAll() {
       const ids = [...started];
       started.clear();

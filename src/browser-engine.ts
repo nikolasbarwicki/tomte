@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { isMusl } from "./cli.ts";
+import { findChrome } from "./browser/engine-cli.ts";
 
 const isWin = process.platform === "win32";
 const managedRoot = () => process.env.CLAUDEBOT_BROWSER_ROOT ?? join(homedir(), ".cache", "claudebot", "agent-browser");
@@ -56,7 +57,10 @@ export function resolveEngine(): ResolvedEngine | undefined {
 
 export function engineStatus(): EngineStatus {
   const e = resolveEngine();
-  if (e) return { status: "available", ...e };
+  if (e) {
+    if (!findChrome()) return { status: "unavailable", reason: "Chrome for Testing is not installed; run `bun src/host.ts install-browser`" };
+    return { status: "available", ...e };
+  }
   const reason = platformKey()
     ? "browser engine not installed; run `bun src/host.ts install-browser`"
     : `no agent-browser build for ${process.platform}/${process.arch}`;

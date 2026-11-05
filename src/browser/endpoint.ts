@@ -1,7 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { HostServerLease } from "../harness.ts";
+import type { EgressProxy } from "./egress-proxy.ts";
 import type { BrowserRuntimes } from "./runtime.ts";
+import { browserIsolation } from "./sandbox.ts";
 import { BROWSER_INSTRUCTIONS, BROWSER_SERVER_NAME, createBrowserMcpServer } from "./tools.ts";
 import { TokenRegistry } from "./tokens.ts";
 
@@ -13,6 +15,7 @@ export interface BrowserEndpointDeps {
   /** The bot's Browser switch, read on every request so turning it off takes effect at once. */
   isEnabled(botId: string): boolean;
   runtimes: BrowserRuntimes;
+  egress: EgressProxy;
 }
 
 export interface BrowserEndpoint {
@@ -42,7 +45,7 @@ export function createBrowserEndpoint(deps: BrowserEndpointDeps): BrowserEndpoin
       if (!deps.isEnabled(botId)) return reject(res, 403, "the browser is switched off for this bot");
       if (req.method !== "POST") return reject(res, 405, "method not allowed");
 
-      const mcp = createBrowserMcpServer({ botId, browser: deps.runtimes.forBot(botId) });
+      const mcp = createBrowserMcpServer({ botId, browser: deps.runtimes.forBot(botId), egress: deps.egress });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       res.on("close", () => {
         void transport.close();
@@ -58,6 +61,7 @@ export function createBrowserEndpoint(deps: BrowserEndpointDeps): BrowserEndpoin
       return {
         servers: [{ name: BROWSER_SERVER_NAME, url: `http://127.0.0.1:${deps.port()}${BROWSER_ENDPOINT_PATH}`, token }],
         instructions: BROWSER_INSTRUCTIONS,
+        isolation: browserIsolation(),
         release: revoke,
       };
     },

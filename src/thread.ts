@@ -216,7 +216,7 @@ export class Thread {
       (this.o.persona ? `\n\n${this.o.persona}` : "") +
       section("User memory (about the user)", this.o.memory.user) +
       section("Bot memory (how you operate)", this.o.memory.bot);
-    const launch = claudeHarness.launch({ hostServers: lease?.servers ?? [], integrations: session, systemPromptAppend: append, isolation: {} });
+    const launch = claudeHarness.launch({ hostServers: lease?.servers ?? [], integrations: session, systemPromptAppend: append, isolation: lease?.isolation ?? {} });
     try {
       const q = query({
         prompt: inbox,

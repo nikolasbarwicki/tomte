@@ -100,3 +100,11 @@ export type CredentialEntry = {
 };
 /** Every credential entry with its grants for the Credentials screen; global, lives outside chat history. */
 export type CredentialsEvent = { type: "credentials"; credentials: CredentialEntry[] };
+
+/** What the Browser panel receives on its per-bot live stream. Only these shapes leave the host. */
+export type LiveMessage =
+  | { type: "state"; state: "stopped" | "live" }
+  | { type: "frame"; data: string; width: number; height: number }
+  | { type: "url"; url: string }
+  | { type: "tabs"; tabs: { id: string; title: string; url: string; active: boolean }[] }
+  | { type: "status"; viewport: { width: number; height: number } };

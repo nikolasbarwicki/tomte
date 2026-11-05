@@ -10,6 +10,7 @@ import { createBot } from "../bots.ts";
 import { migrate } from "../db.ts";
 import { createHostServer, type HostServer } from "../host-server.ts";
 import { memorySecrets } from "../secrets.ts";
+import type { SandboxStatus } from "./sandbox.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "fixtures", "fake-agent-browser.ts");
 const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH"] as const;
@@ -21,6 +22,8 @@ let server: HostServer;
 let secrets: ReturnType<typeof memorySecrets>;
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 const clients: Client[] = [];
+const NO_SANDBOX: SandboxStatus = { status: "unavailable", reason: "the shell sandbox is not supported on win32" };
+let sandbox: SandboxStatus;
 
 beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "browser-test-")));
@@ -40,6 +43,7 @@ beforeEach(async () => {
   fakeDir = join(cwd, "fake");
   mkdirSync(fakeDir, { recursive: true });
   secrets = memorySecrets();
+  sandbox = { status: "available" };
   server = await createHostServer({
     cwd,
     port: 0,
@@ -49,6 +53,7 @@ beforeEach(async () => {
     vite: false,
     herdr: false,
     browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir } },
+    sandbox: () => sandbox,
   });
 });
 
@@ -172,6 +177,30 @@ describe("endpoint hardening", () => {
   });
 });
 
+describe("sandbox unavailable", () => {
+  test("the endpoint refuses a browser-enabled bot", async () => {
+    const id = newBot();
+    await enable(id);
+    const { token, url } = await connect(id);
+
+    sandbox = NO_SANDBOX;
+    expect(server.browser.lease(id).servers).toEqual([]);
+    expect((await post(url, { authorization: `Bearer ${token}` })).status).toBe(403);
+    expect(JSON.parse(readFileSync(join(cwd, ".host", "bots", id, "bot.json"), "utf8")).browser).toEqual({ enabled: true });
+    await closeAll();
+  });
+
+  test("the UI is told the browser is unavailable, with the reason, and the switch refuses to turn on", async () => {
+    sandbox = NO_SANDBOX;
+    const id = newBot();
+    expect((await (await fetch(`${server.url}/api/info`)).json()).browser).toEqual(NO_SANDBOX);
+    const res = await api("/api/bots/browser", { botId: id, enabled: true });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: NO_SANDBOX.reason });
+    await closeAll();
+  });
+});
+
 describe("tools", () => {
   test("an enabled bot sees the open and snapshot tools", async () => {
     const id = newBot();
@@ -273,5 +302,23 @@ describe("runtime lifecycle", () => {
     await closeAll();
     const closes = calls().slice(before).filter((c) => c.argv.includes("close"));
     expect(closes.map((c) => c.argv[c.argv.indexOf("--session") + 1]).sort()).toEqual([`claudebot-${a}`, `claudebot-${b}`].sort());
+  });
+});
+
+describe("network block", () => {
+  test("opening a URL on the host server returns a blocked-navigation result, and every engine call carries the proxy", async () => {
+    const id = newBot();
+    await enable(id);
+    script({ viaProxy: true });
+    const { client } = await connect(id);
+    const r = await client.callTool({ name: "browser_open", arguments: { url: `${server.url}/api/info` } });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain("navigation blocked");
+    expect(text(r)).toContain("127.0.0.1");
+    for (const c of calls()) {
+      expect(c.argv).toContain("--proxy");
+      expect(c.argv).toContain("--proxy-bypass-list=<-loopback>");
+    }
+    await closeAll();
   });
 });

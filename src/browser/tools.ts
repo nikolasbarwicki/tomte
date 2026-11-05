@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerNavigationTools } from "./tools/navigation.ts";
+import type { EgressProxy } from "./egress-proxy.ts";
 import type { BotBrowser } from "./runtime.ts";
 
 export const BROWSER_SERVER_NAME = "browser";
@@ -8,6 +9,8 @@ export const BROWSER_SERVER_NAME = "browser";
 export interface BrowserToolContext {
   botId: string;
   browser: BotBrowser;
+  /** Tells a navigation tool whether the network block refused something during its call. */
+  egress: Pick<EgressProxy, "blockedSince">;
 }
 
 /** Delivered as the MCP server's instructions and appended to the bot's system prompt. */

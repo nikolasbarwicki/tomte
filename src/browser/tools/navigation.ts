@@ -19,7 +19,7 @@ function httpUrl(raw: string): URL | undefined {
   }
 }
 
-export function registerNavigationTools(mcp: McpServer, { browser }: BrowserToolContext) {
+export function registerNavigationTools(mcp: McpServer, { browser, egress }: BrowserToolContext) {
   mcp.registerTool(
     "browser_open",
     {
@@ -30,7 +30,22 @@ export function registerNavigationTools(mcp: McpServer, { browser }: BrowserTool
       guarded(async () => {
         const target = httpUrl(url);
         if (!target) return errorResult("only absolute http and https URLs can be opened");
-        const opened = (await browser.call(["open", target.href])) as { title?: string; url?: string };
+        const started = Date.now();
+        const blocked = () => {
+          const hosts = egress.blockedSince(started);
+          return hosts.length ? errorResult(`navigation blocked: ${hosts.join(", ")} is a local or internal address, which your browser cannot reach`) : undefined;
+        };
+        let opened: { title?: string; url?: string };
+        try {
+          opened = (await browser.call(["open", target.href])) as { title?: string; url?: string };
+        } catch (e) {
+          // Chrome reports a refused tunnel as a generic network error; the proxy knows why.
+          const refused = blocked();
+          if (refused) return refused;
+          throw e;
+        }
+        const refused = blocked();
+        if (refused) return refused;
         const page = (await browser.call(["snapshot"])) as PageSnapshot;
         return textResult(`Opened ${opened.url ?? target.href}${opened.title ? ` — "${opened.title}"` : ""}\n\n${snapshotText(page)}`);
       }),

@@ -21,6 +21,7 @@ import type {
   ServerEvent,
 } from "./events.ts";
 import { post } from "./api.ts";
+import { BrowserPanel } from "./browser-panel.tsx";
 import { Credentials } from "./credentials.tsx";
 import { Integrations } from "./integrations.tsx";
 import { DAYS, browserZone, describe, fromSchedule, toSchedule, type Preset } from "./schedule.ts";
@@ -300,6 +301,7 @@ function App() {
       <h3>{bot ? `How ${bot.name} works` : "Bot memory"}</h3>
       <p className="meta">Only this bot</p>
       {memory.bot ? <pre>{memory.bot}</pre> : <p className="meta">No directions yet.</p>}
+      {bot?.browser.enabled && <BrowserPanel key={bot.id} botId={bot.id} />}
       {botId && <Files dir={files.dir} files={files.files} />}
       {botId && routines?.botId === botId && <Routines key={botId} botId={botId} routines={routines.routines} />}
     </aside>
