@@ -30,7 +30,8 @@ export function getBot(cwd: string, id: string): Bot | undefined {
   if (!existsSync(file)) return undefined;
   const bot = JSON.parse(readFileSync(file, "utf8")) as Bot;
   bot.sessions ??= [bot.id];
-  bot.browser ??= { enabled: false };
+  bot.browser ??= { enabled: false, headed: false };
+  bot.browser.headed ??= false;
   return bot;
 }
 
@@ -46,7 +47,7 @@ export function listBots(cwd: string): Bot[] {
 /** The bot's id doubles as its first Claude Code session id. */
 export function createBot(cwd: string, name: string, purpose = "", id: string = randomUUID()): Bot {
   const now = Date.now();
-  const bot: Bot = { id, name: name.trim(), purpose: purpose.trim(), createdAt: now, lastActive: now, sessions: [id], browser: { enabled: false } };
+  const bot: Bot = { id, name: name.trim(), purpose: purpose.trim(), createdAt: now, lastActive: now, sessions: [id], browser: { enabled: false, headed: false } };
   save(cwd, bot);
   return bot;
 }
@@ -54,7 +55,15 @@ export function createBot(cwd: string, name: string, purpose = "", id: string = 
 export function setBrowserEnabled(cwd: string, id: string, enabled: boolean): Bot | undefined {
   const bot = getBot(cwd, id);
   if (!bot) return undefined;
-  bot.browser = { enabled };
+  bot.browser.enabled = enabled;
+  write(cwd, bot);
+  return bot;
+}
+
+export function setBrowserHeaded(cwd: string, id: string, headed: boolean): Bot | undefined {
+  const bot = getBot(cwd, id);
+  if (!bot) return undefined;
+  bot.browser.headed = headed;
   write(cwd, bot);
   return bot;
 }

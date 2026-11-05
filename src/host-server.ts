@@ -17,7 +17,7 @@ import { BROWSER_ENDPOINT_PATH, createBrowserEndpoint, type BrowserEndpoint } fr
 import { createEgressProxy } from "./browser/egress-proxy.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./browser/runtime.ts";
 import { Thread, type TurnResult } from "./thread.ts";
-import { botContext, botFilesPath, botMemoryPath, createBot, currentSession, getBot, listBots, newSession, setBrowserEnabled, touchBot } from "./bots.ts";
+import { botContext, botFilesPath, botMemoryPath, createBot, currentSession, getBot, listBots, newSession, setBrowserEnabled, setBrowserHeaded, touchBot } from "./bots.ts";
 import { readMemory, userMemoryPath } from "./memory.ts";
 import { watchHerdr } from "./herdr.ts";
 import { deleteFile, listFiles, resolveInside, reveal, watchFiles } from "./files.ts";
@@ -110,11 +110,13 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
 
   const egress = createEgressProxy();
   await egress.start();
-  const browserRuntimes = createBrowserRuntimes(secrets, egress, o.browser);
+  const browserRuntimes = createBrowserRuntimes(secrets, egress, { ...o.browser, headed: (botId) => getBot(cwd, botId)?.browser.headed ?? false });
+  browserRuntimes.start();
   const browserEndpoint = createBrowserEndpoint({
     port: () => port,
     isEnabled: (botId) => (getBot(cwd, botId)?.browser.enabled ?? false) && sandboxOf().status === "available",
     runtimes: browserRuntimes,
+    filesDir: (botId) => botFilesPath(cwd, botId),
     egress,
   });
   const liveView = createLiveView({ ...o.liveView, port: () => port, isEnabled: (botId) => getBot(cwd, botId)?.browser.enabled ?? false, runtimes: browserRuntimes });
@@ -534,6 +536,24 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         if (chat?.busy) chat.configStale = true;
         else chat?.thread.close("browser setting changed");
         announceBots();
+        return json(res, { ok: true });
+      }
+      case "/api/bots/browser/headed": {
+        const bot = getBot(cwd, str("botId"));
+        if (!bot) return json(res, { error: "no such bot" }, 404);
+        if (typeof b.headed !== "boolean") return json(res, { error: "headed must be true or false" }, 400);
+        setBrowserHeaded(cwd, bot.id, b.headed);
+        // The window is chosen when the engine launches Chrome, so a running browser must restart to pick it up.
+        await browserRuntimes.restart(bot.id);
+        announceBots();
+        return json(res, { ok: true });
+      }
+      case "/api/bots/browser/restart":
+      case "/api/bots/browser/sign-out": {
+        const bot = getBot(cwd, str("botId"));
+        if (!bot) return json(res, { error: "no such bot" }, 404);
+        if (path.endsWith("/sign-out")) await browserRuntimes.signOut(bot.id);
+        else await browserRuntimes.restart(bot.id);
         return json(res, { ok: true });
       }
       case "/api/open": {

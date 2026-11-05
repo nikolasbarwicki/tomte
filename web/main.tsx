@@ -245,6 +245,23 @@ function App() {
           Browser
           {browserUnavailable && <small>unavailable: {browserUnavailable}</small>}
         </label>
+        {bot?.browser.enabled && (
+          <>
+            <label className="browser-switch" title="Show the browser window on this computer; (restarts the browser)">
+              <input type="checkbox" checked={bot.browser.headed} onChange={(e) => post("/api/bots/browser/headed", { botId: bot.id, headed: e.target.checked })} />
+              Show browser window
+            </label>
+            <button title="Close the browser; saved logins are kept" onClick={() => post("/api/bots/browser/restart", { botId: bot.id })}>
+              Restart browser
+            </button>
+            <button
+              title="Close the browser and delete its saved logins"
+              onClick={() => confirm(`Sign ${bot.name} out of everything? Its saved logins will be deleted.`) && post("/api/bots/browser/sign-out", { botId: bot.id })}
+            >
+              Sign out of everything
+            </button>
+          </>
+        )}
         <select defaultValue="" onChange={(e) => e.target.value && post("/api/model", { model: e.target.value })}>
           <option value="">model…</option>
           <option value="opus">opus</option>

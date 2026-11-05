@@ -26,7 +26,7 @@ export type Notice = { type: "notify"; source: string; title: string; body: stri
 export type ContextEvent = { type: "context"; tokens: number; max: number; percentage: number };
 
 /** Per-bot settings the user switches on; everything is off by default. */
-export type BotBrowserSettings = { enabled: boolean };
+export type BotBrowserSettings = { enabled: boolean; headed: boolean };
 
 /** A specialized agent: a chain of Claude Code sessions (`sessions`, newest last) plus its own memory. */
 export type Bot = { id: string; name: string; purpose: string; createdAt: number; lastActive: number; sessions: string[]; browser: BotBrowserSettings };

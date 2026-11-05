@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { HostServerLease } from "../harness.ts";
+import { PageState } from "./page-state.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
 import type { BrowserRuntimes } from "./runtime.ts";
 import { browserIsolation } from "./sandbox.ts";
@@ -15,6 +16,8 @@ export interface BrowserEndpointDeps {
   /** The bot's Browser switch, read on every request so turning it off takes effect at once. */
   isEnabled(botId: string): boolean;
   runtimes: BrowserRuntimes;
+  /** The bot's files folder. */
+  filesDir(botId: string): string;
   egress: EgressProxy;
 }
 
@@ -32,6 +35,13 @@ function reject(res: ServerResponse, status: number, message: string) {
 
 export function createBrowserEndpoint(deps: BrowserEndpointDeps): BrowserEndpoint {
   const tokens = new TokenRegistry();
+  const pages = new Map<string, PageState>();
+
+  const pageOf = (botId: string) => {
+    let page = pages.get(botId);
+    if (!page) pages.set(botId, (page = new PageState()));
+    return page;
+  };
 
   return {
     async handle(req, res) {
@@ -45,7 +55,7 @@ export function createBrowserEndpoint(deps: BrowserEndpointDeps): BrowserEndpoin
       if (!deps.isEnabled(botId)) return reject(res, 403, "the browser is switched off for this bot");
       if (req.method !== "POST") return reject(res, 405, "method not allowed");
 
-      const mcp = createBrowserMcpServer({ botId, browser: deps.runtimes.forBot(botId), egress: deps.egress });
+      const mcp = createBrowserMcpServer({ botId, browser: deps.runtimes.forBot(botId), egress: deps.egress, page: pageOf(botId), filesDir: deps.filesDir(botId) });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
       res.on("close", () => {
         void transport.close();
