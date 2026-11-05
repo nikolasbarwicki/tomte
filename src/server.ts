@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { existsSync, realpathSync, type FSWatcher } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createVite } from "vite";
 import { z } from "zod";
@@ -16,7 +17,9 @@ import { openDb } from "./db.ts";
 import { getActivity, markSeen, recordMessage } from "./activity-store.ts";
 import { Conflict, NotFound, RoutineInput, createRoutines, headlessDelegate, runHeadless, type Executor, type RoutineJob } from "./routines.ts";
 import { nextOccurrences } from "./schedule.ts";
-import type { Bot, BotStatus, BotsEvent, FilesEvent, LastMessage, MemoryEvent, Notice, RoutinesEvent, RunTrigger, ServerEvent } from "../web/events.ts";
+import { InvalidInput, NameTaken, createIntegrations } from "./integrations.ts";
+import { keychainSecrets } from "./secrets.ts";
+import type { Bot, BotStatus, BotsEvent, FilesEvent, LastMessage, IntegrationsEvent, MemoryEvent, Notice, RoutinesEvent, RunTrigger, ServerEvent } from "../web/events.ts";
 
 const [cwdArg, botArg] = process.argv.slice(2);
 const PORT = Number(process.env.PORT ?? 5173);
@@ -32,7 +35,7 @@ if (!cli) {
 const cwd = realpathSync(cwdArg ?? process.cwd());
 
 const clients = new Set<ServerResponse>();
-const broadcast = (e: ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent) => {
+const broadcast = (e: ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent | IntegrationsEvent) => {
   for (const c of clients) c.write(`data: ${JSON.stringify(e)}\n\n`);
 };
 
@@ -47,6 +50,8 @@ type Chat = {
   routineTurn: boolean;
   /** Questions and approvals waiting for the user, by id. */
   pending: Map<string, (value: string) => void>;
+  /** Integration settings changed during a turn; the thread reopens once the turn ends. */
+  integrationsStale: boolean;
 };
 const chats = new Map<string, Chat>();
 /** The chat shown in the UI. */
@@ -113,7 +118,7 @@ const execute: Executor = (job) => {
 
 function startHeadless(item: QueuedRoutine) {
   const { bot, routine } = item.job;
-  const h = runHeadless(cwd, cli!, item.job);
+  const h = runHeadless(cwd, cli!, integrations, item.job);
   item.stop = h.stop;
   headlessRuns.set(bot.id, routine.name);
   announceBots();
@@ -162,6 +167,20 @@ const routines = createRoutines({
     if (botId === current?.bot.id) broadcast(routinesEvent(current));
   },
 });
+const integrations = createIntegrations({
+  db,
+  hostDir: join(cwd, ".host"),
+  secrets: keychainSecrets,
+  oauthRedirectUrl: `http://127.0.0.1:${PORT}/oauth/callback`,
+  onChange: () => {
+    broadcast(integrationsEvent());
+    for (const chat of chats.values()) {
+      if (chat.busy) chat.integrationsStale = true;
+      else chat.thread.close("integrations changed");
+    }
+  },
+});
+const integrationsEvent = (): IntegrationsEvent => ({ type: "integrations", integrations: integrations.list() });
 const routinesEvent = (chat: Chat): RoutinesEvent => ({ type: "routines", botId: chat.bot.id, routines: routines.list(chat.bot.id) });
 
 const botsEvent = (): BotsEvent => ({
@@ -222,6 +241,10 @@ async function turn(chat: Chat, text: string): Promise<TurnResult | Error> {
   } finally {
     chat.busy = false;
     chat.routineTurn = false;
+    if (chat.integrationsStale) {
+      chat.integrationsStale = false;
+      chat.thread.close("integrations changed");
+    }
     announceBots();
   }
   release(chat);
@@ -246,6 +269,7 @@ function openThread(bot: Bot, resume: boolean, chat: () => Chat): Thread {
     resume,
     idleMs: 10 * 60_000,
     approveAll: process.env.CLAUDEBOT_ASK_APPROVAL !== "1",
+    integrations,
     log: (l) => console.error(l),
     onMemory: (scope, text) => {
       if (scope === "user" || current?.bot.id === bot.id) broadcast({ type: "memory", scope, text });
@@ -325,7 +349,7 @@ async function transcript(bot: Bot): Promise<Transcript> {
 function createChat(bot: Bot, { history, hasSession }: Transcript): Chat {
   const headless = headlessRuns.get(bot.id);
   if (headless) history.push({ type: "info", text: `routine "${headless}" is running in the background; its reply appears here when it finishes` });
-  const chat: Chat = { bot, history, busy: false, routineTurn: false, pending: new Map(), thread: openThread(bot, hasSession, () => chat) };
+  const chat: Chat = { bot, history, busy: false, routineTurn: false, pending: new Map(), integrationsStale: false, thread: openThread(bot, hasSession, () => chat) };
   chats.set(bot.id, chat);
   return chat;
 }
@@ -382,13 +406,14 @@ async function api(req: IncomingMessage, res: ServerResponse, path: string) {
   if (path === "/api/events") {
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
     const open = current ? [routinesEvent(current), { type: "reset", botId: current.bot.id }, ...current.history] : [];
-    for (const e of [botsEvent(), ...memoryEvents(), filesEvent(), ...notices, ...open]) res.write(`data: ${JSON.stringify(e)}\n\n`);
+    for (const e of [botsEvent(), integrationsEvent(), ...memoryEvents(), filesEvent(), ...notices, ...open]) res.write(`data: ${JSON.stringify(e)}\n\n`);
     clients.add(res);
     req.on("close", () => clients.delete(res));
     return;
   }
   const b = await body(req);
   if (path.startsWith("/api/routines/")) return routineApi(res, path, b);
+  if (path.startsWith("/api/integrations/")) return integrationApi(res, path, b);
   const str = (key: string) => (typeof b[key] === "string" ? (b[key] as string) : "");
   switch (path) {
     case "/api/info":
@@ -515,6 +540,64 @@ async function routineApi(res: ServerResponse, path: string, b: Record<string, u
   }
 }
 
+const CustomIntegration = z.discriminatedUnion("transport", [
+  z.object({ name: z.string().trim(), url: z.string().trim(), transport: z.enum(["http", "sse"]), token: z.string().optional(), oauth: z.boolean().optional(), skillsDir: z.string().optional() }),
+  z.object({ name: z.string().trim(), transport: z.literal("stdio"), command: z.string(), args: z.array(z.string()).optional(), env: z.record(z.string(), z.string()).optional(), skillsDir: z.string().optional() }),
+]);
+
+async function integrationApi(res: ServerResponse, path: string, b: Record<string, unknown>) {
+  try {
+    switch (path) {
+      case "/api/integrations/list":
+        return json(res, integrations.list());
+      case "/api/integrations/add-custom":
+        return json(res, await integrations.addCustom(CustomIntegration.parse(b)));
+      case "/api/integrations/set-bearer": {
+        const { id, token } = z.object({ id: z.string(), token: z.string() }).parse(b);
+        return json(res, await integrations.setBearer(id, token));
+      }
+      case "/api/integrations/connect-oauth": {
+        const a = Id.extend({ clientId: z.string().optional(), clientSecret: z.string().optional() }).parse(b);
+        const own = a.clientId === undefined && a.clientSecret === undefined ? undefined : { clientId: a.clientId ?? "", clientSecret: a.clientSecret ?? "" };
+        return json(res, await integrations.connectOAuth(a.id, own));
+      }
+      case "/api/integrations/disconnect":
+        await integrations.disconnect(Id.parse(b).id);
+        return json(res, { ok: true });
+      case "/api/integrations/probe":
+        return json(res, await integrations.probe(Id.parse(b).id));
+      case "/api/integrations/remove":
+        await integrations.remove(Id.parse(b).id);
+        return json(res, { ok: true });
+      case "/api/integrations/set-enabled": {
+        const a = Id.extend({ enabled: z.boolean() }).parse(b);
+        integrations.setEnabled(a.id, a.enabled);
+        return json(res, { ok: true });
+      }
+      case "/api/integrations/set-policy": {
+        const a = Id.extend({ tool: z.string(), policy: z.enum(["off", "ask", "auto"]) }).parse(b);
+        integrations.setPolicy(a.id, a.tool, a.policy);
+        return json(res, { ok: true });
+      }
+      case "/api/integrations/set-skill-enabled": {
+        const a = Id.extend({ skill: z.string(), enabled: z.boolean() }).parse(b);
+        integrations.setSkillEnabled(a.id, a.skill, a.enabled);
+        return json(res, { ok: true });
+      }
+      case "/api/integrations/reset-policies":
+        integrations.resetPolicies(Id.parse(b).id);
+        return json(res, { ok: true });
+    }
+    res.writeHead(404).end();
+  } catch (e) {
+    if (e instanceof z.ZodError) return json(res, { error: e.issues.map((i) => i.message).join("; ") }, 400);
+    if (e instanceof InvalidInput) return json(res, { error: e.message }, 400);
+    if (e instanceof NameTaken) return json(res, { error: e.message }, 409);
+    if (e instanceof NotFound) return json(res, { error: e.message }, 404);
+    throw e;
+  }
+}
+
 function json(res: ServerResponse, v: unknown, status = 200) {
   res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(v));
 }
@@ -529,8 +612,28 @@ void backfillActivity()
   .then(announceBots)
   .catch((e) => console.error(`[host] activity backfill failed: ${(e as Error).message}`));
 
+const htmlEscape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+function page(res: ServerResponse, status: number, message: string) {
+  res.writeHead(status, { "content-type": "text/html; charset=utf-8" }).end(`<!doctype html><meta charset="utf-8"><title>Claudebot</title><body style="font:16px system-ui;max-width:32rem;margin:4rem auto"><p>${htmlEscape(message)}</p>`);
+}
+
+/** The provider sends the browser back here after sign-in. */
+async function oauthCallback(res: ServerResponse, q: URLSearchParams) {
+  try {
+    const i = await integrations.finishOAuth(q.get("state") ?? "", { code: q.get("code") ?? undefined, error: q.get("error") ?? undefined });
+    if (i.state !== "connected") return page(res, 400, `Could not connect ${i.label}: ${i.error}`);
+    page(res, 200, "Connected. You can close this tab.");
+  } catch (e) {
+    if (e instanceof InvalidInput || e instanceof NotFound) return page(res, 400, e.message);
+    page(res, 500, (e as Error).message);
+  }
+}
+
 const http = createServer((req, res) => {
-  const path = new URL(req.url ?? "/", "http://x").pathname;
+  const url = new URL(req.url ?? "/", "http://x");
+  const path = url.pathname;
+  if (path === "/oauth/callback" && req.method === "GET") return void oauthCallback(res, url.searchParams);
   if (path.startsWith("/api/"))
     return void api(req, res, path).catch((e) => {
       if (!res.headersSent) res.writeHead(500);
