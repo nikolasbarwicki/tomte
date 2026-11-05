@@ -24,3 +24,5 @@ export function memorySecrets(): SecretStore & { entries: ReadonlyMap<string, st
 }
 
 export const secretName = (integrationId: string) => `integration:${integrationId}`;
+
+export const credentialSecretName = (entryId: string) => `browser-credential:${entryId}`;

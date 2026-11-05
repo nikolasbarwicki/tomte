@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getSessionInfo, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { botContext, currentSession, getBot, touchBot } from "./bots.ts";
 import type { ResolvedCli } from "./cli.ts";
+import type { HostServersSource } from "./harness.ts";
 import type { IntegrationsSource } from "./integrations.ts";
 import { Thread, type HostDelegate } from "./thread.ts";
 import { WINDOW_MS, hasOccurrence, latestOccurrence, nextOccurrence, parseSchedule } from "./schedule.ts";
@@ -54,7 +55,7 @@ export const headlessDelegate: HostDelegate = {
 };
 
 /** Runs a routine turn in the bot's own session without the UI, for a bot that is not open. */
-export function runHeadless(cwd: string, cli: ResolvedCli, integrations: IntegrationsSource, { bot, routine, prompt }: RoutineJob): ReturnType<Executor> {
+export function runHeadless(cwd: string, cli: ResolvedCli, integrations: IntegrationsSource, hostServers: HostServersSource, { bot, routine, prompt }: RoutineJob): ReturnType<Executor> {
   let thread: Thread | undefined;
   let stopped: string | undefined;
   const done = (async () => {
@@ -68,6 +69,7 @@ export function runHeadless(cwd: string, cli: ResolvedCli, integrations: Integra
       resume,
       approveAll: process.env.CLAUDEBOT_ASK_APPROVAL !== "1",
       integrations,
+      hostServers: () => hostServers(bot.id),
       delegate: headlessDelegate,
       log: (l) => console.error(`[routine ${routine.name}] ${l}`),
     });

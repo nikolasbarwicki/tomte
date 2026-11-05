@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { userMemoryPath, type MemoryPaths } from "./memory.ts";
@@ -11,10 +11,19 @@ const botDir = (cwd: string, id: string) => join(botsDir(cwd), id);
 export const botMemoryPath = (cwd: string, id: string) => join(botDir(cwd, id), "memory.md");
 /** Everything the bot produces for the user lives here. */
 export const botFilesPath = (cwd: string, id: string) => join(botDir(cwd, id), "files");
+/** Subfolder of the files area holding browser screenshots and oversized pages; scratch for the current session, hidden from the Files panel. */
+export const BROWSER_FILES_DIR = "browser";
 
-function save(cwd: string, bot: Bot) {
+function write(cwd: string, bot: Bot) {
   mkdirSync(botDir(cwd, bot.id), { recursive: true });
   writeFileSync(join(botDir(cwd, bot.id), "bot.json"), JSON.stringify(bot, null, 2) + "\n");
+}
+
+/** Saves a bot held in memory. Settings are owned by their setters, so a stale copy never overwrites them. */
+function save(cwd: string, bot: Bot) {
+  const stored = getBot(cwd, bot.id);
+  if (stored) bot.browser = stored.browser;
+  write(cwd, bot);
 }
 
 export function getBot(cwd: string, id: string): Bot | undefined {
@@ -23,6 +32,8 @@ export function getBot(cwd: string, id: string): Bot | undefined {
   if (!existsSync(file)) return undefined;
   const bot = JSON.parse(readFileSync(file, "utf8")) as Bot;
   bot.sessions ??= [bot.id];
+  bot.browser ??= { enabled: false, headed: false };
+  bot.browser.headed ??= false;
   return bot;
 }
 
@@ -38,8 +49,24 @@ export function listBots(cwd: string): Bot[] {
 /** The bot's id doubles as its first Claude Code session id. */
 export function createBot(cwd: string, name: string, purpose = "", id: string = randomUUID()): Bot {
   const now = Date.now();
-  const bot: Bot = { id, name: name.trim(), purpose: purpose.trim(), createdAt: now, lastActive: now, sessions: [id] };
+  const bot: Bot = { id, name: name.trim(), purpose: purpose.trim(), createdAt: now, lastActive: now, sessions: [id], browser: { enabled: false, headed: false } };
   save(cwd, bot);
+  return bot;
+}
+
+export function setBrowserEnabled(cwd: string, id: string, enabled: boolean): Bot | undefined {
+  const bot = getBot(cwd, id);
+  if (!bot) return undefined;
+  bot.browser.enabled = enabled;
+  write(cwd, bot);
+  return bot;
+}
+
+export function setBrowserHeaded(cwd: string, id: string, headed: boolean): Bot | undefined {
+  const bot = getBot(cwd, id);
+  if (!bot) return undefined;
+  bot.browser.headed = headed;
+  write(cwd, bot);
   return bot;
 }
 
@@ -51,6 +78,7 @@ export function newSession(cwd: string, bot: Bot): string {
   bot.sessions.push(id);
   bot.lastActive = Date.now();
   save(cwd, bot);
+  rmSync(join(botFilesPath(cwd, bot.id), BROWSER_FILES_DIR), { recursive: true, force: true });
   return id;
 }
 

@@ -77,6 +77,8 @@ aside.memory h3:first-child { margin-top: 0; }
 .newbot input { padding: 6px; font: inherit; border-radius: 6px; border: 1px solid #ccc; }
 .newbot textarea { height: 60px; }
 aside.memory pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+header .browser-switch { display: flex; align-items: center; gap: 4px; font-size: 13px; white-space: nowrap; }
+header .browser-switch small { color: #888; }
 header .context { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #888; white-space: nowrap; }
 header .context meter { width: 60px; }
 header .context.high { color: #b3261e; }
@@ -142,3 +144,22 @@ aside.memory .routines h3 { margin: 0; }
 .custom-form input, .custom-form select { padding: 6px; font: inherit; border-radius: 6px; border: 1px solid #ccc; }
 .form-error { color: #b3261e; font-size: 12px; margin: 0; }
 @media (max-width: 800px) { aside { width: 180px; } .integration-grid { grid-template-columns: 1fr; } }
+.browser-panel { margin-top: 12px; border-top: 1px solid #ddd; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.browser-panel h3 { margin: 0; }
+.browser-frame { width: 100%; border: 1px solid #ddd; border-radius: 6px; background: #fff; }
+.browser-url { font-size: 12px; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-tabs { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: #888; }
+.browser-tabs span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-tabs span.active { color: #111; font-weight: 600; }
+.browser-placeholder { padding: 16px 8px; border: 1px dashed #ccc; border-radius: 6px; text-align: center; }
+
+.browser-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+.browser-controls label { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.browser-controls button { font-size: 12px; padding: 2px 8px; }
+.browser-takeover { display: flex; gap: 8px; align-items: center; }
+.browser-stage { outline: none; line-height: 0; }
+.browser-stage.user { box-shadow: 0 0 0 2px #2d7ff9; border-radius: 6px; cursor: crosshair; }
+.browser-stage.user .browser-frame { touch-action: none; user-select: none; }
+.browser-error { color: #b00020; }
+.card.wait.takeover { background: #eef5ff; border-color: #9cc2ff; }
+.card button.primary, .browser-takeover button.primary { background: #2d7ff9; color: #fff; border: 0; border-radius: 6px; padding: 4px 12px; }

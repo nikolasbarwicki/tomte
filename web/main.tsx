@@ -8,6 +8,8 @@ import type {
   BotSummary,
   ContextEvent,
   FilesEvent,
+  CredentialEntry,
+  CredentialsEvent,
   Integration,
   IntegrationsEvent,
   MemoryEvent,
@@ -17,8 +19,11 @@ import type {
   RoutineRun,
   RoutinesEvent,
   ServerEvent,
+  WaitAction,
 } from "./events.ts";
 import { post } from "./api.ts";
+import { BrowserPanel } from "./browser-panel.tsx";
+import { Credentials } from "./credentials.tsx";
 import { Integrations } from "./integrations.tsx";
 import { DAYS, browserZone, describe, fromSchedule, toSchedule, type Preset } from "./schedule.ts";
 
@@ -27,6 +32,7 @@ type Item =
   | { kind: "tool"; name: string; input: string }
   | { kind: "ask"; id: string; question: string; answer?: string }
   | { kind: "approve"; id: string; tool: string; reason: string; input: string; answer?: string }
+  | { kind: "wait"; id: string; waitKind: string; title: string; detail?: string; actions: WaitAction[]; resolved?: string }
   | { kind: "session" }
   | { kind: "routine"; name: string; trigger: string };
 
@@ -45,7 +51,8 @@ const lastMessageTime = (t: number) => {
 
 const STATUS_LABEL: Record<BotStatus, string> = { idle: "Idle", working: "Working…", unseen: "Finished, not seen yet" };
 
-type Info = { cwd: string; cli: string; auth: string };
+type BrowserStatus = { status: "available"; path: string; source: string } | { status: "unavailable"; reason: string };
+type Info = { cwd: string; cli: string; auth: string; browser: BrowserStatus };
 
 
 function reduce(items: Item[], e: ServerEvent): Item[] {
@@ -67,6 +74,10 @@ function reduce(items: Item[], e: ServerEvent): Item[] {
       return [...items, { kind: "approve", id: e.id, tool: e.tool, reason: e.reason, input: e.input }];
     case "answered":
       return items.map((i) => ((i.kind === "ask" || i.kind === "approve") && i.id === e.id ? { ...i, answer: e.value } : i));
+    case "wait":
+      return [...items, { kind: "wait", id: e.id, waitKind: e.kind, title: e.title, detail: e.detail, actions: e.actions }];
+    case "wait_resolved":
+      return items.map((i) => (i.kind === "wait" && i.id === e.id ? { ...i, resolved: e.label } : i));
     case "error":
       return [...items, { kind: "error", text: e.message }];
     case "info":
@@ -102,16 +113,19 @@ function App() {
   const [files, setFiles] = useState<FilesEvent>({ type: "files", dir: "", files: [] });
   const [routines, setRoutines] = useState<RoutinesEvent>();
   const [integrations, setIntegrations] = useState<Integration[]>([]);
-  const [view, setView] = useState<"chat" | "integrations">("chat");
+  const [credentials, setCredentials] = useState<CredentialEntry[]>([]);
+  const [view, setView] = useState<"chat" | "integrations" | "credentials">("chat");
   const bottom = useRef<HTMLDivElement>(null);
   const bot = bots.find((b) => b.id === botId);
+  const browserUnavailable = info?.browser.status === "unavailable" ? info.browser.reason : undefined;
 
   useEffect(() => {
     post("/api/info", {}).then(async (r) => setInfo(await r.json()));
     const es = new EventSource("/api/events");
     es.onmessage = (m) => {
-      const e = JSON.parse(m.data) as ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent | IntegrationsEvent;
+      const e = JSON.parse(m.data) as ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent | IntegrationsEvent | CredentialsEvent;
       if (e.type === "integrations") return setIntegrations(e.integrations);
+      if (e.type === "credentials") return setCredentials(e.credentials);
       if (e.type === "memory") return setMemory((prev) => ({ ...prev, [e.scope]: e.text }));
       if (e.type === "files") return setFiles(e);
       if (e.type === "routines") return setRoutines(e);
@@ -185,6 +199,9 @@ function App() {
       <button className={`chat ${view === "integrations" ? "active" : ""}`} aria-pressed={view === "integrations"} onClick={() => setView(view === "integrations" ? "chat" : "integrations")}>
         <span className="name">Integrations</span>
       </button>
+      <button className={`chat ${view === "credentials" ? "active" : ""}`} aria-pressed={view === "credentials"} onClick={() => setView(view === "credentials" ? "chat" : "credentials")}>
+        <span className="name">Credentials</span>
+      </button>
       {creating && <NewBot onDone={() => setCreating(false)} canCancel={bots.length > 0} />}
       {bots.map((b) => (
         <button key={b.id} className={`chat ${b.status} ${b.id === botId ? "active" : ""}`} onClick={() => openBot(b.id)} title={b.purpose || b.id}>
@@ -211,6 +228,8 @@ function App() {
     </aside>
     {view === "integrations" ? (
       <Integrations integrations={integrations} />
+    ) : view === "credentials" ? (
+      <Credentials credentials={credentials} bots={bots} />
     ) : (
     <>
     <div className="app">
@@ -222,6 +241,16 @@ function App() {
             {info.cwd} · {info.auth}
           </span>
         )}
+        <label className="browser-switch" title={browserUnavailable ?? "Give this bot its own web browser"}>
+          <input
+            type="checkbox"
+            checked={bot?.browser.enabled ?? false}
+            disabled={!bot || (!!browserUnavailable && !bot.browser.enabled)}
+            onChange={(e) => bot && post("/api/bots/browser", { botId: bot.id, enabled: e.target.checked })}
+          />
+          Browser
+          {browserUnavailable && <small>unavailable: {browserUnavailable}</small>}
+        </label>
         <select defaultValue="" onChange={(e) => e.target.value && post("/api/model", { model: e.target.value })}>
           <option value="">model…</option>
           <option value="opus">opus</option>
@@ -278,8 +307,9 @@ function App() {
       <h3>{bot ? `How ${bot.name} works` : "Bot memory"}</h3>
       <p className="meta">Only this bot</p>
       {memory.bot ? <pre>{memory.bot}</pre> : <p className="meta">No directions yet.</p>}
+      {bot?.browser.enabled && <BrowserPanel key={`browser-${bot.id}`} botId={bot.id} botName={bot.name} headed={bot.browser.headed} />}
       {botId && <Files dir={files.dir} files={files.files} />}
-      {botId && routines?.botId === botId && <Routines key={botId} botId={botId} routines={routines.routines} />}
+      {botId && routines?.botId === botId && <Routines key={`routines-${botId}`} botId={botId} routines={routines.routines} />}
     </aside>
     </>
     )}
@@ -590,6 +620,26 @@ function Row({ item }: { item: Item }) {
           <summary>🔧 {item.name}</summary>
           <pre>{item.input}</pre>
         </details>
+      );
+    case "wait":
+      return (
+        <div className={`card wait ${item.waitKind}`}>
+          <div>
+            <b>{item.title}</b>
+            {item.detail && <div>{item.detail}</div>}
+          </div>
+          {item.resolved !== undefined ? (
+            <div className="answered">→ {item.resolved}</div>
+          ) : (
+            <div className="actions">
+              {item.actions.map((a, i) => (
+                <button key={a.id} className={i === 0 ? "primary" : ""} onClick={() => post("/api/waits/answer", { id: item.id, action: a.id })}>
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       );
     case "ask":
       return (

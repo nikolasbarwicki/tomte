@@ -6,6 +6,9 @@ export type ServerEvent =
   | { type: "ask"; id: string; question: string }
   | { type: "approve"; id: string; tool: string; reason: string; input: string }
   | { type: "answered"; id: string; value: string }
+  /** The bot asked the user for something and is waiting for an answer; `wait_resolved` closes the card. */
+  | { type: "wait"; id: string; kind: string; title: string; detail?: string; actions: WaitAction[] }
+  | { type: "wait_resolved"; id: string; label: string }
   | { type: "done" }
   | { type: "error"; message: string }
   | { type: "info"; text: string }
@@ -19,14 +22,20 @@ export type ServerEvent =
   | ContextEvent
   | Notice;
 
+/** One button on a wait card. */
+export type WaitAction = { id: string; label: string };
+
 /** External update from herdr or an omp hook; lives outside chat history. */
 export type Notice = { type: "notify"; source: string; title: string; body: string; at: number };
 
 /** Current context window usage of the open bot's session, as reported by Claude Code. */
 export type ContextEvent = { type: "context"; tokens: number; max: number; percentage: number };
 
+/** Per-bot settings the user switches on; everything is off by default. */
+export type BotBrowserSettings = { enabled: boolean; headed: boolean };
+
 /** A specialized agent: a chain of Claude Code sessions (`sessions`, newest last) plus its own memory. */
-export type Bot = { id: string; name: string; purpose: string; createdAt: number; lastActive: number; sessions: string[] };
+export type Bot = { id: string; name: string; purpose: string; createdAt: number; lastActive: number; sessions: string[]; browser: BotBrowserSettings };
 
 /** Newest message in a bot's chat transcript. */
 export type LastMessage = { from: "user" | "bot"; text: string; at: number };
@@ -89,3 +98,21 @@ export type Integration = {
 };
 /** Every integration for the Integrations screen; global, lives outside chat history. */
 export type IntegrationsEvent = { type: "integrations"; integrations: Integration[] };
+
+/** A stored website login; the password lives only in the OS keychain and is never part of any event. */
+export type CredentialEntry = {
+  id: string; label: string; signInUrl: string; origin: string; username: string; createdAt: number; updatedAt: number;
+  grants: { botId: string; grantedAt: number }[];
+};
+/** Every credential entry with its grants for the Credentials screen; global, lives outside chat history. */
+export type CredentialsEvent = { type: "credentials"; credentials: CredentialEntry[] };
+
+/** What the Browser panel receives on its per-bot live stream. Only these shapes leave the host. */
+export type LiveMessage =
+  | { type: "state"; state: "stopped" | "live" }
+  | { type: "frame"; data: string; width: number; height: number }
+  | { type: "url"; url: string }
+  | { type: "tabs"; tabs: { id: string; title: string; url: string; active: boolean }[] }
+  | { type: "status"; viewport: { width: number; height: number } }
+  /** Who may act in the browser: the bot, the user once granted, or `draining` while the bot's last call finishes. */
+  | { type: "control"; holder: "bot" | "draining" | "user" };
