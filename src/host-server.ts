@@ -21,7 +21,7 @@ import { CREDENTIAL_EXCHANGE_PATH, createBrowserLogin } from "./browser/login.ts
 import { BROWSER_UI_PATHS, createBrowserUiRoutes } from "./browser/ui-routes.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./browser/runtime.ts";
 import { Thread, type TurnResult } from "./thread.ts";
-import { botContext, botFilesPath, botMemoryPath, createBot, currentSession, getBot, listBots, newSession, setBrowserEnabled, setBrowserHeaded, touchBot } from "./bots.ts";
+import { BROWSER_FILES_DIR, botContext, botFilesPath, botMemoryPath, createBot, currentSession, getBot, listBots, newSession, setBrowserEnabled, setBrowserHeaded, touchBot } from "./bots.ts";
 import { readMemory, userMemoryPath } from "./memory.ts";
 import { watchHerdr } from "./herdr.ts";
 import { deleteFile, listFiles, resolveInside, reveal, watchFiles } from "./files.ts";
@@ -200,7 +200,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
 
   const filesEvent = (): FilesEvent => {
     const dir = current ? botFilesPath(cwd, current.bot.id) : "";
-    return { type: "files", dir, files: dir ? listFiles(dir) : [] };
+    return { type: "files", dir, files: dir ? listFiles(dir).filter((f) => !f.path.startsWith(`${BROWSER_FILES_DIR}/`)) : [] };
   };
   /** Pushes the open bot's file list to the page whenever its folder changes. */
   let filesWatcher: FSWatcher | undefined;

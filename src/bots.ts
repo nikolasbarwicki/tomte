@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { userMemoryPath, type MemoryPaths } from "./memory.ts";
@@ -11,6 +11,8 @@ const botDir = (cwd: string, id: string) => join(botsDir(cwd), id);
 export const botMemoryPath = (cwd: string, id: string) => join(botDir(cwd, id), "memory.md");
 /** Everything the bot produces for the user lives here. */
 export const botFilesPath = (cwd: string, id: string) => join(botDir(cwd, id), "files");
+/** Subfolder of the files area holding browser screenshots and oversized pages; scratch for the current session, hidden from the Files panel. */
+export const BROWSER_FILES_DIR = "browser";
 
 function write(cwd: string, bot: Bot) {
   mkdirSync(botDir(cwd, bot.id), { recursive: true });
@@ -76,6 +78,7 @@ export function newSession(cwd: string, bot: Bot): string {
   bot.sessions.push(id);
   bot.lastActive = Date.now();
   save(cwd, bot);
+  rmSync(join(botFilesPath(cwd, bot.id), BROWSER_FILES_DIR), { recursive: true, force: true });
   return id;
 }
 

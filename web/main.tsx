@@ -307,9 +307,9 @@ function App() {
       <h3>{bot ? `How ${bot.name} works` : "Bot memory"}</h3>
       <p className="meta">Only this bot</p>
       {memory.bot ? <pre>{memory.bot}</pre> : <p className="meta">No directions yet.</p>}
-      {bot?.browser.enabled && <BrowserPanel key={bot.id} botId={bot.id} botName={bot.name} headed={bot.browser.headed} />}
+      {bot?.browser.enabled && <BrowserPanel key={`browser-${bot.id}`} botId={bot.id} botName={bot.name} headed={bot.browser.headed} />}
       {botId && <Files dir={files.dir} files={files.files} />}
-      {botId && routines?.botId === botId && <Routines key={botId} botId={botId} routines={routines.routines} />}
+      {botId && routines?.botId === botId && <Routines key={`routines-${botId}`} botId={botId} routines={routines.routines} />}
     </aside>
     </>
     )}

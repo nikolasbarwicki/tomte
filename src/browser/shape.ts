@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { BROWSER_FILES_DIR } from "../bots.ts";
 
 /** About how much page text one result may carry. */
 export const RESULT_LIMIT = 20_000;
@@ -49,7 +50,7 @@ export function shapePage({ content, origin, filesDir }: ShapeInput): string {
   const clean = stripInvisible(content);
   if (clean.length <= RESULT_LIMIT) return wrapPage(clean, origin, nonce);
 
-  const dir = join(filesDir, "browser");
+  const dir = join(filesDir, BROWSER_FILES_DIR);
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `page-${Date.now()}-${nonce}.txt`);
   writeFileSync(file, clean);

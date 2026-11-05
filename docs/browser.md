@@ -4,6 +4,8 @@ Each bot can have its own real Chrome browser. It is off by default. The bot dri
 
 Use `WebFetch` and `WebSearch` for plain reads. The bot is told to reach for the browser only for JavaScript-rendered pages, logins and interaction.
 
+Screenshots and pages too large for one result are saved in the `browser/` folder of the bot's files area so the bot can read them. That folder is hidden from the Files panel and emptied when the bot starts a new session; copy anything you want to keep out of it first.
+
 ## Install the engine
 
 ```sh
