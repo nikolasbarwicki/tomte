@@ -8,6 +8,8 @@ import type {
   BotSummary,
   ContextEvent,
   FilesEvent,
+  CredentialEntry,
+  CredentialsEvent,
   Integration,
   IntegrationsEvent,
   MemoryEvent,
@@ -19,6 +21,7 @@ import type {
   ServerEvent,
 } from "./events.ts";
 import { post } from "./api.ts";
+import { Credentials } from "./credentials.tsx";
 import { Integrations } from "./integrations.tsx";
 import { DAYS, browserZone, describe, fromSchedule, toSchedule, type Preset } from "./schedule.ts";
 
@@ -45,7 +48,8 @@ const lastMessageTime = (t: number) => {
 
 const STATUS_LABEL: Record<BotStatus, string> = { idle: "Idle", working: "Working…", unseen: "Finished, not seen yet" };
 
-type Info = { cwd: string; cli: string; auth: string };
+type BrowserStatus = { status: "available"; path: string; source: string } | { status: "unavailable"; reason: string };
+type Info = { cwd: string; cli: string; auth: string; browser: BrowserStatus };
 
 
 function reduce(items: Item[], e: ServerEvent): Item[] {
@@ -102,16 +106,19 @@ function App() {
   const [files, setFiles] = useState<FilesEvent>({ type: "files", dir: "", files: [] });
   const [routines, setRoutines] = useState<RoutinesEvent>();
   const [integrations, setIntegrations] = useState<Integration[]>([]);
-  const [view, setView] = useState<"chat" | "integrations">("chat");
+  const [credentials, setCredentials] = useState<CredentialEntry[]>([]);
+  const [view, setView] = useState<"chat" | "integrations" | "credentials">("chat");
   const bottom = useRef<HTMLDivElement>(null);
   const bot = bots.find((b) => b.id === botId);
+  const browserUnavailable = info?.browser.status === "unavailable" ? info.browser.reason : undefined;
 
   useEffect(() => {
     post("/api/info", {}).then(async (r) => setInfo(await r.json()));
     const es = new EventSource("/api/events");
     es.onmessage = (m) => {
-      const e = JSON.parse(m.data) as ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent | IntegrationsEvent;
+      const e = JSON.parse(m.data) as ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent | IntegrationsEvent | CredentialsEvent;
       if (e.type === "integrations") return setIntegrations(e.integrations);
+      if (e.type === "credentials") return setCredentials(e.credentials);
       if (e.type === "memory") return setMemory((prev) => ({ ...prev, [e.scope]: e.text }));
       if (e.type === "files") return setFiles(e);
       if (e.type === "routines") return setRoutines(e);
@@ -185,6 +192,9 @@ function App() {
       <button className={`chat ${view === "integrations" ? "active" : ""}`} aria-pressed={view === "integrations"} onClick={() => setView(view === "integrations" ? "chat" : "integrations")}>
         <span className="name">Integrations</span>
       </button>
+      <button className={`chat ${view === "credentials" ? "active" : ""}`} aria-pressed={view === "credentials"} onClick={() => setView(view === "credentials" ? "chat" : "credentials")}>
+        <span className="name">Credentials</span>
+      </button>
       {creating && <NewBot onDone={() => setCreating(false)} canCancel={bots.length > 0} />}
       {bots.map((b) => (
         <button key={b.id} className={`chat ${b.status} ${b.id === botId ? "active" : ""}`} onClick={() => openBot(b.id)} title={b.purpose || b.id}>
@@ -211,6 +221,8 @@ function App() {
     </aside>
     {view === "integrations" ? (
       <Integrations integrations={integrations} />
+    ) : view === "credentials" ? (
+      <Credentials credentials={credentials} bots={bots} />
     ) : (
     <>
     <div className="app">
@@ -222,6 +234,16 @@ function App() {
             {info.cwd} · {info.auth}
           </span>
         )}
+        <label className="browser-switch" title={browserUnavailable ?? "Give this bot its own web browser"}>
+          <input
+            type="checkbox"
+            checked={bot?.browser.enabled ?? false}
+            disabled={!bot || (!!browserUnavailable && !bot.browser.enabled)}
+            onChange={(e) => bot && post("/api/bots/browser", { botId: bot.id, enabled: e.target.checked })}
+          />
+          Browser
+          {browserUnavailable && <small>unavailable: {browserUnavailable}</small>}
+        </label>
         <select defaultValue="" onChange={(e) => e.target.value && post("/api/model", { model: e.target.value })}>
           <option value="">model…</option>
           <option value="opus">opus</option>

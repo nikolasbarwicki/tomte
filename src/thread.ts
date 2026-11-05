@@ -1,6 +1,4 @@
-import { chmodSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { resolve, relative, isAbsolute } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   createSdkMcpServer,
@@ -16,6 +14,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { cmdExeSpawner, loginShellPath, type ResolvedCli } from "./cli.ts";
+import { claudeHarness, type HostServerLease } from "./harness.ts";
 import type { IntegrationsSource } from "./integrations.ts";
 import { appendMemory, readMemory, writeMemory, type MemoryPaths } from "./memory.ts";
 import type { MemoryScope } from "../web/events.ts";
@@ -39,6 +38,8 @@ export interface ThreadOptions {
   additionalDirectories?: string[];
   /** Asked for its session configuration whenever a live query opens, and for a decision on every integration tool call. */
   integrations?: IntegrationsSource;
+  /** Leases the host servers (such as the browser endpoint) for each live query; released when that query closes. */
+  hostServers?: () => HostServerLease;
   model?: string;
   idleMs?: number;
   /** Run every tool without asking the delegate. */
@@ -112,7 +113,7 @@ export interface TurnResult {
 export class Thread {
   readonly sessionId: string;
   private started: boolean;
-  private live?: { q: Query; inbox: Inbox; it: AsyncIterator<SDKMessage>; expiresAt?: number };
+  private live?: { q: Query; inbox: Inbox; it: AsyncIterator<SDKMessage>; expiresAt?: number; lease?: HostServerLease };
   private idleTimer?: NodeJS.Timeout;
   private busy = false;
   /** Set when `close()` lands while `send()` is still opening the query, which `close()` alone cannot reach. */
@@ -140,7 +141,7 @@ export class Thread {
   }
 
   private canUseTool: CanUseTool = async (name, input) => {
-    if (name.startsWith("mcp__host__")) return { behavior: "allow", updatedInput: input };
+    if (name.startsWith("mcp__host__") || name.startsWith("mcp__browser__")) return { behavior: "allow", updatedInput: input };
     switch (this.o.integrations?.decide(name)) {
       case "allow":
         return { behavior: "allow", updatedInput: input };
@@ -203,59 +204,53 @@ export class Thread {
 
   private async open() {
     const inbox = new Inbox();
-    let mcpFile: string | undefined;
-    const extraArgs: Record<string, string | null> = {};
     const session = await this.o.integrations?.session();
-    if (session && Object.keys(session.mcpServers).length) {
-      mcpFile = join(tmpdir(), `${APP}-mcp-${randomUUID()}.json`);
-      writeFileSync(mcpFile, JSON.stringify({ mcpServers: session.mcpServers }), { mode: 0o600 });
-      chmodSync(mcpFile, 0o600);
-      extraArgs["mcp-config"] = mcpFile;
-    }
+    const lease = this.o.hostServers?.();
     const section = (title: string, path: string) => {
       const text = readMemory(path).trim();
       return text ? `\n\n# ${title}\n${text}` : "";
     };
     const append =
       HOST_INSTRUCTIONS +
+      (lease?.instructions ? `\n\n${lease.instructions}` : "") +
       (this.o.persona ? `\n\n${this.o.persona}` : "") +
       section("User memory (about the user)", this.o.memory.user) +
       section("Bot memory (how you operate)", this.o.memory.bot);
-    const q = query({
-      prompt: inbox,
-      options: {
-        pathToClaudeCodeExecutable: this.o.cli.path,
-        ...(this.o.cli.needsShell ? { spawnClaudeCodeProcess: cmdExeSpawner } : {}),
-        cwd: this.o.cwd,
-        additionalDirectories: this.o.additionalDirectories,
-        ...(this.started ? { resume: this.sessionId } : { sessionId: this.sessionId }),
-        persistSession: true,
-        systemPrompt: { type: "preset", preset: "claude_code", append },
-        includePartialMessages: true,
-        permissionMode: "default",
-        canUseTool: this.canUseTool,
-        strictMcpConfig: true,
-        settingSources: ["user"],
-        mcpServers: { host: this.hostServer() },
-        extraArgs,
-        disallowedTools: session?.disallowedTools ?? [],
-        ...(session?.plugins.length ? { plugins: session.plugins } : {}),
-        model: this.model,
-        env: this.env(),
-        stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
-      },
-    });
+    const launch = claudeHarness.launch({ hostServers: lease?.servers ?? [], integrations: session, systemPromptAppend: append, isolation: {} });
     try {
-      await q.initializationResult();
+      const q = query({
+        prompt: inbox,
+        options: {
+          pathToClaudeCodeExecutable: this.o.cli.path,
+          ...(this.o.cli.needsShell ? { spawnClaudeCodeProcess: cmdExeSpawner } : {}),
+          cwd: this.o.cwd,
+          additionalDirectories: this.o.additionalDirectories,
+          ...(this.started ? { resume: this.sessionId } : { sessionId: this.sessionId }),
+          persistSession: true,
+          includePartialMessages: true,
+          canUseTool: this.canUseTool,
+          mcpServers: { host: this.hostServer() },
+          ...launch.options,
+          model: this.model,
+          env: this.env(),
+          stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
+        },
+      });
+      try {
+        await q.initializationResult();
+      } catch (e) {
+        q.close();
+        throw e;
+      }
+      if (this.effort) await q.applyFlagSettings({ effortLevel: this.effort });
+      this.started = true;
+      this.live = { q, inbox, it: q[Symbol.asyncIterator](), expiresAt: session?.expiresAt, lease };
     } catch (e) {
-      q.close();
+      lease?.release();
       throw e;
     } finally {
-      if (mcpFile) rmSync(mcpFile, { force: true });
+      launch.dispose();
     }
-    if (this.effort) await q.applyFlagSettings({ effortLevel: this.effort });
-    this.started = true;
-    this.live = { q, inbox, it: q[Symbol.asyncIterator](), expiresAt: session?.expiresAt };
     this.log(`[host] query opened (${this.o.resume ? "resume" : "new"}) session=${this.sessionId}`);
     await this.reconcileIntegrations();
   }
@@ -344,6 +339,7 @@ export class Thread {
     if (!this.live) return;
     this.live.inbox.end();
     this.live.q.close();
+    this.live.lease?.release();
     this.live = undefined;
     this.log(`[host] query closed (${reason}); next send resumes session=${this.sessionId}`);
   }

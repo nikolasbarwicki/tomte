@@ -77,12 +77,30 @@ CREATE TABLE IF NOT EXISTS integration_skills (
 );
 `;
 
+const SCHEMA_V5 = `
+CREATE TABLE IF NOT EXISTS credential_entries (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  sign_in_url TEXT NOT NULL,
+  origin TEXT NOT NULL,                -- derived from sign_in_url
+  username TEXT NOT NULL,              -- the password lives only in the OS keychain
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS credential_grants (
+  bot_id TEXT NOT NULL,
+  entry_id TEXT NOT NULL REFERENCES credential_entries(id) ON DELETE CASCADE,
+  granted_at INTEGER NOT NULL,
+  PRIMARY KEY (bot_id, entry_id)
+);
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
   db.run("PRAGMA foreign_keys = ON");
   const { user_version } = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!;
-  const migrations = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4];
+  const migrations = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;
     db.transaction(() => {

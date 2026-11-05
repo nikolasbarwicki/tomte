@@ -25,8 +25,11 @@ export type Notice = { type: "notify"; source: string; title: string; body: stri
 /** Current context window usage of the open bot's session, as reported by Claude Code. */
 export type ContextEvent = { type: "context"; tokens: number; max: number; percentage: number };
 
+/** Per-bot settings the user switches on; everything is off by default. */
+export type BotBrowserSettings = { enabled: boolean };
+
 /** A specialized agent: a chain of Claude Code sessions (`sessions`, newest last) plus its own memory. */
-export type Bot = { id: string; name: string; purpose: string; createdAt: number; lastActive: number; sessions: string[] };
+export type Bot = { id: string; name: string; purpose: string; createdAt: number; lastActive: number; sessions: string[]; browser: BotBrowserSettings };
 
 /** Newest message in a bot's chat transcript. */
 export type LastMessage = { from: "user" | "bot"; text: string; at: number };
@@ -89,3 +92,11 @@ export type Integration = {
 };
 /** Every integration for the Integrations screen; global, lives outside chat history. */
 export type IntegrationsEvent = { type: "integrations"; integrations: Integration[] };
+
+/** A stored website login; the password lives only in the OS keychain and is never part of any event. */
+export type CredentialEntry = {
+  id: string; label: string; signInUrl: string; origin: string; username: string; createdAt: number; updatedAt: number;
+  grants: { botId: string; grantedAt: number }[];
+};
+/** Every credential entry with its grants for the Credentials screen; global, lives outside chat history. */
+export type CredentialsEvent = { type: "credentials"; credentials: CredentialEntry[] };

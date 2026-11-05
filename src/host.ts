@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { authCommand, installManagedCli, resolveCli, type ResolvedCli } from "./cli.ts";
+import { installManagedEngine } from "./browser-engine.ts";
 import { Thread, type HostDelegate } from "./thread.ts";
 import { botContext, createBot, currentSession, getBot, newSession, touchBot } from "./bots.ts";
 import { getSessionInfo } from "@anthropic-ai/claude-agent-sdk";
@@ -176,6 +177,9 @@ try {
       break;
     case "install-cli":
       console.log(`installed ${await installManagedCli(a1)}`);
+      break;
+    case "install-browser":
+      console.log(`installed ${await installManagedEngine(a1)}`);
       break;
     case "auth-status":
     case "auth-login": {

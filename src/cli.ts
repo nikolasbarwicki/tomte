@@ -15,11 +15,14 @@ export type ResolvedCli = {
   needsShell: boolean;
 };
 
+export function isMusl(): boolean {
+  return process.platform === "linux" && !existsSync("/lib/ld-linux-x86-64.so.2") && !existsSync("/lib/ld-linux-aarch64.so.1");
+}
+
 function platformPackage(): string {
   const arch = process.arch === "arm64" ? "arm64" : "x64";
   const os = process.platform === "win32" ? "win32" : process.platform === "darwin" ? "darwin" : "linux";
-  const musl = os === "linux" && !existsSync("/lib/ld-linux-x86-64.so.2") && !existsSync("/lib/ld-linux-aarch64.so.1");
-  return `@anthropic-ai/claude-code-${os}-${arch}${musl ? "-musl" : ""}`;
+  return `@anthropic-ai/claude-code-${os}-${arch}${isMusl() ? "-musl" : ""}`;
 }
 
 function managedBinary(): string | undefined {
