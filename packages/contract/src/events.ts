@@ -124,21 +124,6 @@ export type BotSummary = z.infer<typeof BotSummary>;
 export const BotsEvent = z.object({ type: z.literal("bots"), bots: z.array(BotSummary) });
 export type BotsEvent = z.infer<typeof BotsEvent>;
 
-/** Whether bots can get a browser on this host, and why not. */
-export const BrowserAvailability = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("available"), path: z.string(), source: z.string() }),
-  z.object({ status: z.literal("unavailable"), reason: z.string() }),
-]);
-export type BrowserAvailability = z.infer<typeof BrowserAvailability>;
-/** The `/api/info` response: where the host runs and how it reaches Claude. */
-export const HostInfo = z.object({
-  cwd: z.string(),
-  cli: z.string(),
-  auth: z.string(),
-  browser: BrowserAvailability,
-});
-export type HostInfo = z.infer<typeof HostInfo>;
-
 /** `user`: facts/preferences about the user, shared by all bots. `bot`: how one bot should operate. */
 export const MemoryScope = z.enum(["user", "bot"]);
 export type MemoryScope = z.infer<typeof MemoryScope>;

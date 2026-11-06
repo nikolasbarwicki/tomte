@@ -1,6 +1,6 @@
+import { HostInfo } from "@claudebot/contract/api";
 import {
   HostEvent,
-  HostInfo,
   type BotSummary,
   type ContextEvent,
   type CredentialEntry,
