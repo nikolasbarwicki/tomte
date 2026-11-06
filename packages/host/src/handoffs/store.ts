@@ -9,7 +9,7 @@ export type HandoffStatus =
   | "completed"
   | "failed"
   | "canceled";
-export type MessageKind = "brief" | "message" | "result" | "failure" | "cancel";
+type MessageKind = "brief" | "message" | "result" | "failure" | "cancel";
 
 export const FINAL_STATUSES: readonly HandoffStatus[] = ["completed", "failed", "canceled"];
 
@@ -25,7 +25,7 @@ export type Handoff = {
   updatedAt: number;
 };
 
-export type HandoffMessage = {
+type HandoffMessage = {
   id: string;
   handoffId: string;
   senderId: string;
@@ -77,7 +77,7 @@ const toMessage = (r: MessageRow): HandoffMessage => ({
 });
 
 /** What one state change records: the new status and the message that caused it. */
-export type Transition = {
+type Transition = {
   senderId: string;
   kind: MessageKind;
   text: string;

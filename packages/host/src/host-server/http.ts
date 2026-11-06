@@ -19,7 +19,7 @@ export interface Route {
 }
 
 /** Logs a failed handler under `label` and ends the response, with 500 when nothing was sent yet. */
-export function safe(handler: Handler, label: string): Handler {
+function safe(handler: Handler, label: string): Handler {
   return (req, res, url) =>
     handler(req, res, url).catch((e) => {
       console.error(`${label} ${(e as Error).message}`);

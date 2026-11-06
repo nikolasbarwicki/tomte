@@ -16,7 +16,7 @@ import type { BotBrowser } from "./runtime.ts";
 export const CREDENTIAL_EXCHANGE_PATH = "/api/browser/credential-exchange";
 
 /** The engine's name for the credential plugin; the action policy allows exactly `plugin:<name>:credential.read`. */
-export const CREDENTIAL_PLUGIN_NAME = "claudebot";
+const CREDENTIAL_PLUGIN_NAME = "claudebot";
 
 export const NONCE_TTL_MS = 60_000;
 
@@ -61,7 +61,7 @@ export class LoginNonces {
   }
 }
 
-export type LoginResult =
+type LoginResult =
   | WaitingForUser
   | { status: "signed_in"; site: string }
   | { status: "needs_another_step"; site: string }

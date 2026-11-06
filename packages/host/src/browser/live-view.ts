@@ -30,7 +30,7 @@ const rec = (v: unknown): Record<string, unknown> =>
 const text = (v: unknown): string =>
   typeof v === "string" || typeof v === "number" ? String(v) : "";
 
-export function toLiveMessage(raw: unknown): LiveMessage | undefined {
+function toLiveMessage(raw: unknown): LiveMessage | undefined {
   if (typeof raw !== "string") return undefined;
   let m: Record<string, unknown>;
   try {

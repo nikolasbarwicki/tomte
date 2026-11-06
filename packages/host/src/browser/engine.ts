@@ -18,7 +18,7 @@ const isWin = process.platform === "win32";
 /** Where the managed engine is installed: `agent-browser/` in the data root. */
 const managedRoot = (dataRoot: string) => join(dataRoot, "agent-browser");
 
-export const ENGINE_VERSION = "0.41.2";
+const ENGINE_VERSION = "0.41.2";
 
 /** SHA-256 of each release binary, hashed locally from github.com/vercel-labs/agent-browser/releases/tag/v0.41.2. */
 const ENGINE_SHA256: Record<string, string> = {

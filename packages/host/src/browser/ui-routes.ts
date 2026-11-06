@@ -7,9 +7,9 @@ import type { LiveView } from "./live-view.ts";
 import type { Takeover } from "./takeover.ts";
 import { guardUiRequest, rejectRequest } from "./ui-guard.ts";
 
-export const CONTROL_PATH = "/api/browser/control";
-export const INPUT_PATH = "/api/browser/input";
-export const WAIT_ANSWER_PATH = "/api/waits/answer";
+const CONTROL_PATH = "/api/browser/control";
+const INPUT_PATH = "/api/browser/input";
+const WAIT_ANSWER_PATH = "/api/waits/answer";
 export const BROWSER_UI_PATHS: ReadonlySet<string> = new Set([
   CONTROL_PATH,
   INPUT_PATH,

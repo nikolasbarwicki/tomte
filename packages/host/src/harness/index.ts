@@ -16,7 +16,7 @@ export {
 } from "./cli.ts";
 
 /** An HTTP MCP server owned by the host; the token travels as a bearer header, never in argv. */
-export interface HostMcpServer {
+interface HostMcpServer {
   name: string;
   url: string;
   token: string;
@@ -56,13 +56,13 @@ export interface IsolationProfile {
 }
 
 /** What a harness launches with from the bot's integrations: their MCP servers, disallowed tools and plugins. */
-export interface LaunchIntegrations {
+interface LaunchIntegrations {
   mcpServers: Record<string, McpServerConfig>;
   disallowedTools: string[];
   plugins: SdkPluginConfig[];
 }
 
-export interface HarnessLaunchInput {
+interface HarnessLaunchInput {
   hostServers: HostMcpServer[];
   /** Integration servers, disallowed tools and plugins for this session. */
   integrations?: LaunchIntegrations;
@@ -70,7 +70,7 @@ export interface HarnessLaunchInput {
   isolation: IsolationProfile;
 }
 
-export interface HarnessLaunch {
+interface HarnessLaunch {
   options: Partial<Options>;
   /** Removes any temporary files; safe to call once the CLI has read its configuration. */
   dispose(): void;

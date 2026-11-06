@@ -88,7 +88,7 @@ export const host = (i: Integration) => {
 };
 
 /** Why a row matched a search that its name and tagline did not. */
-export type Hit = { kind: "tool" | "skill"; name: string };
+type Hit = { kind: "tool" | "skill"; name: string };
 export type ListEntry = { integration: Integration; hit: Hit | null };
 
 const byLabel = (a: ListEntry, b: ListEntry) =>
@@ -143,13 +143,13 @@ function match(integration: Integration, q: string): ListEntry | undefined {
 
 /** What a tool can do, from the annotations its server declared. */
 export type ToolKind = "read" | "write" | "destructive";
-export const TOOL_KINDS: { kind: ToolKind; label: string; hint: string }[] = [
+const TOOL_KINDS: { kind: ToolKind; label: string; hint: string }[] = [
   { kind: "read", label: "Read", hint: "Only look things up" },
   { kind: "write", label: "Write", hint: "Create or change things" },
   { kind: "destructive", label: "Destructive", hint: "May delete or overwrite" },
 ];
 
-export const toolKind = (t: IntegrationTool): ToolKind =>
+const toolKind = (t: IntegrationTool): ToolKind =>
   t.readOnly ? "read" : t.destructive ? "destructive" : "write";
 
 /** Tools matching `query`, grouped by kind in `TOOL_KINDS` order; empty groups are left out. */

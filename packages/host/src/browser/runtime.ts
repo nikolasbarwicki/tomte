@@ -23,7 +23,7 @@ import { chromePid, engineTree, isAlive, killTree, readPid, waitForExit } from "
 
 const KEY_SECRET = "browser-encryption-key";
 
-export const USER_HAS_CONTROL = "user has control";
+const USER_HAS_CONTROL = "user has control";
 
 /** The engine or Chrome is missing, so no browser call can run. */
 export class BrowserUnavailable extends Error {}

@@ -4,7 +4,7 @@ import { isAbsolute, join, normalize } from "node:path";
 import { parseArgs } from "node:util";
 
 /** Local: the host runs on the user's machine. Remote: the host runs on a server and users reach it over the network. */
-export type HostMode = "local" | "remote";
+type HostMode = "local" | "remote";
 
 /** Every deployment choice, read once at startup by `parseHostConfig`; nothing downstream reads the environment for these. */
 export interface HostConfig {
