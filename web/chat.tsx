@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpIcon, AtSignIcon, ChevronDownIcon, MessageSquarePlusIcon, PanelRightIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronDownIcon, MessageSquarePlusIcon, PanelRightIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,7 +19,8 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 import type { BotSummary, ContextEvent, FilesEvent, MemoryScope, Routine } from "./events.ts";
 import { act } from "./api.ts";
-import { strokeFill } from "./avatars.ts";
+import { botTheme } from "./avatars.ts";
+import { BotAvatar } from "./bot-avatar.tsx";
 import { BotPanel, type PanelTab } from "./bot-panel.tsx";
 import { confirmAction } from "./confirm.tsx";
 import { kTokens } from "./format.ts";
@@ -89,10 +90,9 @@ export function ChatView({
     />
   );
 
-  const { fill, text } = strokeFill(bot.avatar.stroke);
   return (
     <div className="flex h-full min-h-0">
-      <div className="bot-theme flex min-w-0 flex-1 flex-col" style={{ "--bot": fill, "--bot-foreground": text } as React.CSSProperties}>
+      <div className="bot-theme flex min-w-0 flex-1 flex-col" style={botTheme(bot.avatar.stroke)}>
         <AppBar>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-medium">{bot.name}</h1>
@@ -134,7 +134,7 @@ export function ChatView({
             <TooltipContent>Memory, files, routines and browser</TooltipContent>
           </Tooltip>
         </AppBar>
-        <Transcript bot={bot} items={items} busy={busy} onShowBrowser={showBrowser} />
+        <Transcript bot={bot} bots={bots} items={items} busy={busy} onShowBrowser={showBrowser} />
         <Composer bot={bot} bots={bots} busy={busy} draft={draft} onDraftTaken={onDraftTaken} />
       </div>
       {wide ? (
@@ -294,9 +294,10 @@ function Composer({ bot, bots, busy, draft, onDraftTaken }: { bot: BotSummary; b
                   pick(b);
                 }}
                 onMouseEnter={() => setHighlight(i)}
-                className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm", i === active && "bg-accent text-accent-foreground")}
+                style={botTheme(b.avatar.stroke)}
+                className={cn("bot-theme flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm", i === active && "bg-accent text-accent-foreground")}
               >
-                <AtSignIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                <BotAvatar avatar={b.avatar} className="size-5" />
                 <span className="shrink-0 font-medium">{b.name}</span>
                 {b.purpose && <span className="truncate text-xs text-muted-foreground">{b.purpose}</span>}
               </button>
@@ -312,19 +313,23 @@ function Composer({ bot, bots, busy, draft, onDraftTaken }: { bot: BotSummary; b
         >
           {mentions.length > 0 && (
             <div className="flex flex-wrap gap-1.5 px-3 pt-3">
-              {mentions.map((m) => (
-                <span key={m.id} className="inline-flex h-6 items-center gap-1 rounded-full bg-secondary pr-1 pl-2 text-xs font-medium text-secondary-foreground">
-                  @{m.name}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${m.name}`}
-                    className="rounded-full p-0.5 hover:bg-foreground/10"
-                    onClick={() => setMentions(mentions.filter((x) => x.id !== m.id))}
-                  >
-                    <XIcon className="size-3" />
-                  </button>
-                </span>
-              ))}
+              {mentions.map((m) => {
+                const target = bots.find((b) => b.id === m.id);
+                return (
+                  <span key={m.id} style={target && botTheme(target.avatar.stroke)} className="bot-theme inline-flex h-6 items-center gap-1 rounded-full bg-secondary pr-1 pl-1 text-xs font-medium text-secondary-foreground">
+                    {target && <BotAvatar avatar={target.avatar} className="size-4" />}
+                    @{m.name}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${m.name}`}
+                      className="rounded-full p-0.5 hover:bg-foreground/10"
+                      onClick={() => setMentions(mentions.filter((x) => x.id !== m.id))}
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  </span>
+                );
+              })}
             </div>
           )}
           <Textarea

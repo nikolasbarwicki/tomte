@@ -26,7 +26,7 @@ function writeSession(botId: string, msgs: { type: "user" | "assistant"; content
   writeFileSync(join(dir, `${botId}.jsonl`), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
 }
 
-type Card = { type: "handoff"; direction: string; bot: string; title: string; status: string; text: string };
+type Card = { type: "handoff"; direction: string; bot: string; botId?: string; title: string; status: string; text: string };
 
 /** What a page connecting now would be sent for the open bot's transcript. */
 async function pageEvents(): Promise<{ type: string; [k: string]: unknown }[]> {
@@ -55,7 +55,7 @@ describe("handoff cards", () => {
     await host.until(() => host.messagesOf(b).length === 1);
     const events = await pageEvents();
     expect(events.filter((e) => e.type === "handoff")).toEqual([
-      { type: "handoff", direction: "received", bot: "Alice", title: "Flights", status: "submitted", text: "find <one> & cheap" },
+      { type: "handoff", direction: "received", bot: "Alice", botId: a, title: "Flights", status: "submitted", text: "find <one> & cheap" },
     ]);
     expect(events.some((e) => e.type === "user")).toBe(false);
   });
@@ -70,9 +70,9 @@ describe("handoff cards", () => {
     await host.until(() => host.messagesOf(b).length === 1);
     await bob.call("complete_handoff", { handoff_id, result: "EUR 99" });
     await host.until(() => host.messagesOf(a).length === 1);
-    expect((await cards()).map(({ direction, bot, title, status, text }) => ({ direction, bot, title, status, text }))).toEqual([
-      { direction: "sent", bot: "Bob", title: "Flights", status: "submitted", text: "find one" },
-      { direction: "received", bot: "Bob", title: "Flights", status: "completed", text: "EUR 99" },
+    expect((await cards()).map(({ direction, bot, botId, title, status, text }) => ({ direction, bot, botId, title, status, text }))).toEqual([
+      { direction: "sent", bot: "Bob", botId: b, title: "Flights", status: "submitted", text: "find one" },
+      { direction: "received", bot: "Bob", botId: b, title: "Flights", status: "completed", text: "EUR 99" },
     ]);
   });
 
@@ -122,11 +122,11 @@ describe("handoff cards", () => {
     }
     expect(logs.find((l) => l.includes("query opened") && l.includes(`session=${b}`))).toContain("(resume)");
     const events = await pageEvents();
-    expect(events.filter((e) => e.type === "handoff").map(({ direction, bot, title, status, text }) => ({ direction, bot, title, status, text }))).toEqual([
-      { direction: "received", bot: "Alice", title: "Flights", status: "submitted", text: "find one" },
-      { direction: "sent", bot: "Alice", title: "Flights", status: "input-required", text: "which month?" },
-      { direction: "received", bot: "Alice", title: "Flights", status: "working", text: "May" },
-      { direction: "sent", bot: "Alice", title: "Flights", status: "failed", text: "no flights" },
+    expect(events.filter((e) => e.type === "handoff").map(({ direction, bot, botId, title, status, text }) => ({ direction, bot, botId, title, status, text }))).toEqual([
+      { direction: "received", bot: "Alice", botId: a, title: "Flights", status: "submitted", text: "find one" },
+      { direction: "sent", bot: "Alice", botId: a, title: "Flights", status: "input-required", text: "which month?" },
+      { direction: "received", bot: "Alice", botId: a, title: "Flights", status: "working", text: "May" },
+      { direction: "sent", bot: "Alice", botId: a, title: "Flights", status: "failed", text: "no flights" },
     ]);
     expect(events.filter((e) => e.type === "user").map((e) => e.text)).toEqual(["continue"]);
   });

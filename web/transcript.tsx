@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Streamdown } from "streamdown";
 import {
   AlarmClockIcon,
@@ -26,6 +27,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import type { BotSummary, ServerEvent, WaitAction } from "./events.ts";
 import { act } from "./api.ts";
+import { botTheme } from "./avatars.ts";
+import { BotAvatar } from "./bot-avatar.tsx";
 import { kTokens } from "./format.ts";
 
 export type Item =
@@ -37,7 +40,7 @@ export type Item =
   | { kind: "wait"; id: string; waitKind: string; title: string; detail?: string; actions: WaitAction[]; resolved?: string }
   | { kind: "session" }
   | { kind: "routine"; name: string; trigger: string }
-  | { kind: "handoff"; direction: "sent" | "received"; bot: string; title: string; status: string; text: string };
+  | { kind: "handoff"; direction: "sent" | "received"; bot: string; botId?: string; title: string; status: string; text: string };
 
 export function reduce(items: Item[], e: ServerEvent): Item[] {
   const last = items[items.length - 1];
@@ -73,7 +76,7 @@ export function reduce(items: Item[], e: ServerEvent): Item[] {
     case "routine":
       return [...items, { kind: "routine", name: e.name, trigger: e.trigger }];
     case "handoff":
-      return [...items, { kind: "handoff", direction: e.direction, bot: e.bot, title: e.title, status: e.status, text: e.text }];
+      return [...items, { kind: "handoff", direction: e.direction, bot: e.bot, botId: e.botId, title: e.title, status: e.status, text: e.text }];
     case "compacted":
       return [...items, { kind: "info", text: `Context compacted (${e.trigger}) · ${kTokens(e.preTokens)} tokens summarized` }];
     case "done":
@@ -85,7 +88,7 @@ export function reduce(items: Item[], e: ServerEvent): Item[] {
 }
 
 /** The scrolling message list. It follows new output while the reader is at the bottom and stays put once they scroll up. */
-export function Transcript({ bot, items, busy, onShowBrowser }: { bot: BotSummary; items: Item[]; busy: boolean; onShowBrowser: () => void }) {
+export function Transcript({ bot, bots, items, busy, onShowBrowser }: { bot: BotSummary; bots: BotSummary[]; items: Item[]; busy: boolean; onShowBrowser: () => void }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   const toBottom = (behavior: ScrollBehavior) => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior });
@@ -117,7 +120,7 @@ export function Transcript({ bot, items, busy, onShowBrowser }: { bot: BotSummar
         ) : (
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6">
             {items.map((it, i) => (
-              <Row key={i} item={it} onShowBrowser={onShowBrowser} />
+              <Row key={i} item={it} bots={bots} onShowBrowser={onShowBrowser} />
             ))}
             {busy && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -142,16 +145,23 @@ export function Transcript({ bot, items, busy, onShowBrowser }: { bot: BotSummar
   );
 }
 
-function Row({ item, onShowBrowser }: { item: Item; onShowBrowser: () => void }) {
+function Row({ item, bots, onShowBrowser }: { item: Item; bots: BotSummary[]; onShowBrowser: () => void }) {
   switch (item.kind) {
     case "user":
       return (
         <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm break-words whitespace-pre-wrap text-primary-foreground">
-          {item.mentions?.map((m) => (
-            <span key={m.id} className="mr-1 font-semibold">
-              @{m.name}
-            </span>
-          ))}
+          {item.mentions?.map((m) => {
+            const target = bots.find((b) => b.id === m.id);
+            return target ? (
+              <Link key={m.id} to="/bots/$botId" params={{ botId: target.id }} style={botTheme(target.avatar.stroke)} className="bot-theme mr-1 rounded-full bg-background px-1.5 font-semibold text-primary transition-colors hover:bg-secondary">
+                @{m.name}
+              </Link>
+            ) : (
+              <span key={m.id} className="mr-1 font-semibold">
+                @{m.name}
+              </span>
+            );
+          })}
           {item.text}
         </div>
       );
@@ -193,7 +203,7 @@ function Row({ item, onShowBrowser }: { item: Item; onShowBrowser: () => void })
         </Badge>
       );
     case "handoff":
-      return <HandoffCard item={item} />;
+      return <HandoffCard item={item} other={bots.find((b) => b.id === item.botId)} />;
     case "tool":
       return <ToolCall name={item.name} input={item.input} />;
     case "wait":
@@ -369,14 +379,23 @@ const HANDOFF_STATUS: Record<string, string> = {
   canceled: "bg-destructive/10 text-destructive",
 };
 
-function HandoffCard({ item }: { item: Extract<Item, { kind: "handoff" }> }) {
+/** `other`: the bot on the far side, when it still exists; the card takes its color. */
+function HandoffCard({ item, other }: { item: Extract<Item, { kind: "handoff" }>; other: BotSummary | undefined }) {
   const received = item.direction === "received";
   return (
-    <div className="grid gap-2 rounded-xl border bg-card p-4 text-sm">
+    <div style={other && botTheme(other.avatar.stroke)} className={cn("grid gap-2 rounded-xl border bg-card p-4 text-sm", other && "bot-theme")}>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {received ? <ArrowDownLeftIcon className="size-3.5" /> : <ArrowUpRightIcon className="size-3.5" />}
-        <span>
-          Handoff {received ? "from" : "to"} <span className="font-medium text-foreground">{item.bot}</span>
+        <span className="flex items-center gap-1">
+          Handoff {received ? "from" : "to"}
+          {other ? (
+            <Link to="/bots/$botId" params={{ botId: other.id }} className="inline-flex items-center gap-1 rounded-full py-0.5 pr-2 pl-1 font-medium text-primary transition-colors hover:bg-primary/10">
+              <BotAvatar avatar={other.avatar} className="size-4" />
+              {item.bot}
+            </Link>
+          ) : (
+            <span className="font-medium text-foreground">{item.bot}</span>
+          )}
         </span>
         <Badge variant="secondary" className={cn("ml-auto capitalize", HANDOFF_STATUS[item.status])}>
           {item.status}

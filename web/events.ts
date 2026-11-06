@@ -20,8 +20,8 @@ export type ServerEvent =
   | { type: "session" }
   /** A routine's turn starts in this chat; its prompt stays hidden like other host messages. */
   | { type: "routine"; name: string; trigger: RunTrigger }
-  /** A handoff shown as a card. `received`: another bot's brief or update arrived; `sent`: this bot's own handoff tool call. `bot` is the other party. */
-  | { type: "handoff"; direction: "sent" | "received"; bot: string; title: string; status: string; text: string }
+  /** A handoff shown as a card. `received`: another bot's brief or update arrived; `sent`: this bot's own handoff tool call. `bot` is the other party's name, `botId` its id when the handoff is still known. */
+  | { type: "handoff"; direction: "sent" | "received"; bot: string; botId?: string; title: string; status: string; text: string }
   | { type: "compacted"; trigger: "manual" | "auto"; preTokens: number }
   | ContextEvent
   | Notice;

@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 /** One-line doodle faces on a 160×160 canvas; each path is drawn without lifting the pen, so it can animate as a single stroke. */
 export const FACES = {
   tuft: "M70 120 C46 118 36 98 38 80 C40 58 58 42 80 42 C78 34 84 28 90 30 C96 32 92 40 82 42 C104 42 122 60 122 82 C122 104 106 120 84 120 C76 104 66 96 66 88 C66 82 72 82 72 88 C72 94 82 96 90 90 C92 86 92 82 96 82 C100 82 100 88 94 90",
@@ -39,10 +41,10 @@ export const STROKE_NAMES = Object.keys(STROKES) as Stroke[];
 export const isFace = (s: string): s is Face => Object.hasOwn(FACES, s);
 export const isStroke = (s: string): s is Stroke => Object.hasOwn(STROKES, s);
 
-/** A stroke as a solid fill and the text color that reads on it; `ink` fills with the theme's text color. */
-export function strokeFill(stroke: Stroke): { fill: string; text: string } {
-  if (stroke === "ink") return { fill: "var(--foreground)", text: "var(--background)" };
-  return { fill: STROKES[stroke], text: "oklch(0.985 0 0)" };
+/** Inline style for a `.bot-theme` element: the stroke as a solid fill and the text color on it; `ink` fills with the theme's text color. */
+export function botTheme(stroke: Stroke): CSSProperties {
+  const ink = stroke === "ink";
+  return { "--bot": ink ? "var(--foreground)" : STROKES[stroke], "--bot-foreground": ink ? "var(--background)" : "oklch(0.985 0 0)" } as CSSProperties;
 }
 
 /** A stable avatar derived from the bot id, for bots created before avatars existed. */
