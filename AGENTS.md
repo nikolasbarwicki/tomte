@@ -2,6 +2,8 @@
 
 `bun run check` is the full gate; run it before calling work done. It runs, in order and stopping at the first failure: `fmt:check` (oxfmt), `lint` (oxlint, type-aware), `knip` (dead files, exports and dependencies), `typecheck` (tsgo, per package), `depcheck` (dependency-cruiser, ADR 0003 layering) and `test` (`bun test`). Each is also a script of its own. `bun run fmt` rewrites formatting in place.
 
+`bun test` always runs with coverage (`bunfig.toml`: `coverage = true`, test files excluded) and exits non-zero when any covered file's line or function coverage is below `coverageThreshold`, which is how `check` and CI enforce it. Bun applies the threshold per file, not to the "All files" total, and only reads the plural keys `lines`/`functions` (singular keys are silently ignored; an omitted key defaults to 0.9). The threshold is the lowest per-file value measured today, rounded down to a whole percent. Raise it as tests land, never lower it; if coverage genuinely drops, add tests instead.
+
 ### Git hooks
 
 Git hooks come from lefthook (`lefthook.yml`) and are installed by `bun install` via the `prepare` script; it skips quietly outside a git checkout.
