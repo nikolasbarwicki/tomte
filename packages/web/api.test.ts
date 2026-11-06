@@ -37,7 +37,9 @@ describe("readJson", () => {
   });
 
   test("rejects a response body that does not match", async () => {
-    expect(readJson(Response.json({ id: 1 }), Created)).rejects.toBeInstanceOf(InvalidPayload);
+    await expect(readJson(Response.json({ id: 1 }), Created)).rejects.toBeInstanceOf(
+      InvalidPayload,
+    );
   });
 });
 

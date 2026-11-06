@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 
 import type { SpawnOptions, SpawnedProcess } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
 
 const isWin = process.platform === "win32";
 /** Where the managed Claude CLI is installed: `claude-cli/` in the data root. */
@@ -77,13 +78,18 @@ export function resolveCli(dataRoot: string): ResolvedCli | undefined {
   );
 }
 
+/** The fields of an npm registry version document the install reads. */
+const NpmVersion = z.object({
+  version: z.string(),
+  dist: z.object({ tarball: z.string(), integrity: z.string() }),
+});
+
 /** Download Anthropic's platform package from npm, verify dist.integrity, extract it into the data root. */
 export async function installManagedCli(dataRoot: string, version = "latest"): Promise<string> {
   const name = platformPackage();
-  const meta = (await (await fetch(`https://registry.npmjs.org/${name}/${version}`)).json()) as {
-    version: string;
-    dist: { tarball: string; integrity: string };
-  };
+  const meta = NpmVersion.parse(
+    await (await fetch(`https://registry.npmjs.org/${name}/${version}`)).json(),
+  );
   const [algo = "", expected] = [
     meta.dist.integrity.split("-")[0],
     meta.dist.integrity.slice(meta.dist.integrity.indexOf("-") + 1),
