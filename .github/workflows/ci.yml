@@ -40,6 +40,27 @@ jobs:
 
       - run: bun run check
 
+  pr-title:
+    name: pr-title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun install --frozen-lockfile
+
+      # Squash merges use the PR title as the commit message. The title goes
+      # through an env var, never interpolated into the script.
+      - name: Lint PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$PR_TITLE" | bunx commitlint
+
   secrets:
     name: secrets
     runs-on: ubuntu-latest
