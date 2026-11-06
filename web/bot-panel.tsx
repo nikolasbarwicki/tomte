@@ -8,7 +8,7 @@ import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { BotSummary, FilesEvent, MemoryScope, Routine } from "./events.ts";
+import type { BotSummary, FilesEvent, MemoryScope, Routine } from "../src/contract/events.ts";
 import { act } from "./api.ts";
 import { BrowserPanel } from "./browser-panel.tsx";
 import { confirmAction } from "./confirm.tsx";

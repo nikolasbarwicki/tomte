@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { HostServerLease } from "../harness.ts";
+import type { HostServerLease } from "../harness/index.ts";
+import { serveMcpRequest } from "../host-mcp/index.ts";
 import { PageState } from "./page-state.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
 import type { BrowserRuntimes } from "./runtime.ts";
@@ -8,7 +8,7 @@ import type { Takeover } from "./takeover.ts";
 import type { BrowserLogin } from "./login.ts";
 import { browserIsolation } from "./sandbox.ts";
 import { BROWSER_INSTRUCTIONS, BROWSER_SERVER_NAME, createBrowserMcpServer } from "./tools.ts";
-import { TokenRegistry } from "../tokens.ts";
+import { TokenRegistry } from "../platform/tokens.ts";
 
 export const BROWSER_ENDPOINT_PATH = "/mcp/browser";
 
@@ -37,10 +37,6 @@ export interface BrowserEndpoint {
   revokeBot(botId: string): void;
 }
 
-function reject(res: ServerResponse, status: number, message: string) {
-  res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify({ error: message }));
-}
-
 export function createBrowserEndpoint(deps: BrowserEndpointDeps): BrowserEndpoint {
   const tokens = deps.tokens ?? new TokenRegistry();
   const pages = new Map<string, PageState>();
@@ -52,26 +48,14 @@ export function createBrowserEndpoint(deps: BrowserEndpointDeps): BrowserEndpoin
   };
 
   return {
-    async handle(req, res) {
-      const port = deps.port();
-      // Blocks DNS rebinding (wrong Host) and web pages (any Origin).
-      if (req.headers.host !== `127.0.0.1:${port}` && req.headers.host !== `localhost:${port}`) return reject(res, 403, "bad host");
-      if (req.headers.origin !== undefined) return reject(res, 403, "cross-origin requests are not allowed");
-      const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
-      const botId = bearer ? tokens.botOf(bearer) : undefined;
-      if (!botId) return reject(res, 401, "missing or invalid token");
-      if (!deps.isEnabled(botId)) return reject(res, 403, "the browser is switched off for this bot");
-      if (req.method !== "POST") return reject(res, 405, "method not allowed");
-
-      const mcp = createBrowserMcpServer({ botId, browser: deps.runtimes.forBot(botId), egress: deps.egress, page: pageOf(botId), filesDir: deps.filesDir(botId), takeover: deps.takeover, login: deps.login, unattended: () => deps.unattended(botId) });
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-      res.on("close", () => {
-        void transport.close();
-        void mcp.close();
-      });
-      await mcp.connect(transport);
-      await transport.handleRequest(req, res);
-    },
+    handle: (req, res) =>
+      serveMcpRequest(req, res, {
+        port: deps.port(),
+        tokens,
+        refuse: (botId) => (deps.isEnabled(botId) ? undefined : "the browser is switched off for this bot"),
+        server: (botId) =>
+          createBrowserMcpServer({ botId, browser: deps.runtimes.forBot(botId), egress: deps.egress, page: pageOf(botId), filesDir: deps.filesDir(botId), takeover: deps.takeover, login: deps.login, unattended: () => deps.unattended(botId) }),
+      }),
 
     lease(botId) {
       if (!deps.isEnabled(botId)) return { servers: [], release() {} };

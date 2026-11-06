@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { FACES, STROKES, type BotAvatar as Avatar } from "./avatars.ts";
+import { FACES, STROKES, type BotAvatar as Avatar } from "../src/contract/avatars.ts";
 
 /** A bot's one-line face. While `working`, the line keeps drawing and erasing itself. */
 export function BotAvatar({ avatar, working = false, className }: { avatar: Avatar; working?: boolean; className?: string }) {

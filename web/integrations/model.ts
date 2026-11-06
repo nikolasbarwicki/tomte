@@ -1,4 +1,4 @@
-import { CATALOG_CATEGORIES, type CatalogCategory, type Integration, type IntegrationAuth, type IntegrationTool, type IntegrationTransport, type ToolPolicy } from "../events.ts";
+import { CATALOG_CATEGORIES, type CatalogCategory, type Integration, type IntegrationAuth, type IntegrationTool, type IntegrationTransport, type ToolPolicy } from "../../src/contract/events.ts";
 
 export const TRANSPORT_LABEL: Record<IntegrationTransport["type"], string> = { http: "HTTP", sse: "SSE", stdio: "Local command" };
 

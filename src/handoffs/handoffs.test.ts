@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { startHandoffHost, parse, type HandoffHost } from "./test-host.ts";
+import { startHandoffHost, parse, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
 beforeEach(async () => void (host = await startHandoffHost()));

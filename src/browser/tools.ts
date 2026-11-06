@@ -4,33 +4,12 @@ import { EngineError } from "./engine-cli.ts";
 import { registerNavigationTools } from "./tools/navigation.ts";
 import { errorResult } from "./tools/result.ts";
 import { registerActionTools } from "./tools/actions.ts";
-import type { PageState } from "./page-state.ts";
-import type { EgressProxy } from "./egress-proxy.ts";
 import type { BotBrowser } from "./runtime.ts";
-import type { Takeover } from "./takeover.ts";
+import type { BrowserToolContext } from "./tools/context.ts";
 import { registerTakeoverTools } from "./tools/takeover.ts";
 import { registerCredentialTools } from "./tools/credentials.ts";
-import type { BrowserLogin } from "./login.ts";
 
 export const BROWSER_SERVER_NAME = "browser";
-
-/** What every browser tool is allowed to touch: one bot's browser, nothing else. */
-export interface BrowserToolContext {
-  botId: string;
-  browser: BotBrowser;
-  /** What the bot has seen of its page: snapshot revision and repeated-call streak. */
-  page: PageState;
-  /** The bot's files folder, where oversized results and screenshots are saved. */
-  filesDir: string;
-  /** Tells a navigation tool whether the network block refused something during its call. */
-  egress: Pick<EgressProxy, "blockedSince">;
-  /** Asks the user to take over the bot's browser. */
-  takeover: Pick<Takeover, "request">;
-  /** Stored credentials and sign-in. */
-  login: Pick<BrowserLogin, "list" | "login">;
-  /** True while the bot runs without the user (a routine); human waits are refused then. */
-  unattended(): boolean;
-}
 
 /** Delivered as the MCP server's instructions and appended to the bot's system prompt. */
 export const BROWSER_INSTRUCTIONS = [

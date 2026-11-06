@@ -16,10 +16,10 @@ Gmail setup today asks each user to:
 
 ## 2. Claudebot's current wiring **[V]**
 
-- `src/integrations-catalog.ts`: `GMAIL_OAUTH` is an own-client entry. Scopes `gmail.readonly gmail.compose`. URL `https://gmailmcp.googleapis.com/mcp/v1`.
-- `src/integrations.ts`: `connectOAuth` uses `deps.oauthRedirectUrl` (loopback `/oauth/callback`, port from `PORT`, default 5173) through the MCP SDK `mcpAuth`.
+- `src/integrations/catalog.ts`: `GMAIL_OAUTH` is an own-client entry. Scopes `gmail.readonly gmail.compose`. URL `https://gmailmcp.googleapis.com/mcp/v1`.
+- `src/integrations/index.ts`: `connectOAuth` uses `deps.oauthRedirectUrl` (loopback `/oauth/callback`, port from `PORT`, default 5173) through the MCP SDK `mcpAuth`.
 - `.env`: `APP_ORIGIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
-- No `access_type` string exists in `src/integrations*.ts`. The installed MCP SDK (`node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js`) matches only `offline_access`, and only to add `prompt=consent`; it never sets `access_type`. **[V]** by grep, not by a live Google sign-in. So claudebot sends no `access_type=offline` today, and Google likely issues no refresh token **[I]** until tested.
+- No `access_type` string exists in `src/integrations/*.ts`. The installed MCP SDK (`node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js`) matches only `offline_access`, and only to add `prompt=consent`; it never sets `access_type`. **[V]** by grep, not by a live Google sign-in. So claudebot sends no `access_type=offline` today, and Google likely issues no refresh token **[I]** until tested.
 
 ## 3. Google facts
 
@@ -103,7 +103,7 @@ Composio's own account of managed auth (`composio.dev/content/ship-gmail-integra
 ## 6. Recommended direction (not yet decided)
 
 1. Add a Composio catalog entry as the opt-in one-click path, with explicit data-path disclosure. Keep A.
-2. Port MausBot-style verb-class grants and send-always-asks before any managed Gmail path ships. This depends on the approval-policy gap in `thread.ts` `canUseTool`: the integration "ask" branch precedes the `approveAll` short-circuit, and routines and chat default to `approveAll: true`.
+2. Port MausBot-style verb-class grants and send-always-asks before any managed Gmail path ships. This depends on the approval-policy gap in `bots/thread.ts` `canUseTool`: the integration "ask" branch precedes the `approveAll` short-circuit, and routines and chat default to `approveAll: true`.
 3. Add `access_type=offline` + `prompt=consent` to Google authorization URLs (SDK does not, see section 2). Confirm with a live sign-in.
 4. Write a Limited Use-style disclosure for the model-provider transfer.
 5. Do not start a verified-client project until Google answers whether piping Gmail into Claude, or a user-chosen model, is a permitted transfer.

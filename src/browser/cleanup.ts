@@ -1,4 +1,4 @@
-import type { Credentials } from "../credentials.ts";
+import type { Credentials } from "../credentials/index.ts";
 import type { BrowserEndpoint } from "./endpoint.ts";
 import type { BrowserRuntimes } from "./runtime.ts";
 import type { Takeover } from "./takeover.ts";

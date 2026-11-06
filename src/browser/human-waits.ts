@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ServerEvent, WaitAction } from "../../web/events.ts";
+import type { ServerEvent, WaitAction } from "../contract/events.ts";
 
 /** What the bot's tool returns for a human wait: at once, never after the user answers. */
 export interface WaitingForUser {

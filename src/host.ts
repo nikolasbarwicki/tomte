@@ -5,10 +5,9 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { authCommand, installManagedCli, resolveCli, type ResolvedCli } from "./cli.ts";
-import { installManagedEngine } from "./browser-engine.ts";
-import { Thread, type HostDelegate } from "./thread.ts";
-import { botContext, botFilesPath, createBot, currentSession, getBot, newSession, touchBot } from "./bots.ts";
+import { authCommand, installManagedCli, resolveCli, type ResolvedCli } from "./harness/index.ts";
+import { installManagedEngine } from "./browser/index.ts";
+import { Thread, botContext, botFilesPath, createBot, currentSession, getBot, newSession, touchBot, type HostDelegate } from "./bots/index.ts";
 import { getSessionInfo } from "@anthropic-ai/claude-agent-sdk";
 
 const log = (l: string) => console.error(l);
@@ -182,7 +181,7 @@ try {
       console.log(`installed ${await installManagedEngine(a1)}`);
       break;
     case "browser-smoke":
-      await (await import("./browser-smoke.ts")).runBrowserSmoke();
+      await (await import("./browser/smoke.ts")).runBrowserSmoke();
       break;
     case "auth-status":
     case "auth-login": {

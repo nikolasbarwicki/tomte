@@ -1,13 +1,8 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { EngineError } from "../engine-cli.ts";
-import type { BrowserToolContext } from "../tools.ts";
+import { EngineError, type PageData } from "../engine-cli.ts";
+import type { BrowserToolContext } from "./context.ts";
 import { shapePage } from "../shape.ts";
 import { guarded, textResult, ToolError } from "./result.ts";
-
-export interface PageData {
-  origin?: string;
-  snapshot?: string;
-}
 
 /** What a tool produced: the text for the bot and what the page looked like afterwards, for the loop guard. */
 export interface Outcome {

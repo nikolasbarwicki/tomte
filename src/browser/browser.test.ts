@@ -6,13 +6,13 @@ import { request } from "node:http";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBot } from "../bots.ts";
-import { migrate } from "../db.ts";
-import { createHostServer, type HostServer } from "../host-server.ts";
-import { memorySecrets } from "../secrets.ts";
+import { createBot } from "../bots/index.ts";
+import { migrate } from "../platform/db.ts";
+import { createHostServer, type HostServer } from "../host-server/index.ts";
+import { memorySecrets } from "../platform/secrets.ts";
 import type { SandboxStatus } from "./sandbox.ts";
 
-const FAKE_ENGINE = join(import.meta.dir, "..", "fixtures", "fake-agent-browser.ts");
+const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH"] as const;
 
 let root: string;
@@ -193,7 +193,7 @@ describe("sandbox unavailable", () => {
   test("the UI is told the browser is unavailable, with the reason, and the switch refuses to turn on", async () => {
     sandbox = NO_SANDBOX;
     const id = newBot();
-    expect((await (await fetch(`${server.url}/api/info`)).json()).browser).toEqual(NO_SANDBOX);
+    expect(await (await fetch(`${server.url}/api/info`)).json()).toHaveProperty("browser", NO_SANDBOX);
     const res = await api("/api/bots/browser", { botId: id, enabled: true });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: NO_SANDBOX.reason });

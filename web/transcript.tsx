@@ -36,7 +36,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
-import type { BotSummary, ServerEvent, WaitAction } from "./events.ts";
+import type { BotSummary, ServerEvent, WaitAction } from "../src/contract/events.ts";
 import { act } from "./api.ts";
 import { botTheme } from "./avatars.ts";
 import { BotAvatar } from "./bot-avatar.tsx";

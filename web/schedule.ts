@@ -1,4 +1,4 @@
-import type { Schedule } from "./events.ts";
+import type { Schedule } from "../src/contract/events.ts";
 
 /** Editor-friendly shapes; every preset except `once` compiles to cron. `time` is "HH:MM", `day` is 0 (Sunday) to 6. */
 export type Preset =

@@ -1,1 +1,5 @@
-{"compilerOptions":{"target":"ES2022","module":"Preserve","moduleResolution":"Bundler","strict":true,"moduleDetection":"force","noEmit":true,"allowImportingTsExtensions":true,"skipLibCheck":true,"jsx":"react-jsx","paths":{"@/*":["./web/*"]},"lib":["ES2022","DOM"],"types":["bun"]},"include":["src","web"]}
+{
+  "files": [],
+  "compilerOptions": { "paths": { "@/*": ["./web/*"] } },
+  "references": [{ "path": "./tsconfig.server.json" }, { "path": "./tsconfig.web.json" }]
+}

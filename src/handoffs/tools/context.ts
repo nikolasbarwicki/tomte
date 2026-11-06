@@ -1,4 +1,4 @@
-import type { ServerEvent } from "../../../web/events.ts";
+import type { ServerEvent } from "../../contract/events.ts";
 import type { HandoffStore } from "../store.ts";
 
 /** An A2A agent card: how a bot describes itself to other bots. */

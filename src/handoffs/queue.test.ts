@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { startHandoffHost, type HandoffHost } from "./test-host.ts";
+import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
 let claudeConfig: string;
@@ -35,6 +35,8 @@ async function pageEvents(): Promise<PageEvent[]> {
 }
 const chatEvents = async () => (await pageEvents()).filter((e) => ["user", "queued", "dequeued"].includes(e.type));
 const open = (id: string) => host.ui("/api/open", { id, botId: id });
+/** Sends a message from the page; the reply names the queued entry when the bot was busy. */
+const send = async (text: string) => (await (await host.ui("/api/send", { text })).json()) as { ok: true; queued?: string };
 
 /** Opens a bot and leaves its first turn running. */
 async function busyBot() {
@@ -49,7 +51,7 @@ async function busyBot() {
 describe("message queue", () => {
   test("messages sent during a turn wait, then reach the bot together as the next turn", async () => {
     const a = await busyBot();
-    const second = await (await host.ui("/api/send", { text: "second" })).json();
+    const second = await send("second");
     await host.ui("/api/send", { text: "third" });
     expect(second.queued).toBeString();
 
@@ -73,7 +75,7 @@ describe("message queue", () => {
 
   test("a cancelled message never reaches the bot, and cancelling it twice is refused", async () => {
     const a = await busyBot();
-    const { queued } = await (await host.ui("/api/send", { text: "oops" })).json();
+    const { queued } = await send("oops");
     await host.ui("/api/send", { text: "keep" });
 
     expect((await host.ui("/api/send/cancel", { id: queued })).status).toBe(200);
@@ -90,7 +92,7 @@ describe("message queue", () => {
   test("a send to an idle bot runs at once and is not queued", async () => {
     const a = host.createBot("Researcher");
     await open(a);
-    const sent = await (await host.ui("/api/send", { text: "hi" })).json();
+    const sent = await send("hi");
     expect(sent.queued).toBeUndefined();
     expect((await host.ui("/api/send/cancel", { id: "nope" })).status).toBe(404);
   });

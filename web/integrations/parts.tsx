@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { Integration } from "../events.ts";
+import type { Integration } from "../../src/contract/events.ts";
 import { act } from "../api.ts";
 import { cn } from "@/lib/utils";
 import type { Health } from "./model.ts";

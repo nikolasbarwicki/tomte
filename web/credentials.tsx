@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { KeyRound, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
-import type { BotSummary, CredentialEntry } from "./events.ts";
+import type { BotSummary, CredentialEntry } from "../src/contract/events.ts";
 import { act, errorOf, post } from "./api.ts";
 import { confirmAction } from "./confirm.tsx";
 import { Page } from "./page.tsx";

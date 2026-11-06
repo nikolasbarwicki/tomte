@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { ChevronRight, Plus, Search } from "lucide-react";
-import type { Integration } from "../events.ts";
+import type { Integration } from "../../src/contract/events.ts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SignInButton } from "./auth.tsx";
