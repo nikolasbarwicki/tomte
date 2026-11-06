@@ -12,11 +12,13 @@
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun test",
     "depcheck": "depcruise packages",
-    "check": "bun run typecheck && bun run depcheck && bun test"
+    "knip": "knip",
+    "check": "bun run typecheck && bun run depcheck && bun run knip && bun test"
   },
   "devDependencies": {
     "@swc/core": "^1.16.22",
     "dependency-cruiser": "^18.7.2",
+    "knip": "^6.44.1",
     "typescript": "^7.0.2"
   },
   "engines": {

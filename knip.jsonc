@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Scope is packages/web only; the root workspace, host and contract are not checked.
+  "ignoreWorkspaces": [".", "packages/host", "packages/contract"],
+  "workspaces": {
+    "packages/web": {
+      "vite": { "config": ["vite.config.ts"] },
+      "tailwind": { "config": ["tailwind.css"] },
+      "entry": ["**/*.test.ts", "app/routes/*.lazy.tsx"],
+      // components/ui is vendored shadcn: files keep every export the registry ships so later `shadcn add` diffs stay clean.
+      "ignoreIssues": { "components/ui/**": ["exports", "types"] }
+    }
+  }
+}

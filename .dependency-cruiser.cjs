@@ -5,6 +5,14 @@
 const HOST = "^packages/host/src/";
 const WEB = "^packages/web/";
 const CONTRACT = "^packages/contract/";
+const WEB_FEATURES = `${WEB}features/`;
+const WEB_SHARED = `${WEB}(components|hooks|lib|host)/`;
+const WEB_UI = `${WEB}components/ui/`;
+const WEB_APP = `${WEB}(app/|main\\.tsx$)`;
+const WEB_FEATURE_PRIVATE = `${WEB_FEATURES}[^/]+/(?!index\\.ts$)`;
+/** Web modules that stay free of React so they run under plain bun test. */
+const WEB_PURE = `${WEB}(host/(state|transcript)\\.ts$|features/[^/]+/(model|schedule)\\.ts$)`;
+const REACT = "node_modules/(@types/)?(react|react-dom)/";
 const TESTS = `(\\.test\\.tsx?$|${HOST}testing/)`;
 /** Folders under packages/host/src whose files are private behind index.ts. */
 const MODULES = "(bots|browser|credentials|handoffs|harness|host-mcp|host-server|integrations|routines)";
@@ -35,6 +43,55 @@ module.exports = {
       severity: "error",
       from: { path: WEB },
       to: { path: "^packages/", pathNot: `${WEB}|${CONTRACT}` },
+    },
+    {
+      name: "web-shared-not-to-features",
+      comment: "Web shared code (components, hooks, lib, host) never imports features or app.",
+      severity: "error",
+      from: { path: WEB_SHARED },
+      to: { path: `${WEB_FEATURES}|${WEB_APP}` },
+    },
+    {
+      name: "web-ui-is-vendored-leaf",
+      comment: "shadcn components/ui imports only itself, lib/, hooks/ and npm.",
+      severity: "error",
+      from: { path: WEB_UI },
+      to: { path: WEB, pathNot: `${WEB_UI}|${WEB}(lib|hooks)/` },
+    },
+    {
+      name: "web-features-not-to-app",
+      comment: "Features never import app/; route data via getRouteApi, host data via host/ hooks.",
+      severity: "error",
+      from: { path: WEB_FEATURES },
+      to: { path: WEB_APP },
+    },
+    {
+      name: "web-feature-privacy",
+      comment: "From outside a web feature folder, import only its index.ts.",
+      severity: "error",
+      from: { path: `${WEB_FEATURES}([^/]+)/|${WEB}(?!features/)` },
+      to: { path: WEB_FEATURE_PRIVATE, pathNot: `${WEB_FEATURES}$1/` },
+    },
+    {
+      name: "web-no-cross-feature",
+      comment: "Features never import each other; app/ composes them.",
+      severity: "error",
+      from: { path: `${WEB_FEATURES}([^/]+)/` },
+      to: { path: WEB_FEATURES, pathNot: `${WEB_FEATURES}$1/` },
+    },
+    {
+      name: "web-routes-load-screens-lazily",
+      comment: "The router loads screen routes only through dynamic import().",
+      severity: "error",
+      from: { path: `${WEB}app/router\\.tsx$` },
+      to: { path: `${WEB}app/routes/.+\\.lazy\\.tsx$`, dependencyTypesNot: ["dynamic-import"] },
+    },
+    {
+      name: "web-pure-models",
+      comment: "Pure web models (host/state, host/transcript, features/*/model, features/*/schedule) import no React and no .tsx file.",
+      severity: "error",
+      from: { path: WEB_PURE },
+      to: { path: `${REACT}|\\.tsx$` },
     },
     {
       name: "contract-is-standalone",

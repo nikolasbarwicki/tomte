@@ -3,8 +3,8 @@ import { ThemeProvider } from "next-themes";
 import { RouterProvider } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ConfirmHost } from "./confirm.tsx";
-import { router } from "./router.tsx";
+import { ConfirmHost } from "@/components/confirm.tsx";
+import { router } from "./app/router.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
