@@ -1,5 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { post } from "./api.ts";
+import { EllipsisIcon, GlobeIcon, HandIcon, LogOutIcon, MousePointerClickIcon, RotateCwIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
+import { act, errorOf, post } from "./api.ts";
+import { confirmAction } from "./confirm.tsx";
 import type { LiveMessage } from "./events.ts";
 
 type Tab = Extract<LiveMessage, { type: "tabs" }>["tabs"][number];
@@ -116,62 +130,116 @@ export function BrowserPanel({ botId, botName, headed }: { botId: string; botNam
   const url = tabs.find((t) => t.active)?.url || navigated;
   const control = async (action: "take" | "hand_back") => {
     const res = await post("/api/browser/control", { botId, action });
-    setError(res.ok ? undefined : ((await res.json().catch(() => ({}))) as { error?: string }).error ?? `failed (${res.status})`);
+    setError(res.ok ? undefined : await errorOf(res));
   };
+  const signOut = async () => {
+    const ok = await confirmAction({
+      title: `Sign ${botName} out of everything?`,
+      description: "The browser closes and its saved logins are deleted. Stored credentials and grants are kept.",
+      action: "Sign out",
+      destructive: true,
+    });
+    if (ok) await act("/api/bots/browser/sign-out", { botId });
+  };
+  const userHolds = holder === "user";
   return (
-    <div className="browser-panel">
-      <h3>Browser</h3>
-      <div className="browser-controls">
-        <label title="Show the browser window on this computer (restarts the browser)">
-          <input type="checkbox" checked={headed} onChange={(e) => post("/api/bots/browser/headed", { botId, headed: e.target.checked })} />
-          Show window
-        </label>
-        <button title="Close the browser; saved logins are kept" onClick={() => post("/api/bots/browser/restart", { botId })}>
-          Restart
-        </button>
-        <button
-          title="Close the browser and delete its saved logins"
-          onClick={() => confirm(`Sign ${botName} out of everything? Its saved logins will be deleted.`) && post("/api/bots/browser/sign-out", { botId })}
-        >
-          Sign out of everything
-        </button>
+    <div className="grid gap-3">
+      <div className="flex items-center gap-2">
+        <span className={cn("size-2 shrink-0 rounded-full", !live ? "bg-muted-foreground/40" : userHolds ? "bg-blue-500" : "bg-emerald-500")} />
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          {!live ? "Not running" : userHolds ? "You have control" : holder === "draining" ? "Handing control to you…" : `${botName} is in control`}
+        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Browser settings" />}>
+            <EllipsisIcon />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuCheckboxItem checked={headed} onCheckedChange={(checked) => act("/api/bots/browser/headed", { botId, headed: checked })}>
+              Show window
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuItem onClick={() => act("/api/bots/browser/restart", { botId })}>
+              <RotateCwIcon /> Restart browser
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={signOut}>
+              <LogOutIcon /> Sign out of everything
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {live ? (
         <>
-          {tabs.length > 0 && (
-            <div className="browser-tabs">
-              {tabs.map((t) => (
-                <span key={t.id} className={t.active ? "active" : ""} title={t.url}>
-                  {t.title || t.url || t.id}
-                </span>
-              ))}
+          <div className="overflow-hidden rounded-lg border">
+            {tabs.length > 1 && (
+              <div className="flex gap-1 overflow-x-auto border-b bg-muted/60 px-1.5 pt-1.5">
+                {tabs.map((t) => (
+                  <span
+                    key={t.id}
+                    title={t.url}
+                    className={cn("max-w-40 shrink-0 truncate rounded-t-md px-2.5 py-1 text-xs", t.active ? "bg-background font-medium" : "text-muted-foreground")}
+                  >
+                    {t.title || t.url || t.id}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2 border-b bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground">
+              <GlobeIcon className="size-3.5 shrink-0" />
+              <span className="truncate" title={url}>
+                {url ?? ""}
+              </span>
             </div>
-          )}
-          <div className="browser-url" title={url}>{url ?? ""}</div>
-          {data ? (
-            <div className={`browser-stage ${holder}`} tabIndex={holder === "user" ? 0 : -1} {...(holder === "user" ? input.keys : {})}>
-              <img ref={input.frame} className="browser-frame" alt="The bot's browser" draggable={false} src={`data:image/jpeg;base64,${data}`} {...(holder === "user" ? input.handlers : {})} />
-            </div>
-          ) : (
-            <p className="meta">Waiting for the page…</p>
-          )}
-          <div className="browser-takeover">
-            {holder === "user" ? (
+            {data ? (
+              <div
+                className={cn("leading-none outline-none", userHolds && "cursor-crosshair ring-2 ring-blue-500 ring-inset")}
+                tabIndex={userHolds ? 0 : -1}
+                {...(userHolds ? input.keys : {})}
+              >
+                <img
+                  ref={input.frame}
+                  className={cn("block w-full", userHolds && "touch-none select-none")}
+                  alt="The bot's browser"
+                  draggable={false}
+                  src={`data:image/jpeg;base64,${data}`}
+                  {...(userHolds ? input.handlers : {})}
+                />
+              </div>
+            ) : (
+              <div className="flex aspect-video items-center justify-center gap-2 text-xs text-muted-foreground">
+                <Spinner /> Waiting for the page…
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {userHolds ? (
               <>
-                <button className="primary" onClick={() => control("hand_back")}>Hand back</button>
-                <span className="meta">You have control · click the page to type</span>
+                <Button size="sm" onClick={() => control("hand_back")}>
+                  <HandIcon /> Hand back
+                </Button>
+                <span className="text-xs text-muted-foreground">Click the page to type into it.</span>
               </>
             ) : (
               <>
-                <button disabled={holder === "draining"} onClick={() => control("take")}>{holder === "draining" ? "Taking control…" : "Take control"}</button>
-                <span className="meta">Bot is in control</span>
+                <Button size="sm" variant="outline" disabled={holder === "draining"} onClick={() => control("take")}>
+                  {holder === "draining" ? <Spinner /> : <MousePointerClickIcon />}
+                  {holder === "draining" ? "Taking control…" : "Take control"}
+                </Button>
+                <span className="text-xs text-muted-foreground">View only while the bot is in control.</span>
               </>
             )}
           </div>
-          {error && <p className="meta browser-error">{error}</p>}
+          {error && <p className="text-xs text-destructive">{error}</p>}
         </>
       ) : (
-        <p className="meta browser-placeholder">The browser is not running. It starts when the bot first uses it.</p>
+        <Empty className="border border-dashed p-6">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <GlobeIcon />
+            </EmptyMedia>
+            <EmptyTitle className="text-sm">The browser is not running</EmptyTitle>
+            <EmptyDescription className="text-xs">It starts when {botName} first uses it.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
     </div>
   );

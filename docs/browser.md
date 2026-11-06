@@ -25,7 +25,7 @@ Engine lookup order: `AGENT_BROWSER_PATH`, the managed install, then `agent-brow
 
 ## Enable the browser for a bot
 
-Turn on the **Browser** switch in the bot's header. When the switch is disabled, the reason is shown next to it:
+Open the bot's side panel (the panel button at the top right of the chat) and go to the **Browser** tab. Turn on the **Web browser** switch. When the switch is disabled, the reason is shown below it:
 
 | Reason | Fix |
 | --- | --- |
@@ -36,25 +36,27 @@ Turn on the **Browser** switch in the bot's header. When the switch is disabled,
 
 The sandbox is required because a browser-enabled bot runs its shell commands inside Claude Code's sandbox (see [Safety](#safety)). The browser never runs a bot unprotected.
 
-Enabling the switch shows a Browser panel in the bot's view. The browser itself starts on the bot's first browser call, not when you enable the switch.
+Enabling the switch shows the browser's live view and controls in the Browser tab. The browser itself starts on the bot's first browser call, not when you enable the switch.
 
 ### Panel controls
 
+The **⋯** menu next to the browser's status holds:
+
 - **Show window**: runs Chrome with a visible window on your computer, for sites that block headless browsers. Restarts the browser.
-- **Restart**: closes the browser and keeps saved logins. Use it to recover a stuck browser. The bot is told it restarted and must take a fresh snapshot.
+- **Restart browser**: closes the browser and keeps saved logins. Use it to recover a stuck browser. The bot is told it restarted and must take a fresh snapshot.
 - **Sign out of everything**: closes the browser and deletes its saved login state (asks for confirmation). Grants and vault entries are untouched.
 
 A browser nobody used for 10 minutes closes on its own, keeping its logins. All browsers close when claudebot shuts down, and leftover engine and Chrome processes from a crash are closed on the next start (and swept every minute).
 
 ## Live view
 
-The panel shows a live picture of the bot's browser with its tabs and current URL. Opening the panel never starts a browser; a stopped browser shows a placeholder ("The browser is not running. It starts when the bot first uses it."). The view is view-only while the bot is in control, and a slow connection gets the latest frame rather than a backlog.
+The Browser tab shows a live picture of the bot's browser with its tabs and current URL. Opening the tab never starts a browser; a stopped browser shows a placeholder ("The browser is not running. It starts when <bot> first uses it."). The view is view-only while the bot is in control, and a slow connection gets the latest frame rather than a backlog.
 
 ## Takeover
 
 When the bot hits something it cannot do (CAPTCHA, 2FA code, passkey, a login it cannot finish), it requests a takeover with a one-line reason.
 
-1. A **Needs you** card appears in the bot's chat with the reason and two buttons: **I'm done** and **Skip**. The card survives closing and reopening the UI.
+1. A **Needs you** card appears in the bot's chat with the reason and three buttons: **Open browser**, **I'm done** and **Skip**. The side panel switches to the Browser tab on its own. The card survives closing and reopening the UI.
 2. You control the browser from the live view: click and type in the picture.
 3. **I'm done** resumes the bot with a note to take a fresh snapshot. **Skip** tells the bot you did not complete the step, so it can try something else or report back.
 

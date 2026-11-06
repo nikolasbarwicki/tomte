@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { createServer as createVite } from "vite";
 import { z } from "zod";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { getSessionInfo, getSessionMessages, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import type { ResolvedCli } from "./cli.ts";
 import { engineStatus, type EngineStatus } from "./browser-engine.ts";
@@ -868,10 +869,12 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     }
   }
 
+  const webRoot = fileURLToPath(new URL("../web", import.meta.url));
   const vite = o.vite
     ? await createVite({
-        root: fileURLToPath(new URL("../web", import.meta.url)),
-        plugins: [react()],
+        root: webRoot,
+        plugins: [react(), tailwindcss()],
+        resolve: { alias: { "@": webRoot } },
         server: { middlewareMode: true, hmr: { server: http } },
         appType: "spa",
       })

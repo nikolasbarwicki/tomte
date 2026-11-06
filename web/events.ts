@@ -47,6 +47,11 @@ export type BotSummary = Bot & { last: LastMessage | null; status: BotStatus };
 /** Every bot for the sidebar, most recently active first; lives outside chat history. */
 export type BotsEvent = { type: "bots"; bots: BotSummary[] };
 
+/** Whether bots can get a browser on this host, and why not. */
+export type BrowserAvailability = { status: "available"; path: string; source: string } | { status: "unavailable"; reason: string };
+/** The `/api/info` response: where the host runs and how it reaches Claude. */
+export type HostInfo = { cwd: string; cli: string; auth: string; browser: BrowserAvailability };
+
 /** `user`: facts/preferences about the user, shared by all bots. `bot`: how one bot should operate. */
 export type MemoryScope = "user" | "bot";
 
