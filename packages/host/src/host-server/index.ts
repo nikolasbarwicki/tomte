@@ -43,7 +43,7 @@ export interface HostServerOptions {
   db: Database;
   secrets: SecretStore;
   /** The bot to open first; the most recently active bot when omitted. */
-  botId?: string;
+  botId?: string | undefined;
   /** Overrides for the browser engine, Chrome and the engine's environment. */
   browser?: BrowserRuntimeOptions;
   /** Whether the shell sandbox can run; checks this platform when omitted. */
@@ -109,10 +109,10 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     unattended: (botId) => chats.unattended(botId),
     emit: (botId, e) => chats.emitTo(botId, e),
     deliver: (botId, text) => void chats.deliver(botId, text),
-    sandbox: o.sandbox,
-    runtime: o.browser,
-    liveView: o.liveView,
-    takeoverInactivityMs: o.takeoverInactivityMs,
+    ...(o.sandbox !== undefined && { sandbox: o.sandbox }),
+    ...(o.browser !== undefined && { runtime: o.browser }),
+    ...(o.liveView !== undefined && { liveView: o.liveView }),
+    ...(o.takeoverInactivityMs !== undefined && { takeoverInactivityMs: o.takeoverInactivityMs }),
   });
   const handoffs = createHandoffs({
     db,

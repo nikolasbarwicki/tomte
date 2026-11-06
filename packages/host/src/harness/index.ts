@@ -28,7 +28,7 @@ export interface HostServerLease {
   /** Guidance for the bot about these servers, appended to its system prompt. */
   instructions?: string;
   /** How the CLI must confine the bot shell while this lease is held; absent for an unconfined bot. */
-  isolation?: IsolationProfile;
+  isolation?: IsolationProfile | undefined;
   release: () => void;
 }
 
@@ -65,7 +65,7 @@ interface LaunchIntegrations {
 interface HarnessLaunchInput {
   hostServers: HostMcpServer[];
   /** Integration servers, disallowed tools and plugins for this session. */
-  integrations?: LaunchIntegrations;
+  integrations?: LaunchIntegrations | undefined;
   systemPromptAppend: string;
   isolation: IsolationProfile;
 }

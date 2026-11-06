@@ -20,6 +20,7 @@ import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
+import { defined } from "../testing/defined.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "..", "testing", "fake-claude.ts");
@@ -106,7 +107,7 @@ async function setup(openChat: boolean) {
   expect((await ui("/api/bots/browser", { botId, enabled: true })).status).toBe(200);
   if (openChat) expect((await ui("/api/open", { botId })).status).toBe(200);
   const connect = async () => {
-    const s = server.browser.lease(botId).servers[0];
+    const s = defined(server.browser.lease(botId).servers[0], "server");
     const client = new Client({ name: "test", version: "1.0.0" });
     await client.connect(
       new StreamableHTTPClientTransport(new URL(s.url), {

@@ -8,6 +8,7 @@ import type { Schedule } from "@claudebot/contract/events";
 
 import { createBot } from "../bots/index.ts";
 import { migrate } from "../platform/db.ts";
+import { defined } from "../testing/defined.ts";
 import { Conflict, createRoutines, type Executor } from "./index.ts";
 import * as store from "./store.ts";
 
@@ -60,9 +61,10 @@ test("reconciling twice catches up once, with the late note", async () => {
     { trigger: "schedule", status: "running", scheduledFor: at("2026-01-01T12:00:00Z") },
   ]);
   expect(jobs).toHaveLength(1);
-  expect(jobs[0].prompt).toContain("30 minutes late");
+  const job = defined(jobs[0], "job");
+  expect(job.prompt).toContain("30 minutes late");
   changed = Promise.withResolvers();
-  jobs[0].resolve("all done\nmore");
+  job.resolve("all done\nmore");
   await changed.promise;
   expect(runsOf(r.id)).toMatchObject([{ status: "succeeded", output: "all done\nmore" }]);
 });
@@ -158,7 +160,7 @@ test("a one-shot deactivates after firing", async () => {
   clock = at("2026-01-01T11:01:00Z");
   routines.start();
   changed = Promise.withResolvers();
-  jobs[0].resolve("ok");
+  defined(jobs[0], "job").resolve("ok");
   await changed.promise;
   expect(routines.get(r.id)).toMatchObject({
     active: false,

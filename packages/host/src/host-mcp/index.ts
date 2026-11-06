@@ -43,10 +43,7 @@ export async function serveMcpRequest(
   if (req.method !== "POST") return reject(res, 405, "method not allowed");
 
   const mcp = o.server(botId);
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true,
-  });
+  const transport = new StreamableHTTPServerTransport({ enableJsonResponse: true });
   res.on("close", () => {
     void transport.close();
     void mcp.close();

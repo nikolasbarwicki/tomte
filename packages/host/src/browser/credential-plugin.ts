@@ -14,7 +14,7 @@ if (input.protocol !== PROTOCOL) {
   reply({ success: true, manifest: { name: "claudebot", capabilities: ["credential.read"] } });
 } else if (input.type === "credential.resolve") {
   try {
-    const res = await fetch(process.argv[2], {
+    const res = await fetch(process.argv[2] ?? "", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ nonce: input.request?.itemRef, url: input.request?.url }),

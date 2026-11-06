@@ -52,8 +52,10 @@ const unattr = (s: string) =>
     .replace(/&lt;/g, "<")
     .replace(/&quot;/g, '"')
     .replace(/&amp;/g, "&");
-const attrsOf = (s: string) =>
-  Object.fromEntries([...s.matchAll(/([\w-]+)="([^"]*)"/g)].map((m) => [m[1], unattr(m[2])]));
+const attrsOf = (s: string): Record<string, string | undefined> =>
+  Object.fromEntries(
+    [...s.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, k = "", v = ""]) => [k, unattr(v)]),
+  );
 
 /** A handoff or handoff-update message addressed to this bot, read back from its tag; `title` is only known for a brief. */
 export type ReceivedHandoff = {
@@ -67,24 +69,34 @@ export type ReceivedHandoff = {
 
 /** Every handoff tag in a delivered text (several may be joined into one turn), in order. Understands whatever status a later ticket formats. */
 export function parseHandoffTags(text: string): ReceivedHandoff[] {
-  return [...text.matchAll(/<(handoff|handoff-update) ([^>]*)>\n([\s\S]*?)\n<\/\1>/g)].map((m) => {
-    const a = attrsOf(m[2]);
-    return m[1] === "handoff"
-      ? {
-          id: a.id,
-          from: a.requester,
-          title: a.title,
-          status: a.status ?? "submitted",
-          text: m[3],
-          resumed: a.resumed === "true",
-        }
-      : { id: a.id, from: a.from, status: a.status, text: m[3], resumed: a.resumed === "true" };
-  });
+  return [...text.matchAll(/<(handoff|handoff-update) ([^>]*)>\n([\s\S]*?)\n<\/\1>/g)].map(
+    ([, kind, attrs = "", body = ""]) => {
+      const a = attrsOf(attrs);
+      return kind === "handoff"
+        ? {
+            id: a.id ?? "",
+            from: a.requester ?? "",
+            ...(a.title !== undefined && { title: a.title }),
+            status: a.status ?? "submitted",
+            text: body,
+            resumed: a.resumed === "true",
+          }
+        : {
+            id: a.id ?? "",
+            from: a.from ?? "",
+            status: a.status ?? "",
+            text: body,
+            resumed: a.resumed === "true",
+          };
+    },
+  );
 }
 
 /** Ids of the handoffs whose briefs a delivered text carries. */
 export const handoffIdsIn = (text: string): string[] =>
-  [...text.matchAll(/^<handoff id="([^"]+)"/gm)].map((m) => m[1]);
+  [...text.matchAll(/^<handoff id="([^"]+)"/gm)].flatMap(([, id]) =>
+    id === undefined ? [] : [id],
+  );
 
 /** The tag the host appends to a user message for each bot the user mentioned. */
 const formatMention = (m: Mention) => `<mention name="${attr(m.name)}" id="${attr(m.id)}"/>`;
@@ -99,9 +111,9 @@ const MENTION_TAG = /<mention ([^>]*)\/>/g;
 
 /** Splits a delivered user message back into what the user typed and the bots they mentioned. */
 export function parseMentions(text: string): { text: string; mentions: Mention[] } {
-  const mentions = [...text.matchAll(MENTION_TAG)].map((m) => {
-    const a = attrsOf(m[1]);
-    return { id: a.id, name: a.name };
+  const mentions = [...text.matchAll(MENTION_TAG)].map(([, attrs = ""]) => {
+    const a = attrsOf(attrs);
+    return { id: a.id ?? "", name: a.name ?? "" };
   });
   return { text: text.replace(MENTION_TAG, "").trim(), mentions };
 }

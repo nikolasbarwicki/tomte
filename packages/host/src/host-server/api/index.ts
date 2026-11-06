@@ -29,10 +29,12 @@ export function createApi(ctx: ApiContext): Handler {
       body: b,
       str: (key) => (typeof b[key] === "string" ? (b[key] as string) : ""),
     };
-    if (Object.hasOwn(anyBot, path)) return anyBot[path](r);
+    const botRoute = Object.hasOwn(anyBot, path) ? anyBot[path] : undefined;
+    if (botRoute) return botRoute(r);
     const chat = ctx.chats.open();
     if (!chat) return json(res, { error: "no bot open; create one first" }, 409);
-    if (Object.hasOwn(openBot, path)) return openBot[path](r, chat);
+    const openRoute = Object.hasOwn(openBot, path) ? openBot[path] : undefined;
+    if (openRoute) return openRoute(r, chat);
     res.writeHead(404).end();
   }
 

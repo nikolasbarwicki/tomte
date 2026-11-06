@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { defined } from "../testing/defined.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
@@ -103,6 +104,6 @@ describe("mentions", () => {
     await open(a);
     await host.ui("/api/send", { text: "hi" });
     await host.until(() => host.launches().length > 0);
-    expect(host.launches()[0].appendSystemPrompt).toContain("<mention");
+    expect(defined(host.launches()[0], "launch").appendSystemPrompt).toContain("<mention");
   });
 });

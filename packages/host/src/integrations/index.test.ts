@@ -44,7 +44,6 @@ beforeAll(() => {
         async () => ({ content: [{ type: "text", text: "gone" }] }),
       );
       const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
         enableJsonResponse: true,
       });
       await mcp.connect(transport);
@@ -231,7 +230,6 @@ const authed = (token: string) =>
         async () => ({ content: [{ type: "text", text: "ok" }] }),
       );
       const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
         enableJsonResponse: true,
       });
       await mcp.connect(transport);
@@ -725,7 +723,6 @@ function oauthFixture(own?: { id: string; secret: string }) {
           async () => ({ content: [{ type: "text", text: "gone" }] }),
         );
         const transport = new WebStandardStreamableHTTPServerTransport({
-          sessionIdGenerator: undefined,
           enableJsonResponse: true,
         });
         await mcp.connect(transport);

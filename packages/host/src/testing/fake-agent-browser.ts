@@ -10,6 +10,8 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { defined } from "./defined.ts";
+
 interface Page {
   title?: string;
   snapshot: string;
@@ -31,11 +33,12 @@ interface Script {
   logins?: Record<string, { username: string; password: string; next: string; error?: string }>;
 }
 
-const dir = process.env.FAKE_AGENT_BROWSER_DIR;
-if (!dir) {
+const envDir = process.env.FAKE_AGENT_BROWSER_DIR;
+if (!envDir) {
   console.error("FAKE_AGENT_BROWSER_DIR is not set");
   process.exit(2);
 }
+const dir: string = envDir;
 const read = <T>(name: string, fallback: T): T =>
   existsSync(join(dir, name)) ? JSON.parse(readFileSync(join(dir, name), "utf8")) : fallback;
 
@@ -68,19 +71,21 @@ const flagsWithValue = new Set([
 const flags: Record<string, string> = {};
 const rest: string[] = [];
 for (let i = 0; i < argv.length; i++) {
-  if (flagsWithValue.has(argv[i])) flags[argv[i]] = argv[++i];
-  else if (argv[i] === "--json" || argv[i] === "--headed" || argv[i] === "--no-navigate")
-    flags[argv[i]] = "true";
-  else rest.push(argv[i]);
+  const a = defined(argv[i], "argument");
+  if (flagsWithValue.has(a)) {
+    const value = argv[++i];
+    if (value !== undefined) flags[a] = value;
+  } else if (a === "--json" || a === "--headed" || a === "--no-navigate") flags[a] = "true";
+  else rest.push(a);
 }
-const [command, ...args] = rest;
+const [command = "", ...args] = rest;
 const session = flags["--session"] ?? "default";
 
 const reply = (data: unknown) => console.log(JSON.stringify({ success: true, data, error: null }));
-const fail = (error: string) => {
+function fail(error: string): never {
   console.log(JSON.stringify({ success: false, data: null, error }));
   process.exit(1);
-};
+}
 
 const script = read<Script>("script.json", {});
 const state = read<Record<string, string>>("state.json", {});
@@ -98,7 +103,7 @@ function engineAction(): string | undefined {
     case "get":
       return `get${args[0]}`;
     case "tab":
-      return ["list", "new", "close"].includes(args[0]) ? `tab_${args[0]}` : "tab_switch";
+      return ["list", "new", "close"].includes(args[0] ?? "") ? `tab_${args[0]}` : "tab_switch";
     case "stream":
       return `stream_${args[0]}`;
     case "auth":
@@ -140,12 +145,13 @@ async function authLogin() {
   ).find((p) => p.name === provider);
   if (!plugin || !url) fail("unknown credential provider");
   if (flags["--no-navigate"]) {
-    const here = state[session] ? new URL(state[session]).origin : "about:blank";
+    const current = state[session];
+    const here = current ? new URL(current).origin : "about:blank";
     if (here !== new URL(url).origin)
       fail(`Current page origin ${here} does not match credential origin ${new URL(url).origin}`);
   }
   checkPolicy(`plugin:${provider}:credential.read`);
-  const child = Bun.spawn([plugin!.command, ...(plugin!.args ?? [])], {
+  const child = Bun.spawn([plugin.command, ...(plugin.args ?? [])], {
     stdin: "pipe",
     stdout: "pipe",
     stderr: "ignore",
@@ -164,15 +170,15 @@ async function authLogin() {
     credential?: { username: string; password: string };
   };
   if (!answer.success || !answer.credential) fail("credential provider failed");
-  const expected = script.logins?.[url!];
+  const expected = script.logins?.[url];
   if (expected?.error) fail(expected.error);
   if (
     expected &&
-    answer.credential!.username === expected.username &&
-    answer.credential!.password === expected.password
+    answer.credential.username === expected.username &&
+    answer.credential.password === expected.password
   ) {
     state[session] = expected.next;
-    writeFileSync(join(dir!, "state.json"), JSON.stringify(state));
+    writeFileSync(join(dir, "state.json"), JSON.stringify(state));
   }
   reply({ loggedIn: true, name });
 }
@@ -182,11 +188,13 @@ if (script.fail?.[command]) fail(script.fail[command]);
 
 switch (command) {
   case "open": {
+    const target = defined(args[0], "url");
     if (script.viaProxy && flags["--proxy"])
-      await fetch(args[0], { proxy: flags["--proxy"] }).then((r) => r.arrayBuffer());
-    state[session] = script.redirects?.[args[0]] ?? args[0];
+      await fetch(target, { proxy: flags["--proxy"] }).then((r) => r.arrayBuffer());
+    const landed = script.redirects?.[target] ?? target;
+    state[session] = landed;
     writeFileSync(join(dir, "state.json"), JSON.stringify(state));
-    reply({ title: pageAt(state[session]).title ?? "", url: state[session] });
+    reply({ title: pageAt(landed).title ?? "", url: landed });
     break;
   }
   case "snapshot": {
@@ -196,8 +204,9 @@ switch (command) {
     const selector = args.includes("-s") ? args[args.indexOf("-s") + 1] : undefined;
     let snapshot = page.snapshot;
     if (selector) {
-      if (!page.selectors?.[selector]) fail(`Selector '${selector}' did not match any element`);
-      snapshot = page.selectors![selector];
+      const selected = page.selectors?.[selector];
+      if (!selected) fail(`Selector '${selector}' did not match any element`);
+      snapshot = selected;
     }
     if (args.includes("-i"))
       snapshot = snapshot
@@ -219,10 +228,12 @@ switch (command) {
     reply({ origin: url, text: pageAt(url).text ?? "" });
     break;
   }
-  case "screenshot":
-    writeFileSync(args[0], "png");
-    reply({ path: args[0] });
+  case "screenshot": {
+    const path = defined(args[0], "screenshot path");
+    writeFileSync(path, "png");
+    reply({ path });
     break;
+  }
   case "tab":
     reply({
       tabs: state[session]

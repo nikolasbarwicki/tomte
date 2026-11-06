@@ -44,7 +44,7 @@ export function createHandoffs({ db, ...deps }: HandoffsOptions): Handoffs {
           type: "handoff",
           direction: "received",
           bot: t.from,
-          botId: h && (h.requesterId === ownerId ? h.assigneeId : h.requesterId),
+          ...(h && { botId: h.requesterId === ownerId ? h.assigneeId : h.requesterId }),
           title: t.title ?? h?.title ?? "",
           status: t.resumed && t.title !== undefined ? (h?.status ?? t.status) : t.status,
           text: t.text,

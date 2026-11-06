@@ -11,11 +11,16 @@ interface Proc {
 function processTable(): Proc[] {
   const r = spawnSync("ps", ["-axo", "pid=,ppid=,pgid="], { encoding: "utf8" });
   if (r.status !== 0) return [];
-  return r.stdout
-    .split("\n")
-    .map((l) => l.trim().split(/\s+/).map(Number))
-    .filter((p) => p.length === 3 && p.every(Number.isInteger))
-    .map(([pid, ppid, pgid]) => ({ pid, ppid, pgid }));
+  return r.stdout.split("\n").flatMap((l) => {
+    const [pid, ppid, pgid, ...rest] = l.trim().split(/\s+/).map(Number);
+    return pid !== undefined &&
+      ppid !== undefined &&
+      pgid !== undefined &&
+      rest.length === 0 &&
+      [pid, ppid, pgid].every(Number.isInteger)
+      ? [{ pid, ppid, pgid }]
+      : [];
+  });
 }
 
 export function readPid(file: string): number | undefined {

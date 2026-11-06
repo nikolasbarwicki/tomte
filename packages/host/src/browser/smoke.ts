@@ -311,7 +311,8 @@ async function scenarios(
   );
 
   step("sandbox: the bot's shell cannot reach engine state or the browser endpoint");
-  const endpoint = server.browser.lease(botId).servers[0].url;
+  const endpoint = server.browser.lease(botId).servers[0]?.url;
+  if (!endpoint) throw new Error("the lease has no browser endpoint");
   const before = (await getSessionMessages(botId, { dir: workspace })).length;
   await turn(
     `Run these four shell commands with your Bash tool, each as its own call, exactly as written, and do not retry or work around failures:\n` +
@@ -327,7 +328,7 @@ async function scenarios(
     .map((x) => JSON.stringify(x.message));
   const outputs = results.filter((r) => r.includes("tool_result"));
   check(outputs.length >= 4, `the bot ran four Bash commands (${outputs.length} results)`);
-  const [ls, cat, curl, py] = outputs;
+  const [ls = "", cat = "", curl = "", py = ""] = outputs;
   for (const o of outputs) console.log(`  bash result: ${o.slice(0, 400)}`);
   check(
     /denied|Operation not permitted|exit=[1-9]/.test(ls) && !/sessions|browsers|\.key/.test(ls),

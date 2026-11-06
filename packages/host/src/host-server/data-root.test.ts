@@ -28,10 +28,7 @@ beforeAll(() => {
         { description: "Look something up", annotations: { readOnlyHint: true } },
         async () => ({ content: [{ type: "text", text: "ok" }] }),
       );
-      const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-        enableJsonResponse: true,
-      });
+      const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });
       await server.connect(transport);
       return transport.handleRequest(req);
     },

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { defined } from "../testing/defined.ts";
 import { startHandoffHost, parse, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
@@ -58,7 +59,7 @@ describe("conversation", () => {
     });
     await host.until(() => host.messagesOf(b).length === 2);
     expect(host.messagesOf(b)[1]).toContain("May 3");
-    expect(parse<Row[]>(await bob.call("list_handoffs"))[0].status).toBe("working");
+    expect(defined(parse<Row[]>(await bob.call("list_handoffs"))[0], "row").status).toBe("working");
   });
 
   test("list_handoffs hides other bots' and finished handoffs; non-parties cannot message", async () => {

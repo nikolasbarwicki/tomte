@@ -70,8 +70,9 @@ export function createTranscripts({
       // getSessionInfo has no summary for a session whose first message is a host tag (<handoff>, <scheduled-routine>), so fall back to its messages.
       const current = currentSession(bot);
       const hasSession =
-        !!(await getSessionInfo(current, { dir: cwd })) ||
-        (await getSessionMessages(current, { dir: cwd })).length > 0;
+        current !== undefined &&
+        (!!(await getSessionInfo(current, { dir: cwd })) ||
+          (await getSessionMessages(current, { dir: cwd })).length > 0);
       const history: ServerEvent[] = [];
       for (const [i, id] of bot.sessions.entries()) {
         if (i > 0) history.push({ type: "session" });

@@ -43,7 +43,7 @@ export interface HostDelegate {
 export interface ThreadOptions {
   cli: ResolvedCli;
   cwd: string;
-  sessionId?: string;
+  sessionId?: string | undefined;
   /** True when this session id already has a transcript on disk. */
   resume?: boolean;
   additionalDirectories?: string[];
@@ -95,7 +95,7 @@ const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 /** Push-based async iterable feeding later turns into the same live query. */
 class Inbox implements AsyncIterable<SDKUserMessage> {
   private queue: SDKUserMessage[] = [];
-  private wake?: () => void;
+  private wake?: (() => void) | undefined;
   private done = false;
   push(m: SDKUserMessage) {
     this.queue.push(m);
@@ -124,18 +124,20 @@ export interface TurnResult {
 export class Thread {
   readonly sessionId: string;
   private started: boolean;
-  private live?: {
-    q: Query;
-    inbox: Inbox;
-    it: AsyncIterator<SDKMessage>;
-    expiresAt?: number;
-    lease?: HostServerLease;
-  };
+  private live?:
+    | {
+        q: Query;
+        inbox: Inbox;
+        it: AsyncIterator<SDKMessage>;
+        expiresAt?: number | undefined;
+        lease?: HostServerLease | undefined;
+      }
+    | undefined;
   private idleTimer?: NodeJS.Timeout;
   private busy = false;
   /** Set when `close()` lands while `send()` is still opening the query, which `close()` alone cannot reach. */
   private closedMidSend = false;
-  private model?: string;
+  private model?: string | undefined;
   private effort?: EffortLevel;
   private readonly roots: string[];
   private readonly log: (l: string) => void;
@@ -266,14 +268,16 @@ export class Thread {
           pathToClaudeCodeExecutable: this.o.cli.path,
           ...(this.o.cli.needsShell ? { spawnClaudeCodeProcess: cmdExeSpawner } : {}),
           cwd: this.o.cwd,
-          additionalDirectories: this.o.additionalDirectories,
+          ...(this.o.additionalDirectories !== undefined && {
+            additionalDirectories: this.o.additionalDirectories,
+          }),
           ...(this.started ? { resume: this.sessionId } : { sessionId: this.sessionId }),
           persistSession: true,
           includePartialMessages: true,
           canUseTool: this.canUseTool,
           mcpServers: { host: this.hostServer() },
           ...launch.options,
-          model: this.model,
+          ...(this.model !== undefined && { model: this.model }),
           env: this.env(),
           stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
         },

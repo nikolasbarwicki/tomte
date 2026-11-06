@@ -32,6 +32,7 @@ import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
+import { defined } from "../testing/defined.ts";
 import {
   classifyAfterLogin,
   CREDENTIAL_EXCHANGE_PATH,
@@ -199,7 +200,7 @@ async function setup() {
   const botId = createBot(cwd, "bot").id;
   expect((await ui("/api/bots/browser", { botId, enabled: true })).status).toBe(200);
   expect((await ui("/api/open", { botId })).status).toBe(200);
-  const s = server.browser.lease(botId).servers[0];
+  const s = defined(server.browser.lease(botId).servers[0], "server");
   const client = new Client({ name: "test", version: "1.0.0" });
   await client.connect(
     new StreamableHTTPClientTransport(new URL(s.url), {
@@ -363,7 +364,7 @@ describe("browser_login", () => {
     expect(r.isError).toBe(false);
     expect(JSON.parse(r.text)).toMatchObject({ status: "signed_in", site: SITE });
 
-    const [login] = loginCalls();
+    const login = defined(loginCalls()[0], "login call");
     expect(login.argv).toEqual(
       expect.arrayContaining([
         "auth",
@@ -376,14 +377,15 @@ describe("browser_login", () => {
         SIGN_IN,
       ]),
     );
-    const nonce = login.argv[login.argv.indexOf("--item") + 1];
+    const nonce = defined(login.argv[login.argv.indexOf("--item") + 1], "nonce");
     expect(nonce.length).toBeGreaterThanOrEqual(32);
     const plugins = JSON.parse(login.env.AGENT_BROWSER_PLUGINS!) as {
       name: string;
       args: string[];
     }[];
-    expect(plugins[0].name).toBe("claudebot");
-    expect(plugins[0].args[1]).toBe(`${server.url}${CREDENTIAL_EXCHANGE_PATH}`);
+    const plugin = defined(plugins[0], "plugin");
+    expect(plugin.name).toBe("claudebot");
+    expect(plugin.args[1]).toBe(`${server.url}${CREDENTIAL_EXCHANGE_PATH}`);
     expect(login.env.AGENT_BROWSER_PLUGINS).not.toContain(nonce);
 
     const state = JSON.parse(readFileSync(join(fakeDir, "state.json"), "utf8")) as Record<
@@ -565,7 +567,7 @@ describe("the credential exchange", () => {
     const feed = events();
     await allow(call, feed.received);
     await call("browser_login", { entry: "Example" });
-    const [login] = loginCalls();
+    const login = defined(loginCalls()[0], "login call");
     const nonce = login.argv[login.argv.indexOf("--item") + 1];
 
     const replay = await exchange({ nonce, url: SIGN_IN });

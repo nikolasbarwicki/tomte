@@ -20,6 +20,7 @@ import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
+import { defined } from "../testing/defined.ts";
 import { writeActionPolicy } from "./action-policy.ts";
 import { BROWSER_INSTRUCTIONS } from "./tools.ts";
 
@@ -63,7 +64,7 @@ beforeEach(async () => {
   });
   botId = createBot(cwd, "bot").id;
   setBrowserEnabled(cwd, botId, true);
-  const [s] = server.browser.lease(botId).servers;
+  const s = defined(server.browser.lease(botId).servers[0], "server");
   client = new Client({ name: "test", version: "1.0.0" });
   await client.connect(
     new StreamableHTTPClientTransport(new URL(s.url), {
@@ -88,7 +89,8 @@ const lastOf = (name: string) =>
     .at(-1);
 const call = (name: string, args: Record<string, unknown> = {}) =>
   client.callTool({ name, arguments: args });
-const text = (r: unknown) => (r as { content: { text: string }[] }).content[0].text;
+const text = (r: unknown) =>
+  defined((r as { content: { text: string }[] }).content[0], "content").text;
 const closeAll = async () => {
   await client.close();
   await server.close();
@@ -162,7 +164,7 @@ describe("tools", () => {
       );
       const r = await call(name, fixed);
       expect(r.isError).toBeFalsy();
-      expect(lastOf(expected[0])).toEqual(expected);
+      expect(lastOf(defined(expected[0], "command"))).toEqual(expected);
     };
     await run("browser_fill", { ref: "REF", text: "alice" }, ["fill", "@e2", "alice"]);
     await run("browser_type", { ref: "REF", text: "bob" }, ["type", "@e2", "bob"]);
@@ -260,7 +262,7 @@ describe("policy", () => {
     for (const { argv } of calls()) {
       const i = argv.indexOf("--action-policy");
       expect(i).toBeGreaterThan(-1);
-      files.add(argv[i + 1]);
+      files.add(defined(argv[i + 1], "policy file"));
     }
     expect(files.size).toBe(1);
     expect(calls().at(-1)!.argv).toContain("close");
@@ -373,7 +375,7 @@ describe("output shaping", () => {
     expect(r).toContain("Outline:");
     expect(r).toContain("Big Title");
     expect(r).toContain("Last Section");
-    const path = /saved to (.+)$/.exec(r.trim())![1];
+    const path = defined(/saved to (.+)$/.exec(r.trim())?.[1], "saved path");
     expect(path.startsWith(join(botFilesPath(cwd, botId), "browser"))).toBe(true);
     const full = readFileSync(path, "utf8");
     expect(full.length).toBeGreaterThan(20_000);

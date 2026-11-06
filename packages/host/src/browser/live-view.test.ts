@@ -13,6 +13,7 @@ import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
+import { defined } from "../testing/defined.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH"] as const;
@@ -140,7 +141,7 @@ const frame = (n: number) =>
 
 async function startBrowser(botId: string) {
   const lease = server.browser.lease(botId);
-  const [s] = lease.servers;
+  const s = defined(lease.servers[0], "server");
   const client = new Client({ name: "test", version: "1.0.0" });
   await client.connect(
     new StreamableHTTPClientTransport(new URL(s.url), {

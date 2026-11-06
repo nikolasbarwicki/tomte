@@ -46,7 +46,9 @@ afterAll(async () => {
 const proxyPort = () => Number(new URL(proxy.url).port);
 
 /** A plain HTTP request through the proxy, the way a browser sends it. */
-function viaProxy(url: string): Promise<{ status: number; body: string; location?: string }> {
+function viaProxy(
+  url: string,
+): Promise<{ status: number; body: string; location?: string | undefined }> {
   return new Promise((resolve, reject) => {
     request(
       {

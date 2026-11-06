@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { defined } from "../testing/defined.ts";
 import { startHandoffHost, parse, type BotCaller, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
@@ -14,7 +15,10 @@ async function bots(n: number) {
   const ids = Array.from({ length: n }, (_, i) => host.createBot(`Bot${i}`, `bot ${i}`));
   const callers: Bot[] = [];
   for (const id of ids) callers.push(await host.actAs(id));
-  return { ids, as: callers };
+  return {
+    id: (i: number) => defined(ids[i], `bot ${i} id`),
+    as: (i: number) => defined(callers[i], `bot ${i}`),
+  };
 }
 
 const handOff = (who: Bot, to: string, extra: Record<string, unknown> = {}) =>
@@ -22,10 +26,9 @@ const handOff = (who: Bot, to: string, extra: Record<string, unknown> = {}) =>
 
 describe("hand_off guardrails", () => {
   test("refuses a cycle of two and of three, and allows the edge once the loop's handoff finishes", async () => {
-    const {
-      ids: [a, b, c],
-      as: [alice, bob, cy],
-    } = await bots(3);
+    const { id, as } = await bots(3);
+    const [a, b, c] = [id(0), id(1), id(2)];
+    const [alice, bob, cy] = [as(0), as(1), as(2)];
     const ab = parse<{ handoff_id: string }>(await handOff(alice, b)).handoff_id;
     const back = await handOff(bob, a);
     expect(back.isError).toBe(true);
@@ -39,10 +42,9 @@ describe("hand_off guardrails", () => {
   });
 
   test("allows a chain of three and refuses a fourth link for depth", async () => {
-    const {
-      ids: [, b, c, d, e],
-      as: [alice, bob, cy, dan],
-    } = await bots(5);
+    const { id, as } = await bots(5);
+    const [b, c, d, e] = [id(1), id(2), id(3), id(4)];
+    const [alice, bob, cy, dan] = [as(0), as(1), as(2), as(3)];
     expect((await handOff(alice, b)).isError).toBe(false);
     expect((await handOff(bob, c)).isError).toBe(false);
     expect((await handOff(cy, d)).isError).toBe(false);
@@ -52,10 +54,9 @@ describe("hand_off guardrails", () => {
   });
 
   test("refuses a link that would join two chains too deep, even though neither is too deep alone", async () => {
-    const {
-      ids: [, b, c, d, e],
-      as: [alice, , cy, dan],
-    } = await bots(5);
+    const { id, as } = await bots(5);
+    const [b, c, d, e] = [id(1), id(2), id(3), id(4)];
+    const [alice, cy, dan] = [as(0), as(2), as(3)];
     await handOff(alice, b);
     await handOff(cy, d);
     const r = await handOff(dan, e);
@@ -64,25 +65,22 @@ describe("hand_off guardrails", () => {
   });
 
   test("refuses a sixth open handoff from one requester until one finishes", async () => {
-    const {
-      ids,
-      as: [alice, ...others],
-    } = await bots(7);
-    const first = parse<{ handoff_id: string }>(await handOff(alice, ids[1]!)).handoff_id;
-    for (const to of ids.slice(2, 6)) expect((await handOff(alice, to)).isError).toBe(false);
-    const sixth = await handOff(alice, ids[6]!);
+    const { id, as } = await bots(7);
+    const alice = as(0);
+    const first = parse<{ handoff_id: string }>(await handOff(alice, id(1))).handoff_id;
+    for (const i of [2, 3, 4, 5]) expect((await handOff(alice, id(i))).isError).toBe(false);
+    const sixth = await handOff(alice, id(6));
     expect(sixth.isError).toBe(true);
     expect(sixth.text).toContain("5 open");
 
-    await others[0]!.call("complete_handoff", { handoff_id: first, result: "ok" });
-    expect((await handOff(alice, ids[6]!)).isError).toBe(false);
+    await as(1).call("complete_handoff", { handoff_id: first, result: "ok" });
+    expect((await handOff(alice, id(6))).isError).toBe(false);
   });
 
   test("refuses self, unknown bot, empty brief and over-long title, creating nothing", async () => {
-    const {
-      ids: [a, b],
-      as: [alice],
-    } = await bots(2);
+    const { id, as } = await bots(2);
+    const [a, b] = [id(0), id(1)];
+    const alice = as(0);
     expect((await handOff(alice, a)).isError).toBe(true);
     expect((await handOff(alice, "no-such-bot")).isError).toBe(true);
     expect((await handOff(alice, b, { brief: "   " })).isError).toBe(true);

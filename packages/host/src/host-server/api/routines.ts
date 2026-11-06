@@ -33,8 +33,17 @@ export async function routineApi(
         return json(res, routines.create(botId, input));
       }
       case "/api/routines/update": {
-        const { id, ...patch } = RoutinePatch.parse(b);
-        return json(res, routines.update(id, patch));
+        const { id, name, instruction, schedule, active, catchUp } = RoutinePatch.parse(b);
+        return json(
+          res,
+          routines.update(id, {
+            ...(name !== undefined && { name }),
+            ...(instruction !== undefined && { instruction }),
+            ...(schedule !== undefined && { schedule }),
+            ...(active !== undefined && { active }),
+            ...(catchUp !== undefined && { catchUp }),
+          }),
+        );
       }
       case "/api/routines/delete":
         await routines.remove(Id.parse(b).id);
