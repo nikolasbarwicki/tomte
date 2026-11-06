@@ -14,6 +14,14 @@ import { engineStatus, type EngineStatus } from "./browser-engine.ts";
 import { createLiveView, LIVE_VIEW_PATH, type LiveViewOptions } from "./browser/live-view.ts";
 import { sandboxStatus, type SandboxStatus } from "./browser/sandbox.ts";
 import { BROWSER_ENDPOINT_PATH, createBrowserEndpoint, type BrowserEndpoint } from "./browser/endpoint.ts";
+import { BOTS_ENDPOINT_PATH, createBotsEndpoint, type BotsEndpoint } from "./handoffs/endpoint.ts";
+import { handoffIdsIn, parseHandoffTags, parseMentions, withMentions, type Mention } from "./handoffs/format.ts";
+import { redeliverOpenHandoffs, removeBotHandoffs } from "./handoffs/cleanup.ts";
+import { removeBotBrowser } from "./browser/cleanup.ts";
+import { sentCardsFromTool } from "./handoffs/tools/card.ts";
+import { createHandoffStore } from "./handoffs/store.ts";
+import { combineLeases, type HostServersSource } from "./harness.ts";
+import { TokenRegistry } from "./tokens.ts";
 import { createEgressProxy } from "./browser/egress-proxy.ts";
 import { createHumanWaits } from "./browser/human-waits.ts";
 import { Takeover } from "./browser/takeover.ts";
@@ -62,9 +70,13 @@ export interface HostServer {
   url: string;
   /** The browser endpoint's token leases, so a caller can act as a bot session. */
   browser: BrowserEndpoint;
+  /** The bots endpoint's token leases, so a caller can act as a bot session. */
+  bots: BotsEndpoint;
   currentBotId(): string | undefined;
   /** Closes every thread and browser, then stops listening. */
   close(): Promise<void>;
+  /** Everything the browser and handoff features hold for a bot being deleted. Does not touch the bot's files or config. */
+  removeBot(botId: string): Promise<void>;
 }
 
 export async function createHostServer(o: HostServerOptions): Promise<HostServer> {
@@ -82,6 +94,12 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     if (path === BROWSER_ENDPOINT_PATH)
       return void browserEndpoint.handle(req, res).catch((e) => {
         console.error(`[browser] endpoint failed: ${(e as Error).message}`);
+        if (!res.headersSent) res.writeHead(500);
+        res.end();
+      });
+    if (path === BOTS_ENDPOINT_PATH)
+      return void botsEndpoint.handle(req, res).catch((e) => {
+        console.error(`[bots] endpoint failed: ${(e as Error).message}`);
         if (!res.headersSent) res.writeHead(500);
         res.end();
       });
@@ -141,7 +159,9 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const credentials = createCredentials({ db, secrets: secrets, onChange: () => broadcast(credentialsEvent()) });
   const browserLogin = createBrowserLogin({ credentials, secrets, waits, botName: (botId) => getBot(cwd, botId)?.name ?? "A bot", exchangeUrl: () => `http://127.0.0.1:${port}${CREDENTIAL_EXCHANGE_PATH}` });
   const unattended = (botId: string) => !!chats.get(botId)?.routineTurn || headlessRuns.has(botId);
+  const tokens = new TokenRegistry();
   const browserEndpoint = createBrowserEndpoint({
+    tokens,
     takeover,
     login: browserLogin,
     unattended,
@@ -153,7 +173,23 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   });
   const liveView = createLiveView({ ...o.liveView, port: () => port, isEnabled: (botId) => getBot(cwd, botId)?.browser.enabled ?? false, runtimes: browserRuntimes, takeover });
   const browserUi = createBrowserUiRoutes({ port: () => port, isEnabled: (botId) => getBot(cwd, botId)?.browser.enabled ?? false, takeover, waits, liveView });
-  const hostServers = (botId: string) => browserEndpoint.lease(botId);
+  const handoffStore = createHandoffStore(db);
+  const botsEndpointDeliver = (botId: string, text: string) =>
+    void deliver(botId, text).catch((e) => console.error(`[bots] delivery to ${botId} failed: ${(e as Error).message}`));
+  const botsEndpoint = createBotsEndpoint({
+    tokens,
+    port: () => port,
+    handoffs: handoffStore,
+    show: (botId, card) => {
+      const chat = chats.get(botId);
+      if (chat) emit(chat, card);
+    },
+    cards: () => listBots(cwd).map((bot) => ({ id: bot.id, name: bot.name, description: bot.purpose, status: isWorking(bot.id) ? "working" : "idle" })),
+    botName: (botId) => getBot(cwd, botId)?.name,
+    filesDir: (botId) => botFilesPath(cwd, botId),
+    deliver: botsEndpointDeliver,
+  });
+  const hostServers: HostServersSource = (botId) => combineLeases([browserEndpoint.lease(botId), botsEndpoint.lease(botId)]);
 
   const clients = new Set<ServerResponse>();
   const broadcast = (e: ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent | IntegrationsEvent | CredentialsEvent) => {
@@ -272,7 +308,9 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     }
     for (const chat of chats.values()) {
       if (!chat.inbox.length || chat.busy || headlessRuns.has(chat.bot.id)) continue;
-      void turn(chat, chat.inbox.splice(0).join("\n\n"));
+      const texts = chat.inbox.splice(0);
+      for (const card of texts.flatMap(receivedCards)) emit(chat, card);
+      void turn(chat, texts.join("\n\n"));
     }
     if (current) await narrate(current);
   }
@@ -323,13 +361,15 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const credentialsEvent = (): CredentialsEvent => ({ type: "credentials", credentials: credentials.list() });
   const routinesEvent = (chat: Chat): RoutinesEvent => ({ type: "routines", botId: chat.bot.id, routines: routines.list(chat.bot.id) });
 
+  const isWorking = (botId: string) => !!chats.get(botId)?.busy || headlessRuns.has(botId);
+
   const botsEvent = (): BotsEvent => ({
     type: "bots",
     bots: listBots(cwd).map((bot) => {
       const activity = getActivity(db, bot.id);
       const last = activity?.last ?? null;
       const status: BotStatus =
-        chats.get(bot.id)?.busy || headlessRuns.has(bot.id)
+        isWorking(bot.id)
           ? "working"
           : last?.from === "bot" && last.at > (activity?.seenAt ?? 0)
             ? "unseen"
@@ -354,9 +394,21 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     );
   }
 
+  /** Handoff cards for the tags in a text delivered to a bot. A brief carries its title; an update's title comes from the handoff. */
+  const receivedCards = (text: string): ServerEvent[] =>
+    parseHandoffTags(text).map((t) => ({
+      type: "handoff",
+      direction: "received",
+      bot: t.from,
+      title: t.title ?? handoffStore.get(t.id)?.title ?? "",
+      status: t.resumed && t.title !== undefined ? (handoffStore.get(t.id)?.status ?? t.status) : t.status,
+      text: t.text,
+    }));
+
   /** Runs one turn in a chat, shown or not; failures are shown there and returned. */
   async function turn(chat: Chat, text: string): Promise<TurnResult | Error> {
     chat.busy = true;
+    for (const id of handoffIdsIn(text)) handoffStore.start(id);
     touchBot(cwd, chat.bot);
     announceBots();
     let out: TurnResult | Error;
@@ -430,7 +482,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const ROUTINE_TAG = /^<scheduled-routine name="([^"]*)" trigger="(schedule|manual)"/;
 
   /** Rebuild the UI transcript of a bot's session from Claude Code's own session file. */
-  async function replay(sessionId: string): Promise<ServerEvent[]> {
+  async function replay(sessionId: string, ownerId: string): Promise<ServerEvent[]> {
     const out: ServerEvent[] = [];
     for (const m of await getSessionMessages(sessionId, { dir: cwd })) {
       const msg = m.message;
@@ -441,12 +493,16 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         for (const text of texts) {
           const routine = text.match(ROUTINE_TAG);
           if (routine) out.push({ type: "routine", name: routine[1], trigger: routine[2] as RunTrigger });
-          else if (!text.startsWith("<")) out.push({ type: "user", text });
+          else if (/^<handoff(-update)? /.test(text)) out.push(...receivedCards(text));
+          else if (!text.startsWith("<") || text.startsWith("<mention ")) {
+            const { text: typed, mentions } = parseMentions(text);
+            out.push(mentions.length ? { type: "user", text: typed, mentions } : { type: "user", text });
+          }
         }
       } else if (m.type === "assistant" && Array.isArray(content)) {
         for (const b of content) {
           if (b.type === "text") out.push({ type: "text_start" }, { type: "delta", text: b.text });
-          if (b.type === "tool_use") out.push({ type: "tool", name: b.name, input: JSON.stringify(b.input) });
+          if (b.type === "tool_use") out.push({ type: "tool", name: b.name, input: JSON.stringify(b.input) }, ...sentCardsFromTool(b.name, b.input as Record<string, string>, ownerId, { handoffs: handoffStore, botName: (id) => getBot(cwd, id)?.name }));
         }
       }
     }
@@ -462,7 +518,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         const info = await getSessionInfo(id, { dir: cwd });
         if (!info) continue;
         let last: LastMessage | undefined;
-        for (const e of await replay(id)) {
+        for (const e of await replay(id, bot.id)) {
           if (e.type === "user") last = { from: "user", text: e.text, at: info.lastModified };
           if (e.type === "delta") last = { from: "bot", text: e.text, at: info.lastModified };
         }
@@ -478,11 +534,13 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
 
   /** Reads a bot's whole transcript, across its sessions, from Claude Code's session files. */
   async function transcript(bot: Bot): Promise<Transcript> {
-    const hasSession = !!(await getSessionInfo(currentSession(bot), { dir: cwd }));
+    // getSessionInfo has no summary for a session whose first message is a host tag (<handoff>, <scheduled-routine>), so fall back to its messages.
+    const current = currentSession(bot);
+    const hasSession = !!(await getSessionInfo(current, { dir: cwd })) || (await getSessionMessages(current, { dir: cwd })).length > 0;
     const history: ServerEvent[] = [];
     for (const [i, id] of bot.sessions.entries()) {
       if (i > 0) history.push({ type: "session" });
-      if (i < bot.sessions.length - 1 || hasSession) history.push(...(await replay(id)));
+      if (i < bot.sessions.length - 1 || hasSession) history.push(...(await replay(id, bot.id)));
     }
     return { history, hasSession };
   }
@@ -621,10 +679,17 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       case "/api/send": {
         if (chat.busy) return json(res, { error: "a turn is already running" }, 409);
         if (headlessRuns.has(chat.bot.id)) return json(res, { error: "a routine is running in this chat; wait for it to finish" }, 409);
-        emit(chat, { type: "user", text: str("text") });
+        const ids = Array.isArray(b.mentions) ? b.mentions : [];
+        const mentions: Mention[] = [];
+        for (const id of ids) {
+          const target = typeof id === "string" && id !== chat.bot.id ? getBot(cwd, id) : undefined;
+          if (!target) return json(res, { error: `cannot mention ${typeof id === "string" ? id : "that"}: unknown bot or the open bot` }, 400);
+          if (!mentions.some((m) => m.id === target.id)) mentions.push({ id: target.id, name: target.name });
+        }
+        emit(chat, mentions.length ? { type: "user", text: str("text"), mentions } : { type: "user", text: str("text") });
         recordMessage(db, chat.bot.id, { from: "user", text: str("text"), at: Date.now() });
         json(res, { ok: true });
-        void turn(chat, str("text"));
+        void turn(chat, withMentions(str("text"), mentions));
         return;
       }
       case "/api/answer": {
@@ -813,13 +878,20 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     : undefined;
 
   routines.start();
+  const handoffDeps = { handoffs: handoffStore, botName: (botId: string) => getBot(cwd, botId)?.name, deliver: botsEndpointDeliver };
+  redeliverOpenHandoffs(handoffDeps);
   ready = true;
 
   return {
     port,
     url: `http://127.0.0.1:${port}`,
     browser: browserEndpoint,
+    bots: botsEndpoint,
     currentBotId: () => current?.bot.id,
+    async removeBot(botId) {
+      await removeBotBrowser({ endpoint: browserEndpoint, runtimes: browserRuntimes, takeover, credentials }, botId);
+      removeBotHandoffs(handoffDeps, botId);
+    },
     async close() {
       ready = false;
       for (const chat of chats.values()) chat.thread.close("shutdown");

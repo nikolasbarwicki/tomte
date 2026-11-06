@@ -141,7 +141,7 @@ export class Thread {
   }
 
   private canUseTool: CanUseTool = async (name, input) => {
-    if (name.startsWith("mcp__host__") || name.startsWith("mcp__browser__")) return { behavior: "allow", updatedInput: input };
+    if (name.startsWith("mcp__host__") || name.startsWith("mcp__browser__") || name.startsWith("mcp__bots__")) return { behavior: "allow", updatedInput: input };
     switch (this.o.integrations?.decide(name)) {
       case "allow":
         return { behavior: "allow", updatedInput: input };

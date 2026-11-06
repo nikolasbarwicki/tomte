@@ -1,5 +1,5 @@
 export type ServerEvent =
-  | { type: "user"; text: string }
+  | { type: "user"; text: string; mentions?: { id: string; name: string }[] }
   | { type: "text_start" }
   | { type: "delta"; text: string }
   | { type: "tool"; name: string; input: string }
@@ -18,6 +18,8 @@ export type ServerEvent =
   | { type: "session" }
   /** A routine's turn starts in this chat; its prompt stays hidden like other host messages. */
   | { type: "routine"; name: string; trigger: RunTrigger }
+  /** A handoff shown as a card. `received`: another bot's brief or update arrived; `sent`: this bot's own handoff tool call. `bot` is the other party. */
+  | { type: "handoff"; direction: "sent" | "received"; bot: string; title: string; status: string; text: string }
   | { type: "compacted"; trigger: "manual" | "auto"; preTokens: number }
   | ContextEvent
   | Notice;

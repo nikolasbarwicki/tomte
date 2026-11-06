@@ -149,7 +149,7 @@ async function setup() {
   return { botId, call, holder };
 }
 
-const messages = () => (existsSync(join(claudeDir, "messages.jsonl")) ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as string) : []);
+const messages = () => (existsSync(join(claudeDir, "messages.jsonl")) ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => (JSON.parse(l) as { text: string }).text) : []);
 const waitCard = (received: ServerEvent[]) => received.find((e) => e.type === "wait") as Extract<ServerEvent, { type: "wait" }> | undefined;
 const request = async (call: Awaited<ReturnType<typeof setup>>["call"], reason = "solve the CAPTCHA") => JSON.parse((await call("browser_request_takeover", { reason })).text) as { status: string; id: string };
 

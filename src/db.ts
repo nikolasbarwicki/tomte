@@ -95,12 +95,37 @@ CREATE TABLE IF NOT EXISTS credential_grants (
 );
 `;
 
+const SCHEMA_V6 = `
+CREATE TABLE IF NOT EXISTS handoffs (
+  id TEXT PRIMARY KEY,
+  requester_id TEXT NOT NULL,
+  assignee_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  brief TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('submitted','working','input-required','completed','failed','canceled')),
+  result TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS handoffs_requester ON handoffs(requester_id);
+CREATE INDEX IF NOT EXISTS handoffs_assignee ON handoffs(assignee_id);
+CREATE TABLE IF NOT EXISTS handoff_messages (
+  id TEXT PRIMARY KEY,
+  handoff_id TEXT NOT NULL REFERENCES handoffs(id) ON DELETE CASCADE,
+  sender_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('brief','message','result','failure','cancel')),
+  text TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS handoff_messages_by_handoff ON handoff_messages(handoff_id, created_at);
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
   db.run("PRAGMA foreign_keys = ON");
   const { user_version } = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!;
-  const migrations = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5];
+  const migrations = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;
     db.transaction(() => {

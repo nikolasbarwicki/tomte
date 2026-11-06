@@ -25,6 +25,17 @@ export interface HostServerLease {
 /** Leases the host servers a bot may use; the lease is empty when the bot has none. */
 export type HostServersSource = (botId: string) => HostServerLease;
 
+/** One lease holding every server of `leases`, their instructions joined and the first isolation profile; releasing it releases them all. */
+export function combineLeases(leases: HostServerLease[]): HostServerLease {
+  const instructions = leases.flatMap((l) => (l.instructions ? [l.instructions] : [])).join("\n\n");
+  return {
+    servers: leases.flatMap((l) => l.servers),
+    ...(instructions && { instructions }),
+    isolation: leases.find((l) => l.isolation)?.isolation,
+    release: () => leases.forEach((l) => l.release()),
+  };
+}
+
 /** Sandbox/isolation settings a harness renders into its launch options. */
 export interface IsolationProfile {
   /**

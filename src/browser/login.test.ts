@@ -91,7 +91,7 @@ const script = (extra: object = {}) =>
 const engineCalls = (): { argv: string[]; env: Record<string, string | undefined> }[] =>
   existsSync(join(fakeDir, "calls.jsonl")) ? readFileSync(join(fakeDir, "calls.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
 const loginCalls = () => engineCalls().filter((c) => c.argv.includes("auth"));
-const messages = () => (existsSync(join(claudeDir, "messages.jsonl")) ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as string) : []);
+const messages = () => (existsSync(join(claudeDir, "messages.jsonl")) ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => (JSON.parse(l) as { text: string }).text) : []);
 
 /** Everything the chat page receives on /api/events, as it arrives. */
 function events() {
