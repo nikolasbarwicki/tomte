@@ -139,6 +139,23 @@
   color: var(--link);
 }
 
+/* A bot's chat takes its accents from the bot's color; `--bot` and `--bot-foreground` are set inline from its avatar stroke. */
+.bot-theme {
+    --primary: var(--bot);
+    --primary-foreground: var(--bot-foreground);
+    --ring: var(--bot);
+    --accent: color-mix(in oklch, var(--bot) 14%, var(--background));
+    --accent-foreground: var(--foreground);
+    --secondary: color-mix(in oklch, var(--bot) 14%, var(--background));
+    --secondary-foreground: var(--foreground);
+    --link: color-mix(in oklch, var(--bot) 75%, var(--foreground));
+}
+
+/* Inline code is `bg-muted`, the same gray as the bot's bubble. */
+.bot-reply [data-streamdown="inline-code"] {
+    background: var(--background);
+}
+
 /* A working bot's face draws itself, holds, then erases along the same line. Offsets stop just past the ends so the round caps never leave a dot. */
 @keyframes bot-avatar-draw {
   0% { stroke-dashoffset: 1.02; }

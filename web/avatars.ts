@@ -39,6 +39,12 @@ export const STROKE_NAMES = Object.keys(STROKES) as Stroke[];
 export const isFace = (s: string): s is Face => Object.hasOwn(FACES, s);
 export const isStroke = (s: string): s is Stroke => Object.hasOwn(STROKES, s);
 
+/** A stroke as a solid fill and the text color that reads on it; `ink` fills with the theme's text color. */
+export function strokeFill(stroke: Stroke): { fill: string; text: string } {
+  if (stroke === "ink") return { fill: "var(--foreground)", text: "var(--background)" };
+  return { fill: STROKES[stroke], text: "oklch(0.985 0 0)" };
+}
+
 /** A stable avatar derived from the bot id, for bots created before avatars existed. */
 export function defaultAvatar(id: string): BotAvatar {
   let h = 0;

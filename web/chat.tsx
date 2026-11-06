@@ -19,6 +19,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 import type { BotSummary, ContextEvent, FilesEvent, MemoryScope, Routine } from "./events.ts";
 import { act } from "./api.ts";
+import { strokeFill } from "./avatars.ts";
 import { BotPanel, type PanelTab } from "./bot-panel.tsx";
 import { confirmAction } from "./confirm.tsx";
 import { kTokens } from "./format.ts";
@@ -88,9 +89,10 @@ export function ChatView({
     />
   );
 
+  const { fill, text } = strokeFill(bot.avatar.stroke);
   return (
     <div className="flex h-full min-h-0">
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="bot-theme flex min-w-0 flex-1 flex-col" style={{ "--bot": fill, "--bot-foreground": text } as React.CSSProperties}>
         <AppBar>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-medium">{bot.name}</h1>

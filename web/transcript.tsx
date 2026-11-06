@@ -121,7 +121,7 @@ export function Transcript({ bot, items, busy, onShowBrowser }: { bot: BotSummar
             ))}
             {busy && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Spinner /> {bot.name} is working…
+                <Spinner className="text-primary" /> {bot.name} is working…
               </div>
             )}
           </div>
@@ -146,7 +146,7 @@ function Row({ item, onShowBrowser }: { item: Item; onShowBrowser: () => void })
   switch (item.kind) {
     case "user":
       return (
-        <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-sm break-words whitespace-pre-wrap">
+        <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm break-words whitespace-pre-wrap text-primary-foreground">
           {item.mentions?.map((m) => (
             <span key={m.id} className="mr-1 font-semibold">
               @{m.name}
@@ -157,7 +157,7 @@ function Row({ item, onShowBrowser }: { item: Item; onShowBrowser: () => void })
       );
     case "assistant":
       return (
-        <div className="min-w-0 text-sm leading-relaxed">
+        <div className="bot-reply mr-auto max-w-[85%] min-w-0 rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-sm leading-relaxed">
           <Streamdown linkSafety={{ enabled: false }}>{item.text}</Streamdown>
         </div>
       );
@@ -240,11 +240,11 @@ function PendingCard({
         "grid gap-3 rounded-xl border p-4 text-sm",
         !open && "bg-muted/40",
         open && tone === "attention" && "border-amber-500/40 bg-amber-500/5",
-        open && tone === "info" && "border-blue-500/40 bg-blue-500/5",
+        open && tone === "info" && "border-primary/40 bg-primary/5",
       )}
     >
       <div className="flex gap-2.5">
-        <span className={cn("mt-0.5 shrink-0 [&_svg]:size-4", open ? (tone === "info" ? "text-blue-600 dark:text-blue-400" : "text-amber-600 dark:text-amber-400") : "text-muted-foreground")}>
+        <span className={cn("mt-0.5 shrink-0 [&_svg]:size-4", open ? (tone === "info" ? "text-primary" : "text-amber-600 dark:text-amber-400") : "text-muted-foreground")}>
           {icon}
         </span>
         <div className="grid min-w-0 flex-1 gap-1">{title}</div>
