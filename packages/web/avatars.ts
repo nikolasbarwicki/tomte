@@ -1,5 +1,6 @@
 import {
   FACE_NAMES,
+  nameAt,
   STROKE_NAMES,
   STROKES,
   type BotAvatar,
@@ -18,7 +19,7 @@ export function botTheme(stroke: Stroke): CSSProperties {
 
 export function randomAvatar(): BotAvatar {
   return {
-    face: FACE_NAMES[Math.floor(Math.random() * FACE_NAMES.length)],
-    stroke: STROKE_NAMES[1 + Math.floor(Math.random() * (STROKE_NAMES.length - 1))],
+    face: nameAt(FACE_NAMES, Math.floor(Math.random() * FACE_NAMES.length)),
+    stroke: nameAt(STROKE_NAMES, 1 + Math.floor(Math.random() * (STROKE_NAMES.length - 1))),
   };
 }

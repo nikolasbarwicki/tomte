@@ -84,6 +84,7 @@ const botRoute = createRoute({
 function IntegrationsScreen({ selectedId }: { selectedId: string | undefined }) {
   const { bots, openBotId, integrations, setDraft } = useShell();
   const navigate = useNavigate();
+  const firstBot = bots?.[0];
   return (
     <Integrations
       integrations={integrations}
@@ -94,9 +95,9 @@ function IntegrationsScreen({ selectedId }: { selectedId: string | undefined }) 
           : navigate({ to: "/integrations" }))
       }
       onTry={
-        bots?.length
+        firstBot
           ? (text) => {
-              const botId = openBotId ?? bots[0].id;
+              const botId = openBotId ?? firstBot.id;
               setDraft({ botId, text });
               void navigate({ to: "/bots/$botId", params: { botId } });
             }
