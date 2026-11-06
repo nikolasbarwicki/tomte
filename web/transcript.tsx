@@ -40,6 +40,7 @@ import { act } from "./api.ts";
 import { botTheme } from "./avatars.ts";
 import { BotAvatar } from "./bot-avatar.tsx";
 import { kTokens } from "./format.ts";
+import { splitMentions } from "./mentions.ts";
 
 export type Item =
   | { kind: "user"; text: string; mentions?: { id: string; name: string }[] }
@@ -162,30 +163,41 @@ export function Transcript({ bot, bots, items, busy, onShowBrowser }: { bot: Bot
 /** `running`: the row is the live edge of a turn still in progress. */
 function RowView({ row, running, bots, onShowBrowser }: { row: Row; running: boolean; bots: BotSummary[]; onShowBrowser: () => void }) {
   switch (row.kind) {
-    case "user":
+    case "user": {
+      const mentions = row.mentions ?? [];
+      const segments = splitMentions(row.text, mentions);
+      const leading = mentions.filter((m) => !segments.some((s) => typeof s !== "string" && s.mention.id === m.id)).map((m) => ({ mention: m, text: `@${m.name}` }));
       return (
         <Message align="end">
           <MessageContent>
             <Bubble align="end">
               <BubbleContent className="whitespace-pre-wrap">
-                {row.mentions?.map((m) => {
-                  const target = bots.find((b) => b.id === m.id);
+                {[...leading.flatMap((s) => [s, " "]), ...segments].map((s, i) => {
+                  if (typeof s === "string") return s;
+                  const target = bots.find((b) => b.id === s.mention.id);
                   return target ? (
-                    <Link key={m.id} to="/bots/$botId" params={{ botId: target.id }} style={botTheme(target.avatar.stroke)} className="bot-theme mr-1 rounded-full bg-background px-1.5 font-semibold text-primary transition-colors hover:bg-secondary">
-                      @{m.name}
+                    <Link
+                      key={i}
+                      to="/bots/$botId"
+                      params={{ botId: target.id }}
+                      style={botTheme(target.avatar.stroke)}
+                      className="bot-theme inline-flex items-baseline gap-1 rounded-full bg-background px-1.5 font-semibold text-primary transition-colors hover:bg-secondary"
+                    >
+                      <BotAvatar avatar={target.avatar} className="size-[1.1em] self-center" />
+                      {s.text.slice(1)}
                     </Link>
                   ) : (
-                    <span key={m.id} className="mr-1 font-semibold">
-                      @{m.name}
+                    <span key={i} className="font-semibold">
+                      {s.text}
                     </span>
                   );
                 })}
-                {row.text}
               </BubbleContent>
             </Bubble>
           </MessageContent>
         </Message>
       );
+    }
     case "assistant":
       return (
         <Message>
