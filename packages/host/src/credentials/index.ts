@@ -9,15 +9,17 @@ import { credentialSecretName, type SecretStore } from "../platform/secrets.ts";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** The sign-in URL must be https (http only for localhost, for testing); returns the normalized URL and its origin. */
-function parseSignInUrl(raw: string): { url: string; origin: string } {
+/** The sign-in URL must be https (http only for localhost, or anywhere when `allowHttp`, for testing); returns the normalized URL and its origin. */
+function parseSignInUrl(raw: string, allowHttp = false): { url: string; origin: string } {
   let u: URL;
   try {
     u = new URL(raw.trim());
   } catch {
     throw new InvalidInput("Sign-in URL is not a valid URL");
   }
-  const ok = u.protocol === "https:" || (u.protocol === "http:" && LOCAL_HOSTS.has(u.hostname));
+  const ok =
+    u.protocol === "https:" ||
+    (u.protocol === "http:" && (allowHttp || LOCAL_HOSTS.has(u.hostname)));
   if (!ok) throw new InvalidInput("Sign-in URL must use https");
   if (u.username || u.password) throw new InvalidInput("Sign-in URL must not contain credentials");
   u.hash = "";
@@ -47,6 +49,8 @@ export function createCredentials(deps: {
   secrets: SecretStore;
   now?: () => number;
   onChange?: () => void;
+  /** Test-only: accept plain-http sign-in URLs on any host (the browser smoke's site is on a LAN IP). */
+  allowHttp?: boolean;
 }) {
   const { db, secrets } = deps;
   const now = deps.now ?? Date.now;
@@ -88,7 +92,7 @@ export function createCredentials(deps: {
     ): Promise<CredentialEntry> {
       const v = CredentialFields.parse(f);
       if (!f.password) throw new InvalidInput("Password is required");
-      const { url, origin } = parseSignInUrl(v.signInUrl);
+      const { url, origin } = parseSignInUrl(v.signInUrl, deps.allowHttp);
       const id = randomUUID();
       const t = now();
       await secrets.set(credentialSecretName(id), f.password);
@@ -111,7 +115,7 @@ export function createCredentials(deps: {
     ): Promise<CredentialEntry> {
       need(id);
       const v = CredentialFields.parse(f);
-      const { url, origin } = parseSignInUrl(v.signInUrl);
+      const { url, origin } = parseSignInUrl(v.signInUrl, deps.allowHttp);
       if (f.password) await secrets.set(credentialSecretName(id), f.password);
       db.query(
         "UPDATE credential_entries SET label = ?, sign_in_url = ?, origin = ?, username = ?, updated_at = ? WHERE id = ?",

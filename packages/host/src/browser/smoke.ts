@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { spawnSync } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,11 +10,12 @@ import { HostEvent, type ServerEvent } from "@claudebot/contract/events";
 import type { Server } from "bun";
 
 import { createBot } from "../bots/index.ts";
+import { createCredentials } from "../credentials/index.ts";
 import { resolveCli } from "../harness/index.ts";
 import { createHostServer, type HostServer } from "../host-server/index.ts";
 import type { HostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
-import { credentialSecretName, memorySecrets, type SecretStore } from "../platform/secrets.ts";
+import { memorySecrets, type SecretStore } from "../platform/secrets.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
 import { engineStatus } from "./engine.ts";
 
@@ -250,13 +251,13 @@ async function scenarios(
   );
 
   step("(b) browser_login with a vault entry");
-  // The vault only accepts https (or localhost) sign-in URLs, so this smoke-only entry goes straight into its own DB and secret store.
-  const entryId = randomUUID();
-  const t = Date.now();
-  db.query(
-    "INSERT INTO credential_entries (id, label, sign_in_url, origin, username, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-  ).run(entryId, "Smoke Login", `${site.base}/login`, site.base, "alice", t, t);
-  await secrets.set(credentialSecretName(entryId), site.password);
+  // The vault only accepts https (or localhost) sign-in URLs and the site is on a LAN IP, so this entry goes through an http-allowing vault on the same DB and secret store.
+  await createCredentials({ db, secrets, allowHttp: true }).add({
+    label: "Smoke Login",
+    signInUrl: `${site.base}/login`,
+    username: "alice",
+    password: site.password,
+  });
   const cards0 = received.filter((e) => e.type === "wait").length;
   const toolsB1 = await turn(
     `Sign in to the test site with the stored credential "Smoke Login": call browser_credentials, then browser_login with that label. Do not open the login page yourself.`,
