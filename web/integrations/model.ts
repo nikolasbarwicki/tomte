@@ -1,4 +1,4 @@
-import type { Integration, IntegrationAuth, IntegrationTool, IntegrationTransport, ToolPolicy } from "../events.ts";
+import { CATALOG_CATEGORIES, type CatalogCategory, type Integration, type IntegrationAuth, type IntegrationTool, type IntegrationTransport, type ToolPolicy } from "../events.ts";
 
 export const TRANSPORT_LABEL: Record<IntegrationTransport["type"], string> = { http: "HTTP", sse: "SSE", stdio: "Local command" };
 
@@ -82,6 +82,11 @@ export function listSections(integrations: Integration[], query: string): { your
   yours.sort((a, b) => Number(needsAttention(b.integration)) - Number(needsAttention(a.integration)) || byLabel(a, b));
   available.sort(byLabel);
   return { yours, available };
+}
+
+/** Built-ins still to connect, one group per category in `CATALOG_CATEGORIES` order; empty groups are left out. */
+export function byCategory(available: ListEntry[]): { category: CatalogCategory; entries: ListEntry[] }[] {
+  return CATALOG_CATEGORIES.map((category) => ({ category, entries: available.filter((e) => e.integration.catalog?.category === category) })).filter((g) => g.entries.length > 0);
 }
 
 function match(integration: Integration, q: string): ListEntry | undefined {

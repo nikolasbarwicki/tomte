@@ -101,11 +101,16 @@ export type IntegrationTool = {
 export type IntegrationSkill = { name: string; description: string; enabled: boolean };
 /** A brand mark: one path on a 24×24 viewBox, drawn white on `color`. */
 export type BrandIcon = { color: string; path: string };
+/** Where a built-in sits on the Integrations list, in display order. */
+export const CATALOG_CATEGORIES = ["Engineering", "Cloud and data", "Productivity", "Communication", "Sales and payments", "Design", "Web"] as const;
+export type CatalogCategory = (typeof CATALOG_CATEGORIES)[number];
 /** What a built-in catalog entry adds to its integration's screen. */
 export type CatalogInfo = {
+  category: CatalogCategory;
   /** One line on what the service gives bots. */
   tagline: string;
-  icon: BrandIcon;
+  /** Absent when Simple Icons carries no mark for the service; the screen shows its initial instead. */
+  icon?: BrandIcon;
   /** Prompts a bot can run once the service is connected. */
   examples: string[];
   /** Git repository cloned for the skills this service brings. */

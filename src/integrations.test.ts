@@ -8,8 +8,9 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrate } from "./db.ts";
-import { InvalidInput, NameTaken, createIntegrations, type Integrations, type ServerName } from "./integrations.ts";
-import type { CatalogEntry } from "./integrations-catalog.ts";
+import { InvalidInput, NameTaken, createIntegrations, withOfflineAccess, type Integrations, type ServerName } from "./integrations.ts";
+import { CATALOG, type CatalogEntry } from "./integrations-catalog.ts";
+import * as store from "./integrations-store.ts";
 import { memorySecrets } from "./secrets.ts";
 
 let server: ReturnType<typeof Bun.serve>;
@@ -36,7 +37,7 @@ let secrets: ReturnType<typeof memorySecrets>;
 let changes: number;
 let clock = 1_000;
 const REDIRECT = "http://127.0.0.1:9/oauth/callback";
-const SHOWN = { tagline: "Test service", icon: { color: "#000000", path: "M0 0h24v24H0z" }, examples: [] };
+const SHOWN = { category: "Engineering" as const, tagline: "Test service", icon: { color: "#000000", path: "M0 0h24v24H0z" }, examples: [] };
 let hostDir: string;
 
 beforeEach(() => {
@@ -47,6 +48,7 @@ beforeEach(() => {
   integrations = createIntegrations({ db: migrate(new Database(":memory:")), secrets, hostDir, now: () => clock, onChange: () => changes++, oauthRedirectUrl: REDIRECT });
 });
 
+const rows = (db: Database) => (db.query("SELECT count(*) AS n FROM integrations").get() as { n: number }).n;
 const add = (name = "fx") => integrations.addCustom({ name, url, transport: "http" });
 const policies = async (name = "fx") => Object.fromEntries((await add(name)).tools.map((t) => [t.name, t.policy]));
 
@@ -175,9 +177,35 @@ const authed = (token: string) =>
     },
   });
 
-test("a fresh workspace lists every built-in as disconnected beside no custom servers", () => {
-  const l = integrations.list();
-  expect(l.map((i) => [i.catalogId, i.state])).toEqual([["gmail", "disconnected"], ["linear", "disconnected"], ["github", "disconnected"], ["posthog", "disconnected"], ["cloudflare", "disconnected"]]);
+test("a fresh workspace lists the whole catalog, grouped data included, without inserting a row", () => {
+  const db = migrate(new Database(":memory:"));
+  const l = createIntegrations({ db, secrets, hostDir, onChange: () => {}, oauthRedirectUrl: REDIRECT }).list();
+  expect(l.map((i) => [i.catalogId, i.state])).toEqual(CATALOG.map((c) => [c.id, "disconnected"]));
+  expect(l.every((i) => i.catalog?.category)).toBe(true);
+  expect(rows(db)).toBe(0);
+});
+
+test("connecting a browsed built-in inserts exactly one row under the listed id", async () => {
+  const db = migrate(new Database(":memory:"));
+  integrations = createIntegrations({ db, secrets, hostDir, now: () => clock, onChange: () => {}, oauthRedirectUrl: REDIRECT, catalog: [{ id: "svc", label: "Svc", url, auth: { kind: "bearer" }, ...SHOWN }] });
+  const { id } = integrations.list()[0]!;
+  await expect(integrations.setBearer(id, " ")).rejects.toBeInstanceOf(InvalidInput);
+  expect(rows(db)).toBe(0);
+  expect((await integrations.setBearer(id, "t1")).state).toBe("connected");
+  await integrations.setBearer(id, "t2");
+  await integrations.probe(id);
+  expect(rows(db)).toBe(1);
+  expect(integrations.list().map((i) => [i.id, i.state])).toEqual([[id, "connected"]]);
+});
+
+test("an upgraded database keeps its built-in rows and lists each built-in once", () => {
+  const db = migrate(new Database(":memory:"));
+  store.insert(db, { id: "old-uuid", catalogId: "linear", name: "linear", transport: { type: "http", url: "https://mcp.linear.app/mcp" }, auth: { kind: "none" }, enabled: true, state: "connected", error: null, createdAt: 1, updatedAt: 1 });
+  const l = createIntegrations({ db, secrets, hostDir, onChange: () => {}, oauthRedirectUrl: REDIRECT }).list();
+  expect(rows(db)).toBe(1);
+  expect(l.filter((i) => i.catalogId === "linear").map((i) => [i.id, i.state])).toEqual([["old-uuid", "connected"]]);
+  expect(l.length).toBe(CATALOG.length);
+  expect(l.find((i) => i.id === "old-uuid")!.auth).toEqual(CATALOG.find((c) => c.id === "linear")!.auth);
 });
 
 test("a bearer token is stored in the secret store, sent as Authorization, and never listed", async () => {
@@ -675,6 +703,35 @@ test("own client: wrong credentials show the provider's error and store nothing"
     const refused = f.approve((await integrations.connectOAuth(id, { clientId: "mine", clientSecret: "s3cret" })).authorizeUrl);
     expect((await integrations.finishOAuth(refused.state, { error: "access_denied" })).error).toContain("access_denied");
     expect(secrets.entries.size).toBe(0);
+  } finally {
+    f.server.stop(true);
+  }
+});
+
+test("a Google authorization URL asks for offline access and fresh consent; other issuers' URLs are left alone", () => {
+  const google = withOfflineAccess(new URL("https://accounts.google.com/o/oauth2/v2/auth?client_id=x"));
+  expect(google.searchParams.get("access_type")).toBe("offline");
+  expect(google.searchParams.get("prompt")).toBe("consent");
+  const other = withOfflineAccess(new URL("https://mcp.linear.app/authorize?client_id=x"));
+  expect(other.searchParams.has("access_type")).toBe(false);
+  expect(other.searchParams.has("prompt")).toBe(false);
+});
+
+test("own client: built-ins sharing an app label sign in with the client entered once", async () => {
+  const f = oauthFixture({ id: "mine", secret: "s3cret" });
+  try {
+    const catalog: CatalogEntry[] = ["one", "two"].map((id) => ({ id, label: id, url: f.url, auth: { kind: "oauth", client: "own", ownClient: { ...OWN, scope: id } }, ...SHOWN }));
+    const db = migrate(new Database(":memory:"));
+    integrations = createIntegrations({ db, secrets, hostDir, now: () => clock, onChange: () => {}, oauthRedirectUrl: REDIRECT, catalog });
+    const [one, two] = integrations.list().map((i) => i.id);
+    await expect(integrations.connectOAuth(two!)).rejects.toBeInstanceOf(InvalidInput);
+    await expect(integrations.setBearer(two!, "t")).rejects.toBeInstanceOf(InvalidInput);
+    expect(rows(db)).toBe(0);
+    const x = f.approve((await integrations.connectOAuth(one!, { clientId: "mine", clientSecret: "s3cret" })).authorizeUrl);
+    expect((await integrations.finishOAuth(x.state, { code: x.code })).state).toBe("connected");
+    const y = f.approve((await integrations.connectOAuth(two!)).authorizeUrl);
+    expect([y.a.searchParams.get("client_id"), y.a.searchParams.get("scope")]).toEqual(["mine", "two"]);
+    expect((await integrations.finishOAuth(y.state, { code: y.code })).state).toBe("connected");
   } finally {
     f.server.stop(true);
   }

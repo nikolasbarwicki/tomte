@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import type { Integration, IntegrationTool } from "../events.ts";
-import { health, listSections, needsAttention, toolGroups } from "./model.ts";
+import type { CatalogCategory, Integration, IntegrationTool } from "../events.ts";
+import { byCategory, health, listSections, needsAttention, toolGroups } from "./model.ts";
 
 const tool = (name: string, kind: Partial<Pick<IntegrationTool, "readOnly" | "destructive">> = {}): IntegrationTool => ({
   name, description: "", readOnly: false, destructive: false, policy: "ask", lastSeen: 0, ...kind,
@@ -54,4 +54,18 @@ test("tools group as read, write, destructive, and empty groups drop out", () =>
     ["destructive", ["delete_issue"]],
   ]);
   expect(toolGroups(tools, "delete").map((g) => g.kind)).toEqual(["destructive"]);
+});
+
+test("built-ins to connect group by category in catalog order, and search filters every group", () => {
+  const shown = (category: CatalogCategory, tagline: string) => ({ catalog: { category, tagline, examples: [] } });
+  const all = [
+    integration("Notion", shown("Productivity", "Pages and databases")),
+    integration("Sentry", shown("Engineering", "Errors and issues")),
+    integration("Linear", shown("Engineering", "Issues and projects")),
+    integration("Slack", shown("Communication", "Messages")),
+  ];
+  const groups = (q: string) => byCategory(listSections(all, q).available).map((g) => [g.category, g.entries.map((e) => e.integration.label)]);
+  expect(groups("")).toEqual([["Engineering", ["Linear", "Sentry"]], ["Productivity", ["Notion"]], ["Communication", ["Slack"]]]);
+  expect(groups("pages")).toEqual([["Productivity", ["Notion"]]]);
+  expect(groups("issues")).toEqual([["Engineering", ["Linear", "Sentry"]]]);
 });

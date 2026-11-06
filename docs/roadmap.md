@@ -92,7 +92,7 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 
 **Plan, in order.**
 1. Authenticated remote access to the existing UI (tunnel or reverse proxy, with a login). Keep the loopback endpoints for bot tools untouched.
-2. One chat channel (Slack or Telegram) that posts bot messages, approval cards and `Notice`s, and routes replies into `deliver()`.
+2. One chat channel (Slack, Telegram or Discord) that posts bot messages, approval cards and `Notice`s, and routes replies into `deliver()`. Telegram and Discord are channels only, not catalog integrations.
 3. A service wrapper (launchd, systemd) or Docker image so the host stays up. Update docs.
 
 **Constraint.** Never expose the browser, bots or credential endpoints without the existing token, Host and Origin checks.
@@ -158,7 +158,7 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 **Problem.** `CatalogEntry` in `src/integrations-catalog.ts` is data-only, so each new service is an entry, not code. The list is short. Google service setup for a public release: [`research/google-oauth-research.md`](research/google-oauth-research.md).
 
 **Plan.**
-- Add Slack, Notion, Google Calendar, Google Drive, Stripe, each with default `ask` policies on write tools.
+- 29 services from [`.scratch/integrations-catalog/spec.md`](../.scratch/integrations-catalog/spec.md): 25 shipped as catalog entries (18 one-click OAuth, 2 token, 5 own OAuth client) and 4 (Figma, Trello, Obsidian, Paper) as custom-server recipes in [`custom-integrations.md`](custom-integrations.md). Live sign-in checks: [`.scratch/integrations-catalog/live-checklist.md`](../.scratch/integrations-catalog/live-checklist.md). Per-service research: [`research/integrations/`](research/integrations/).
 - Spike Composio's MCP endpoint against the existing OAuth and bearer flows. If it fits, one entry covers thousands of apps; if its auth model needs a new code path, drop it. Unverified until tried.
 
 **Done when.** Each new entry connects from the UI and one read and one write tool works from a bot, the write asking for approval.

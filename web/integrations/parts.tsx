@@ -7,7 +7,7 @@ import type { Health } from "./model.ts";
 /** A brand tile for built-ins; custom servers get their first letter. */
 export function IntegrationIcon({ integration: i, size = "md" }: { integration: Integration; size?: "md" | "lg" }) {
   const box = size === "lg" ? "size-12 rounded-xl" : "size-9 rounded-lg";
-  if (!i.catalog)
+  if (!i.catalog?.icon)
     return (
       <span aria-hidden className={cn("flex shrink-0 items-center justify-center bg-muted font-semibold text-muted-foreground ring-1 ring-foreground/10", box, size === "lg" ? "text-lg" : "text-sm")}>
         {i.label.charAt(0).toUpperCase()}

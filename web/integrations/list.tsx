@@ -5,10 +5,10 @@ import type { Integration } from "../events.ts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SignInButton } from "./auth.tsx";
-import { effort, health, host, isOneClick, isSetUp, listSections, type ListEntry } from "./model.ts";
+import { byCategory, effort, health, host, isOneClick, isSetUp, listSections, type ListEntry } from "./model.ts";
 import { HealthLabel, IntegrationIcon } from "./parts.tsx";
 
-/** Every integration as one row each: the user's first, then the built-ins still to connect. Configuration lives on the detail page. */
+/** Every integration as one row each: the user's first, then the built-ins still to connect, grouped by category. Configuration lives on the detail page. */
 export function IntegrationsList({ integrations, onOpen }: { integrations: Integration[]; onOpen: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const { yours, available } = listSections(integrations, query);
@@ -26,7 +26,9 @@ export function IntegrationsList({ integrations, onOpen }: { integrations: Integ
         />
       </div>
       {yours.length > 0 && <RowGroup title="Your integrations" entries={yours} onOpen={onOpen} />}
-      {available.length > 0 && <RowGroup title="Available" entries={available} onOpen={onOpen} />}
+      {byCategory(available).map((g) => (
+        <RowGroup key={g.category} title={g.category} entries={g.entries} onOpen={onOpen} />
+      ))}
       {yours.length === 0 && available.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">No integration, tool or skill matches “{query.trim()}”.</p>}
     </div>
   );

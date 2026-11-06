@@ -124,7 +124,7 @@ export function OwnClientForm({ integration: i, ownClient }: { integration: Inte
             <Input id={`${i.id}-client-secret`} type="password" autoComplete="off" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} />
           </Field>
         </div>
-        <Button type="submit" className="self-start" disabled={busy || !clientId.trim() || !clientSecret.trim()}>
+        <Button type="submit" className="self-start" disabled={busy || !clientId.trim() !== !clientSecret.trim()}>
           {busy && <Spinner data-icon="inline-start" />}
           Connect {i.label}
         </Button>
