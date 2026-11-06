@@ -2,8 +2,9 @@ import { chmodSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { McpServerConfig, Options } from "@anthropic-ai/claude-agent-sdk";
-import type { SessionIntegrations } from "../integrations/index.ts";
+import type { McpServerConfig, Options, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
+
+export { authCommand, cmdExeSpawner, installManagedCli, isMusl, loginShellPath, resolveCli, type ResolvedCli } from "./cli.ts";
 
 /** An HTTP MCP server owned by the host; the token travels as a bearer header, never in argv. */
 export interface HostMcpServer {
@@ -45,10 +46,17 @@ export interface IsolationProfile {
   shell?: { denyRead: string[] };
 }
 
+/** What a harness launches with from the bot's integrations: their MCP servers, disallowed tools and plugins. */
+export interface LaunchIntegrations {
+  mcpServers: Record<string, McpServerConfig>;
+  disallowedTools: string[];
+  plugins: SdkPluginConfig[];
+}
+
 export interface HarnessLaunchInput {
   hostServers: HostMcpServer[];
   /** Integration servers, disallowed tools and plugins for this session. */
-  integrations?: SessionIntegrations;
+  integrations?: LaunchIntegrations;
   systemPromptAppend: string;
   isolation: IsolationProfile;
 }

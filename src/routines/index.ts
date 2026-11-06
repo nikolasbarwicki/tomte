@@ -2,15 +2,13 @@ import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getSessionInfo, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import { botContext, currentSession, getBot, touchBot } from "../bots/index.ts";
-import type { ResolvedCli } from "../harness/cli.ts";
-import type { HostServersSource } from "../harness/index.ts";
+import { Thread, botContext, currentSession, getBot, touchBot, type HostDelegate } from "../bots/index.ts";
+import type { HostServersSource, ResolvedCli } from "../harness/index.ts";
 import type { IntegrationsSource } from "../integrations/index.ts";
-import { Thread, type HostDelegate } from "../bots/thread.ts";
-import { WINDOW_MS, hasOccurrence, latestOccurrence, nextOccurrence, parseSchedule } from "./schedule.ts";
+import { WINDOW_MS, hasOccurrence, latestOccurrence, nextOccurrence, nextOccurrences, parseSchedule } from "./schedule.ts";
 import * as store from "./store.ts";
 import type { RoutineRecord } from "./store.ts";
-import type { Bot, Routine, RoutineRun, RunTrigger } from "../contract/events.ts";
+import type { Bot, Routine, RoutineRun, RunTrigger, Schedule } from "../contract/events.ts";
 import { NotFound } from "../platform/errors.ts";
 
 export class Conflict extends Error {}
@@ -341,6 +339,11 @@ export function createRoutines(deps: {
     runs(id: string, before = Number.MAX_SAFE_INTEGER, limit = 20): RoutineRun[] {
       require(id);
       return store.listRuns(db, id, before, Math.min(Math.max(limit, 1), 100));
+    },
+
+    /** The next three times a schedule would fire, for the editor's preview. */
+    preview(schedule: Schedule): number[] {
+      return nextOccurrences(schedule, now(), 3);
     },
   };
 }

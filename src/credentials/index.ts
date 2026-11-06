@@ -8,7 +8,7 @@ import type { CredentialEntry } from "../contract/events.ts";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /** The sign-in URL must be https (http only for localhost, for testing); returns the normalized URL and its origin. */
-export function parseSignInUrl(raw: string): { url: string; origin: string } {
+function parseSignInUrl(raw: string): { url: string; origin: string } {
   let u: URL;
   try {
     u = new URL(raw.trim());

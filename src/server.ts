@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { getBot } from "./bots/index.ts";
-import { resolveCli } from "./harness/cli.ts";
+import { resolveCli } from "./harness/index.ts";
 import { openDb } from "./platform/db.ts";
 import { keychainSecrets } from "./platform/secrets.ts";
 import { createHostServer } from "./host-server.ts";

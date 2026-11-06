@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
 import { engineStatus } from "./engine.ts";
 import { createBot } from "../bots/index.ts";
-import { resolveCli } from "../harness/cli.ts";
+import { resolveCli } from "../harness/index.ts";
 import { migrate } from "../platform/db.ts";
 import { createHostServer, type HostServer } from "../host-server.ts";
 import { credentialSecretName, memorySecrets, type SecretStore } from "../platform/secrets.ts";

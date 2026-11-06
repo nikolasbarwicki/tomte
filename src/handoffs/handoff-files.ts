@@ -1,6 +1,6 @@
 import { copyFileSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, dirname } from "node:path";
-import { resolveInside } from "../bots/files.ts";
+import { resolveInside } from "../bots/index.ts";
 
 /** Why `name` cannot be handed over from `srcDir`, or undefined when it is a regular file inside it. */
 function refusal(srcDir: string, name: string): string | undefined {

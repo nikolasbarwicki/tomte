@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
-import { isMusl } from "../harness/cli.ts";
+import { isMusl } from "../harness/index.ts";
 import { findChrome } from "./engine-cli.ts";
 
 const isWin = process.platform === "win32";

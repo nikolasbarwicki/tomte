@@ -10,35 +10,40 @@ import { z } from "zod";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { getSessionInfo, getSessionMessages, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import type { ResolvedCli } from "./harness/cli.ts";
-import { engineStatus, type EngineStatus } from "./browser/engine.ts";
-import { createLiveView, LIVE_VIEW_PATH, type LiveViewOptions } from "./browser/live-view.ts";
-import { sandboxStatus, type SandboxStatus } from "./browser/sandbox.ts";
-import { BROWSER_ENDPOINT_PATH, createBrowserEndpoint, type BrowserEndpoint } from "./browser/endpoint.ts";
-import { BOTS_ENDPOINT_PATH, createBotsEndpoint, type BotsEndpoint } from "./handoffs/endpoint.ts";
-import { handoffIdsIn, parseHandoffTags, parseMentions, withMentions, type Mention } from "./handoffs/format.ts";
-import { redeliverOpenHandoffs, removeBotHandoffs } from "./handoffs/cleanup.ts";
-import { removeBotBrowser } from "./browser/cleanup.ts";
-import { sentCardsFromTool } from "./handoffs/tools/card.ts";
-import { createHandoffStore } from "./handoffs/store.ts";
-import { combineLeases, type HostServersSource } from "./harness/index.ts";
+import { combineLeases, type HostServersSource, type ResolvedCli } from "./harness/index.ts";
+import { BROWSER_ENDPOINT_PATH, BROWSER_UI_PATHS, CREDENTIAL_EXCHANGE_PATH, LIVE_VIEW_PATH, createBrowser, type BrowserEndpoint, type BrowserRuntimeOptions, type LiveViewOptions, type SandboxStatus } from "./browser/index.ts";
+import { BOTS_ENDPOINT_PATH, createHandoffs, parseMentions, withMentions, type BotsEndpoint, type Mention } from "./handoffs/index.ts";
 import { TokenRegistry } from "./platform/tokens.ts";
-import { createEgressProxy } from "./browser/egress-proxy.ts";
-import { createHumanWaits } from "./browser/human-waits.ts";
-import { Takeover } from "./browser/takeover.ts";
-import { CREDENTIAL_EXCHANGE_PATH, createBrowserLogin } from "./browser/login.ts";
-import { BROWSER_UI_PATHS, createBrowserUiRoutes } from "./browser/ui-routes.ts";
-import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./browser/runtime.ts";
-import { Thread, type TurnResult } from "./bots/thread.ts";
-import { BROWSER_FILES_DIR, botContext, botFilesPath, botMemoryPath, createBot, currentSession, getBot, listBots, newSession, setBrowserEnabled, setBrowserHeaded, touchBot } from "./bots/index.ts";
+import {
+  BROWSER_FILES_DIR,
+  Thread,
+  botContext,
+  botFilesPath,
+  botMemoryPath,
+  createBot,
+  currentSession,
+  deleteFile,
+  getActivity,
+  getBot,
+  listBots,
+  listFiles,
+  markSeen,
+  newSession,
+  readMemory,
+  recordMessage,
+  resolveInside,
+  reveal,
+  setBrowserEnabled,
+  setBrowserHeaded,
+  touchBot,
+  userMemoryPath,
+  watchFiles,
+  type TurnResult,
+} from "./bots/index.ts";
 import { isFace, isStroke } from "./contract/avatars.ts";
-import { readMemory, userMemoryPath } from "./bots/memory.ts";
 import { watchHerdr } from "./herdr.ts";
-import { deleteFile, listFiles, resolveInside, reveal, watchFiles } from "./bots/files.ts";
 import { credentialApi, createCredentials } from "./credentials/index.ts";
-import { getActivity, markSeen, recordMessage } from "./bots/activity-store.ts";
 import { Conflict, RoutineInput, createRoutines, headlessDelegate, runHeadless, type Executor, type RoutineJob } from "./routines/index.ts";
-import { nextOccurrences } from "./routines/schedule.ts";
 import { NameTaken, createIntegrations } from "./integrations/index.ts";
 import { InvalidInput, NotFound } from "./platform/errors.ts";
 import type { SecretStore } from "./platform/secrets.ts";
@@ -95,31 +100,31 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     const path = url.pathname;
     if (path === "/oauth/callback" && req.method === "GET") return void oauthCallback(res, url.searchParams);
     if (path === BROWSER_ENDPOINT_PATH)
-      return void browserEndpoint.handle(req, res).catch((e) => {
+      return void browser.endpoint.handle(req, res).catch((e) => {
         console.error(`[browser] endpoint failed: ${(e as Error).message}`);
         if (!res.headersSent) res.writeHead(500);
         res.end();
       });
     if (path === BOTS_ENDPOINT_PATH)
-      return void botsEndpoint.handle(req, res).catch((e) => {
+      return void handoffs.endpoint.handle(req, res).catch((e) => {
         console.error(`[bots] endpoint failed: ${(e as Error).message}`);
         if (!res.headersSent) res.writeHead(500);
         res.end();
       });
     if (path === CREDENTIAL_EXCHANGE_PATH)
-      return void browserLogin.handle(req, res, port).catch((e) => {
+      return void browser.handleCredentialExchange(req, res).catch((e) => {
         console.error(`[browser] credential exchange failed: ${(e as Error).message}`);
         if (!res.headersSent) res.writeHead(500);
         res.end();
       });
     if (path === LIVE_VIEW_PATH)
-      return void liveView.handle(req, res).catch((e) => {
+      return void browser.handleLiveView(req, res).catch((e) => {
         console.error(`[browser] live view failed: ${(e as Error).message}`);
         if (!res.headersSent) res.writeHead(500);
         res.end();
       });
     if (BROWSER_UI_PATHS.has(path))
-      return void browserUi(req, res, path).catch((e) => {
+      return void browser.handleUi(req, res, path).catch((e) => {
         console.error(`[browser] ui route failed: ${(e as Error).message}`);
         if (!res.headersSent) res.writeHead(500);
         res.end();
@@ -138,51 +143,30 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   await listening.promise;
   const port = (http.address() as AddressInfo).port;
 
-  const sandboxOf = o.sandbox ?? (() => sandboxStatus());
-  /** The browser can be switched on only when the engine, Chrome and the shell sandbox are all usable. */
-  const browserStatus = (): EngineStatus => {
-    const engine = engineStatus();
-    if (engine.status === "unavailable") return engine;
-    const sandbox = sandboxOf();
-    return sandbox.status === "unavailable" ? sandbox : engine;
-  };
-
-  const egress = createEgressProxy();
-  await egress.start();
-  const browserRuntimes = createBrowserRuntimes(secrets, egress, { ...o.browser, headed: (botId) => getBot(cwd, botId)?.browser.headed ?? false });
-  browserRuntimes.start();
-  const waits = createHumanWaits({
+  const credentials = createCredentials({ db, secrets: secrets, onChange: () => broadcast(credentialsEvent()) });
+  const tokens = new TokenRegistry();
+  const browser = await createBrowser({
+    secrets,
+    credentials,
+    tokens,
+    port: () => port,
+    bot: (botId) => getBot(cwd, botId),
+    filesDir: (botId) => botFilesPath(cwd, botId),
+    unattended: (botId) => !!chats.get(botId)?.routineTurn || headlessRuns.has(botId),
     emit: (botId, e) => {
       const chat = chats.get(botId);
       if (chat) emit(chat, e);
     },
     deliver: (botId, text) => void deliver(botId, text),
+    sandbox: o.sandbox,
+    runtime: o.browser,
+    liveView: o.liveView,
+    takeoverInactivityMs: o.takeoverInactivityMs,
   });
-  const takeover = new Takeover({ runtimes: browserRuntimes, waits, deliver: (botId, text) => void deliver(botId, text), inactivityMs: o.takeoverInactivityMs });
-  const credentials = createCredentials({ db, secrets: secrets, onChange: () => broadcast(credentialsEvent()) });
-  const browserLogin = createBrowserLogin({ credentials, secrets, waits, botName: (botId) => getBot(cwd, botId)?.name ?? "A bot", exchangeUrl: () => `http://127.0.0.1:${port}${CREDENTIAL_EXCHANGE_PATH}` });
-  const unattended = (botId: string) => !!chats.get(botId)?.routineTurn || headlessRuns.has(botId);
-  const tokens = new TokenRegistry();
-  const browserEndpoint = createBrowserEndpoint({
-    tokens,
-    takeover,
-    login: browserLogin,
-    unattended,
-    port: () => port,
-    isEnabled: (botId) => (getBot(cwd, botId)?.browser.enabled ?? false) && sandboxOf().status === "available",
-    runtimes: browserRuntimes,
-    filesDir: (botId) => botFilesPath(cwd, botId),
-    egress,
-  });
-  const liveView = createLiveView({ ...o.liveView, port: () => port, isEnabled: (botId) => getBot(cwd, botId)?.browser.enabled ?? false, runtimes: browserRuntimes, takeover });
-  const browserUi = createBrowserUiRoutes({ port: () => port, isEnabled: (botId) => getBot(cwd, botId)?.browser.enabled ?? false, takeover, waits, liveView });
-  const handoffStore = createHandoffStore(db);
-  const botsEndpointDeliver = (botId: string, text: string) =>
-    void deliver(botId, text).catch((e) => console.error(`[bots] delivery to ${botId} failed: ${(e as Error).message}`));
-  const botsEndpoint = createBotsEndpoint({
+  const handoffs = createHandoffs({
+    db,
     tokens,
     port: () => port,
-    handoffs: handoffStore,
     show: (botId, card) => {
       const chat = chats.get(botId);
       if (chat) emit(chat, card);
@@ -190,9 +174,10 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     cards: () => listBots(cwd).map((bot) => ({ id: bot.id, name: bot.name, description: bot.purpose, status: isWorking(bot.id) ? "working" : "idle" })),
     botName: (botId) => getBot(cwd, botId)?.name,
     filesDir: (botId) => botFilesPath(cwd, botId),
-    deliver: botsEndpointDeliver,
+    deliver: (botId, text) =>
+      void deliver(botId, text).catch((e) => console.error(`[bots] delivery to ${botId} failed: ${(e as Error).message}`)),
   });
-  const hostServers: HostServersSource = (botId) => combineLeases([browserEndpoint.lease(botId), botsEndpoint.lease(botId)]);
+  const hostServers: HostServersSource = (botId) => combineLeases([browser.endpoint.lease(botId), handoffs.endpoint.lease(botId)]);
 
   const clients = new Set<ServerResponse>();
   const broadcast = (e: ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent | IntegrationsEvent | CredentialsEvent) => {
@@ -329,7 +314,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         if (e.source === "user") {
           emit(chat, { type: "dequeued", id: e.id });
           userSaid(chat, e.shown, e.mentions);
-        } else for (const card of receivedCards(e.text, chat.bot.id)) emit(chat, card);
+        } else for (const card of handoffs.receivedCards(e.text, chat.bot.id)) emit(chat, card);
       }
       void turn(chat, entries.map((e) => e.text).join("\n\n"));
     }
@@ -415,25 +400,10 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     );
   }
 
-  /** Handoff cards for the tags in a text delivered to `ownerId`. A brief carries its title; an update's title comes from the handoff. */
-  const receivedCards = (text: string, ownerId: string): ServerEvent[] =>
-    parseHandoffTags(text).map((t) => {
-      const h = handoffStore.get(t.id);
-      return {
-        type: "handoff",
-        direction: "received",
-        bot: t.from,
-        botId: h && (h.requesterId === ownerId ? h.assigneeId : h.requesterId),
-        title: t.title ?? h?.title ?? "",
-        status: t.resumed && t.title !== undefined ? (h?.status ?? t.status) : t.status,
-        text: t.text,
-      };
-    });
-
   /** Runs one turn in a chat, shown or not; failures are shown there and returned. */
   async function turn(chat: Chat, text: string): Promise<TurnResult | Error> {
     chat.busy = true;
-    for (const id of handoffIdsIn(text)) handoffStore.start(id);
+    handoffs.startDelivered(text);
     touchBot(cwd, chat.bot);
     announceBots();
     let out: TurnResult | Error;
@@ -518,7 +488,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         for (const text of texts) {
           const routine = text.match(ROUTINE_TAG);
           if (routine) out.push({ type: "routine", name: routine[1], trigger: routine[2] as RunTrigger });
-          else if (/^<handoff(-update)? /.test(text)) out.push(...receivedCards(text, ownerId));
+          else if (/^<handoff(-update)? /.test(text)) out.push(...handoffs.receivedCards(text, ownerId));
           else if (!text.startsWith("<") || text.startsWith("<mention ")) {
             const { text: typed, mentions } = parseMentions(text);
             out.push(mentions.length ? { type: "user", text: typed, mentions } : { type: "user", text });
@@ -527,7 +497,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       } else if (m.type === "assistant" && Array.isArray(content)) {
         for (const b of content) {
           if (b.type === "text") out.push({ type: "text_start" }, { type: "delta", text: b.text });
-          if (b.type === "tool_use") out.push({ type: "tool", name: b.name, input: JSON.stringify(b.input) }, ...sentCardsFromTool(b.name, b.input as Record<string, string>, ownerId, { handoffs: handoffStore, botName: (id) => getBot(cwd, id)?.name }));
+          if (b.type === "tool_use") out.push({ type: "tool", name: b.name, input: JSON.stringify(b.input) }, ...handoffs.sentCards(b.name, b.input as Record<string, string>, ownerId));
         }
       }
     }
@@ -571,7 +541,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   }
 
   function createChat(bot: Bot, { history, hasSession }: Transcript, inbox: InboxEntry[] = []): Chat {
-    history.push(...waits.pending(bot.id));
+    history.push(...browser.pendingWaits(bot.id));
     const headless = headlessRuns.get(bot.id);
     if (headless) history.push({ type: "info", text: `routine "${headless}" is running in the background; its reply appears here when it finishes` });
     for (const e of inbox) if (e.source === "user") history.push(queuedEvent(e));
@@ -647,7 +617,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     const str = (key: string) => (typeof b[key] === "string" ? (b[key] as string) : "");
     switch (path) {
       case "/api/info":
-        return json(res, { cwd, cli: `${cli.path} (${cli.source})`, auth: process.env.ANTHROPIC_API_KEY ? "api key" : "CLI stored login", browser: browserStatus() });
+        return json(res, { cwd, cli: `${cli.path} (${cli.source})`, auth: process.env.ANTHROPIC_API_KEY ? "api key" : "CLI stored login", browser: browser.status() });
       case "/api/seen": {
         const bot = getBot(cwd, str("botId"));
         if (!bot) return json(res, { error: "no such bot" }, 404);
@@ -668,7 +638,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         const bot = getBot(cwd, str("botId"));
         if (!bot) return json(res, { error: "no such bot" }, 404);
         if (typeof b.enabled !== "boolean") return json(res, { error: "enabled must be true or false" }, 400);
-        const engine = browserStatus();
+        const engine = browser.status();
         if (b.enabled && engine.status === "unavailable") return json(res, { error: engine.reason }, 409);
         setBrowserEnabled(cwd, bot.id, b.enabled);
         const chat = chats.get(bot.id);
@@ -683,7 +653,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         if (typeof b.headed !== "boolean") return json(res, { error: "headed must be true or false" }, 400);
         setBrowserHeaded(cwd, bot.id, b.headed);
         // The window is chosen when the engine launches Chrome, so a running browser must restart to pick it up.
-        await browserRuntimes.restart(bot.id);
+        await browser.restart(bot.id);
         announceBots();
         return json(res, { ok: true });
       }
@@ -691,8 +661,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       case "/api/bots/browser/sign-out": {
         const bot = getBot(cwd, str("botId"));
         if (!bot) return json(res, { error: "no such bot" }, 404);
-        if (path.endsWith("/sign-out")) await browserRuntimes.signOut(bot.id);
-        else await browserRuntimes.restart(bot.id);
+        if (path.endsWith("/sign-out")) await browser.signOut(bot.id);
+        else await browser.restart(bot.id);
         return json(res, { ok: true });
       }
       case "/api/open": {
@@ -760,7 +730,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         newSession(cwd, chat.bot);
         chat.thread = openThread(chat.bot, false, () => chat);
         emit(chat, { type: "session" });
-        takeover.cancelBot(chat.bot.id, "a new session started");
+        browser.cancelTakeover(chat.bot.id, "a new session started");
         return json(res, { ok: true });
       }
       case "/api/files/delete": {
@@ -815,7 +785,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
           return json(res, routines.runs(q.id, q.before, q.limit));
         }
         case "/api/routines/preview":
-          return json(res, { next: nextOccurrences(Preview.parse(b).schedule, Date.now(), 3) });
+          return json(res, { next: routines.preview(Preview.parse(b).schedule) });
       }
       res.writeHead(404).end();
     } catch (e) {
@@ -923,19 +893,18 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     : undefined;
 
   routines.start();
-  const handoffDeps = { handoffs: handoffStore, botName: (botId: string) => getBot(cwd, botId)?.name, deliver: botsEndpointDeliver };
-  redeliverOpenHandoffs(handoffDeps);
+  handoffs.redeliverOpen();
   ready = true;
 
   return {
     port,
     url: `http://127.0.0.1:${port}`,
-    browser: browserEndpoint,
-    bots: botsEndpoint,
+    browser: browser.endpoint,
+    bots: handoffs.endpoint,
     currentBotId: () => current?.bot.id,
     async removeBot(botId) {
-      await removeBotBrowser({ endpoint: browserEndpoint, runtimes: browserRuntimes, takeover, credentials }, botId);
-      removeBotHandoffs(handoffDeps, botId);
+      await browser.removeBot(botId);
+      handoffs.removeBot(botId);
     },
     async close() {
       ready = false;
@@ -943,9 +912,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       stopHerdr?.();
       filesWatcher?.close();
       routines.stop();
-      liveView.close();
-      await browserRuntimes.closeAll();
-      await egress.stop();
+      await browser.close();
       await vite?.close();
       http.closeAllConnections();
       const closed = Promise.withResolvers<void>();

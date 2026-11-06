@@ -103,7 +103,7 @@ class OAuthState implements OAuthClientProvider {
   codeVerifier = () => this.verifier;
 }
 
-export function parseServerName(raw: string): ServerName {
+function parseServerName(raw: string): ServerName {
   if (!raw) throw new InvalidInput("name required");
   if (RESERVED.has(raw)) throw new InvalidInput(`"${raw}" is reserved`);
   if (!NAME.test(raw)) throw new InvalidInput("name must start with a lowercase letter and use only lowercase letters, digits and _ (max 32)");

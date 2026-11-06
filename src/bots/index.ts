@@ -5,6 +5,11 @@ import { userMemoryPath, type MemoryPaths } from "./memory.ts";
 import { defaultAvatar, type BotAvatar } from "../contract/avatars.ts";
 import type { Bot } from "../contract/events.ts";
 
+export { Thread, type HostDelegate, type TurnResult } from "./thread.ts";
+export { readMemory, userMemoryPath } from "./memory.ts";
+export { getActivity, markSeen, recordMessage } from "./activity-store.ts";
+export { deleteFile, listFiles, resolveInside, reveal, watchFiles } from "./files.ts";
+
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const botsDir = (cwd: string) => join(cwd, ".host", "bots");
