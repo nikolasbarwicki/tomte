@@ -23,3 +23,15 @@ Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
 - pre-commit (staged files, parallel): `oxfmt --check`, `oxlint`, `gitleaks git --staged`. A format failure means run `bun run fmt` and re-stage.
 - pre-push: `bun run check`.
 - Prerequisite: [`gitleaks`](https://github.com/gitleaks/gitleaks) is a Go binary, not an npm dependency. Install it yourself (`brew install gitleaks` on macOS); pre-commit fails with an install hint when it is missing.
+
+### CI
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`/`master`. Jobs: `check` (`bun install --frozen-lockfile`, then `bun run check`), `secrets` (gitleaks over the full history, config in `.gitleaks.toml`) and `audit` (`bun audit`, non-blocking until it exits 0; then drop `continue-on-error` in the workflow). The Bun version comes from `.bun-version`.
+
+Branch protection is repo settings, not code. Once the repo is on GitHub, require the `check` and `secrets` jobs (replace `OWNER/REPO` and the branch):
+
+```sh
+gh api -X PUT repos/OWNER/REPO/branches/main/protection --input - <<'JSON'
+{"required_status_checks":{"strict":true,"contexts":["check","secrets"]},"enforce_admins":false,"required_pull_request_reviews":null,"restrictions":null}
+JSON
+```
