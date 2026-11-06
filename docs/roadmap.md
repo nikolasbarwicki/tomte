@@ -2,7 +2,7 @@
 
 Source: competitor review of Rerun, OpenBot, Turnstone, Rakazo and MausBot against the codebase on 2026-11-06. Competitor facts come from their landing pages and public READMEs (Turnstone and MausBot: landing page only). "Claudebot lacks X" means no code for X was found.
 
-Out of scope here: computer use (see [`research/cua-research.md`](research/cua-research.md)) and bot handoffs (see `.scratch/bot-handoffs/`). Both are tracked separately. Items 7 and 8 depend on handoffs landing, as does the Chief of Staff template in item 3.
+Out of scope here: computer use (see [`research/cua-research.md`](research/cua-research.md)). Bot handoffs have landed (`src/handoffs/`, ADR-0002) and are not tracked here. Items 7 and 8 build on them, as does the Chief of Staff template in item 3.
 
 ## Where claudebot stands
 
@@ -62,12 +62,12 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 
 ## 3. Bots that create routines, bots and skills
 
-**Problem.** The only bot-facing host tools on `master` are `ask_user` and `remember`. Routine CRUD exists only under `/api/routines/*`. MausBot ("automations from one sentence"), Rerun (Foreman), Turnstone and Rakazo (Chief of Staff) all let a bot set these up.
+**Problem.** Bot-facing host tools are `ask_user`, `remember`, the handoff tools and the browser tools; none of them manages routines, bots or skills. Routine CRUD exists only under `/api/routines/*`. MausBot ("automations from one sentence"), Rerun (Foreman), Turnstone and Rakazo (Chief of Staff) all let a bot set these up.
 
 **Plan.**
 - Add `create_routine` / `list_routines` / `update_routine` host tools, calling the same code as the HTTP routes.
 - Add `create_bot` (name, purpose, initial memory). Pair it with the unfinished bot delete flow (item 6) so created bots can be cleaned up.
-- Ship a Chief of Staff template that combines these with `hand_off`. This part waits for handoffs to land; `create_routine` and `create_bot` do not.
+- Ship a Chief of Staff template that combines these with `hand_off`. Handoffs have landed, so this waits only on `create_routine` and `create_bot`.
 
 **Guards.** A bot may edit only its own routines. Cap the number of bots one bot may create. Bot-created routines default to approval-required for writes (item 1).
 
@@ -123,7 +123,7 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 - A static template list in the web bundle: name, purpose, memory seed, suggested integrations. Start with Inbox Manager, Coding Agent, Researcher.
 - Picking one fills the form; the user can still edit. `/api/bots/new` gains an optional `memory` field written to `botMemoryPath`.
 - Suggested integrations are shown as hints, not granted. Grants stay a user action.
-- Chief of Staff joins once item 3 and handoffs land.
+- Chief of Staff joins once item 3 lands.
 
 **Done when.** Choosing Inbox Manager creates a bot whose first turn already knows its job and memory seed.
 
@@ -153,19 +153,19 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 
 **Done when.** A routine run and a handoff each show a cost, and the bot's monthly total equals the sum of its turns.
 
-### 6e. Bigger catalog
+### 6e. Bigger catalog (shipped; Composio spike open)
 
-**Problem.** `CatalogEntry` in `src/integrations-catalog.ts` is data-only, so each new service is an entry, not code. The list is short. Google service setup for a public release: [`research/google-oauth-research.md`](research/google-oauth-research.md).
+**Problem.** `CatalogEntry` in `src/integrations-catalog.ts` is data-only, so each new service is an entry, not code. The list was short; it now has 30 entries, and the open work is the Composio spike below. Google service setup for a public release: [`research/google-oauth-research.md`](research/google-oauth-research.md).
 
 **Plan.**
-- 29 services from [`.scratch/integrations-catalog/spec.md`](../.scratch/integrations-catalog/spec.md): 25 shipped as catalog entries (18 one-click OAuth, 2 token, 5 own OAuth client) and 4 (Figma, Trello, Obsidian, Paper) as custom-server recipes in [`custom-integrations.md`](custom-integrations.md). Live sign-in checks: [`.scratch/integrations-catalog/live-checklist.md`](../.scratch/integrations-catalog/live-checklist.md). Per-service research: [`research/integrations/`](research/integrations/).
+- **Shipped.** 30 catalog entries in `src/integrations-catalog.ts` (commit `5c61276`), plus 4 services (Figma, Trello, Obsidian, Paper) as custom-server recipes in [`custom-integrations.md`](custom-integrations.md). Spec: [`.scratch/integrations-catalog/spec.md`](../.scratch/integrations-catalog/spec.md). Live sign-in checks: [`.scratch/integrations-catalog/live-checklist.md`](../.scratch/integrations-catalog/live-checklist.md). Per-service research: [`research/integrations/`](research/integrations/).
 - Spike Composio's MCP endpoint against the existing OAuth and bearer flows. If it fits, one entry covers thousands of apps; if its auth model needs a new code path, drop it. Unverified until tried.
 
 **Done when.** Each new entry connects from the UI and one read and one write tool works from a bot, the write asking for approval.
 
 ## 7. Expose bots to external agents
 
-ADR-0002 deferred "A2A JSON-RPC between bots" and "exposing bots as A2A servers". After handoffs land, add a translation layer from the handoff store to A2A, and an MCP tool surface for external agents. One OpenMausBot contributor merged an MCP server for external orchestration, so there is demand. Needs token issuance for external callers and the same untrusted-content rule as bot-to-bot messages.
+ADR-0002 deferred "A2A JSON-RPC between bots" and "exposing bots as A2A servers". Handoffs have landed, so add a translation layer from the handoff store to A2A, and an MCP tool surface for external agents. One OpenMausBot contributor merged an MCP server for external orchestration, so there is demand. Needs token issuance for external callers and the same untrusted-content rule as bot-to-bot messages.
 
 ## 8. Bot-authored skills
 
