@@ -30,7 +30,7 @@ export interface EngineLaunch {
 }
 
 /** The engine shuts its own daemon down after this much inactivity; a backstop behind the host's idle close. */
-export const ENGINE_IDLE_TIMEOUT_MS = 15 * 60_000;
+const ENGINE_IDLE_TIMEOUT_MS = 15 * 60_000;
 
 export const DEFAULT_CALL_TIMEOUT_MS = 60_000;
 
@@ -67,7 +67,7 @@ export function sessionName(botId: string): string {
 }
 
 /** Flags every engine call carries, then the command itself. */
-export function engineArgs(launch: EngineLaunch, botId: string, command: string[]): string[] {
+function engineArgs(launch: EngineLaunch, botId: string, command: string[]): string[] {
   const session = sessionName(botId);
   return ["--json", "--session", session, "--restore", session, ...launchFlags(launch), ...command];
 }
@@ -100,7 +100,7 @@ export function restoreStatePath(env: Record<string, string> | undefined, botId:
   return join(env?.HOME ?? homedir(), ".agent-browser", "sessions", `${session}-${session}`);
 }
 
-export function engineEnv(launch: EngineLaunch): Record<string, string> {
+function engineEnv(launch: EngineLaunch): Record<string, string> {
   const env: Record<string, string> = {};
   for (const k of PASSTHROUGH_ENV) if (process.env[k] !== undefined) env[k] = process.env[k]!;
   return { ...env, ...launch.env, AGENT_BROWSER_ENCRYPTION_KEY: launch.encryptionKey };

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema-jsonc.json",
+  "workspaces": {
+    ".": {
+      // omp hook installed by symlink (see header of the file), never imported.
+      "entry": ["integrations/omp/*.ts"],
+      // @swc/core: dependency-cruiser loads it by name via `parser: "swc"` in .dependency-cruiser.cjs.
+      // @oh-my-pi/pi-coding-agent: type-only import resolved by omp at hook load time; not installed in this repo.
+      "ignoreDependencies": ["@swc/core", "@oh-my-pi/pi-coding-agent"],
+    },
+    "packages/host": {
+      "entry": [
+        "src/host.ts",
+        "src/server.ts",
+        // Spawned as subprocesses by tests via path strings (fake Claude, MCP stdio server, lock holder, fake agent-browser).
+        "src/testing/*.ts",
+      ],
+      "project": ["src/**/*.ts"],
+    },
+    "packages/web": {
+      "entry": ["main.tsx", "vite.config.ts"],
+      "project": ["**/*.{ts,tsx}"],
+      // Imported only from tailwind.css via @import, which knip doesn't parse.
+      "ignoreDependencies": [
+        "tailwindcss",
+        "tw-animate-css",
+        "shadcn",
+        "@fontsource-variable/geist",
+      ],
+    },
+    "packages/contract": {
+      "entry": ["src/events.ts", "src/avatars.ts"],
+      "project": ["src/**/*.ts"],
+    },
+  },
+  "ignoreIssues": {
+    // shadcn-generated primitives export their full variant set by design; kept verbatim so `shadcn add` updates stay diffable.
+    "packages/web/components/ui/**": ["exports", "types"],
+  },
+}

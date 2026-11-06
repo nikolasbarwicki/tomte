@@ -14,7 +14,7 @@ type QueuedRoutine = {
 };
 
 /** A routine turn started in a bot's chat. */
-export type ChatRoutineTurn = { done: Promise<TurnResult | Error>; stop: (reason: string) => void };
+type ChatRoutineTurn = { done: Promise<TurnResult | Error>; stop: (reason: string) => void };
 
 export interface RoutineTurnsDeps {
   cwd: string;

@@ -8,7 +8,7 @@ export interface WaitingForUser {
   id: string;
 }
 
-export interface WaitSpec {
+interface WaitSpec {
   /** A short label the card uses to pick its look, such as "takeover" or "approval". */
   kind: string;
   title: string;
@@ -28,7 +28,7 @@ export interface HumanWaitsOptions {
   deliver: (botId: string, text: string) => void;
 }
 
-export type WaitCardEvent = Extract<ServerEvent, { type: "wait" | "wait_resolved" }>;
+type WaitCardEvent = Extract<ServerEvent, { type: "wait" | "wait_resolved" }>;
 
 interface Pending {
   botId: string;
@@ -36,7 +36,7 @@ interface Pending {
   card: Extract<WaitCardEvent, { type: "wait" }>;
 }
 
-export const CANCELLED = "cancelled";
+const CANCELLED = "cancelled";
 
 /**
  * Asks the user something without ever blocking a bot's tool call. `request` returns `{status, id}` at once

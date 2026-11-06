@@ -7,7 +7,7 @@ import type { IsolationProfile } from "../harness/index.ts";
 export type SandboxStatus = { status: "available" } | { status: "unavailable"; reason: string };
 
 /** The engine's state directory (saved logins, encryption material, Chrome); a bot's shell and Read tool must never see it. */
-export const engineStateDir = () => join(homedir(), ".agent-browser");
+const engineStateDir = () => join(homedir(), ".agent-browser");
 
 /**
  * The isolation a browser-enabled bot runs under. Claude's macOS sandbox always allows the SecurityServer Mach service,

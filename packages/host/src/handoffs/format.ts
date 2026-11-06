@@ -1,7 +1,7 @@
 import type { HandoffStatus } from "./store.ts";
 
 /** The fixed line after a brief: the tools that continue or finish the handoff. */
-export const HANDOFF_TOOLS_LINE =
+const HANDOFF_TOOLS_LINE =
   "Continue or finish this handoff with the bots tools (mcp__bots__*): handoff_message to ask or answer, complete_handoff with your result, fail_handoff to decline or give up.";
 
 const attr = (s: string) =>
@@ -87,7 +87,7 @@ export const handoffIdsIn = (text: string): string[] =>
   [...text.matchAll(/^<handoff id="([^"]+)"/gm)].map((m) => m[1]);
 
 /** The tag the host appends to a user message for each bot the user mentioned. */
-export const formatMention = (m: Mention) => `<mention name="${attr(m.name)}" id="${attr(m.id)}"/>`;
+const formatMention = (m: Mention) => `<mention name="${attr(m.name)}" id="${attr(m.id)}"/>`;
 
 export type Mention = { id: string; name: string };
 

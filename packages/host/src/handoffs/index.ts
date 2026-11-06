@@ -12,7 +12,7 @@ import { createHandoffStore } from "./store.ts";
 import { sentCardsFromTool } from "./tools/card.ts";
 import type { HandoffCard } from "./tools/context.ts";
 
-export { BOTS_ENDPOINT_PATH, type BotsEndpoint, type HandoffCard };
+export { BOTS_ENDPOINT_PATH, type BotsEndpoint };
 export { parseMentions, withMentions, type Mention } from "./format.ts";
 
 export type HandoffsOptions = Omit<BotsEndpointDeps, "handoffs"> & { db: Database };

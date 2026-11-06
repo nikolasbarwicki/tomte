@@ -18,7 +18,7 @@ type StatusChange = {
 const NOTIFY: Partial<Record<AgentStatus, string>> = { blocked: "needs input", done: "finished" };
 const RETRY_MS = 5_000;
 
-export function socketPath(): string {
+function socketPath(): string {
   return process.env.HERDR_SOCKET_PATH ?? join(homedir(), ".config", "herdr", "herdr.sock");
 }
 

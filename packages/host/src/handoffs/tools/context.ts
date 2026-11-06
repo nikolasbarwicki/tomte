@@ -3,7 +3,7 @@ import type { ServerEvent } from "@claudebot/contract/events";
 import type { HandoffStore } from "../store.ts";
 
 /** An A2A agent card: how a bot describes itself to other bots. */
-export type AgentCard = {
+type AgentCard = {
   id: string;
   name: string;
   description: string;

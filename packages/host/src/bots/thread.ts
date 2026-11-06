@@ -26,8 +26,8 @@ import {
 import type { IntegrationsSource } from "../integrations/index.ts";
 import { appendMemory, readMemory, writeMemory, type MemoryPaths } from "./memory.ts";
 
-export const APP = "claudebot";
-export const VERSION = "0.1.0";
+const APP = "claudebot";
+const VERSION = "0.1.0";
 
 /** Decisions the host (its UI/user) owns. */
 export interface HostDelegate {

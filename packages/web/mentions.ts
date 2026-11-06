@@ -8,7 +8,7 @@ export type Segment = string | { mention: MentionTarget; text: string };
  * unless a letter or digit continues it, so `@Writer,` counts and `@Writers` does not. Longer names win, so `@Inbox handler` is
  * not read as `@Inbox`.
  */
-export function splitMentions(text: string, targets: MentionTarget[]): Segment[] {
+function splitMentions(text: string, targets: MentionTarget[]): Segment[] {
   const byLength = [...targets].sort((a, b) => b.name.length - a.name.length);
   const segments: Segment[] = [];
   let plain = 0;

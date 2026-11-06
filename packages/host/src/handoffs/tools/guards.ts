@@ -1,6 +1,6 @@
-export const MAX_TITLE_LENGTH = 80;
-export const MAX_CHAIN_DEPTH = 3;
-export const MAX_OPEN_PER_REQUESTER = 5;
+const MAX_TITLE_LENGTH = 80;
+const MAX_CHAIN_DEPTH = 3;
+const MAX_OPEN_PER_REQUESTER = 5;
 
 type Edge = { requesterId: string; assigneeId: string };
 

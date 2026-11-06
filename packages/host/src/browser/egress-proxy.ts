@@ -10,9 +10,9 @@ import {
 import { connect, isIP, type AddressInfo, type Socket } from "node:net";
 
 /** Resolves a hostname to every address it has. */
-export type Resolve = (host: string) => Promise<string[]>;
+type Resolve = (host: string) => Promise<string[]>;
 /** Opens a connection to an already-checked address. */
-export type Dial = (address: string, port: number) => Socket;
+type Dial = (address: string, port: number) => Socket;
 
 export interface EgressProxyOptions {
   resolve?: Resolve;
