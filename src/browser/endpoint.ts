@@ -8,7 +8,7 @@ import type { Takeover } from "./takeover.ts";
 import type { BrowserLogin } from "./login.ts";
 import { browserIsolation } from "./sandbox.ts";
 import { BROWSER_INSTRUCTIONS, BROWSER_SERVER_NAME, createBrowserMcpServer } from "./tools.ts";
-import { TokenRegistry } from "./tokens.ts";
+import { TokenRegistry } from "../tokens.ts";
 
 export const BROWSER_ENDPOINT_PATH = "/mcp/browser";
 
@@ -25,6 +25,8 @@ export interface BrowserEndpointDeps {
   login: BrowserLogin;
   /** True while the bot runs a routine, with no user present. */
   unattended(botId: string): boolean;
+  /** The host-wide token registry shared with the other host endpoints; a private one when omitted. */
+  tokens?: TokenRegistry;
 }
 
 export interface BrowserEndpoint {
@@ -40,7 +42,7 @@ function reject(res: ServerResponse, status: number, message: string) {
 }
 
 export function createBrowserEndpoint(deps: BrowserEndpointDeps): BrowserEndpoint {
-  const tokens = new TokenRegistry();
+  const tokens = deps.tokens ?? new TokenRegistry();
   const pages = new Map<string, PageState>();
 
   const pageOf = (botId: string) => {

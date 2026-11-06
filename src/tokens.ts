@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 const digest = (token: string) => createHash("sha256").update(token).digest();
 
-/** Bearer tokens that identify a bot to the browser endpoint. Kept in memory only. */
+/** Bearer tokens that identify a bot to a host endpoint. Kept in memory only. */
 export class TokenRegistry {
   private entries: { digest: Buffer; botId: string }[] = [];
 

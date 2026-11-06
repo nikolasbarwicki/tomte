@@ -28,13 +28,15 @@ import { Integrations } from "./integrations.tsx";
 import { DAYS, browserZone, describe, fromSchedule, toSchedule, type Preset } from "./schedule.ts";
 
 type Item =
-  | { kind: "user" | "assistant" | "error" | "info" | "update"; text: string }
+  | { kind: "user"; text: string; mentions?: { id: string; name: string }[] }
+  | { kind: "assistant" | "error" | "info" | "update"; text: string }
   | { kind: "tool"; name: string; input: string }
   | { kind: "ask"; id: string; question: string; answer?: string }
   | { kind: "approve"; id: string; tool: string; reason: string; input: string; answer?: string }
   | { kind: "wait"; id: string; waitKind: string; title: string; detail?: string; actions: WaitAction[]; resolved?: string }
   | { kind: "session" }
-  | { kind: "routine"; name: string; trigger: string };
+  | { kind: "routine"; name: string; trigger: string }
+  | { kind: "handoff"; direction: "sent" | "received"; bot: string; title: string; status: string; text: string };
 
 const kTokens = (n: number) => `${Math.round(n / 1000)}k`;
 
@@ -59,7 +61,7 @@ function reduce(items: Item[], e: ServerEvent): Item[] {
   const last = items[items.length - 1];
   switch (e.type) {
     case "user":
-      return [...items, { kind: "user", text: e.text }];
+      return [...items, { kind: "user", text: e.text, mentions: e.mentions }];
     case "text_start":
       return [...items, { kind: "assistant", text: "" }];
     case "delta":
@@ -88,6 +90,8 @@ function reduce(items: Item[], e: ServerEvent): Item[] {
       return [...items, { kind: "session" }];
     case "routine":
       return [...items, { kind: "routine", name: e.name, trigger: e.trigger }];
+    case "handoff":
+      return [...items, { kind: "handoff", direction: e.direction, bot: e.bot, title: e.title, status: e.status, text: e.text }];
     case "compacted":
       return [...items, { kind: "info", text: `context compacted (${e.trigger}) · ${kTokens(e.preTokens)} tokens summarized` }];
     case "done":
@@ -102,6 +106,7 @@ function App() {
   const [items, setItems] = useState<Item[]>([]);
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
+  const [mentions, setMentions] = useState<{ id: string; name: string }[]>([]);
   const [info, setInfo] = useState<Info>();
   const [bots, setBots] = useState<BotSummary[]>([]);
   const [botId, setBotId] = useState<string>();
@@ -151,7 +156,7 @@ function App() {
       }
       if (e.type === "context") return setContext(e);
       if (e.type === "session") setContext(undefined);
-      if (e.type === "user" || e.type === "update" || e.type === "routine") setBusy(true);
+      if (e.type === "user" || e.type === "update" || e.type === "routine" || (e.type === "handoff" && e.direction === "received")) setBusy(true);
       if (e.type === "done" || e.type === "error") setBusy(false);
       setItems((prev) => reduce(prev, e));
     };
@@ -187,7 +192,18 @@ function App() {
     const text = input.trim();
     if (!text || busy || !botId) return;
     setInput("");
-    post("/api/send", { text });
+    setMentions([]);
+    post("/api/send", { text, mentions: mentions.map((m) => m.id) });
+  };
+
+  const mentionQuery = input.match(/(?:^|\s)@([^\s@]*)$/)?.[1];
+  const candidates =
+    mentionQuery === undefined
+      ? []
+      : bots.filter((b) => b.id !== botId && !mentions.some((m) => m.id === b.id) && b.name.toLowerCase().includes(mentionQuery.toLowerCase()));
+  const pickMention = (b: BotSummary) => {
+    setInput(input.replace(/@[^\s@]*$/, ""));
+    setMentions([...mentions, { id: b.id, name: b.name }]);
   };
 
   return (
@@ -283,6 +299,27 @@ function App() {
         <div ref={bottom} />
       </main>
       <footer>
+        {candidates.length > 0 && (
+          <ul className="mention-menu">
+            {candidates.map((b) => (
+              <li key={b.id} onMouseDown={(e) => (e.preventDefault(), pickMention(b))}>
+                @{b.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        {mentions.length > 0 && (
+          <div className="mention-chips">
+            {mentions.map((m) => (
+              <span key={m.id} className="mention-chip">
+                @{m.name}
+                <button title="Remove" onClick={() => setMentions(mentions.filter((x) => x.id !== m.id))}>
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <textarea
           value={input}
           placeholder={bot ? `Message ${bot.name} (Enter to send, Shift+Enter for newline)` : "Create a bot first"}
@@ -595,7 +632,16 @@ function Row({ item }: { item: Item }) {
   const [reply, setReply] = useState("");
   switch (item.kind) {
     case "user":
-      return <div className="msg user">{item.text}</div>;
+      return (
+        <div className="msg user">
+          {item.mentions?.map((m) => (
+            <span key={m.id} className="mention-chip">
+              @{m.name}
+            </span>
+          ))}
+          {item.text}
+        </div>
+      );
     case "assistant":
       return (
         <div className="msg assistant md">
@@ -610,6 +656,17 @@ function Row({ item }: { item: Item }) {
       return (
         <div className="routine-start">
           ⏰ Routine <b>{item.name}</b> · {item.trigger === "manual" ? "test run" : "scheduled"}
+        </div>
+      );
+    case "handoff":
+      return (
+        <div className={`handoff-card ${item.direction}`}>
+          <div className="handoff-head">
+            <span>🤝 {item.direction === "received" ? `From ${item.bot}` : `To ${item.bot}`}</span>
+            <span className={`badge handoff-status ${item.status}`}>{item.status}</span>
+          </div>
+          {item.title && <b>{item.title}</b>}
+          <div className="handoff-text">{item.text}</div>
         </div>
       );
     case "session":

@@ -71,7 +71,7 @@ const until = async (check: () => boolean, ms = 4000) => {
 };
 
 const ui = (path: string, body: object) => fetch(`${server.url}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: server.url }, body: JSON.stringify(body) });
-const messages = () => (existsSync(join(claudeDir, "messages.jsonl")) ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8").trim().split("\n").filter(Boolean) : []);
+const messages = () => (existsSync(join(claudeDir, "messages.jsonl")) ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => (JSON.parse(l) as { text: string }).text) : []);
 
 /** A browser-enabled bot; `openChat` makes its routine turns chat-hosted, otherwise they run headless. */
 async function setup(openChat: boolean) {

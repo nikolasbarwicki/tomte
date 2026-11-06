@@ -12,3 +12,8 @@
 - **Credential entry**: a stored website login (label, site origin, username, password) in the claudebot vault.
 - **Grant**: the user's permission for one bot to use one credential entry.
 - **Human wait**: anything that needs the user before the bot can continue (takeover, credential approval).
+- **Handoff**: a task one bot gives another, with a brief, messages, a status and a result; an A2A task between claudebot bots.
+- **Requester**: the bot that creates a handoff and receives its result.
+- **Assignee**: the bot a handoff is given to; it does the work in its own session.
+- **Brief**: the self-contained instructions in a handoff (goal, context, constraints, deliverable, done criteria); the assignee sees nothing else of the requester's conversation.
+- **Agent card**: a bot's public description for other bots (id, name, purpose, status), as listed by `list_bots`.
