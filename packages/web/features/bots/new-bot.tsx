@@ -1,4 +1,4 @@
-import { FACE_NAMES, STROKE_NAMES, STROKES } from "@claudebot/contract/avatars";
+import { FACE_NAMES, STROKE_NAMES } from "@claudebot/contract/avatars";
 import { Bot } from "@claudebot/contract/events";
 import { useNavigate } from "@tanstack/react-router";
 import { useActionState, useState } from "react";
@@ -27,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { errorOf, readJson } from "@/host/api.ts";
-import { randomAvatar } from "@/lib/avatars.ts";
+import { randomAvatar, STROKES } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
 import { createBot } from "./api.ts";
