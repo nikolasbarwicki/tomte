@@ -1,17 +1,17 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 
-import { getSessionInfo, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
+import { getSessionInfo } from "@anthropic-ai/claude-agent-sdk";
 import type { Bot, Routine, RoutineRun, RunTrigger, Schedule } from "@claudebot/contract/events";
 import { z } from "zod";
 
 import {
-  Thread,
-  botContext,
   currentSession,
   getBot,
+  headlessDelegate,
+  openThread,
   touchBot,
-  type HostDelegate,
+  type Thread,
   type ThreadEnv,
 } from "../bots/index.ts";
 import { NotFound } from "../platform/errors.ts";
@@ -75,40 +75,23 @@ const LATE_NOTE_MS = 15 * 60_000;
 /** setTimeout's delay is a signed 32-bit int; longer waits re-arm in steps. */
 const MAX_TIMEOUT_MS = 2_147_000_000;
 
-/** Answers a routine's questions and approvals while nobody is watching. */
-export const headlessDelegate: HostDelegate = {
-  askUser: async () =>
-    "No human is available during this scheduled run. Make the most reasonable assumption, state it in your final message, and continue.",
-  approve: async (): Promise<PermissionResult> => ({
-    behavior: "deny",
-    message: "no human is present during a scheduled run",
-  }),
-};
-
 /** Runs a routine turn in the bot's own session without the UI, for a bot that is not open. */
 export function runHeadless(
-  { cwd, dataRoot, cli, integrations, hostServers, approveAll }: ThreadEnv,
+  env: ThreadEnv,
   { bot, routine, prompt }: RoutineJob,
 ): ReturnType<Executor> {
   let thread: Thread | undefined;
   let stopped: string | undefined;
   const done = (async () => {
-    const ctx = botContext(dataRoot, bot);
-    const resume =
-      ctx.sessionId !== undefined && !!(await getSessionInfo(ctx.sessionId, { dir: cwd }));
+    const sessionId = currentSession(bot);
+    const resume = sessionId !== undefined && !!(await getSessionInfo(sessionId, { dir: env.cwd }));
     if (stopped) throw new Error(stopped);
-    thread = new Thread({
-      cli,
-      cwd,
-      ...ctx,
+    thread = openThread(env, bot, {
       resume,
-      approveAll,
-      integrations,
-      hostServers: () => hostServers(bot.id),
       delegate: headlessDelegate,
       log: (l) => console.error(`[routine ${routine.name}] ${l}`),
     });
-    touchBot(dataRoot, bot);
+    touchBot(env.dataRoot, bot);
     try {
       return (await thread.send(prompt)).text;
     } finally {

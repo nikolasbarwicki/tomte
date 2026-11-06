@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { BotAvatar, defaultAvatar } from "@claudebot/contract/avatars";
-import { Bot, BotBrowserSettings } from "@claudebot/contract/events";
+import { Bot, BotBrowserSettings, type MemoryScope } from "@claudebot/contract/events";
 import { z } from "zod";
 
 import { userMemoryPath } from "./memory.ts";
+import { Thread, type HostDelegate, type ThreadEnv } from "./thread.ts";
 
 export { Thread, type HostDelegate, type ThreadEnv, type TurnResult } from "./thread.ts";
 export { readMemory, userMemoryPath } from "./memory.ts";
@@ -139,4 +141,37 @@ export function botContext(dataRoot: string, bot: Bot) {
     persona,
     memory: { user: userMemoryPath(dataRoot), bot: botMemoryPath(dataRoot, bot.id) },
   };
+}
+
+/** Answers questions and approvals while nobody is watching, as in a routine run. */
+export const headlessDelegate: HostDelegate = {
+  askUser: async () =>
+    "No human is available during this scheduled run. Make the most reasonable assumption, state it in your final message, and continue.",
+  approve: async (): Promise<PermissionResult> => ({
+    behavior: "deny",
+    message: "no human is present during a scheduled run",
+  }),
+};
+
+/** Opens a Claude Code thread bound to a bot in the host's shared thread environment. */
+export function openThread(
+  { cwd, dataRoot, cli, integrations, hostServers, approveAll }: ThreadEnv,
+  bot: Bot,
+  opts: {
+    resume?: boolean;
+    delegate: HostDelegate;
+    log: (line: string) => void;
+    idleMs?: number;
+    onMemory?: (scope: MemoryScope, text: string) => void;
+  },
+): Thread {
+  return new Thread({
+    cli,
+    cwd,
+    ...botContext(dataRoot, bot),
+    approveAll,
+    integrations,
+    hostServers: () => hostServers(bot.id),
+    ...opts,
+  });
 }
