@@ -1,7 +1,5 @@
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
 
-import { z } from "zod";
-
 import {
   BROWSER_ENDPOINT_PATH,
   BROWSER_UI_PATHS,
@@ -88,25 +86,4 @@ export function createRequestListener(routes: Route[], fallback: RequestListener
 
 export function json(res: ServerResponse, v: unknown, status = 200) {
   res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(v));
-}
-
-/** A request body that is not a JSON object; the API answers it with 400. */
-export class InvalidBody extends Error {}
-
-const JsonObject = z.record(z.string(), z.unknown());
-
-/** The request's JSON object body; an empty body reads as `{}`. */
-export async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
-  let s = "";
-  for await (const chunk of req) s += chunk;
-  if (!s) return {};
-  let v: unknown;
-  try {
-    v = JSON.parse(s);
-  } catch {
-    throw new InvalidBody("request body is not valid JSON");
-  }
-  const parsed = JsonObject.safeParse(v);
-  if (!parsed.success) throw new InvalidBody("request body must be a JSON object");
-  return parsed.data;
 }
