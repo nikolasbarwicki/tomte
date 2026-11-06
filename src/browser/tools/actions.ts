@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import type { BrowserToolContext } from "../tools.ts";
+import type { BrowserToolContext } from "./context.ts";
 import { httpUrl } from "./navigation.ts";
 import { pageTool, snapshotOutcome, textOutcome } from "./page.ts";
 import { ToolError } from "./result.ts";

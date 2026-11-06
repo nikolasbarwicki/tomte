@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { BrowserToolContext } from "../tools.ts";
+import type { BrowserToolContext } from "./context.ts";
 import { pageTool, snapshotOutcome } from "./page.ts";
 import { errorResult, guarded, ToolError } from "./result.ts";
 

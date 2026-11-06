@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { NEEDS_STEP } from "../login.ts";
-import type { BrowserToolContext } from "../tools.ts";
+import type { BrowserToolContext } from "./context.ts";
 import { errorResult, guarded, textResult } from "./result.ts";
 import { UNATTENDED_MESSAGE } from "./takeover.ts";
 

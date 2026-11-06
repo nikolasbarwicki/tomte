@@ -6,6 +6,12 @@ import { join } from "node:path";
 /** A failed engine call: the engine said no, did not answer in time, or could not be run. */
 export class EngineError extends Error {}
 
+/** What the engine returns for a snapshot of the active tab. */
+export interface PageData {
+  origin?: string;
+  snapshot?: string;
+}
+
 /** Everything the host fixes about how the engine runs; nothing here comes from a bot. */
 export interface EngineLaunch {
   binary: string;

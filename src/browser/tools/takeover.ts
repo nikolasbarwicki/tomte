@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { BrowserToolContext } from "../tools.ts";
+import type { BrowserToolContext } from "./context.ts";
 import { errorResult, textResult } from "./result.ts";
 
 export const UNATTENDED_MESSAGE = "not available in unattended runs; report the login wall or CAPTCHA in your result instead";
