@@ -11,9 +11,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
+import { Progress } from "@/components/ui/progress";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
@@ -99,7 +101,6 @@ export function ChatView({
             {bot.purpose && <p className="truncate text-xs text-muted-foreground">{bot.purpose}</p>}
           </div>
           <ContextMeter context={context} />
-          <ModelMenu />
           <Tooltip>
             <TooltipTrigger
               render={
@@ -152,83 +153,71 @@ export function ChatView({
   );
 }
 
+/** How full the session's context window is, after the Context pattern. */
 function ContextMeter({ context }: { context: ContextEvent | undefined }) {
   const pct = context?.percentage ?? 0;
   const high = pct >= 80;
-  const r = 6;
-  const circumference = 2 * Math.PI * r;
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={<span tabIndex={0} className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs tabular-nums", high ? "text-destructive" : "text-muted-foreground")} />}
+    <HoverCard>
+      <HoverCardTrigger
+        delay={10}
+        closeDelay={100}
+        render={<Button variant="ghost" size="sm" className={cn("tabular-nums", high ? "text-destructive" : "text-muted-foreground")} />}
       >
-        <svg viewBox="0 0 16 16" className="size-4 -rotate-90" aria-hidden>
-          <circle cx="8" cy="8" r={r} fill="none" strokeWidth="2.5" className="stroke-muted" />
-          <circle
-            cx="8"
-            cy="8"
-            r={r}
-            fill="none"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={circumference * (1 - pct / 100)}
-            className={high ? "stroke-destructive" : "stroke-primary"}
-          />
-        </svg>
-        <span className="hidden sm:inline">{context ? `${pct}%` : "–"}</span>
-      </TooltipTrigger>
-      <TooltipContent>
-        {context
-          ? `Context ${pct}% full · ${kTokens(context.tokens)} of ${kTokens(context.max)} tokens${high ? ". Consider a new session." : ""}`
-          : "Context usage appears after the next reply"}
-      </TooltipContent>
-    </Tooltip>
+        {context ? `${pct}%` : "–"}
+        <span className="hidden sm:inline">context</span>
+      </HoverCardTrigger>
+      <HoverCardContent align="end" className="flex flex-col gap-3">
+        {context ? (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-medium">Context</span>
+              <span className="text-muted-foreground tabular-nums">
+                {kTokens(context.tokens)} / {kTokens(context.max)}
+              </span>
+            </div>
+            <Progress value={pct} aria-label="Context used" className={cn(high && "**:data-[slot=progress-indicator]:bg-destructive")} />
+            {high && <p className="text-muted-foreground">Consider a new session.</p>}
+          </>
+        ) : (
+          <p className="text-muted-foreground">Context usage appears after the next reply.</p>
+        )}
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
-const MODELS = ["opus", "sonnet", "haiku"];
-const EFFORTS = ["low", "medium", "high", "max"];
-
-/** Switches the open session's model and effort. The host does not report the current values, so only choices made here show. */
-function ModelMenu() {
-  const [model, setModel] = useState<string>();
-  const [effort, setEffort] = useState<string>();
+/**
+ * One of the open session's settings in the composer, after the Model Selector pattern. The host does not report the current values,
+ * so only choices made here show.
+ */
+function SessionSetting({ label, options, apply }: { label: string; options: string[]; apply: (value: string) => Promise<boolean> }) {
+  const [value, setValue] = useState<string>();
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="sm" className="text-muted-foreground" />}>
-        <span className="capitalize">{model ?? "Model"}</span>
-        {effort && <span className="hidden sm:inline">· {effort}</span>}
+      <DropdownMenuTrigger render={<InputGroupButton size="xs" variant="ghost" className="text-xs" aria-label={value ? `${label}: ${value}` : label} />}>
+        {value ? (
+          <>
+            <span className="hidden text-muted-foreground sm:inline">{label}</span>
+            <span className="capitalize">{value}</span>
+          </>
+        ) : (
+          label
+        )}
         <ChevronDownIcon />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align="start" side="top" className="w-36">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Model</DropdownMenuLabel>
+          <DropdownMenuLabel>{label}</DropdownMenuLabel>
           <DropdownMenuRadioGroup
-            value={model ?? ""}
+            value={value ?? ""}
             onValueChange={async (v: string) => {
-              if (await act("/api/model", { model: v })) setModel(v);
+              if (await apply(v)) setValue(v);
             }}
           >
-            {MODELS.map((m) => (
-              <DropdownMenuRadioItem key={m} value={m} className="capitalize">
-                {m}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Effort</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={effort ?? ""}
-            onValueChange={async (v: string) => {
-              if (await act("/api/effort", { effort: v })) setEffort(v);
-            }}
-          >
-            {EFFORTS.map((e) => (
-              <DropdownMenuRadioItem key={e} value={e} className="capitalize">
-                {e}
+            {options.map((o) => (
+              <DropdownMenuRadioItem key={o} value={o} closeOnClick className="capitalize">
+                {o}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
@@ -237,6 +226,9 @@ function ModelMenu() {
     </DropdownMenu>
   );
 }
+
+const MODELS = ["opus", "sonnet", "haiku"];
+const EFFORTS = ["low", "medium", "high", "max"];
 
 function Composer({ bot, bots, busy, draft, onDraftTaken }: { bot: BotSummary; bots: BotSummary[]; busy: boolean; draft: string | undefined; onDraftTaken: () => void }) {
   const [input, setInput] = useState(draft ?? "");
@@ -305,72 +297,76 @@ function Composer({ bot, bots, busy, draft, onDraftTaken }: { bot: BotSummary; b
           </div>
         )}
         <form
+          className="@container"
           onSubmit={(e) => {
             e.preventDefault();
             void send();
           }}
-          className="rounded-2xl border bg-background shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30 dark:bg-input/30"
         >
-          {mentions.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 px-3 pt-3">
-              {mentions.map((m) => {
-                const target = bots.find((b) => b.id === m.id);
-                return (
-                  <span key={m.id} style={target && botTheme(target.avatar.stroke)} className="bot-theme inline-flex h-6 items-center gap-1 rounded-full bg-secondary pr-1 pl-1 text-xs font-medium text-secondary-foreground">
-                    {target && <BotAvatar avatar={target.avatar} className="size-4" />}
-                    @{m.name}
-                    <button
-                      type="button"
-                      aria-label={`Remove ${m.name}`}
-                      className="rounded-full p-0.5 hover:bg-foreground/10"
-                      onClick={() => setMentions(mentions.filter((x) => x.id !== m.id))}
-                    >
-                      <XIcon className="size-3" />
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-          <Textarea
-            ref={textarea}
-            autoFocus
-            rows={1}
-            value={input}
-            placeholder={`Message ${bot.name}…`}
-            aria-label={`Message ${bot.name}`}
-            className="max-h-60 min-h-12 resize-none border-0 bg-transparent! px-4 pt-3 shadow-none focus-visible:ring-0"
-            onChange={(e) => {
-              setInput(e.target.value);
-              setHighlight(0);
-            }}
-            onKeyDown={(e) => {
-              if (candidates.length > 0) {
-                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                  e.preventDefault();
-                  const step = e.key === "ArrowDown" ? 1 : -1;
-                  return setHighlight((active + step + candidates.length) % candidates.length);
+          <InputGroup className="rounded-2xl bg-background shadow-xs dark:bg-input/30">
+            {mentions.length > 0 && (
+              <InputGroupAddon align="block-start" className="flex-wrap pt-3">
+                {mentions.map((m) => {
+                  const target = bots.find((b) => b.id === m.id);
+                  return (
+                    <span key={m.id} style={target && botTheme(target.avatar.stroke)} className="bot-theme inline-flex h-6 items-center gap-1 rounded-full bg-secondary pr-1 pl-1 text-xs font-medium text-secondary-foreground">
+                      {target && <BotAvatar avatar={target.avatar} className="size-4" />}
+                      @{m.name}
+                      <button
+                        type="button"
+                        aria-label={`Remove ${m.name}`}
+                        className="rounded-full p-0.5 hover:bg-foreground/10"
+                        onClick={() => setMentions(mentions.filter((x) => x.id !== m.id))}
+                      >
+                        <XIcon className="size-3" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </InputGroupAddon>
+            )}
+            <InputGroupTextarea
+              ref={textarea}
+              autoFocus
+              rows={1}
+              value={input}
+              placeholder={`Message ${bot.name}…`}
+              aria-label={`Message ${bot.name}`}
+              className="max-h-60 min-h-12 px-4 pt-3"
+              onChange={(e) => {
+                setInput(e.target.value);
+                setHighlight(0);
+              }}
+              onKeyDown={(e) => {
+                if (candidates.length > 0) {
+                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    const step = e.key === "ArrowDown" ? 1 : -1;
+                    return setHighlight((active + step + candidates.length) % candidates.length);
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    return pick(candidates[active]!);
+                  }
                 }
-                if (e.key === "Enter" || e.key === "Tab") {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
-                  return pick(candidates[active]!);
+                  void send();
                 }
-              }
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-          />
-          <div className="flex items-center gap-2 px-3 pb-2.5">
-            <p className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
-              <Kbd>@</Kbd> hand off to a bot · <Kbd>Shift</Kbd>
-              <Kbd>Enter</Kbd> new line
-            </p>
-            <Button type="submit" size="icon-sm" className="ml-auto rounded-full" disabled={busy || !input.trim()} aria-label="Send">
-              <ArrowUpIcon />
-            </Button>
-          </div>
+              }}
+            />
+            <InputGroupAddon align="block-end">
+              <SessionSetting label="Model" options={MODELS} apply={(model) => act("/api/model", { model })} />
+              <SessionSetting label="Effort" options={EFFORTS} apply={(effort) => act("/api/effort", { effort })} />
+              <p className="ml-auto hidden items-center gap-1 text-xs font-normal whitespace-nowrap @xl:flex">
+                <Kbd>@</Kbd> hand off to a bot · <Kbd>Shift</Kbd>
+                <Kbd>Enter</Kbd> new line
+              </p>
+              <InputGroupButton type="submit" variant="default" size="icon-sm" className="ml-auto rounded-full @xl:ml-0" disabled={busy || !input.trim()} aria-label="Send">
+                <ArrowUpIcon />
+              </InputGroupButton>
+            </InputGroupAddon>
+          </InputGroup>
         </form>
       </div>
     </div>

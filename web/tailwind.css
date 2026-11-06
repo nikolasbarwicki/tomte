@@ -151,8 +151,8 @@
     --link: color-mix(in oklch, var(--bot) 75%, var(--foreground));
 }
 
-/* Inline code is `bg-muted`, the same gray as the bot's bubble. */
-.bot-reply [data-streamdown="inline-code"] {
+/* Inline code is `bg-muted`, the same gray as the bot's reply bubble. */
+[data-slot="bubble"][data-variant="muted"] [data-streamdown="inline-code"] {
     background: var(--background);
 }
 

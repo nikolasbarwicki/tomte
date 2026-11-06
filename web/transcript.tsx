@@ -1,13 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Streamdown } from "streamdown";
 import {
   AlarmClockIcon,
-  ArrowDownIcon,
   ArrowDownLeftIcon,
   ArrowUpRightIcon,
   BotIcon,
-  ChevronRightIcon,
   CircleAlertIcon,
   CircleCheckIcon,
   GlobeIcon,
@@ -19,11 +17,23 @@ import {
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
+import { Item as ItemRow, ItemActions, ItemContent, ItemDescription, ItemFooter, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import { Message, MessageContent } from "@/components/ui/message";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
 import { Spinner } from "@/components/ui/spinner";
+import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
 import type { BotSummary, ServerEvent, WaitAction } from "./events.ts";
 import { act } from "./api.ts";
@@ -87,208 +97,231 @@ export function reduce(items: Item[], e: ServerEvent): Item[] {
   }
 }
 
-/** The scrolling message list. It follows new output while the reader is at the bottom and stays put once they scroll up. */
+type ToolItem = Extract<Item, { kind: "tool" }>;
+/** What the thread renders: items as they came, except back-to-back tool calls collapse into one trace of steps. */
+type Row = Exclude<Item, ToolItem> | { kind: "steps"; tools: ToolItem[] };
+
+/** Scroller items use `content-visibility: auto`, whose paint containment would clip a handoff card's shadow. */
+const UNCLIPPED = "[content-visibility:visible]";
+
+function toRows(items: Item[]): Row[] {
+  const rows: Row[] = [];
+  for (const item of items) {
+    const last = rows.at(-1);
+    if (item.kind !== "tool") rows.push(item);
+    else if (last?.kind === "steps") last.tools.push(item);
+    else rows.push({ kind: "steps", tools: [item] });
+  }
+  return rows;
+}
+
+/** The thread. Message Scroller follows new output while the reader is at the live edge and anchors each new user turn near the top. */
 export function Transcript({ bot, bots, items, busy, onShowBrowser }: { bot: BotSummary; bots: BotSummary[]; items: Item[]; busy: boolean; onShowBrowser: () => void }) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const [atBottom, setAtBottom] = useState(true);
-  const toBottom = (behavior: ScrollBehavior) => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior });
-
-  useEffect(() => {
-    if (atBottom) toBottom("instant");
-  }, [items, busy]);
-
+  if (items.length === 0 && !busy) {
+    return (
+      <Empty className="min-h-0 flex-1">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <BotIcon />
+          </EmptyMedia>
+          <EmptyTitle>Message {bot.name}</EmptyTitle>
+          <EmptyDescription>{bot.purpose || "Tell it what this bot is for and what to do first. It remembers how you like things done."}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+  const rows = toRows(items);
   return (
-    <div className="relative min-h-0 flex-1">
-      <div
-        ref={scroller}
-        className="h-full overflow-y-auto"
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
-        }}
-      >
-        {items.length === 0 && !busy ? (
-          <Empty className="h-full">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <BotIcon />
-              </EmptyMedia>
-              <EmptyTitle>Message {bot.name}</EmptyTitle>
-              <EmptyDescription>{bot.purpose || "Tell it what this bot is for and what to do first. It remembers how you like things done."}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6">
-            {items.map((it, i) => (
-              <Row key={i} item={it} bots={bots} onShowBrowser={onShowBrowser} />
+    <MessageScrollerProvider autoScroll>
+      <MessageScroller className="flex-1">
+        <MessageScrollerViewport>
+          <MessageScrollerContent aria-busy={busy} className="mx-auto w-full max-w-3xl gap-4 px-4 py-6">
+            {rows.map((row, i) => (
+              <MessageScrollerItem key={i} messageId={String(i)} scrollAnchor={row.kind === "user"} className={cn(row.kind === "handoff" && UNCLIPPED)}>
+                <RowView row={row} running={busy && i === rows.length - 1} bots={bots} onShowBrowser={onShowBrowser} />
+              </MessageScrollerItem>
             ))}
             {busy && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Spinner className="text-primary" /> {bot.name} is working…
-              </div>
+              <MessageScrollerItem messageId="working">
+                <Marker role="status">
+                  <MarkerIcon>
+                    <Spinner className="text-primary" />
+                  </MarkerIcon>
+                  <MarkerContent className="shimmer">{bot.name} is working…</MarkerContent>
+                </Marker>
+              </MessageScrollerItem>
             )}
-          </div>
-        )}
-      </div>
-      {!atBottom && (
-        <Button
-          variant="outline"
-          size="icon-sm"
-          aria-label="Jump to latest"
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full shadow-md"
-          onClick={() => toBottom("smooth")}
-        >
-          <ArrowDownIcon />
-        </Button>
-      )}
-    </div>
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+        <MessageScrollerButton />
+      </MessageScroller>
+    </MessageScrollerProvider>
   );
 }
 
-function Row({ item, bots, onShowBrowser }: { item: Item; bots: BotSummary[]; onShowBrowser: () => void }) {
-  switch (item.kind) {
+/** `running`: the row is the live edge of a turn still in progress. */
+function RowView({ row, running, bots, onShowBrowser }: { row: Row; running: boolean; bots: BotSummary[]; onShowBrowser: () => void }) {
+  switch (row.kind) {
     case "user":
       return (
-        <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm break-words whitespace-pre-wrap text-primary-foreground">
-          {item.mentions?.map((m) => {
-            const target = bots.find((b) => b.id === m.id);
-            return target ? (
-              <Link key={m.id} to="/bots/$botId" params={{ botId: target.id }} style={botTheme(target.avatar.stroke)} className="bot-theme mr-1 rounded-full bg-background px-1.5 font-semibold text-primary transition-colors hover:bg-secondary">
-                @{m.name}
-              </Link>
-            ) : (
-              <span key={m.id} className="mr-1 font-semibold">
-                @{m.name}
-              </span>
-            );
-          })}
-          {item.text}
-        </div>
+        <Message align="end">
+          <MessageContent>
+            <Bubble align="end">
+              <BubbleContent className="whitespace-pre-wrap">
+                {row.mentions?.map((m) => {
+                  const target = bots.find((b) => b.id === m.id);
+                  return target ? (
+                    <Link key={m.id} to="/bots/$botId" params={{ botId: target.id }} style={botTheme(target.avatar.stroke)} className="bot-theme mr-1 rounded-full bg-background px-1.5 font-semibold text-primary transition-colors hover:bg-secondary">
+                      @{m.name}
+                    </Link>
+                  ) : (
+                    <span key={m.id} className="mr-1 font-semibold">
+                      @{m.name}
+                    </span>
+                  );
+                })}
+                {row.text}
+              </BubbleContent>
+            </Bubble>
+          </MessageContent>
+        </Message>
       );
     case "assistant":
       return (
-        <div className="bot-reply mr-auto max-w-[85%] min-w-0 rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-sm leading-relaxed">
-          <Streamdown linkSafety={{ enabled: false }}>{item.text}</Streamdown>
-        </div>
+        <Message>
+          <MessageContent>
+            <Bubble variant="muted" className="max-w-[60%]">
+              <BubbleContent className="w-full">
+                <Streamdown linkSafety={{ enabled: false }}>{row.text}</Streamdown>
+              </BubbleContent>
+            </Bubble>
+          </MessageContent>
+        </Message>
       );
+    case "steps":
+      return <Steps tools={row.tools} running={running} />;
     case "error":
       return (
         <Alert variant="destructive">
           <CircleAlertIcon />
-          <AlertDescription className="break-words whitespace-pre-wrap">{item.text}</AlertDescription>
+          <AlertDescription className="break-words whitespace-pre-wrap">{row.text}</AlertDescription>
         </Alert>
       );
     case "update":
       return (
         <Alert>
           <MegaphoneIcon />
-          <AlertDescription className="text-foreground">{item.text}</AlertDescription>
+          <AlertDescription className="text-foreground">{row.text}</AlertDescription>
         </Alert>
       );
     case "info":
-      return <p className="text-center text-xs text-muted-foreground">{item.text}</p>;
+      return (
+        <Marker variant="separator" className="text-xs">
+          <MarkerContent>{row.text}</MarkerContent>
+        </Marker>
+      );
     case "session":
       return (
-        <div className="flex items-center gap-3 py-2 text-xs text-muted-foreground">
-          <span className="h-px flex-1 bg-border" />
-          New session · earlier messages are no longer in the bot's context
-          <span className="h-px flex-1 bg-border" />
-        </div>
+        <Marker variant="separator" className="text-xs">
+          <MarkerContent>New session · earlier messages are no longer in the bot's context</MarkerContent>
+        </Marker>
       );
     case "routine":
       return (
-        <Badge variant="outline" className="mx-auto h-6 gap-1.5 px-2.5 text-muted-foreground">
-          <AlarmClockIcon />
-          Routine <span className="font-semibold text-foreground">{item.name}</span> · {item.trigger === "manual" ? "test run" : "scheduled"}
-        </Badge>
+        <Marker variant="separator" className="text-xs">
+          <MarkerIcon>
+            <AlarmClockIcon className="size-3.5" />
+          </MarkerIcon>
+          <MarkerContent>
+            Routine <span className="font-semibold text-foreground">{row.name}</span> · {row.trigger === "manual" ? "test run" : "scheduled"}
+          </MarkerContent>
+        </Marker>
       );
     case "handoff":
-      return <HandoffCard item={item} other={bots.find((b) => b.id === item.botId)} />;
-    case "tool":
-      return <ToolCall name={item.name} input={item.input} />;
+      return <HandoffCard item={row} other={bots.find((b) => b.id === row.botId)} />;
     case "wait":
-      return <WaitCard item={item} onShowBrowser={onShowBrowser} />;
+      return <WaitCard item={row} onShowBrowser={onShowBrowser} />;
     case "ask":
-      return <AskCard item={item} />;
+      return <AskCard item={row} />;
     case "approve":
-      return <ApproveCard item={item} />;
+      return <ApproveCard item={row} />;
   }
 }
 
-function ToolCall({ name, input }: { name: string; input: string }) {
+/** Tool calls the bot made in a row. The host reports no tool results, so the newest call of a live turn is the one running. */
+function Steps({ tools, running }: { tools: ToolItem[]; running: boolean }) {
   return (
-    <Collapsible className="-my-1.5">
-      <CollapsibleTrigger className="group/tool flex max-w-full items-center gap-1.5 rounded-md py-1 text-xs text-muted-foreground hover:text-foreground">
-        <WrenchIcon className="size-3.5 shrink-0" />
-        <span className="truncate font-mono">{name}</span>
-        <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-data-panel-open/tool:rotate-90" />
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <pre className="mt-1 max-h-80 overflow-auto rounded-lg bg-muted p-3 font-mono text-xs whitespace-pre-wrap">{input}</pre>
-      </CollapsibleContent>
-    </Collapsible>
+    <Trace>
+      {tools.map((tool, i) => (
+        <TraceCollapsible key={i}>
+          <TraceCollapsibleTrigger>
+            <TraceLine status={running && i === tools.length - 1 ? "running" : undefined}>
+              <TraceIcon>
+                <WrenchIcon />
+              </TraceIcon>
+              <TraceTitle className="font-mono text-xs">{tool.name}</TraceTitle>
+            </TraceLine>
+          </TraceCollapsibleTrigger>
+          <TraceCollapsibleContent>
+            <pre className="max-h-80 overflow-auto font-mono text-xs whitespace-pre-wrap">{tool.input}</pre>
+          </TraceCollapsibleContent>
+        </TraceCollapsible>
+      ))}
+    </Trace>
   );
 }
 
-/** A question or request the bot is blocked on. Open ones stand out; settled ones fade to a record. */
-function PendingCard({
+/**
+ * Something the bot is blocked on, after the Confirmation pattern. Open while `answer` is undefined: outlined, with `actions`.
+ * Settled: muted, with the answer in their place. `footer` spans the full width below.
+ */
+function Request({
   icon,
   title,
-  open,
-  tone = "attention",
-  children,
+  description,
+  answer,
+  actions,
+  footer,
 }: {
   icon: React.ReactNode;
   title: React.ReactNode;
-  open: boolean;
-  tone?: "attention" | "info";
-  children: React.ReactNode;
+  description?: React.ReactNode;
+  answer: string | undefined;
+  actions?: React.ReactNode;
+  footer?: React.ReactNode;
 }) {
+  const open = answer === undefined;
   return (
-    <div
-      className={cn(
-        "grid gap-3 rounded-xl border p-4 text-sm",
-        !open && "bg-muted/40",
-        open && tone === "attention" && "border-amber-500/40 bg-amber-500/5",
-        open && tone === "info" && "border-primary/40 bg-primary/5",
+    <ItemRow variant={open ? "outline" : "muted"} size="sm">
+      <ItemMedia variant="icon" className={cn(open && "text-primary")}>
+        {icon}
+      </ItemMedia>
+      <ItemContent className="min-w-0">
+        <ItemTitle className="line-clamp-none">{title}</ItemTitle>
+        {description && <ItemDescription className="line-clamp-none whitespace-pre-wrap">{description}</ItemDescription>}
+      </ItemContent>
+      {open ? (
+        actions && <ItemActions className="flex-wrap">{actions}</ItemActions>
+      ) : (
+        <ItemActions className="text-xs text-muted-foreground">
+          <CircleCheckIcon className="size-3.5" /> {answer}
+        </ItemActions>
       )}
-    >
-      <div className="flex gap-2.5">
-        <span className={cn("mt-0.5 shrink-0 [&_svg]:size-4", open ? (tone === "info" ? "text-primary" : "text-amber-600 dark:text-amber-400") : "text-muted-foreground")}>
-          {icon}
-        </span>
-        <div className="grid min-w-0 flex-1 gap-1">{title}</div>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function Settled({ label }: { label: string }) {
-  return (
-    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <CircleCheckIcon className="size-3.5" /> {label}
-    </p>
+      {footer && <ItemFooter>{footer}</ItemFooter>}
+    </ItemRow>
   );
 }
 
 function WaitCard({ item, onShowBrowser }: { item: Extract<Item, { kind: "wait" }>; onShowBrowser: () => void }) {
-  const open = item.resolved === undefined;
   const takeover = item.waitKind === "takeover";
   return (
-    <PendingCard
-      open={open}
-      tone={takeover ? "info" : "attention"}
+    <Request
       icon={takeover ? <HandIcon /> : <ShieldQuestionIcon />}
-      title={
+      title={item.title}
+      description={item.detail}
+      answer={item.resolved}
+      actions={
         <>
-          <span className="font-medium">{item.title}</span>
-          {item.detail && <span className="text-muted-foreground">{item.detail}</span>}
-        </>
-      }
-    >
-      {open ? (
-        <div className="flex flex-wrap gap-2">
           {item.actions.map((a, i) => (
             <Button key={a.id} size="sm" variant={i === 0 ? "default" : "outline"} onClick={() => act("/api/waits/answer", { id: item.id, action: a.id })}>
               {a.label}
@@ -299,77 +332,63 @@ function WaitCard({ item, onShowBrowser }: { item: Extract<Item, { kind: "wait" 
               <GlobeIcon /> Open browser
             </Button>
           )}
-        </div>
-      ) : (
-        <Settled label={item.resolved ?? ""} />
-      )}
-    </PendingCard>
+        </>
+      }
+    />
   );
 }
 
 function AskCard({ item }: { item: Extract<Item, { kind: "ask" }> }) {
   const [reply, setReply] = useState("");
-  const open = item.answer === undefined;
   return (
-    <PendingCard
-      open={open}
+    <Request
       icon={<MessageCircleQuestionIcon />}
-      title={
-        <>
-          <span className="text-xs font-medium text-muted-foreground">The bot asks</span>
-          <span className="whitespace-pre-wrap">{item.question}</span>
-        </>
+      title="The bot asks"
+      description={item.question}
+      answer={item.answer}
+      footer={
+        item.answer === undefined && (
+          <form
+            className="flex w-full gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void act("/api/answer", { id: item.id, value: reply });
+            }}
+          >
+            <Input autoFocus placeholder="Your answer" value={reply} onChange={(e) => setReply(e.target.value)} />
+            <Button type="submit" disabled={!reply.trim()}>
+              Answer
+            </Button>
+          </form>
+        )
       }
-    >
-      {open ? (
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void act("/api/answer", { id: item.id, value: reply });
-          }}
-        >
-          <Input autoFocus placeholder="Your answer" value={reply} onChange={(e) => setReply(e.target.value)} className="bg-background" />
-          <Button type="submit" disabled={!reply.trim()}>
-            Answer
-          </Button>
-        </form>
-      ) : (
-        <Settled label={item.answer ?? ""} />
-      )}
-    </PendingCard>
+    />
   );
 }
 
 function ApproveCard({ item }: { item: Extract<Item, { kind: "approve" }> }) {
-  const open = item.answer === undefined;
   return (
-    <PendingCard
-      open={open}
+    <Request
       icon={<ShieldQuestionIcon />}
       title={
-        <>
-          <span className="font-medium">
-            Allow <span className="font-mono">{item.tool}</span>?
-          </span>
-          {item.reason && <span className="text-muted-foreground">{item.reason}</span>}
-        </>
+        <span>
+          Allow <span className="font-mono">{item.tool}</span>?
+        </span>
       }
-    >
-      <pre className="max-h-60 overflow-auto rounded-lg bg-background/80 p-3 font-mono text-xs whitespace-pre-wrap ring-1 ring-border">{item.input}</pre>
-      {open ? (
-        <div className="flex gap-2">
-          <Button size="sm" onClick={() => act("/api/answer", { id: item.id, value: "allow" })}>
-            Allow
-          </Button>
+      description={item.reason}
+      answer={item.answer === "allow" ? "Allowed" : item.answer === "deny" ? "Denied" : item.answer}
+      actions={
+        <>
           <Button size="sm" variant="outline" onClick={() => act("/api/answer", { id: item.id, value: "deny" })}>
             Deny
           </Button>
-        </div>
-      ) : (
-        <Settled label={item.answer === "allow" ? "Allowed" : item.answer === "deny" ? "Denied" : (item.answer ?? "")} />
-      )}
-    </PendingCard>
+          <Button size="sm" onClick={() => act("/api/answer", { id: item.id, value: "allow" })}>
+            Allow
+          </Button>
+        </>
+      }
+      footer={<pre className="max-h-60 w-full overflow-auto rounded-md bg-muted/60 p-3 font-mono text-xs whitespace-pre-wrap">{item.input}</pre>}
+    />
   );
 }
 
@@ -383,7 +402,7 @@ const HANDOFF_STATUS: Record<string, string> = {
 function HandoffCard({ item, other }: { item: Extract<Item, { kind: "handoff" }>; other: BotSummary | undefined }) {
   const received = item.direction === "received";
   return (
-    <div style={other && botTheme(other.avatar.stroke)} className={cn("grid gap-2 rounded-xl border bg-card p-4 text-sm", other && "bot-theme")}>
+    <div style={other && botTheme(other.avatar.stroke)} className={cn("grid gap-2 rounded-xl border bg-card p-4 text-sm shadow-[0_0_24px_1px_rgb(0_0_0/0.06)] dark:shadow-[0_0_24px_1px_rgb(0_0_0/0.4)]", other && "bot-theme")}>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {received ? <ArrowDownLeftIcon className="size-3.5" /> : <ArrowUpRightIcon className="size-3.5" />}
         <span className="flex items-center gap-1">
