@@ -1,11 +1,15 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
 import type { BotsToolContext } from "./context.ts";
 import { jsonResult } from "./result.ts";
 
 export function registerListHandoffs(mcp: McpServer, ctx: BotsToolContext) {
   mcp.registerTool(
     "list_handoffs",
-    { description: "List your open handoffs, as requester or assignee: id, role, the other bot, title, status and the last message. Use it to catch up after your context was compacted." },
+    {
+      description:
+        "List your open handoffs, as requester or assignee: id, role, the other bot, title, status and the last message. Use it to catch up after your context was compacted.",
+    },
     () =>
       jsonResult(
         ctx.handoffs.openFor(ctx.botId).map((h) => {

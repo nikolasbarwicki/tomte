@@ -29,12 +29,12 @@ Engine lookup order: `AGENT_BROWSER_PATH`, the managed install, then `agent-brow
 
 Open the bot's side panel (the panel button at the top right of the chat) and go to the **Browser** tab. Turn on the **Web browser** switch. When the switch is disabled, the reason is shown below it:
 
-| Reason | Fix |
-| --- | --- |
-| Browser engine not installed | Run `bun packages/host/src/host.ts install-browser`. |
-| Chrome for Testing is not installed | Run `bun packages/host/src/host.ts install-browser`. |
-| No `agent-browser` build for this OS/CPU | Not supported on this machine. |
-| The shell sandbox is unavailable | macOS needs `/usr/bin/sandbox-exec`. Linux needs `bwrap` and `socat` installed (on Ubuntu, an AppArmor user-namespace restriction can also stop `bwrap`; fix the restriction, do not run unsandboxed). Windows has no sandbox, so no browser. |
+| Reason                                   | Fix                                                                                                                                                                                                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Browser engine not installed             | Run `bun packages/host/src/host.ts install-browser`.                                                                                                                                                                                          |
+| Chrome for Testing is not installed      | Run `bun packages/host/src/host.ts install-browser`.                                                                                                                                                                                          |
+| No `agent-browser` build for this OS/CPU | Not supported on this machine.                                                                                                                                                                                                                |
+| The shell sandbox is unavailable         | macOS needs `/usr/bin/sandbox-exec`. Linux needs `bwrap` and `socat` installed (on Ubuntu, an AppArmor user-namespace restriction can also stop `bwrap`; fix the restriction, do not run unsandboxed). Windows has no sandbox, so no browser. |
 
 The sandbox is required because a browser-enabled bot runs its shell commands inside Claude Code's sandbox (see [Safety](#safety)). The browser never runs a bot unprotected.
 

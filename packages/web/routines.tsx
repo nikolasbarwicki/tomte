@@ -1,22 +1,59 @@
+import type { Routine, RoutineRun, RunStatus } from "@claudebot/contract/events";
+import {
+  AlarmClockIcon,
+  ChevronRightIcon,
+  EllipsisIcon,
+  PencilIcon,
+  PlayIcon,
+  PlusIcon,
+  TrashIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Streamdown } from "streamdown";
-import { AlarmClockIcon, ChevronRightIcon, EllipsisIcon, PencilIcon, PlayIcon, PlusIcon, TrashIcon } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { Routine, RoutineRun, RunStatus } from "@claudebot/contract/events";
+
 import { act, errorOf, post } from "./api.ts";
 import { confirmAction } from "./confirm.tsx";
 import { dateTime } from "./format.ts";
@@ -34,7 +71,7 @@ export function Routines({ botId, routines }: { botId: string; routines: Routine
   return (
     <div className="grid gap-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">Instructions this bot runs on a schedule.</p>
+        <p className="text-muted-foreground text-xs">Instructions this bot runs on a schedule.</p>
         <Button variant="outline" size="sm" onClick={() => edit()}>
           <PlusIcon /> New routine
         </Button>
@@ -46,7 +83,10 @@ export function Routines({ botId, routines }: { botId: string; routines: Routine
               <AlarmClockIcon />
             </EmptyMedia>
             <EmptyTitle className="text-sm">No routines yet</EmptyTitle>
-            <EmptyDescription className="text-xs">Have the bot do something every morning, every hour or once at a set time. You can also ask it in chat to set one up.</EmptyDescription>
+            <EmptyDescription className="text-xs">
+              Have the bot do something every morning, every hour or once at a set time. You can
+              also ask it in chat to set one up.
+            </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button size="sm" onClick={() => edit()}>
@@ -63,7 +103,12 @@ export function Routines({ botId, routines }: { botId: string; routines: Routine
       )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-lg">
-          <RoutineForm key={formKey} botId={botId} routine={editing} onDone={() => setOpen(false)} />
+          <RoutineForm
+            key={formKey}
+            botId={botId}
+            routine={editing}
+            onDone={() => setOpen(false)}
+          />
         </DialogContent>
       </Dialog>
     </div>
@@ -93,13 +138,26 @@ function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   const lastRunId = r.lastRun?.id;
   useEffect(() => {
     if (!open) return;
-    post("/api/routines/runs", { id: r.id }).then(async (res) => res.ok && setRuns(await res.json()));
+    post("/api/routines/runs", { id: r.id }).then(
+      async (res) => res.ok && setRuns(await res.json()),
+    );
   }, [open, r.id, lastRunId, r.lastRun?.status]);
 
   const status = r.running ? "running" : r.lastRun?.status;
-  const next = !r.active ? "Paused" : r.nextRunAt ? `Next run ${dateTime(r.nextRunAt)}` : "No runs left";
+  const next = !r.active
+    ? "Paused"
+    : r.nextRunAt
+      ? `Next run ${dateTime(r.nextRunAt)}`
+      : "No runs left";
   const remove = async () => {
-    if (await confirmAction({ title: `Delete routine "${r.name}"?`, description: "It stops running. This cannot be undone.", action: "Delete", destructive: true })) {
+    if (
+      await confirmAction({
+        title: `Delete routine "${r.name}"?`,
+        description: "It stops running. This cannot be undone.",
+        action: "Delete",
+        destructive: true,
+      })
+    ) {
       await act("/api/routines/delete", { id: r.id });
     }
   };
@@ -116,24 +174,37 @@ function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
         />
         <div className="grid min-w-0 flex-1 gap-0.5">
           <div className="flex min-w-0 items-center gap-2">
-            <span className={cn("truncate text-sm font-medium", !r.active && "text-muted-foreground")} title={r.instruction}>
+            <span
+              className={cn("truncate text-sm font-medium", !r.active && "text-muted-foreground")}
+              title={r.instruction}
+            >
               {r.name}
             </span>
             {status && <RunBadge status={status} />}
           </div>
-          <span className="text-xs text-muted-foreground">{describe(r.schedule)}</span>
-          <span className="text-xs text-muted-foreground">{next}</span>
+          <span className="text-muted-foreground text-xs">{describe(r.schedule)}</span>
+          <span className="text-muted-foreground text-xs">{next}</span>
         </div>
         <Tooltip>
           <TooltipTrigger
-            render={<Button variant="ghost" size="icon-xs" aria-label="Run now" disabled={r.running} onClick={() => act("/api/routines/run", { id: r.id })} />}
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Run now"
+                disabled={r.running}
+                onClick={() => act("/api/routines/run", { id: r.id })}
+              />
+            }
           >
             {r.running ? <Spinner /> : <PlayIcon />}
           </TooltipTrigger>
           <TooltipContent>{r.running ? "Running…" : "Run now"}</TooltipContent>
         </Tooltip>
         <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label={`Actions for ${r.name}`} />}>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="icon-xs" aria-label={`Actions for ${r.name}`} />}
+          >
             <EllipsisIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-36">
@@ -148,16 +219,16 @@ function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
         </DropdownMenu>
       </div>
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="group/runs flex w-full items-center gap-1 border-t px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+        <CollapsibleTrigger className="group/runs text-muted-foreground hover:text-foreground flex w-full items-center gap-1 border-t px-3 py-1.5 text-xs">
           <ChevronRightIcon className="size-3.5 transition-transform group-data-panel-open/runs:rotate-90" />
           Run history
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="grid gap-1 px-3 pb-3">
             {!runs ? (
-              <Spinner className="mx-auto my-2 text-muted-foreground" />
+              <Spinner className="text-muted-foreground mx-auto my-2" />
             ) : runs.length === 0 ? (
-              <p className="py-1 text-xs text-muted-foreground">No runs yet.</p>
+              <p className="text-muted-foreground py-1 text-xs">No runs yet.</p>
             ) : (
               runs.map((run) => <RunRow key={run.id} run={run} />)
             )}
@@ -172,16 +243,21 @@ function RunRow({ run }: { run: RoutineRun }) {
   const hasBody = !!(run.error || run.output);
   return (
     <Collapsible disabled={!hasBody}>
-      <CollapsibleTrigger className="group/run flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-xs hover:bg-muted/60 disabled:hover:bg-transparent">
-        <ChevronRightIcon className={cn("size-3 shrink-0 text-muted-foreground transition-transform group-data-panel-open/run:rotate-90", !hasBody && "invisible")} />
+      <CollapsibleTrigger className="group/run hover:bg-muted/60 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-xs disabled:hover:bg-transparent">
+        <ChevronRightIcon
+          className={cn(
+            "size-3 shrink-0 text-muted-foreground transition-transform group-data-panel-open/run:rotate-90",
+            !hasBody && "invisible",
+          )}
+        />
         <RunBadge status={run.status} />
-        <span className="truncate text-muted-foreground">
+        <span className="text-muted-foreground truncate">
           {dateTime(run.startedAt)} · {run.trigger === "manual" ? "test run" : "scheduled"}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-1 mb-2 grid gap-2 rounded-md bg-muted/50 p-3 text-sm">
-          {run.error && <p className="text-xs text-destructive">{run.error}</p>}
+        <div className="bg-muted/50 mt-1 mb-2 grid gap-2 rounded-md p-3 text-sm">
+          {run.error && <p className="text-destructive text-xs">{run.error}</p>}
           {run.output && <Streamdown linkSafety={{ enabled: false }}>{run.output}</Streamdown>}
         </div>
       </CollapsibleContent>
@@ -207,17 +283,37 @@ const REPEAT: { value: Preset["kind"]; label: string }[] = [
 const isRepeat = (v: unknown): v is Preset["kind"] => REPEAT.some((r) => r.value === v);
 const DAY_ITEMS = DAYS.map((d, i) => ({ value: i, label: d }));
 
-function RoutineForm({ botId, routine, onDone }: { botId: string; routine?: Routine; onDone: () => void }) {
-  const initial: Preset = routine ? fromSchedule(routine.schedule) : { kind: "daily", time: "09:00" };
+function RoutineForm({
+  botId,
+  routine,
+  onDone,
+}: {
+  botId: string;
+  routine?: Routine;
+  onDone: () => void;
+}) {
+  const initial: Preset = routine
+    ? fromSchedule(routine.schedule)
+    : { kind: "daily", time: "09:00" };
   const [name, setName] = useState(routine?.name ?? "");
   const [instruction, setInstruction] = useState(routine?.instruction ?? "");
   const [kind, setKind] = useState<Preset["kind"]>(initial.kind);
   const [minute, setMinute] = useState(initial.kind === "hourly" ? initial.minute : 0);
   const [time, setTime] = useState("time" in initial ? initial.time : "09:00");
   const [day, setDay] = useState(initial.kind === "weekly" ? initial.day : 1);
-  const [at, setAt] = useState(localInput(initial.kind === "once" ? initial.at : Date.now() + 60 * 60_000));
-  const [expr, setExpr] = useState(initial.kind === "custom" ? initial.expr : routine?.schedule.kind === "cron" ? routine.schedule.expr : "0 9 * * *");
-  const [tz, setTz] = useState(routine?.schedule.kind === "cron" ? routine.schedule.tz : browserZone());
+  const [at, setAt] = useState(
+    localInput(initial.kind === "once" ? initial.at : Date.now() + 60 * 60_000),
+  );
+  const [expr, setExpr] = useState(
+    initial.kind === "custom"
+      ? initial.expr
+      : routine?.schedule.kind === "cron"
+        ? routine.schedule.expr
+        : "0 9 * * *",
+  );
+  const [tz, setTz] = useState(
+    routine?.schedule.kind === "cron" ? routine.schedule.tz : browserZone(),
+  );
   const [catchUp, setCatchUp] = useState(routine?.catchUp ?? true);
   const [preview, setPreview] = useState<{ next?: number[]; error?: string }>({});
   const [error, setError] = useState("");
@@ -247,7 +343,9 @@ function RoutineForm({ botId, routine, onDone }: { botId: string; routine?: Rout
   const submit = async () => {
     setBusy(true);
     const payload = { name, instruction, schedule, catchUp };
-    const res = routine ? await post("/api/routines/update", { id: routine.id, ...payload }) : await post("/api/routines/create", { botId, ...payload });
+    const res = routine
+      ? await post("/api/routines/update", { id: routine.id, ...payload })
+      : await post("/api/routines/create", { botId, ...payload });
     setBusy(false);
     if (!res.ok) return setError(await errorOf(res));
     onDone();
@@ -263,16 +361,30 @@ function RoutineForm({ botId, routine, onDone }: { botId: string; routine?: Rout
     >
       <DialogHeader>
         <DialogTitle>{routine ? "Edit routine" : "New routine"}</DialogTitle>
-        <DialogDescription>The bot runs the instruction on its own at the times below and keeps a record of each run.</DialogDescription>
+        <DialogDescription>
+          The bot runs the instruction on its own at the times below and keeps a record of each run.
+        </DialogDescription>
       </DialogHeader>
       <FieldGroup className="gap-4">
         <Field>
           <FieldLabel htmlFor="routine-name">Name</FieldLabel>
-          <Input id="routine-name" autoFocus placeholder="e.g. Morning digest" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input
+            id="routine-name"
+            autoFocus
+            placeholder="e.g. Morning digest"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
         </Field>
         <Field>
           <FieldLabel htmlFor="routine-instruction">Instruction</FieldLabel>
-          <Textarea id="routine-instruction" className="min-h-24" placeholder="What should the bot do each time?" value={instruction} onChange={(e) => setInstruction(e.target.value)} />
+          <Textarea
+            id="routine-instruction"
+            className="min-h-24"
+            placeholder="What should the bot do each time?"
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+          />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field>
@@ -293,32 +405,61 @@ function RoutineForm({ botId, routine, onDone }: { botId: string; routine?: Rout
           {kind === "hourly" && (
             <Field>
               <FieldLabel htmlFor="routine-minute">At minute</FieldLabel>
-              <Input id="routine-minute" type="number" min={0} max={59} value={minute} onChange={(e) => setMinute(Number(e.target.value))} />
+              <Input
+                id="routine-minute"
+                type="number"
+                min={0}
+                max={59}
+                value={minute}
+                onChange={(e) => setMinute(Number(e.target.value))}
+              />
             </Field>
           )}
           {(kind === "daily" || kind === "weekdays") && (
             <Field>
               <FieldLabel htmlFor="routine-time">At</FieldLabel>
-              <Input id="routine-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+              <Input
+                id="routine-time"
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+              />
             </Field>
           )}
           {kind === "once" && (
             <Field>
               <FieldLabel htmlFor="routine-at">On</FieldLabel>
-              <Input id="routine-at" type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} />
+              <Input
+                id="routine-at"
+                type="datetime-local"
+                value={at}
+                onChange={(e) => setAt(e.target.value)}
+              />
             </Field>
           )}
           {kind === "custom" && (
             <Field>
               <FieldLabel htmlFor="routine-cron">Cron expression</FieldLabel>
-              <Input id="routine-cron" className="font-mono" placeholder="30 8 * * 1" value={expr} onChange={(e) => setExpr(e.target.value)} />
-              <FieldDescription className="text-xs">Minute, hour, day of month, month, day of week.</FieldDescription>
+              <Input
+                id="routine-cron"
+                className="font-mono"
+                placeholder="30 8 * * 1"
+                value={expr}
+                onChange={(e) => setExpr(e.target.value)}
+              />
+              <FieldDescription className="text-xs">
+                Minute, hour, day of month, month, day of week.
+              </FieldDescription>
             </Field>
           )}
           {kind === "weekly" && (
             <Field>
               <FieldLabel>On</FieldLabel>
-              <Select items={DAY_ITEMS} value={day} onValueChange={(v) => typeof v === "number" && setDay(v)}>
+              <Select
+                items={DAY_ITEMS}
+                value={day}
+                onValueChange={(v) => typeof v === "number" && setDay(v)}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -335,13 +476,23 @@ function RoutineForm({ botId, routine, onDone }: { botId: string; routine?: Rout
           {kind === "weekly" && (
             <Field>
               <FieldLabel htmlFor="routine-time">At</FieldLabel>
-              <Input id="routine-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+              <Input
+                id="routine-time"
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+              />
             </Field>
           )}
           {kind !== "once" && (
             <Field>
               <FieldLabel htmlFor="routine-tz">Time zone</FieldLabel>
-              <Input id="routine-tz" placeholder="Europe/Warsaw" value={tz} onChange={(e) => setTz(e.target.value)} />
+              <Input
+                id="routine-tz"
+                placeholder="Europe/Warsaw"
+                value={tz}
+                onChange={(e) => setTz(e.target.value)}
+              />
             </Field>
           )}
         </div>
@@ -351,13 +502,13 @@ function RoutineForm({ botId, routine, onDone }: { botId: string; routine?: Rout
             Catch up on a missed run after downtime (up to 12 h)
           </FieldLabel>
         </Field>
-        <div className="rounded-lg bg-muted/50 p-3 text-xs">
+        <div className="bg-muted/50 rounded-lg p-3 text-xs">
           {preview.error ? (
             <span className="text-destructive">{preview.error}</span>
           ) : preview.next?.length ? (
             <>
               <p className="mb-1 font-medium">Next runs</p>
-              <ul className="grid gap-0.5 text-muted-foreground">
+              <ul className="text-muted-foreground grid gap-0.5">
                 {preview.next.map((t) => (
                   <li key={t}>{dateTime(t)}</li>
                 ))}

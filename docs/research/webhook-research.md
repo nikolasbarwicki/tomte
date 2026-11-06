@@ -4,21 +4,21 @@ Roadmap item 2. Researched 2026-11-06 against the codebase. Cloudflare quick-tun
 
 ## Findings in the code
 
-| Fact | Evidence | Consequence |
-|---|---|---|
-| Host binds loopback only | `host-server/index.ts` | A public webhook needs a tunnel, relay or reverse proxy |
-| UI, browser and bots endpoints check Host (most also Origin) | `ui-guard.ts:25`, `host-mcp/index.ts` | Hooks need their own listener; do not loosen these checks |
-| Headless runs approve all by default | `routines/index.ts:70` `approveAll: process.env.CLAUDEBOT_ASK_APPROVAL !== "1"` | A payload can act unless a gate overrides this |
-| Host, browser and bots tools skip all policy | `bots/thread.ts:144` | `remember`, `rewrite_memory`, browser and handoffs are reachable from a payload |
-| Integration `auto` is allowed before `approveAll` | `bots/thread.ts:145-147` | A taint placed at `approveAll` is too late |
-| In-root reads and writes are always allowed | `bots/thread.ts:155-156` | A payload can rewrite the bot's files |
-| `trigger` has a CHECK constraint | `platform/db.ts:22` `CHECK (trigger IN ('schedule','manual'))` | Needs a table rebuild in a new `SCHEMA_Vn`; SQLite cannot alter a CHECK |
-| One live run per routine id | `routines/index.ts:213,226` | Calling `run()` while busy clobbers the in-flight run; `testRun` throws `Conflict`, `fire` skips |
-| Startup interrupts all `running` rows | `routines/store.ts:150-153` `interruptStaleRuns` | A persisted queue needs a separate `queued` status |
-| Schedule dedupe is timestamp-based | `routines/store.ts:103` `claimOccurrence` | Webhooks need their own dedupe key |
-| `UNIQUE (routine_id, scheduled_for)` | `platform/db.ts` | Allows any number of rows with NULL `scheduled_for`; no conflict for webhook rows |
-| CLI is required even with an API key | `server.ts:14-16` exits when `resolveCli()` is null | A VPS needs the CLI binary (`CLAUDE_PATH` or `install-cli`) plus `ANTHROPIC_API_KEY` |
-| Secrets are keychain-only | `platform/secrets.ts`, wired in `server.ts:25` (`Bun.secrets`, service `claudebot`); `memorySecrets` is in-process | On headless Linux without Secret Service, integration tokens, credential passwords and the browser engine key (`runtime.ts` `engineKey`) fail |
+| Fact                                                         | Evidence                                                                                                           | Consequence                                                                                                                                   |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Host binds loopback only                                     | `host-server/index.ts`                                                                                             | A public webhook needs a tunnel, relay or reverse proxy                                                                                       |
+| UI, browser and bots endpoints check Host (most also Origin) | `ui-guard.ts:25`, `host-mcp/index.ts`                                                                              | Hooks need their own listener; do not loosen these checks                                                                                     |
+| Headless runs approve all by default                         | `routines/index.ts:70` `approveAll: process.env.CLAUDEBOT_ASK_APPROVAL !== "1"`                                    | A payload can act unless a gate overrides this                                                                                                |
+| Host, browser and bots tools skip all policy                 | `bots/thread.ts:144`                                                                                               | `remember`, `rewrite_memory`, browser and handoffs are reachable from a payload                                                               |
+| Integration `auto` is allowed before `approveAll`            | `bots/thread.ts:145-147`                                                                                           | A taint placed at `approveAll` is too late                                                                                                    |
+| In-root reads and writes are always allowed                  | `bots/thread.ts:155-156`                                                                                           | A payload can rewrite the bot's files                                                                                                         |
+| `trigger` has a CHECK constraint                             | `platform/db.ts:22` `CHECK (trigger IN ('schedule','manual'))`                                                     | Needs a table rebuild in a new `SCHEMA_Vn`; SQLite cannot alter a CHECK                                                                       |
+| One live run per routine id                                  | `routines/index.ts:213,226`                                                                                        | Calling `run()` while busy clobbers the in-flight run; `testRun` throws `Conflict`, `fire` skips                                              |
+| Startup interrupts all `running` rows                        | `routines/store.ts:150-153` `interruptStaleRuns`                                                                   | A persisted queue needs a separate `queued` status                                                                                            |
+| Schedule dedupe is timestamp-based                           | `routines/store.ts:103` `claimOccurrence`                                                                          | Webhooks need their own dedupe key                                                                                                            |
+| `UNIQUE (routine_id, scheduled_for)`                         | `platform/db.ts`                                                                                                   | Allows any number of rows with NULL `scheduled_for`; no conflict for webhook rows                                                             |
+| CLI is required even with an API key                         | `server.ts:14-16` exits when `resolveCli()` is null                                                                | A VPS needs the CLI binary (`CLAUDE_PATH` or `install-cli`) plus `ANTHROPIC_API_KEY`                                                          |
+| Secrets are keychain-only                                    | `platform/secrets.ts`, wired in `server.ts:25` (`Bun.secrets`, service `claudebot`); `memorySecrets` is in-process | On headless Linux without Secret Service, integration tokens, credential passwords and the browser engine key (`runtime.ts` `engineKey`) fail |
 
 ## Plan
 
@@ -57,23 +57,24 @@ Before item 1: webhook routines can read, summarize and notify, and writes are r
 
 ## Exposure for open-source users
 
-| Option | User effort | Maintainer cost | Verdict |
-|---|---|---|---|
-| A. Bring your own tunnel | Run a tunnel, paste the URL in settings | Docs | Ship first |
-| B. Built-in launcher | One click; spawns `cloudflared tunnel --url http://127.0.0.1:<hooksPort>` and parses the `trycloudflare.com` URL | Wrapper around a binary | Ship next |
-| C. Hosted relay | None | A service, auth, abuse handling, uptime | Only on proven demand; make it self-hostable |
-| D. Pollers (Gmail, GitHub) | None | Per-integration code | Covers common cases with no inbound traffic |
+| Option                     | User effort                                                                                                      | Maintainer cost                         | Verdict                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------- | -------------------------------------------- |
+| A. Bring your own tunnel   | Run a tunnel, paste the URL in settings                                                                          | Docs                                    | Ship first                                   |
+| B. Built-in launcher       | One click; spawns `cloudflared tunnel --url http://127.0.0.1:<hooksPort>` and parses the `trycloudflare.com` URL | Wrapper around a binary                 | Ship next                                    |
+| C. Hosted relay            | None                                                                                                             | A service, auth, abuse handling, uptime | Only on proven demand; make it self-hostable |
+| D. Pollers (Gmail, GitHub) | None                                                                                                             | Per-integration code                    | Covers common cases with no inbound traffic  |
 
 Account requirements:
 
-| Tunnel | Account | URL |
-|---|---|---|
-| cloudflared quick tunnel | None | Random, changes on restart |
-| cloudflared named tunnel | Free Cloudflare account and a domain on Cloudflare | Stable |
-| ngrok | Required (authtoken from the dashboard) | Random; static free-tier domain unchecked |
-| Tailscale Funnel | Tailscale account | Stable `*.ts.net` |
+| Tunnel                   | Account                                            | URL                                       |
+| ------------------------ | -------------------------------------------------- | ----------------------------------------- |
+| cloudflared quick tunnel | None                                               | Random, changes on restart                |
+| cloudflared named tunnel | Free Cloudflare account and a domain on Cloudflare | Stable                                    |
+| ngrok                    | Required (authtoken from the dashboard)            | Random; static free-tier domain unchecked |
+| Tailscale Funnel         | Tailscale account                                  | Stable `*.ts.net`                         |
 
 Quick tunnels:
+
 - No account or domain needed. Cloudflare labels them testing and development only, with no uptime guarantee.
 - Up to 200 in-flight requests per tunnel; more return `429`. Senders that retry recover.
 - The hostname changes each time a tunnel is created, and the URL stops working when `cloudflared` stops. Senders keep the old URL, so the launcher must show the current one and warn when it changes.

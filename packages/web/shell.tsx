@@ -1,7 +1,3 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
-import { toast } from "sonner";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type {
   BotsEvent,
   BotSummary,
@@ -18,13 +14,26 @@ import type {
   RoutinesEvent,
   ServerEvent,
 } from "@claudebot/contract/events";
+import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+
 import { act, post } from "./api.ts";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { needsAttention } from "./integrations/model.ts";
 import { NewBotDialog } from "./new-bot.tsx";
 import { reduce, type Item } from "./transcript.tsx";
 
-type StreamEvent = ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent | IntegrationsEvent | CredentialsEvent;
+type StreamEvent =
+  | ServerEvent
+  | MemoryEvent
+  | FilesEvent
+  | RoutinesEvent
+  | BotsEvent
+  | IntegrationsEvent
+  | CredentialsEvent;
 
 /** A prompt waiting in a bot's composer, put there by an integration's Try it. */
 export type Draft = { botId: string; text: string };
@@ -112,7 +121,13 @@ export function Shell() {
       }
       if (e.type === "context") return setContext(e);
       if (e.type === "session") setContext(undefined);
-      if (e.type === "user" || e.type === "update" || e.type === "routine" || (e.type === "handoff" && e.direction === "received")) setBusy(true);
+      if (
+        e.type === "user" ||
+        e.type === "update" ||
+        e.type === "routine" ||
+        (e.type === "handoff" && e.direction === "received")
+      )
+        setBusy(true);
       if (e.type === "done" || e.type === "error") setBusy(false);
       setItems((prev) => reduce(prev, e));
     };
@@ -126,10 +141,32 @@ export function Shell() {
 
   return (
     <ShellContext
-      value={{ info, bots, openBotId, items, busy, context, memory, files, routines, integrations, credentials, draft, setDraft, openBot, newBot }}
+      value={{
+        info,
+        bots,
+        openBotId,
+        items,
+        busy,
+        context,
+        memory,
+        files,
+        routines,
+        integrations,
+        credentials,
+        draft,
+        setDraft,
+        openBot,
+        newBot,
+      }}
     >
       <SidebarProvider className="h-svh overflow-hidden">
-        <AppSidebar bots={bots ?? []} info={info} notices={notices} integrationsNeedingAttention={integrations.filter(needsAttention).length} onNewBot={newBot} />
+        <AppSidebar
+          bots={bots ?? []}
+          info={info}
+          notices={notices}
+          integrationsNeedingAttention={integrations.filter(needsAttention).length}
+          onNewBot={newBot}
+        />
         <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
           <Outlet />
         </SidebarInset>

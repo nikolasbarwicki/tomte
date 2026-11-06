@@ -1,11 +1,23 @@
 import { randomBytes } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { resolveEngine } from "./engine.ts";
+
 import type { SecretStore } from "../platform/secrets.ts";
 import { writeActionPolicy } from "./action-policy.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
-import { DEFAULT_CALL_TIMEOUT_MS, EngineError, findChrome, listSessions, restoreStatePath, runEngine, SESSION_PREFIX, sessionName, socketDir, type EngineLaunch } from "./engine-cli.ts";
+import {
+  DEFAULT_CALL_TIMEOUT_MS,
+  EngineError,
+  findChrome,
+  listSessions,
+  restoreStatePath,
+  runEngine,
+  SESSION_PREFIX,
+  sessionName,
+  socketDir,
+  type EngineLaunch,
+} from "./engine-cli.ts";
+import { resolveEngine } from "./engine.ts";
 import { Lane } from "./lane.ts";
 import { chromePid, engineTree, isAlive, killTree, readPid, waitForExit } from "./process.ts";
 
@@ -96,7 +108,12 @@ async function engineKey(secrets: SecretStore): Promise<string> {
   return key;
 }
 
-export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy, dataRoot: string, o: BrowserRuntimeOptions = {}): BrowserRuntimes {
+export function createBrowserRuntimes(
+  secrets: SecretStore,
+  egress: EgressProxy,
+  dataRoot: string,
+  o: BrowserRuntimeOptions = {},
+): BrowserRuntimes {
   const bots = new Map<string, BotState>();
   let key: Promise<string> | undefined;
   let ticker: ReturnType<typeof setInterval> | undefined;
@@ -110,7 +127,20 @@ export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy,
 
   const state = (botId: string): BotState => {
     let s = bots.get(botId);
-    if (!s) bots.set(botId, (s = { lane: new Lane(), live: false, lastUsed: now(), restarts: 0, notices: [], restoreWarned: false, held: false, refused: false }));
+    if (!s)
+      bots.set(
+        botId,
+        (s = {
+          lane: new Lane(),
+          live: false,
+          lastUsed: now(),
+          restarts: 0,
+          notices: [],
+          restoreWarned: false,
+          held: false,
+          refused: false,
+        }),
+      );
     return s;
   };
 
@@ -118,13 +148,24 @@ export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy,
     const binary = resolveEngine(dataRoot)?.path;
     if (!binary) throw new BrowserUnavailable("the browser engine is not installed");
     const chrome = findChrome();
-    if (!chrome) throw new BrowserUnavailable("Chrome for Testing is not installed; run `bun packages/host/src/host.ts install-browser`");
+    if (!chrome)
+      throw new BrowserUnavailable(
+        "Chrome for Testing is not installed; run `bun packages/host/src/host.ts install-browser`",
+      );
     key ??= engineKey(secrets).catch((e) => {
       key = undefined;
       throw e;
     });
     policy ??= writeActionPolicy();
-    return { binary, chrome, actionPolicy: policy.file, encryptionKey: await key, proxy: egress.url, env: o.env, headed: botId ? o.headed?.(botId) : undefined };
+    return {
+      binary,
+      chrome,
+      actionPolicy: policy.file,
+      encryptionKey: await key,
+      proxy: egress.url,
+      env: o.env,
+      headed: botId ? o.headed?.(botId) : undefined,
+    };
   }
 
   const pidFile = (botId: string) => join(socketDir(o.env), `${sessionName(botId)}.pid`);
@@ -134,7 +175,9 @@ export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy,
     s.restarts++;
     s.fingerprint = undefined;
     s.restoreWarned = false;
-    s.notices.push(`Your browser ${what}. Open pages and element refs from before are gone; take a new snapshot before continuing.`);
+    s.notices.push(
+      `Your browser ${what}. Open pages and element refs from before are gone; take a new snapshot before continuing.`,
+    );
   }
 
   /** Daemon and Chrome pids; undefined when the engine leaves no pid file (or Chrome is not up yet). */
@@ -147,12 +190,16 @@ export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy,
   function observe(botId: string, s: BotState, data: unknown) {
     s.lastUsed = now();
     const fp = fingerprint(botId);
-    if (fp && s.fingerprint && fp !== s.fingerprint) noteRestart(s, "crashed or was closed and has been restarted");
+    if (fp && s.fingerprint && fp !== s.fingerprint)
+      noteRestart(s, "crashed or was closed and has been restarted");
     if (fp) s.fingerprint = fp;
-    const restore = (data as { lifecycle?: { restoreStatus?: string } } | null)?.lifecycle?.restoreStatus;
+    const restore = (data as { lifecycle?: { restoreStatus?: string } } | null)?.lifecycle
+      ?.restoreStatus;
     if (restore === "load_failed" && !s.restoreWarned) {
       s.restoreWarned = true;
-      s.notices.push("Your saved logins could not be restored, so you may be signed out. The saved copy was left untouched.");
+      s.notices.push(
+        "Your saved logins could not be restored, so you may be signed out. The saved copy was left untouched.",
+      );
     }
   }
 
@@ -213,9 +260,11 @@ export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy,
     for (const [botId, s] of bots) {
       if (!s.live || s.held || s.lane.busy || now() - s.lastUsed < idleMs) continue;
       // Refused at once if a call slipped in since the check.
-      await s.lane.run(() => closeBrowser(botId, "was closed after sitting idle"), 0).catch((e) => {
-        if (!(e instanceof EngineError)) throw e;
-      });
+      await s.lane
+        .run(() => closeBrowser(botId, "was closed after sitting idle"), 0)
+        .catch((e) => {
+          if (!(e instanceof EngineError)) throw e;
+        });
     }
   }
 
@@ -282,7 +331,10 @@ export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy,
         active: () => s.live,
         async streamPort() {
           if (!s.live) return undefined;
-          const status = (await exec(botId, ["stream", "status"])) as { enabled?: boolean; port?: number };
+          const status = (await exec(botId, ["stream", "status"])) as {
+            enabled?: boolean;
+            port?: number;
+          };
           return status.enabled && typeof status.port === "number" ? status.port : undefined;
         },
       };
@@ -302,7 +354,11 @@ export function createBrowserRuntimes(secrets: SecretStore, egress: EgressProxy,
     async closeAll() {
       clearInterval(ticker);
       ticker = undefined;
-      await Promise.all([...bots].filter(([, s]) => s.live).map(([id, s]) => shutdown(id).then(() => void (s.live = false))));
+      await Promise.all(
+        [...bots]
+          .filter(([, s]) => s.live)
+          .map(([id, s]) => shutdown(id).then(() => void (s.live = false))),
+      );
       if (policy) rmSync(policy.dir, { recursive: true, force: true });
       policy = undefined;
     },

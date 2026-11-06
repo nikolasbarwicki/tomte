@@ -1,4 +1,14 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 export type SkillInfo = { name: string; description: string };
@@ -6,7 +16,8 @@ export type SkillInfo = { name: string; description: string };
 const isDir = (p: string) => existsSync(p) && statSync(p).isDirectory();
 
 /** The folder holding skill folders: a `skills` subfolder when the source has one, else the source itself. */
-const skillsRoot = (source: string) => (isDir(join(source, "skills")) ? join(source, "skills") : source);
+const skillsRoot = (source: string) =>
+  isDir(join(source, "skills")) ? join(source, "skills") : source;
 
 /** `description` from SKILL.md front matter, including folded and literal block values. */
 function describe(skillMd: string): string {
@@ -34,7 +45,10 @@ export function scanSkills(source: string): SkillInfo[] {
   const root = skillsRoot(source);
   return readdirSync(root, { withFileTypes: true })
     .filter((e) => e.isDirectory() && existsSync(join(root, e.name, "SKILL.md")))
-    .map((e) => ({ name: e.name, description: describe(readFileSync(join(root, e.name, "SKILL.md"), "utf8")) }))
+    .map((e) => ({
+      name: e.name,
+      description: describe(readFileSync(join(root, e.name, "SKILL.md"), "utf8")),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -42,14 +56,23 @@ export function scanSkills(source: string): SkillInfo[] {
  * Rebuilds `<pluginsDir>/<name>` holding copies of only `enabled` skill folders and returns its path.
  * With none enabled, removes the folder and returns undefined, so no plugin is passed to the session.
  */
-export function buildPlugin(pluginsDir: string, name: string, source: string, enabled: string[]): string | undefined {
+export function buildPlugin(
+  pluginsDir: string,
+  name: string,
+  source: string,
+  enabled: string[],
+): string | undefined {
   const dest = join(pluginsDir, name);
   rmSync(dest, { recursive: true, force: true });
   if (!enabled.length) return undefined;
   const root = skillsRoot(source);
   mkdirSync(join(dest, ".claude-plugin"), { recursive: true });
-  writeFileSync(join(dest, ".claude-plugin", "plugin.json"), JSON.stringify({ name, version: "0.0.0", description: `Skills of the ${name} integration` }));
-  for (const skill of enabled) cpSync(join(root, skill), join(dest, "skills", skill), { recursive: true, dereference: true });
+  writeFileSync(
+    join(dest, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name, version: "0.0.0", description: `Skills of the ${name} integration` }),
+  );
+  for (const skill of enabled)
+    cpSync(join(root, skill), join(dest, "skills", skill), { recursive: true, dereference: true });
   return dest;
 }
 
@@ -60,7 +83,11 @@ export const gitClone: GitClone = async (repo, dest) => {
   const tmp = `${dest}.partial`;
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(join(dest, ".."), { recursive: true });
-  const p = Bun.spawn(["git", "clone", "--depth", "1", repo, tmp], { stdout: "ignore", stderr: "pipe", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+  const p = Bun.spawn(["git", "clone", "--depth", "1", repo, tmp], {
+    stdout: "ignore",
+    stderr: "pipe",
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
   const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited]);
   if (code !== 0) {
     rmSync(tmp, { recursive: true, force: true });

@@ -1,26 +1,36 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
 import { createBot, getBot } from "../bots/index.ts";
 import { createCredentials } from "../credentials/index.ts";
-import { migrate } from "../platform/db.ts";
 import { createHostServer, type HostServer } from "../host-server/index.ts";
+import { hostOrigin, parseHostConfig } from "../platform/config.ts";
+import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { removeBotBrowser } from "./cleanup.ts";
-import { createBrowserEndpoint } from "./endpoint.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
+import { createBrowserEndpoint } from "./endpoint.ts";
 import { sessionName } from "./engine-cli.ts";
-import { createBrowserLogin } from "./login.ts";
 import { createHumanWaits } from "./human-waits.ts";
+import { createBrowserLogin } from "./login.ts";
 import { isAlive } from "./process.ts";
-import { Takeover } from "./takeover.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./runtime.ts";
-import { hostOrigin, parseHostConfig } from "../platform/config.ts";
+import { Takeover } from "./takeover.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH"] as const;
@@ -42,7 +52,8 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  for (const k of ENV_KEYS) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+  for (const k of ENV_KEYS)
+    saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
   for (const pid of spawned) if (isAlive(pid)) process.kill(-pid, "SIGKILL");
   rmSync(root, { recursive: true, force: true });
 });
@@ -56,37 +67,61 @@ beforeEach(() => {
 });
 
 const script = (s: object) => writeFileSync(join(fakeDir, "script.json"), JSON.stringify(s));
-const seedSessions = (names: string[]) => writeFileSync(join(fakeDir, "state.json"), JSON.stringify(Object.fromEntries(names.map((n) => [n, "https://x.test"]))));
+const seedSessions = (names: string[]) =>
+  writeFileSync(
+    join(fakeDir, "state.json"),
+    JSON.stringify(Object.fromEntries(names.map((n) => [n, "https://x.test"]))),
+  );
 const calls = (): { argv: string[] }[] => {
   try {
-    return readFileSync(join(fakeDir, "calls.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    return readFileSync(join(fakeDir, "calls.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
   } catch {
     return [];
   }
 };
-const closedSessions = () => calls().filter((c) => c.argv.includes("close")).map((c) => c.argv[c.argv.indexOf("--session") + 1]);
+const closedSessions = () =>
+  calls()
+    .filter((c) => c.argv.includes("close"))
+    .map((c) => c.argv[c.argv.indexOf("--session") + 1]);
 /** A killed child lingers as a zombie until the test runner reaps it. */
 async function expectDead(pid: number) {
   for (let i = 0; i < 40 && isAlive(pid); i++) await Bun.sleep(25);
   expect(isAlive(pid)).toBe(false);
 }
 const BOT = "11111111-1111-4111-8111-111111111111";
-const statePath = (botId = BOT) => join(home, ".agent-browser", "sessions", `${sessionName(botId)}-${sessionName(botId)}.json.enc`);
+const statePath = (botId = BOT) =>
+  join(home, ".agent-browser", "sessions", `${sessionName(botId)}-${sessionName(botId)}.json.enc`);
 const saveState = (botId = BOT) => {
   mkdirSync(join(home, ".agent-browser", "sessions"), { recursive: true });
   writeFileSync(statePath(botId), "saved-logins");
 };
 
-const stubEgress = (): EgressProxy => ({ url: "http://127.0.0.1:9", start: async () => {}, stop: async () => {}, blockedSince: () => [] }) as unknown as EgressProxy;
+const stubEgress = (): EgressProxy =>
+  ({
+    url: "http://127.0.0.1:9",
+    start: async () => {},
+    stop: async () => {},
+    blockedSince: () => [],
+  }) as unknown as EgressProxy;
 
 function runtimes(o: BrowserRuntimeOptions = {}) {
-  return createBrowserRuntimes(memorySecrets(), stubEgress(), join(home, "data"), { env: { FAKE_AGENT_BROWSER_DIR: fakeDir, HOME: home, AGENT_BROWSER_SOCKET_DIR: sockets }, ...o });
+  return createBrowserRuntimes(memorySecrets(), stubEgress(), join(home, "data"), {
+    env: { FAKE_AGENT_BROWSER_DIR: fakeDir, HOME: home, AGENT_BROWSER_SOCKET_DIR: sockets },
+    ...o,
+  });
 }
 
 /** A stand-in engine daemon with one child as its "Chrome", each in its own process group like the real thing. */
 async function fakeDaemon(botId: string, { ignoreTerm = false } = {}) {
   const trap = ignoreTerm ? "trap '' TERM HUP;" : "";
-  const daemon = spawn("sh", ["-c", `${trap} sleep 300 & wait`], { detached: true, stdio: "ignore" });
+  const daemon = spawn("sh", ["-c", `${trap} sleep 300 & wait`], {
+    detached: true,
+    stdio: "ignore",
+  });
   daemon.unref();
   spawned.push(daemon.pid!);
   await Bun.sleep(150);
@@ -99,7 +134,9 @@ describe("lane", () => {
     const rt = runtimes({ laneWaitMs: 150 });
     const browser = rt.forBot(BOT);
     const first = browser.exclusive(() => Bun.sleep(400).then(() => "first"));
-    await expect(browser.exclusive(async () => "second")).rejects.toThrow("previous browser call still running");
+    await expect(browser.exclusive(async () => "second")).rejects.toThrow(
+      "previous browser call still running",
+    );
     expect(await first).toBe("first");
     expect(await browser.exclusive(async () => "third")).toBe("third");
   });
@@ -107,7 +144,10 @@ describe("lane", () => {
   test("calls that fit inside the wait run in order, one at a time", async () => {
     const browser = runtimes({ laneWaitMs: 2000 }).forBot(BOT);
     const log: string[] = [];
-    const job = (n: string) => browser.exclusive(async () => (log.push(`${n}:start`), await Bun.sleep(40), log.push(`${n}:end`)));
+    const job = (n: string) =>
+      browser.exclusive(
+        async () => (log.push(`${n}:start`), await Bun.sleep(40), log.push(`${n}:end`)),
+      );
     await Promise.all([job("a"), job("b"), job("c")]);
     expect(log).toEqual(["a:start", "a:end", "b:start", "b:end", "c:start", "c:end"]);
   });
@@ -115,7 +155,9 @@ describe("lane", () => {
   test("bots have separate lanes", async () => {
     const rt = runtimes({ laneWaitMs: 50 });
     const slow = rt.forBot(BOT).exclusive(() => Bun.sleep(150));
-    expect(await rt.forBot("22222222-2222-4222-8222-222222222222").exclusive(async () => "ok")).toBe("ok");
+    expect(
+      await rt.forBot("22222222-2222-4222-8222-222222222222").exclusive(async () => "ok"),
+    ).toBe("ok");
     await slow;
   });
 });
@@ -125,7 +167,9 @@ describe("deadline", () => {
     script({ delayMs: { snapshot: 2000 } });
     const browser = runtimes({ callTimeoutMs: 200 }).forBot(BOT);
     await browser.call(["open", "https://a.test"]);
-    await expect(browser.call(["snapshot"])).rejects.toThrow(/outcome uncertain.*take a snapshot before retrying/);
+    await expect(browser.call(["snapshot"])).rejects.toThrow(
+      /outcome uncertain.*take a snapshot before retrying/,
+    );
   });
 });
 
@@ -248,7 +292,8 @@ describe("headed", () => {
     const [first, second] = calls();
     expect(first.argv).not.toContain("--headed");
     expect(second.argv).toContain("--headed");
-    for (const c of [first, second]) expect(c.argv[c.argv.indexOf("--idle-timeout") + 1]).toBe(String(15 * 60_000));
+    for (const c of [first, second])
+      expect(c.argv[c.argv.indexOf("--idle-timeout") + 1]).toBe(String(15 * 60_000));
   });
 });
 
@@ -275,13 +320,43 @@ describe("sign out and bot deletion", () => {
 
   test("deleting a bot revokes its tokens, closes its browser, deletes saved logins and grants", async () => {
     const rt = runtimes();
-    const credentials = createCredentials({ db: migrate(new Database(":memory:")), secrets: memorySecrets() });
-    const entry = await credentials.add({ label: "GH", signInUrl: "https://github.com/login", username: "me", password: "pw-pw-pw" });
+    const credentials = createCredentials({
+      db: migrate(new Database(":memory:")),
+      secrets: memorySecrets(),
+    });
+    const entry = await credentials.add({
+      label: "GH",
+      signInUrl: "https://github.com/login",
+      username: "me",
+      password: "pw-pw-pw",
+    });
     credentials.grant(BOT, entry.id);
-    const waits = createHumanWaits({ emit() {}, deliver: (_botId, text) => void delivered.push(text) });
+    const waits = createHumanWaits({
+      emit() {},
+      deliver: (_botId, text) => void delivered.push(text),
+    });
     const delivered: string[] = [];
-    const takeover = new Takeover({ runtimes: rt, waits, deliver: (_botId, text) => void delivered.push(text) });
-    const endpoint = createBrowserEndpoint({ host: hostOrigin(parseHostConfig([], {}).config, 1), isEnabled: () => true, runtimes: rt, filesDir: () => root, egress: stubEgress(), takeover, login: createBrowserLogin({ credentials, secrets: memorySecrets(), waits, botName: () => "bot", exchangeUrl: () => "http://127.0.0.1:1/x" }), unattended: () => false });
+    const takeover = new Takeover({
+      runtimes: rt,
+      waits,
+      deliver: (_botId, text) => void delivered.push(text),
+    });
+    const endpoint = createBrowserEndpoint({
+      host: hostOrigin(parseHostConfig([], {}).config, 1),
+      isEnabled: () => true,
+      runtimes: rt,
+      filesDir: () => root,
+      egress: stubEgress(),
+      takeover,
+      login: createBrowserLogin({
+        credentials,
+        secrets: memorySecrets(),
+        waits,
+        botName: () => "bot",
+        exchangeUrl: () => "http://127.0.0.1:1/x",
+      }),
+      unattended: () => false,
+    });
     const token = endpoint.lease(BOT).servers[0].token;
     const rejected = () => fetch(`http://127.0.0.1:1/x`).catch(() => undefined);
     await rt.forBot(BOT).call(["open", "https://a.test"]);
@@ -315,21 +390,34 @@ describe("host routes and tool results", () => {
       cli: { path: "/nonexistent/claude", source: "CLAUDE_PATH", needsShell: false },
       db: migrate(new Database(":memory:")),
       secrets: memorySecrets(),
-      browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir, HOME: home, AGENT_BROWSER_SOCKET_DIR: sockets }, laneWaitMs: 100 },
+      browser: {
+        env: { FAKE_AGENT_BROWSER_DIR: fakeDir, HOME: home, AGENT_BROWSER_SOCKET_DIR: sockets },
+        laneWaitMs: 100,
+      },
     });
   });
 
-  const api = (path: string, body: object) => fetch(`${server.url}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const api = (path: string, body: object) =>
+    fetch(`${server.url}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
   async function enabledBot() {
     const bot = createBot(cwd, "bot");
     expect((await api("/api/bots/browser", { botId: bot.id, enabled: true })).status).toBe(200);
     const [s] = server.browser.lease(bot.id).servers;
     const client = new Client({ name: "test", version: "1.0.0" });
-    await client.connect(new StreamableHTTPClientTransport(new URL(s.url), { requestInit: { headers: { Authorization: `Bearer ${s.token}` } } }));
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(s.url), {
+        requestInit: { headers: { Authorization: `Bearer ${s.token}` } },
+      }),
+    );
     clients.push(client);
     return { bot, client };
   }
-  const textOf = (r: unknown) => (r as { content: { text: string }[] }).content.map((c) => c.text).join("\n");
+  const textOf = (r: unknown) =>
+    (r as { content: { text: string }[] }).content.map((c) => c.text).join("\n");
   const close = async () => {
     await Promise.all(clients.splice(0).map((c) => c.close()));
     await server.close();
@@ -339,10 +427,14 @@ describe("host routes and tool results", () => {
     const { bot, client } = await enabledBot();
     await client.callTool({ name: "browser_open", arguments: { url: "https://a.test" } });
     expect((await api("/api/bots/browser/restart", { botId: bot.id })).status).toBe(200);
-    const next = textOf(await client.callTool({ name: "browser_open", arguments: { url: "https://b.test" } }));
+    const next = textOf(
+      await client.callTool({ name: "browser_open", arguments: { url: "https://b.test" } }),
+    );
     expect(next).toMatch(/Your browser was restarted/);
     expect(next).toContain("https://b.test");
-    expect(textOf(await client.callTool({ name: "browser_snapshot", arguments: {} }))).not.toMatch(/restarted/);
+    expect(textOf(await client.callTool({ name: "browser_snapshot", arguments: {} }))).not.toMatch(
+      /restarted/,
+    );
     await close();
   });
 
@@ -357,7 +449,10 @@ describe("host routes and tool results", () => {
   });
 
   test("routes refuse an unknown bot", async () => {
-    for (const p of ["restart", "sign-out", "headed"]) expect((await api(`/api/bots/browser/${p}`, { botId: "nope", headed: true })).status).toBe(404);
+    for (const p of ["restart", "sign-out", "headed"])
+      expect((await api(`/api/bots/browser/${p}`, { botId: "nope", headed: true })).status).toBe(
+        404,
+      );
     await close();
   });
 
@@ -365,21 +460,33 @@ describe("host routes and tool results", () => {
     const { bot, client } = await enabledBot();
     expect(getBot(cwd, bot.id)!.browser.headed).toBe(false);
     await client.callTool({ name: "browser_open", arguments: { url: "https://a.test" } });
-    expect((await api("/api/bots/browser/headed", { botId: bot.id, headed: "yes" })).status).toBe(400);
-    expect((await api("/api/bots/browser/headed", { botId: bot.id, headed: true })).status).toBe(200);
+    expect((await api("/api/bots/browser/headed", { botId: bot.id, headed: "yes" })).status).toBe(
+      400,
+    );
+    expect((await api("/api/bots/browser/headed", { botId: bot.id, headed: true })).status).toBe(
+      200,
+    );
     expect(getBot(cwd, bot.id)!.browser.headed).toBe(true);
     await client.callTool({ name: "browser_open", arguments: { url: "https://a.test" } });
-    expect(calls().filter((c) => !c.argv.includes("list")).at(-1)!.argv).toContain("--headed");
+    expect(
+      calls()
+        .filter((c) => !c.argv.includes("list"))
+        .at(-1)!.argv,
+    ).toContain("--headed");
     await close();
   });
 
   test("a tool call that cannot get the lane in time fails with 'previous browser call still running'", async () => {
     script({ delayMs: { snapshot: 1500 } });
     const { client } = await enabledBot();
-    await client.callTool({ name: "browser_open", arguments: { url: "https://a.test" } }).catch(() => undefined);
+    await client
+      .callTool({ name: "browser_open", arguments: { url: "https://a.test" } })
+      .catch(() => undefined);
     const slow = client.callTool({ name: "browser_snapshot", arguments: {} });
     await Bun.sleep(100);
-    const refused = (await client.callTool({ name: "browser_snapshot", arguments: {} })) as { isError?: boolean };
+    const refused = (await client.callTool({ name: "browser_snapshot", arguments: {} })) as {
+      isError?: boolean;
+    };
     expect(refused.isError).toBe(true);
     expect(textOf(refused)).toContain("previous browser call still running");
     await slow;

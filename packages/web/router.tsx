@@ -1,5 +1,12 @@
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Navigate,
+  useNavigate,
+} from "@tanstack/react-router";
 import { useEffect } from "react";
-import { createRootRoute, createRoute, createRouter, Navigate, useNavigate } from "@tanstack/react-router";
+
 import { post } from "./api.ts";
 import { ChatView } from "./chat.tsx";
 import { Credentials } from "./credentials.tsx";
@@ -7,7 +14,10 @@ import { Integrations } from "./integrations/screen.tsx";
 import { Shell, useShell } from "./shell.tsx";
 import { Welcome } from "./welcome.tsx";
 
-const rootRoute = createRootRoute({ component: Shell, notFoundComponent: () => <Navigate to="/" replace /> });
+const rootRoute = createRootRoute({
+  component: Shell,
+  notFoundComponent: () => <Navigate to="/" replace />,
+});
 
 /** Lands on the chat the host is showing, or welcomes the user when there is none. */
 const indexRoute = createRoute({
@@ -15,7 +25,8 @@ const indexRoute = createRoute({
   path: "/",
   component: function Home() {
     const { bots, openBotId, newBot } = useShell();
-    if (openBotId && bots?.some((b) => b.id === openBotId)) return <Navigate to="/bots/$botId" params={{ botId: openBotId }} replace />;
+    if (openBotId && bots?.some((b) => b.id === openBotId))
+      return <Navigate to="/bots/$botId" params={{ botId: openBotId }} replace />;
     return <Welcome loading={!bots} hasBots={!!bots?.length} onNewBot={newBot} />;
   },
 });
@@ -56,7 +67,9 @@ const botRoute = createRoute({
         memory={s.memory}
         files={s.files}
         routines={s.routines?.botId === bot.id ? s.routines.routines : undefined}
-        browserUnavailable={s.info?.browser.status === "unavailable" ? s.info.browser.reason : undefined}
+        browserUnavailable={
+          s.info?.browser.status === "unavailable" ? s.info.browser.reason : undefined
+        }
         draft={s.draft?.botId === bot.id ? s.draft.text : undefined}
         onDraftTaken={() => s.setDraft(undefined)}
       />
@@ -71,7 +84,11 @@ function IntegrationsScreen({ selectedId }: { selectedId: string | undefined }) 
     <Integrations
       integrations={integrations}
       selectedId={selectedId}
-      onSelect={(id) => void (id ? navigate({ to: "/integrations/$integrationId", params: { integrationId: id } }) : navigate({ to: "/integrations" }))}
+      onSelect={(id) =>
+        void (id
+          ? navigate({ to: "/integrations/$integrationId", params: { integrationId: id } })
+          : navigate({ to: "/integrations" }))
+      }
       onTry={
         bots?.length
           ? (text) => {
@@ -109,7 +126,13 @@ const credentialsRoute = createRoute({
 });
 
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([indexRoute, botRoute, integrationsRoute, integrationRoute, credentialsRoute]),
+  routeTree: rootRoute.addChildren([
+    indexRoute,
+    botRoute,
+    integrationsRoute,
+    integrationRoute,
+    credentialsRoute,
+  ]),
 });
 
 declare module "@tanstack/react-router" {

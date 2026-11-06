@@ -1,16 +1,21 @@
-import { z } from "zod";
 import type { Schedule } from "@claudebot/contract/events";
+import { z } from "zod";
 
 /** How far back a missed occurrence may lie and still be caught up after downtime. */
 export const WINDOW_MS = 12 * 60 * 60_000;
 const MIN_INTERVAL_MS = 5 * 60_000;
 
 const ScheduleInput = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("cron"), expr: z.string().trim().min(1), tz: z.string().trim().min(1) }),
+  z.object({
+    kind: z.literal("cron"),
+    expr: z.string().trim().min(1),
+    tz: z.string().trim().min(1),
+  }),
   z.object({ kind: z.literal("once"), at: z.number().int() }),
 ]);
 
-const cronNext = (expr: string, tz: string, after: number): number | null => Bun.cron.parse(expr, after, { tz })?.getTime() ?? null;
+const cronNext = (expr: string, tz: string, after: number): number | null =>
+  Bun.cron.parse(expr, after, { tz })?.getTime() ?? null;
 
 /** Validates untrusted input into a schedule that fires at least once and no more often than every 5 minutes. */
 export function parseSchedule(input: unknown): Schedule {
@@ -66,6 +71,7 @@ export function hasOccurrence(s: Schedule, after: number, before: number): boole
 
 export function nextOccurrences(s: Schedule, from: number, n: number): number[] {
   const out: number[] = [];
-  for (let t = nextOccurrence(s, from); t !== null && out.length < n; t = nextOccurrence(s, t)) out.push(t);
+  for (let t = nextOccurrence(s, from); t !== null && out.length < n; t = nextOccurrence(s, t))
+    out.push(t);
   return out;
 }

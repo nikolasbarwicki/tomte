@@ -1,15 +1,31 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
+
 import { getSessionInfo, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import { Thread, botContext, currentSession, getBot, touchBot, type HostDelegate } from "../bots/index.ts";
+import type { Bot, Routine, RoutineRun, RunTrigger, Schedule } from "@claudebot/contract/events";
+import { z } from "zod";
+
+import {
+  Thread,
+  botContext,
+  currentSession,
+  getBot,
+  touchBot,
+  type HostDelegate,
+} from "../bots/index.ts";
 import type { HostServersSource, ResolvedCli } from "../harness/index.ts";
 import type { IntegrationsSource } from "../integrations/index.ts";
-import { WINDOW_MS, hasOccurrence, latestOccurrence, nextOccurrence, nextOccurrences, parseSchedule } from "./schedule.ts";
+import { NotFound } from "../platform/errors.ts";
+import {
+  WINDOW_MS,
+  hasOccurrence,
+  latestOccurrence,
+  nextOccurrence,
+  nextOccurrences,
+  parseSchedule,
+} from "./schedule.ts";
 import * as store from "./store.ts";
 import type { RoutineRecord } from "./store.ts";
-import type { Bot, Routine, RoutineRun, RunTrigger, Schedule } from "@claudebot/contract/events";
-import { NotFound } from "../platform/errors.ts";
 
 export class Conflict extends Error {}
 
@@ -39,7 +55,12 @@ export type Executor = (job: RoutineJob) => {
 };
 
 /** A run in progress; `removed` marks one stopped by `remove()`, whose row the cascade already owns. */
-type LiveRun = { runId: string; stop?: (reason: string) => void; done: Promise<void>; removed?: boolean };
+type LiveRun = {
+  runId: string;
+  stop?: (reason: string) => void;
+  done: Promise<void>;
+  removed?: boolean;
+};
 
 const LATE_NOTE_MS = 15 * 60_000;
 /** setTimeout's delay is a signed 32-bit int; longer waits re-arm in steps. */
@@ -49,11 +70,21 @@ const MAX_TIMEOUT_MS = 2_147_000_000;
 export const headlessDelegate: HostDelegate = {
   askUser: async () =>
     "No human is available during this scheduled run. Make the most reasonable assumption, state it in your final message, and continue.",
-  approve: async (): Promise<PermissionResult> => ({ behavior: "deny", message: "no human is present during a scheduled run" }),
+  approve: async (): Promise<PermissionResult> => ({
+    behavior: "deny",
+    message: "no human is present during a scheduled run",
+  }),
 };
 
 /** Runs a routine turn in the bot's own session without the UI, for a bot that is not open. */
-export function runHeadless(cwd: string, dataRoot: string, cli: ResolvedCli, integrations: IntegrationsSource, hostServers: HostServersSource, { bot, routine, prompt }: RoutineJob): ReturnType<Executor> {
+export function runHeadless(
+  cwd: string,
+  dataRoot: string,
+  cli: ResolvedCli,
+  integrations: IntegrationsSource,
+  hostServers: HostServersSource,
+  { bot, routine, prompt }: RoutineJob,
+): ReturnType<Executor> {
   let thread: Thread | undefined;
   let stopped: string | undefined;
   const done = (async () => {
@@ -87,7 +118,12 @@ export function runHeadless(cwd: string, dataRoot: string, cli: ResolvedCli, int
   };
 }
 
-function prompt(r: RoutineRecord, trigger: RunTrigger, scheduledFor: number | null, lateMs: number) {
+function prompt(
+  r: RoutineRecord,
+  trigger: RunTrigger,
+  scheduledFor: number | null,
+  lateMs: number,
+) {
   const late =
     lateMs > LATE_NOTE_MS
       ? `This run started ${Math.round(lateMs / 60_000)} minutes late because the app was offline; adjust any time-of-day assumptions.`
@@ -138,12 +174,15 @@ export function createRoutines(deps: {
     const delay = s.at - now();
     if (r.lastScheduledFor !== null || delay <= 0) return;
     const capped = delay > MAX_TIMEOUT_MS;
-    const timer = setTimeout(() => {
-      jobs.delete(r.id);
-      if (!capped) return void fire(r.id);
-      const fresh = store.getRoutine(db, r.id);
-      if (fresh) arm(fresh);
-    }, Math.min(delay, MAX_TIMEOUT_MS));
+    const timer = setTimeout(
+      () => {
+        jobs.delete(r.id);
+        if (!capped) return void fire(r.id);
+        const fresh = store.getRoutine(db, r.id);
+        if (fresh) arm(fresh);
+      },
+      Math.min(delay, MAX_TIMEOUT_MS),
+    );
     jobs.set(r.id, { stop: () => clearTimeout(timer) });
   }
 
@@ -187,7 +226,11 @@ export function createRoutines(deps: {
   }
 
   /** Inserts the run row synchronously; the agent works in the background until `done`. */
-  function run(r: RoutineRecord, trigger: RunTrigger, scheduledFor: number | null): { row: RoutineRun; done: Promise<void> } {
+  function run(
+    r: RoutineRecord,
+    trigger: RunTrigger,
+    scheduledFor: number | null,
+  ): { row: RoutineRun; done: Promise<void> } {
     const bot = getBot(dataRoot, r.botId);
     const startedAt = now();
     const row: RoutineRun = {
@@ -212,7 +255,16 @@ export function createRoutines(deps: {
     onChange(r.botId);
     entry.done = (async () => {
       try {
-        const job = execute({ bot, routine: r, prompt: prompt(r, trigger, scheduledFor, scheduledFor === null ? 0 : startedAt - scheduledFor) });
+        const job = execute({
+          bot,
+          routine: r,
+          prompt: prompt(
+            r,
+            trigger,
+            scheduledFor,
+            scheduledFor === null ? 0 : startedAt - scheduledFor,
+          ),
+        });
         entry.stop = job.stop;
         const text = await job.done;
         store.finishRun(db, row.id, "succeeded", { output: text, finishedAt: now() });
@@ -230,7 +282,11 @@ export function createRoutines(deps: {
 
   function reconcile() {
     const n = now();
-    store.interruptStaleRuns(db, n, [...running.values()].map((e) => e.runId));
+    store.interruptStaleRuns(
+      db,
+      n,
+      [...running.values()].map((e) => e.runId),
+    );
     for (const r of store.listActiveRoutines(db)) {
       const last = r.lastScheduledFor ?? r.createdAt;
       const inWindow = latestOccurrence(r.schedule, Math.max(last, n - WINDOW_MS), n);
@@ -308,9 +364,12 @@ export function createRoutines(deps: {
       const t = now();
       const r: RoutineRecord = { ...old, ...patch, updatedAt: t };
       // Occurrences before an edit or while paused are not "missed": move the claim baseline to now.
-      const rescheduled = patch.schedule !== undefined && JSON.stringify(patch.schedule) !== JSON.stringify(old.schedule);
+      const rescheduled =
+        patch.schedule !== undefined &&
+        JSON.stringify(patch.schedule) !== JSON.stringify(old.schedule);
       if (rescheduled) r.lastScheduledFor = r.schedule.kind === "once" ? null : t;
-      else if (r.active && !old.active && r.schedule.kind === "cron") r.lastScheduledFor = Math.max(old.lastScheduledFor ?? 0, t);
+      else if (r.active && !old.active && r.schedule.kind === "cron")
+        r.lastScheduledFor = Math.max(old.lastScheduledFor ?? 0, t);
       store.saveRoutine(db, r);
       arm(r);
       onChange(r.botId);

@@ -3,22 +3,36 @@
 // The data root is a temp directory and the database is in memory, unless `hostFlags` carries `--data-root`: then the database is a file in that data root. `cwd` is the host's workspace directory inside the data root.
 import { Database } from "bun:sqlite";
 import { expect } from "bun:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
 import { createBot } from "../bots/index.ts";
-import { migrate, openDb } from "../platform/db.ts";
 import { createHostServer, type HostServer } from "../host-server/index.ts";
-import { memorySecrets } from "../platform/secrets.ts";
-import { acquireDataRootLock, type DataRootLock } from "../platform/data-root-lock.ts";
 import { parseHostConfig } from "../platform/config.ts";
+import { acquireDataRootLock, type DataRootLock } from "../platform/data-root-lock.ts";
+import { migrate, openDb } from "../platform/db.ts";
+import { memorySecrets } from "../platform/secrets.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "fake-agent-browser.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "fake-claude.ts");
-const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH", "FAKE_CLAUDE_DIR"] as const;
+const ENV_KEYS = [
+  "AGENT_BROWSER_PATH",
+  "AGENT_BROWSER_EXECUTABLE_PATH",
+  "FAKE_CLAUDE_DIR",
+] as const;
 
 export type ToolResult = { isError: boolean; text: string };
 export type BotCaller = (name: string, args?: Record<string, unknown>) => Promise<ToolResult>;
@@ -36,7 +50,11 @@ export interface HandoffHost {
   /** Texts the fake CLI received for the bot's first session, oldest first. */
   messagesOf(botId: string): string[];
   /** CLI launches the fake CLI recorded: the directory it ran in, the system prompt addition and the MCP servers it was given. */
-  launches(): { cwd: string; appendSystemPrompt?: string; mcpServers: Record<string, { url: string; headers: { Authorization: string } }> }[];
+  launches(): {
+    cwd: string;
+    appendSystemPrompt?: string;
+    mcpServers: Record<string, { url: string; headers: { Authorization: string } }>;
+  }[];
   /** From now on, every message the fake CLI receives makes it call the host's `remember` tool with this line. */
   rememberOnMessage(scope: "user" | "bot", line: string): void;
   /** While held, a message the fake CLI receives keeps its turn running. */
@@ -66,7 +84,8 @@ export async function startHandoffHost(hostFlags: string[] = []): Promise<Handof
 
   const config = parseHostConfig(["--data-root", dataRoot, ...hostFlags], {}).config;
   const restoreEnv = () => {
-    for (const k of ENV_KEYS) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+    for (const k of ENV_KEYS)
+      saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
   };
   let lock: DataRootLock;
   try {
@@ -77,7 +96,9 @@ export async function startHandoffHost(hostFlags: string[] = []): Promise<Handof
     throw e;
   }
   const cwd = ensureWorkspace(config.dataRoot);
-  const db = hostFlags.includes("--data-root") ? openDb(config.dataRoot) : migrate(new Database(":memory:"));
+  const db = hostFlags.includes("--data-root")
+    ? openDb(config.dataRoot)
+    : migrate(new Database(":memory:"));
   const secrets = memorySecrets();
   const startServer = () =>
     createHostServer({
@@ -90,7 +111,14 @@ export async function startHandoffHost(hostFlags: string[] = []): Promise<Handof
     });
   let server = await startServer();
   const clients: Client[] = [];
-  const lines = (file: string) => (existsSync(file) ? readFileSync(file, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
+  const lines = (file: string) =>
+    existsSync(file)
+      ? readFileSync(file, "utf8")
+          .trim()
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => JSON.parse(l))
+      : [];
 
   const host: HandoffHost = {
     get server() {
@@ -103,18 +131,34 @@ export async function startHandoffHost(hostFlags: string[] = []): Promise<Handof
       const lease = server.bots.lease(botId);
       const [s] = lease.servers;
       const client = new Client({ name: "test", version: "1.0.0" });
-      await client.connect(new StreamableHTTPClientTransport(new URL(s.url), { requestInit: { headers: { Authorization: `Bearer ${s.token}` } } }));
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(s.url), {
+          requestInit: { headers: { Authorization: `Bearer ${s.token}` } },
+        }),
+      );
       clients.push(client);
       const call: BotCaller = (name, args = {}) =>
-        client.callTool({ name, arguments: args }).then((r) => ({ isError: r.isError === true, text: (r.content as { text: string }[]).map((c) => c.text).join("\n") }));
+        client.callTool({ name, arguments: args }).then((r) => ({
+          isError: r.isError === true,
+          text: (r.content as { text: string }[]).map((c) => c.text).join("\n"),
+        }));
       return { call, token: s.token, url: s.url, revoke: lease.release };
     },
-    messagesOf: (botId) => lines(join(claudeDir, "messages.jsonl")).filter((m: { sessionId: string }) => m.sessionId === botId).map((m: { text: string }) => m.text),
+    messagesOf: (botId) =>
+      lines(join(claudeDir, "messages.jsonl"))
+        .filter((m: { sessionId: string }) => m.sessionId === botId)
+        .map((m: { text: string }) => m.text),
     launches: () => lines(join(claudeDir, "launches.jsonl")),
-    rememberOnMessage: (scope, line) => writeFileSync(join(claudeDir, "remember.json"), JSON.stringify({ scope, line })),
+    rememberOnMessage: (scope, line) =>
+      writeFileSync(join(claudeDir, "remember.json"), JSON.stringify({ scope, line })),
     hold: () => writeFileSync(join(claudeDir, "hold"), ""),
     release: () => rmSync(join(claudeDir, "hold"), { force: true }),
-    ui: (path, body) => fetch(`${server.url}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: server.url }, body: JSON.stringify(body) }),
+    ui: (path, body) =>
+      fetch(`${server.url}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: server.url },
+        body: JSON.stringify(body),
+      }),
     async until(check, ms = 4000) {
       for (let i = 0; i < ms / 25 && !check(); i++) await Bun.sleep(25);
       expect(check()).toBe(true);

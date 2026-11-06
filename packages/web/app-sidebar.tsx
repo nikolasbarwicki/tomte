@@ -1,9 +1,26 @@
-import { useState } from "react";
+import type { BotStatus, BotSummary, HostInfo, Notice } from "@claudebot/contract/events";
 import { Link, useMatchRoute } from "@tanstack/react-router";
+import {
+  BellIcon,
+  FolderIcon,
+  KeyRoundIcon,
+  MoonIcon,
+  PlugIcon,
+  PlusIcon,
+  SunIcon,
+} from "lucide-react";
 import { useTheme } from "next-themes";
-import { BellIcon, FolderIcon, KeyRoundIcon, MoonIcon, PlugIcon, PlusIcon, SunIcon } from "lucide-react";
+import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Sidebar,
   SidebarContent,
@@ -21,18 +38,29 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { BotStatus, BotSummary, HostInfo, Notice } from "@claudebot/contract/events";
-import { shortTime } from "./format.ts";
-import { BotAvatar } from "./bot-avatar.tsx";
 
-const STATUS_LABEL: Record<BotStatus, string> = { idle: "Idle", working: "Working", unseen: "New reply" };
+import { BotAvatar } from "./bot-avatar.tsx";
+import { shortTime } from "./format.ts";
+
+const STATUS_LABEL: Record<BotStatus, string> = {
+  idle: "Idle",
+  working: "Working",
+  unseen: "New reply",
+};
 
 /** The bot's face; it animates while the bot works and carries a dot for an unseen reply. */
 function StatusAvatar({ bot, className }: { bot: BotSummary; className?: string }) {
   return (
-    <span role="img" aria-label={STATUS_LABEL[bot.status]} title={STATUS_LABEL[bot.status]} className={cn("relative shrink-0", className)}>
+    <span
+      role="img"
+      aria-label={STATUS_LABEL[bot.status]}
+      title={STATUS_LABEL[bot.status]}
+      className={cn("relative shrink-0", className)}
+    >
       <BotAvatar avatar={bot.avatar} working={bot.status === "working"} className="size-8!" />
-      {bot.status === "unseen" && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-blue-500 ring-2 ring-sidebar" />}
+      {bot.status === "unseen" && (
+        <span className="ring-sidebar absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-blue-500 ring-2" />
+      )}
     </span>
   );
 }
@@ -83,18 +111,27 @@ export function AppSidebar({
                     <StatusAvatar bot={b} />
                     <span className="grid min-w-0 flex-1 gap-0.5">
                       <span className="flex min-w-0 items-baseline gap-2">
-                        <span className={cn("truncate", b.status === "unseen" && "font-semibold")}>{b.name}</span>
+                        <span className={cn("truncate", b.status === "unseen" && "font-semibold")}>
+                          {b.name}
+                        </span>
                         {b.last && (
                           <time
-                            className={cn("ml-auto shrink-0 text-[11px] text-muted-foreground tabular-nums", b.status === "unseen" && "font-semibold text-foreground")}
+                            className={cn(
+                              "ml-auto shrink-0 text-[11px] text-muted-foreground tabular-nums",
+                              b.status === "unseen" && "font-semibold text-foreground",
+                            )}
                             title={new Date(b.last.at).toLocaleString()}
                           >
                             {shortTime(b.last.at)}
                           </time>
                         )}
                       </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {b.status === "working" ? "Working…" : b.last ? `${b.last.from === "user" ? "You: " : ""}${b.last.text}` : b.purpose || "No messages yet"}
+                      <span className="text-muted-foreground truncate text-xs">
+                        {b.status === "working"
+                          ? "Working…"
+                          : b.last
+                            ? `${b.last.from === "user" ? "You: " : ""}${b.last.text}`
+                            : b.purpose || "No messages yet"}
                       </span>
                     </span>
                   </SidebarMenuButton>
@@ -112,25 +149,36 @@ export function AppSidebar({
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton isActive={!!matchRoute({ to: "/integrations", fuzzy: true })} render={<Link to="/integrations" />} onClick={reveal}>
+            <SidebarMenuButton
+              isActive={!!matchRoute({ to: "/integrations", fuzzy: true })}
+              render={<Link to="/integrations" />}
+              onClick={reveal}
+            >
               <PlugIcon />
               <span>Integrations</span>
             </SidebarMenuButton>
             {integrationsNeedingAttention > 0 && (
-              <SidebarMenuBadge className="bg-destructive/10 text-destructive" title="Integrations that need sign-in or failed">
+              <SidebarMenuBadge
+                className="bg-destructive/10 text-destructive"
+                title="Integrations that need sign-in or failed"
+              >
                 {integrationsNeedingAttention}
               </SidebarMenuBadge>
             )}
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton isActive={!!matchRoute({ to: "/credentials" })} render={<Link to="/credentials" />} onClick={reveal}>
+            <SidebarMenuButton
+              isActive={!!matchRoute({ to: "/credentials" })}
+              render={<Link to="/credentials" />}
+              onClick={reveal}
+            >
               <KeyRoundIcon />
               <span>Credentials</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <Updates notices={notices} />
         </SidebarMenu>
-        <div className="flex items-center gap-1.5 border-t px-2 pt-2 text-xs text-muted-foreground">
+        <div className="text-muted-foreground flex items-center gap-1.5 border-t px-2 pt-2 text-xs">
           <FolderIcon className="size-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate" title={info?.cwd}>
             {info?.cwd ?? "…"}
@@ -159,14 +207,14 @@ function Updates({ notices }: { notices: Notice[] }) {
             <PopoverDescription>Notifications from herdr and omp hooks.</PopoverDescription>
           </PopoverHeader>
           {notices.length === 0 ? (
-            <p className="p-3 text-sm text-muted-foreground">Nothing yet.</p>
+            <p className="text-muted-foreground p-3 text-sm">Nothing yet.</p>
           ) : (
             <ul className="max-h-96 divide-y overflow-y-auto">
               {notices.map((n) => (
                 <li key={`${n.at}-${n.title}`} className="grid gap-0.5 p-3 text-sm">
                   <span className="font-medium">{n.title}</span>
-                  {n.body && <span className="line-clamp-3 text-muted-foreground">{n.body}</span>}
-                  <span className="text-xs text-muted-foreground">
+                  {n.body && <span className="text-muted-foreground line-clamp-3">{n.body}</span>}
+                  <span className="text-muted-foreground text-xs">
                     {n.source} · {shortTime(n.at)}
                   </span>
                 </li>
@@ -175,7 +223,9 @@ function Updates({ notices }: { notices: Notice[] }) {
           )}
         </PopoverContent>
       </Popover>
-      {unread > 0 && <SidebarMenuBadge className="bg-primary text-primary-foreground">{unread}</SidebarMenuBadge>}
+      {unread > 0 && (
+        <SidebarMenuBadge className="bg-primary text-primary-foreground">{unread}</SidebarMenuBadge>
+      )}
     </SidebarMenuItem>
   );
 }
@@ -185,7 +235,16 @@ function ThemeToggle() {
   const dark = resolvedTheme === "dark";
   return (
     <Tooltip>
-      <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={dark ? "Light theme" : "Dark theme"} onClick={() => setTheme(dark ? "light" : "dark")} />}>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={dark ? "Light theme" : "Dark theme"}
+            onClick={() => setTheme(dark ? "light" : "dark")}
+          />
+        }
+      >
         {dark ? <SunIcon /> : <MoonIcon />}
       </TooltipTrigger>
       <TooltipContent>{dark ? "Light theme" : "Dark theme"}</TooltipContent>

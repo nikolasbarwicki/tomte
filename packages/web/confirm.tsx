@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,7 +11,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type ConfirmRequest = { title: string; description?: string; action: string; destructive?: boolean };
+type ConfirmRequest = {
+  title: string;
+  description?: string;
+  action: string;
+  destructive?: boolean;
+};
 type Pending = ConfirmRequest & { resolve: (ok: boolean) => void };
 
 let show: ((p: Pending) => void) | undefined;
@@ -45,11 +51,16 @@ export function ConfirmHost() {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{pending?.title}</AlertDialogTitle>
-          {pending?.description && <AlertDialogDescription>{pending.description}</AlertDialogDescription>}
+          {pending?.description && (
+            <AlertDialogDescription>{pending.description}</AlertDialogDescription>
+          )}
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction variant={pending?.destructive ? "destructive" : "default"} onClick={() => settle(true)}>
+          <AlertDialogAction
+            variant={pending?.destructive ? "destructive" : "default"}
+            onClick={() => settle(true)}
+          >
             {pending?.action}
           </AlertDialogAction>
         </AlertDialogFooter>

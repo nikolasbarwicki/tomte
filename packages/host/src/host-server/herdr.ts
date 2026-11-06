@@ -1,12 +1,18 @@
-import { connect, type Socket } from "node:net";
 import { existsSync } from "node:fs";
+import { connect, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
 type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
 type Pane = { pane_id: string; agent?: string | null; cwd?: string };
-type StatusChange = { pane_id: string; agent?: string | null; display_agent?: string | null; title?: string | null; agent_status: AgentStatus };
+type StatusChange = {
+  pane_id: string;
+  agent?: string | null;
+  display_agent?: string | null;
+  title?: string | null;
+  agent_status: AgentStatus;
+};
 
 /** Agent states worth telling the user about. */
 const NOTIFY: Partial<Record<AgentStatus, string>> = { blocked: "needs input", done: "finished" };
@@ -25,7 +31,9 @@ function request<T>(path: string, method: string, params: object): Promise<T> {
     createInterface({ input: sock }).once("line", (line) => {
       sock.destroy();
       const msg = JSON.parse(line);
-      msg.error ? reject(new Error(`${method}: ${msg.error.code ?? JSON.stringify(msg.error)}`)) : resolve(msg.result);
+      msg.error
+        ? reject(new Error(`${method}: ${msg.error.code ?? JSON.stringify(msg.error)}`))
+        : resolve(msg.result);
     });
   });
 }
@@ -34,7 +42,10 @@ function request<T>(path: string, method: string, params: object): Promise<T> {
  * Watch herdr agent status for every pane and report blocked/done transitions.
  * Herdr status subscriptions are per pane, so any pane created/closed rebuilds the subscription.
  */
-export function watchHerdr(notify: (title: string, body: string) => void, log: (l: string) => void): () => void {
+export function watchHerdr(
+  notify: (title: string, body: string) => void,
+  log: (l: string) => void,
+): () => void {
   const path = socketPath();
   let sock: Socket | undefined;
   let timer: NodeJS.Timeout | undefined;
@@ -92,7 +103,10 @@ export function watchHerdr(notify: (title: string, body: string) => void, log: (
         const what = NOTIFY[d.agent_status];
         if (!what || !d.agent) return;
         const where = cwds.get(d.pane_id);
-        notify(`${d.display_agent ?? d.agent} ${what}`, [d.title, d.pane_id, where].filter(Boolean).join(" · "));
+        notify(
+          `${d.display_agent ?? d.agent} ${what}`,
+          [d.title, d.pane_id, where].filter(Boolean).join(" · "),
+        );
       });
     } catch (e) {
       log(`herdr: ${(e as Error).message}`);

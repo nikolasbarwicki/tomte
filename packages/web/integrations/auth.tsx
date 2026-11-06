@@ -1,16 +1,22 @@
+import type { Integration, OwnClient } from "@claudebot/contract/events";
+import { Check, ChevronDown, Copy, ExternalLink } from "lucide-react";
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Check, ChevronDown, Copy, ExternalLink } from "lucide-react";
-import type { Integration, OwnClient } from "@claudebot/contract/events";
-import { errorOf, post } from "../api.ts";
+
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
+import { errorOf, post } from "../api.ts";
+
 /** Opens the provider's sign-in page in `tab`, which the caller opened inside the click so the browser allows it. */
-export async function signIn(id: string, tab: Window | null, client?: { clientId: string; clientSecret: string }): Promise<string | undefined> {
+export async function signIn(
+  id: string,
+  tab: Window | null,
+  client?: { clientId: string; clientSecret: string },
+): Promise<string | undefined> {
   const r = await post("/api/integrations/connect-oauth", { id, ...client });
   if (!r.ok) {
     tab?.close();
@@ -27,7 +33,10 @@ export function SignInButton({
   children,
   onRefused = (e) => toast.error(e),
   ...props
-}: { integration: Integration; children: ReactNode; onRefused?: (error: string) => void } & Omit<ComponentProps<typeof Button>, "onClick" | "children">) {
+}: { integration: Integration; children: ReactNode; onRefused?: (error: string) => void } & Omit<
+  ComponentProps<typeof Button>,
+  "onClick" | "children"
+>) {
   const [busy, setBusy] = useState(false);
   return (
     <Button
@@ -50,9 +59,16 @@ export function SignInButton({
 export function Alternative({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Collapsible className="flex flex-col gap-3">
-      <CollapsibleTrigger render={<Button variant="ghost" size="xs" className="group self-start text-muted-foreground" />}>
+      <CollapsibleTrigger
+        render={
+          <Button variant="ghost" size="xs" className="group text-muted-foreground self-start" />
+        }
+      >
         {label}
-        <ChevronDown data-icon="inline-end" className="transition-transform group-data-panel-open:rotate-180" />
+        <ChevronDown
+          data-icon="inline-end"
+          className="transition-transform group-data-panel-open:rotate-180"
+        />
       </CollapsibleTrigger>
       <CollapsibleContent>{children}</CollapsibleContent>
     </Collapsible>
@@ -62,7 +78,7 @@ export function Alternative({ label, children }: { label: string; children: Reac
 function CopyBlock({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="flex items-center gap-1 rounded-lg border bg-muted/50 py-1 pr-1 pl-2.5">
+    <div className="bg-muted/50 flex items-center gap-1 rounded-lg border py-1 pr-1 pl-2.5">
       <code className="min-w-0 flex-1 truncate font-mono text-xs" title={value}>
         {value}
       </code>
@@ -85,7 +101,13 @@ function CopyBlock({ value }: { value: string }) {
 }
 
 /** Registering an OAuth client by hand: numbered steps, the redirect address to paste, then the client's ID and secret. */
-export function OwnClientForm({ integration: i, ownClient }: { integration: Integration; ownClient: OwnClient }) {
+export function OwnClientForm({
+  integration: i,
+  ownClient,
+}: {
+  integration: Integration;
+  ownClient: OwnClient;
+}) {
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [busy, setBusy] = useState(false);
@@ -103,9 +125,13 @@ export function OwnClientForm({ integration: i, ownClient }: { integration: Inte
       <ol className="flex flex-col">
         {ownClient.steps.map((s, n) => (
           <li key={s} className="relative flex gap-3 pb-4 last:pb-0">
-            {n < ownClient.steps.length - 1 && <span aria-hidden className="absolute top-6 bottom-0 left-2.75 w-px bg-border" />}
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-full border bg-background text-xs font-medium tabular-nums">{n + 1}</span>
-            <p className="pt-0.5 text-sm text-muted-foreground">{s}</p>
+            {n < ownClient.steps.length - 1 && (
+              <span aria-hidden className="bg-border absolute top-6 bottom-0 left-2.75 w-px" />
+            )}
+            <span className="bg-background flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium tabular-nums">
+              {n + 1}
+            </span>
+            <p className="text-muted-foreground pt-0.5 text-sm">{s}</p>
           </li>
         ))}
       </ol>
@@ -117,14 +143,29 @@ export function OwnClientForm({ integration: i, ownClient }: { integration: Inte
         <div className="grid gap-4 sm:grid-cols-2">
           <Field>
             <FieldLabel htmlFor={`${i.id}-client-id`}>Client ID</FieldLabel>
-            <Input id={`${i.id}-client-id`} autoComplete="off" value={clientId} onChange={(e) => setClientId(e.target.value)} />
+            <Input
+              id={`${i.id}-client-id`}
+              autoComplete="off"
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+            />
           </Field>
           <Field>
             <FieldLabel htmlFor={`${i.id}-client-secret`}>Client secret</FieldLabel>
-            <Input id={`${i.id}-client-secret`} type="password" autoComplete="off" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} />
+            <Input
+              id={`${i.id}-client-secret`}
+              type="password"
+              autoComplete="off"
+              value={clientSecret}
+              onChange={(e) => setClientSecret(e.target.value)}
+            />
           </Field>
         </div>
-        <Button type="submit" className="self-start" disabled={busy || !clientId.trim() !== !clientSecret.trim()}>
+        <Button
+          type="submit"
+          className="self-start"
+          disabled={busy || !clientId.trim() !== !clientSecret.trim()}
+        >
           {busy && <Spinner data-icon="inline-start" />}
           Connect {i.label}
         </Button>
@@ -137,7 +178,8 @@ export function TokenForm({ integration: i }: { integration: Integration }) {
   const [token, setToken] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const label = i.auth.kind === "bearer" ? i.auth : i.auth.kind === "oauth" ? i.auth.alternative : undefined;
+  const label =
+    i.auth.kind === "bearer" ? i.auth : i.auth.kind === "oauth" ? i.auth.alternative : undefined;
   if (!label) return null;
   const submit = async (e: React.SubmitEvent) => {
     e.preventDefault();
@@ -154,10 +196,22 @@ export function TokenForm({ integration: i }: { integration: Integration }) {
       <FieldGroup className="gap-3">
         <Field data-invalid={!!error || undefined}>
           <FieldLabel htmlFor={id}>{label.tokenLabel ?? "Bearer token"}</FieldLabel>
-          <Input id={id} type="password" autoComplete="off" aria-invalid={!!error || undefined} value={token} onChange={(e) => setToken(e.target.value)} />
+          <Input
+            id={id}
+            type="password"
+            autoComplete="off"
+            aria-invalid={!!error || undefined}
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+          />
           {label.tokenUrl && (
             <FieldDescription>
-              <a href={label.tokenUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1">
+              <a
+                href={label.tokenUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1"
+              >
                 Create {label.tokenLabel ?? "a token"}
                 <ExternalLink className="size-3" />
               </a>

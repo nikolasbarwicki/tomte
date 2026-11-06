@@ -1,7 +1,23 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { BotsEvent, CredentialsEvent, FilesEvent, IntegrationsEvent, MemoryEvent, RoutinesEvent, ServerEvent } from "@claudebot/contract/events";
 
-export type HostEvent = ServerEvent | MemoryEvent | FilesEvent | RoutinesEvent | BotsEvent | IntegrationsEvent | CredentialsEvent;
+import type {
+  BotsEvent,
+  CredentialsEvent,
+  FilesEvent,
+  IntegrationsEvent,
+  MemoryEvent,
+  RoutinesEvent,
+  ServerEvent,
+} from "@claudebot/contract/events";
+
+export type HostEvent =
+  | ServerEvent
+  | MemoryEvent
+  | FilesEvent
+  | RoutinesEvent
+  | BotsEvent
+  | IntegrationsEvent
+  | CredentialsEvent;
 
 /** The page's server-sent event stream: every connected page gets every event. */
 export interface EventStream {
@@ -17,7 +33,11 @@ export function createEventStream(): EventStream {
       for (const c of clients) c.write(`data: ${JSON.stringify(e)}\n\n`);
     },
     subscribe(req, res, snapshot) {
-      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      });
       for (const e of snapshot) res.write(`data: ${JSON.stringify(e)}\n\n`);
       clients.add(res);
       req.on("close", () => clients.delete(res));

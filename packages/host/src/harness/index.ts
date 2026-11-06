@@ -1,10 +1,19 @@
+import { randomUUID } from "node:crypto";
 import { chmodSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+
 import type { McpServerConfig, Options, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
 
-export { authCommand, cmdExeSpawner, installManagedCli, isMusl, loginShellPath, resolveCli, type ResolvedCli } from "./cli.ts";
+export {
+  authCommand,
+  cmdExeSpawner,
+  installManagedCli,
+  isMusl,
+  loginShellPath,
+  resolveCli,
+  type ResolvedCli,
+} from "./cli.ts";
 
 /** An HTTP MCP server owned by the host; the token travels as a bearer header, never in argv. */
 export interface HostMcpServer {
@@ -77,7 +86,11 @@ export const claudeHarness: Harness = {
   launch({ hostServers, integrations, systemPromptAppend, isolation }) {
     const mcpServers: Record<string, McpServerConfig> = { ...integrations?.mcpServers };
     for (const s of hostServers) {
-      mcpServers[s.name] = { type: "http", url: s.url, headers: { Authorization: `Bearer ${s.token}` } };
+      mcpServers[s.name] = {
+        type: "http",
+        url: s.url,
+        headers: { Authorization: `Bearer ${s.token}` },
+      };
     }
     const extraArgs: Record<string, string | null> = {};
     let mcpFile: string | undefined;
@@ -94,7 +107,10 @@ export const claudeHarness: Harness = {
         strictMcpConfig: true,
         settingSources: ["user"],
         extraArgs,
-        disallowedTools: [...(integrations?.disallowedTools ?? []), ...(isolation.shell?.denyRead.map((p) => `Read(/${p}/**)`) ?? [])],
+        disallowedTools: [
+          ...(integrations?.disallowedTools ?? []),
+          ...(isolation.shell?.denyRead.map((p) => `Read(/${p}/**)`) ?? []),
+        ],
         ...(isolation.shell
           ? {
               sandbox: {

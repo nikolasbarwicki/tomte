@@ -15,7 +15,12 @@ export function splitMentions(text: string, targets: MentionTarget[]): Segment[]
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== "@" || (i > 0 && !/\s/.test(text[i - 1]!))) continue;
     const rest = text.slice(i + 1);
-    const hit = byLength.find((t) => t.name && rest.toLowerCase().startsWith(t.name.toLowerCase()) && !/[\p{L}\p{N}]/u.test(rest[t.name.length] ?? ""));
+    const hit = byLength.find(
+      (t) =>
+        t.name &&
+        rest.toLowerCase().startsWith(t.name.toLowerCase()) &&
+        !/[\p{L}\p{N}]/u.test(rest[t.name.length] ?? ""),
+    );
     if (!hit) continue;
     const end = i + 1 + hit.name.length;
     if (i > plain) segments.push(text.slice(plain, i));
@@ -31,7 +36,10 @@ export function splitMentions(text: string, targets: MentionTarget[]): Segment[]
  * Matches `@Name` tokens to the bots picked for them, each pick used once, in order. Names are not unique, so two picked
  * "Daily brief"s need two tokens; a token with no pick left stays plain text, and so does a pick whose token is gone.
  */
-export function bindMentions(text: string, picked: MentionTarget[]): { segments: Segment[]; mentions: MentionTarget[] } {
+export function bindMentions(
+  text: string,
+  picked: MentionTarget[],
+): { segments: Segment[]; mentions: MentionTarget[] } {
   const left = [...picked];
   const segments = splitMentions(text, picked).map((s) => {
     if (typeof s === "string") return s;

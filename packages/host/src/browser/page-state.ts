@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+
 import { ToolError } from "./tools/result.ts";
 
 /** The 6th identical call in a row with the page unchanged is refused. */
@@ -34,7 +35,9 @@ export class PageState {
   /** Throws when `key` would be the 6th identical call in a row with an unchanged page. */
   checkLoop(key: string) {
     if (this.last?.key === key && this.last.streak >= LOOP_LIMIT - 1) {
-      throw new ToolError(`this exact call has been made ${this.last.streak} times in a row and the page has not changed; try something different, or report that you are stuck`);
+      throw new ToolError(
+        `this exact call has been made ${this.last.streak} times in a row and the page has not changed; try something different, or report that you are stuck`,
+      );
     }
   }
 

@@ -1,5 +1,5 @@
-import { homedir } from "node:os";
 import { isIPv4 } from "node:net";
+import { homedir } from "node:os";
 import { isAbsolute, join, normalize } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -47,19 +47,25 @@ export interface HostSystem {
 }
 
 /** The OS application-data directory for claudebot: `~/Library/Application Support`, `%APPDATA%`, or `$XDG_DATA_HOME` (`~/.local/share`). */
-function defaultDataRoot(env: Record<string, string | undefined>, { platform, home }: HostSystem): string {
+function defaultDataRoot(
+  env: Record<string, string | undefined>,
+  { platform, home }: HostSystem,
+): string {
   if (platform === "darwin") return join(home, "Library", "Application Support", "claudebot");
-  if (platform === "win32") return join(env.APPDATA || join(home, "AppData", "Roaming"), "claudebot");
+  if (platform === "win32")
+    return join(env.APPDATA || join(home, "AppData", "Roaming"), "claudebot");
   const xdg = env.XDG_DATA_HOME;
   return join(xdg && isAbsolute(xdg) ? xdg : join(home, ".local", "share"), "claudebot");
 }
 
 function parseDataRoot(raw: string): string {
-  if (!isAbsolute(raw)) throw new InvalidConfig(`invalid data root "${raw}": expected an absolute path`);
+  if (!isAbsolute(raw))
+    throw new InvalidConfig(`invalid data root "${raw}": expected an absolute path`);
   return normalize(raw);
 }
 
-const bare = (address: string) => (address.startsWith("[") && address.endsWith("]") ? address.slice(1, -1) : address);
+const bare = (address: string) =>
+  address.startsWith("[") && address.endsWith("]") ? address.slice(1, -1) : address;
 
 function isLoopback(address: string): boolean {
   const a = bare(address);
@@ -68,7 +74,8 @@ function isLoopback(address: string): boolean {
 
 function parsePort(raw: string): number {
   const port = Number(raw);
-  if (!/^\d+$/.test(raw) || port > 65535) throw new InvalidConfig(`invalid port "${raw}": expected an integer from 0 to 65535`);
+  if (!/^\d+$/.test(raw) || port > 65535)
+    throw new InvalidConfig(`invalid port "${raw}": expected an integer from 0 to 65535`);
   return port;
 }
 
@@ -78,11 +85,21 @@ function parsePublicUrl(raw: string): string {
   try {
     u = new URL(raw);
   } catch {
-    throw new InvalidConfig(`invalid public URL "${shown}": expected an origin such as https://claudebot.example.com`);
+    throw new InvalidConfig(
+      `invalid public URL "${shown}": expected an origin such as https://claudebot.example.com`,
+    );
   }
-  if (u.username || u.password) throw new InvalidConfig(`invalid public URL "${shown}": credentials are not allowed`);
-  if ((u.protocol !== "http:" && u.protocol !== "https:") || u.pathname !== "/" || u.search || u.hash) {
-    throw new InvalidConfig(`invalid public URL "${shown}": expected an http(s) origin without path, query or fragment`);
+  if (u.username || u.password)
+    throw new InvalidConfig(`invalid public URL "${shown}": credentials are not allowed`);
+  if (
+    (u.protocol !== "http:" && u.protocol !== "https:") ||
+    u.pathname !== "/" ||
+    u.search ||
+    u.hash
+  ) {
+    throw new InvalidConfig(
+      `invalid public URL "${shown}": expected an http(s) origin without path, query or fragment`,
+    );
   }
   return u.origin;
 }
@@ -115,11 +132,14 @@ export function parseHostConfig(
   const get = (key: string) => (env[key] === "" ? undefined : env[key]);
 
   const mode = values.mode ?? get("CLAUDEBOT_MODE") ?? "local";
-  if (!MODES.includes(mode)) throw new InvalidConfig(`invalid mode "${mode}": expected local or remote`);
+  if (!MODES.includes(mode))
+    throw new InvalidConfig(`invalid mode "${mode}": expected local or remote`);
   const rawDataRoot = values["data-root"] ?? get("CLAUDEBOT_DATA_ROOT");
   const address = values.host ?? get("CLAUDEBOT_HOST") ?? DEFAULT_BIND.address;
   if (!isLoopback(address)) {
-    throw new InvalidConfig(`refusing to bind ${address}: the host listens on loopback only (127.0.0.0/8, ::1 or localhost); reach it from other machines through the public URL`);
+    throw new InvalidConfig(
+      `refusing to bind ${address}: the host listens on loopback only (127.0.0.0/8, ::1 or localhost); reach it from other machines through the public URL`,
+    );
   }
   const rawPort = values.port ?? get("CLAUDEBOT_PORT");
   const rawPublicUrl = values["public-url"] ?? get("CLAUDEBOT_PUBLIC_URL");
@@ -129,10 +149,15 @@ export function parseHostConfig(
   return {
     config: {
       mode: mode as HostMode,
-      dataRoot: rawDataRoot === undefined ? defaultDataRoot(env, system) : parseDataRoot(rawDataRoot),
-      bind: { address: bare(address), port: rawPort === undefined ? DEFAULT_BIND.port : parsePort(rawPort) },
+      dataRoot:
+        rawDataRoot === undefined ? defaultDataRoot(env, system) : parseDataRoot(rawDataRoot),
+      bind: {
+        address: bare(address),
+        port: rawPort === undefined ? DEFAULT_BIND.port : parsePort(rawPort),
+      },
       publicUrl: rawPublicUrl === undefined ? undefined : parsePublicUrl(rawPublicUrl),
-      herdr: values.herdr ?? (rawHerdr === undefined ? false : parseBool("CLAUDEBOT_HERDR", rawHerdr)),
+      herdr:
+        values.herdr ?? (rawHerdr === undefined ? false : parseBool("CLAUDEBOT_HERDR", rawHerdr)),
       vite: values.vite ?? (rawVite === undefined ? false : parseBool("CLAUDEBOT_VITE", rawVite)),
     },
     positionals,

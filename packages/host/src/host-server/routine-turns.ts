@@ -1,11 +1,17 @@
 import type { Database } from "bun:sqlite";
+
 import { recordMessage, type TurnResult } from "../bots/index.ts";
 import type { HostServersSource, ResolvedCli } from "../harness/index.ts";
 import type { IntegrationsSource } from "../integrations/index.ts";
 import { runHeadless, type Executor, type RoutineJob } from "../routines/index.ts";
 
 /** A routine turn waiting for its bot; it runs in the bot's chat once that is idle, or headless if the bot has no chat. */
-type QueuedRoutine = { job: RoutineJob; resolve(text: string): void; reject(e: Error): void; stop?: (reason: string) => void };
+type QueuedRoutine = {
+  job: RoutineJob;
+  resolve(text: string): void;
+  reject(e: Error): void;
+  stop?: (reason: string) => void;
+};
 
 /** A routine turn started in a bot's chat. */
 export type ChatRoutineTurn = { done: Promise<TurnResult | Error>; stop(reason: string): void };
@@ -29,7 +35,10 @@ export interface RoutineTurns {
   /** The routine a headless run is writing the bot's session for; that bot's chat must not start its own turn meanwhile. */
   headless(botId: string): string | undefined;
   /** Starts every queued routine whose bot is free: in the bot's chat when it has one, headless otherwise. */
-  startReady<C extends { busy: boolean }>(chatOf: (botId: string) => C | undefined, runInChat: (chat: C, job: RoutineJob) => ChatRoutineTurn): void;
+  startReady<C extends { busy: boolean }>(
+    chatOf: (botId: string) => C | undefined,
+    runInChat: (chat: C, job: RoutineJob) => ChatRoutineTurn,
+  ): void;
 }
 
 export function createRoutineTurns(deps: RoutineTurnsDeps): RoutineTurns {

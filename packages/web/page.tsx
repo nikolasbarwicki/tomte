@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -14,7 +15,17 @@ export function AppBar({ children }: { children: ReactNode }) {
 }
 
 /** A full-width settings-style screen: a title bar, an optional intro line, then scrollable content. */
-export function Page({ title, description, actions, children }: { title: string; description?: ReactNode; actions?: ReactNode; children: ReactNode }) {
+export function Page({
+  title,
+  description,
+  actions,
+  children,
+}: {
+  title: string;
+  description?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <AppBar>
@@ -23,7 +34,7 @@ export function Page({ title, description, actions, children }: { title: string;
       </AppBar>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
-          {description && <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>}
+          {description && <p className="text-muted-foreground max-w-2xl text-sm">{description}</p>}
           {children}
         </div>
       </div>

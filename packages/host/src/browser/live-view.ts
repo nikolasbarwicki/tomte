@@ -1,8 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+
 import type { LiveMessage } from "@claudebot/contract/events";
+
+import type { HostOrigin } from "../platform/config.ts";
 import type { BotBrowser, BrowserRuntimes } from "./runtime.ts";
 import type { Takeover } from "./takeover.ts";
-import type { HostOrigin } from "../platform/config.ts";
 import { guardUiRequest, rejectRequest } from "./ui-guard.ts";
 
 export const LIVE_VIEW_PATH = "/api/browser/live";
@@ -23,7 +25,8 @@ const DEFAULT_FPS = 15;
 const DEFAULT_RETRY_MS = 1000;
 
 /** Parses an engine stream message into the shape viewers get, or undefined for anything else. */
-const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
+const rec = (v: unknown): Record<string, unknown> =>
+  v && typeof v === "object" ? (v as Record<string, unknown>) : {};
 
 export function toLiveMessage(raw: unknown): LiveMessage | undefined {
   if (typeof raw !== "string") return undefined;
@@ -36,16 +39,34 @@ export function toLiveMessage(raw: unknown): LiveMessage | undefined {
   switch (m.type) {
     case "frame": {
       const meta = rec(m.metadata);
-      return typeof m.data === "string" ? { type: "frame", data: m.data, width: Number(meta.deviceWidth) || 0, height: Number(meta.deviceHeight) || 0 } : undefined;
+      return typeof m.data === "string"
+        ? {
+            type: "frame",
+            data: m.data,
+            width: Number(meta.deviceWidth) || 0,
+            height: Number(meta.deviceHeight) || 0,
+          }
+        : undefined;
     }
     case "url":
       return typeof m.url === "string" ? { type: "url", url: m.url } : undefined;
     case "tabs":
       return Array.isArray(m.tabs)
-        ? { type: "tabs", tabs: m.tabs.map((t) => ({ id: String(rec(t).tabId ?? ""), title: String(rec(t).title ?? ""), url: String(rec(t).url ?? ""), active: rec(t).active === true })) }
+        ? {
+            type: "tabs",
+            tabs: m.tabs.map((t) => ({
+              id: String(rec(t).tabId ?? ""),
+              title: String(rec(t).title ?? ""),
+              url: String(rec(t).url ?? ""),
+              active: rec(t).active === true,
+            })),
+          }
         : undefined;
     case "status":
-      return { type: "status", viewport: { width: Number(m.viewportWidth) || 0, height: Number(m.viewportHeight) || 0 } };
+      return {
+        type: "status",
+        viewport: { width: Number(m.viewportWidth) || 0, height: Number(m.viewportHeight) || 0 },
+      };
     default:
       return undefined;
   }
@@ -152,7 +173,9 @@ class Feed {
 
   private async run() {
     while (!this.abort.signal.aborted) {
-      const port = this.browser.active() ? await this.browser.streamPort().catch(() => undefined) : undefined;
+      const port = this.browser.active()
+        ? await this.browser.streamPort().catch(() => undefined)
+        : undefined;
       if (port !== undefined && !this.abort.signal.aborted) await this.relay(port);
       if (this.abort.signal.aborted) return;
       this.stopped();
@@ -196,13 +219,23 @@ export function createLiveView(o: LiveViewOptions): LiveView {
       if (!body) return;
       const botId = typeof body.botId === "string" ? body.botId : "";
       if (!botId) return rejectRequest(res, 400, "botId required");
-      if (!o.isEnabled(botId)) return rejectRequest(res, 403, "the browser is switched off for this bot");
+      if (!o.isEnabled(botId))
+        return rejectRequest(res, 403, "the browser is switched off for this bot");
 
-      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      });
       const viewer = new Viewer(res, minIntervalMs);
       let feed = feeds.get(botId);
       if (!feed) {
-        feed = new Feed(o.runtimes.forBot(botId), o.retryMs ?? DEFAULT_RETRY_MS, () => feeds.delete(botId), () => ({ type: "control", holder: o.takeover.holder(botId) }));
+        feed = new Feed(
+          o.runtimes.forBot(botId),
+          o.retryMs ?? DEFAULT_RETRY_MS,
+          () => feeds.delete(botId),
+          () => ({ type: "control", holder: o.takeover.holder(botId) }),
+        );
         feeds.set(botId, feed);
       }
       responses.add(res);

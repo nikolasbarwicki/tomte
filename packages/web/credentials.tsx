@@ -1,27 +1,64 @@
-import { useState } from "react";
-import { KeyRound, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import type { BotSummary, CredentialEntry } from "@claudebot/contract/events";
-import { act, errorOf, post } from "./api.ts";
-import { confirmAction } from "./confirm.tsx";
-import { Page } from "./page.tsx";
+import { KeyRound, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+
+import { act, errorOf, post } from "./api.ts";
+import { confirmAction } from "./confirm.tsx";
+import { Page } from "./page.tsx";
 
 /** Which form the dialog shows: a new credential, or an existing one being edited. */
 type Editing = { entry?: CredentialEntry } | null;
 
 /** The global Credentials screen; passwords are write-only and never shown or pre-filled. */
-export function Credentials({ credentials, bots }: { credentials: CredentialEntry[]; bots: BotSummary[] }) {
+export function Credentials({
+  credentials,
+  bots,
+}: {
+  credentials: CredentialEntry[];
+  bots: BotSummary[];
+}) {
   const [editing, setEditing] = useState<Editing>(null);
-  const botName = (id: string) => bots.find((b) => b.id === id)?.name ?? `deleted bot (${id.slice(0, 8)})`;
+  const botName = (id: string) =>
+    bots.find((b) => b.id === id)?.name ?? `deleted bot (${id.slice(0, 8)})`;
   const byBot = new Map<string, CredentialEntry[]>();
-  for (const c of credentials) for (const g of c.grants) byBot.set(g.botId, [...(byBot.get(g.botId) ?? []), c]);
+  for (const c of credentials)
+    for (const g of c.grants) byBot.set(g.botId, [...(byBot.get(g.botId) ?? []), c]);
   return (
     <Page
       title="Credentials"
@@ -36,10 +73,22 @@ export function Credentials({ credentials, bots }: { credentials: CredentialEntr
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editing?.entry ? `Edit ${editing.entry.label}` : "Add credential"}</DialogTitle>
-            <DialogDescription>{editing?.entry ? "The password is never shown. Enter a new one to replace it." : "Bots ask before they first use a login."}</DialogDescription>
+            <DialogTitle>
+              {editing?.entry ? `Edit ${editing.entry.label}` : "Add credential"}
+            </DialogTitle>
+            <DialogDescription>
+              {editing?.entry
+                ? "The password is never shown. Enter a new one to replace it."
+                : "Bots ask before they first use a login."}
+            </DialogDescription>
           </DialogHeader>
-          {editing && <CredentialForm key={editing.entry?.id ?? "new"} entry={editing.entry} onDone={() => setEditing(null)} />}
+          {editing && (
+            <CredentialForm
+              key={editing.entry?.id ?? "new"}
+              entry={editing.entry}
+              onDone={() => setEditing(null)}
+            />
+          )}
         </DialogContent>
       </Dialog>
       {credentials.length === 0 ? (
@@ -49,7 +98,9 @@ export function Credentials({ credentials, bots }: { credentials: CredentialEntr
               <KeyRound />
             </EmptyMedia>
             <EmptyTitle>No credentials yet</EmptyTitle>
-            <EmptyDescription>Save a website login so your bots can sign in with your permission.</EmptyDescription>
+            <EmptyDescription>
+              Save a website login so your bots can sign in with your permission.
+            </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button size="sm" onClick={() => setEditing({})}>
@@ -61,7 +112,12 @@ export function Credentials({ credentials, bots }: { credentials: CredentialEntr
       ) : (
         <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
           {credentials.map((c) => (
-            <CredentialCard key={c.id} entry={c} botName={botName} onEdit={() => setEditing({ entry: c })} />
+            <CredentialCard
+              key={c.id}
+              entry={c}
+              botName={botName}
+              onEdit={() => setEditing({ entry: c })}
+            />
           ))}
         </div>
       )}
@@ -76,8 +132,12 @@ export function Credentials({ credentials, bots }: { credentials: CredentialEntr
                   <ul className="flex flex-col">
                     {entries.map((e) => (
                       <li key={e.id} className="flex items-center justify-between gap-2">
-                        <span className="truncate text-sm text-muted-foreground">{e.label}</span>
-                        <Button variant="ghost" size="xs" onClick={() => act("/api/credentials/revoke", { botId, id: e.id })}>
+                        <span className="text-muted-foreground truncate text-sm">{e.label}</span>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => act("/api/credentials/revoke", { botId, id: e.id })}
+                        >
                           Revoke
                         </Button>
                       </li>
@@ -93,9 +153,22 @@ export function Credentials({ credentials, bots }: { credentials: CredentialEntr
   );
 }
 
-function CredentialCard({ entry: c, botName, onEdit }: { entry: CredentialEntry; botName: (id: string) => string; onEdit: () => void }) {
+function CredentialCard({
+  entry: c,
+  botName,
+  onEdit,
+}: {
+  entry: CredentialEntry;
+  botName: (id: string) => string;
+  onEdit: () => void;
+}) {
   const remove = async () => {
-    const ok = await confirmAction({ title: `Delete "${c.label}"?`, description: "Its password and every bot's access are removed.", action: "Delete", destructive: true });
+    const ok = await confirmAction({
+      title: `Delete "${c.label}"?`,
+      description: "Its password and every bot's access are removed.",
+      action: "Delete",
+      destructive: true,
+    });
     if (ok) await act("/api/credentials/remove", { id: c.id });
   };
   return (
@@ -107,7 +180,9 @@ function CredentialCard({ entry: c, botName, onEdit }: { entry: CredentialEntry;
         </CardDescription>
         <CardAction>
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`${c.label} actions`} />}>
+            <DropdownMenuTrigger
+              render={<Button variant="ghost" size="icon-sm" aria-label={`${c.label} actions`} />}
+            >
               <MoreHorizontal />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -124,15 +199,21 @@ function CredentialCard({ entry: c, botName, onEdit }: { entry: CredentialEntry;
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        <h4 className="text-xs font-medium text-muted-foreground">Bots with access</h4>
+        <h4 className="text-muted-foreground text-xs font-medium">Bots with access</h4>
         {c.grants.length === 0 ? (
-          <p className="text-sm text-muted-foreground">None yet. A bot asks the first time it wants to sign in.</p>
+          <p className="text-muted-foreground text-sm">
+            None yet. A bot asks the first time it wants to sign in.
+          </p>
         ) : (
           <ul className="flex flex-col">
             {c.grants.map((g) => (
               <li key={g.botId} className="flex items-center justify-between gap-2">
                 <span className="truncate text-sm">{botName(g.botId)}</span>
-                <Button variant="ghost" size="xs" onClick={() => act("/api/credentials/revoke", { botId: g.botId, id: c.id })}>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => act("/api/credentials/revoke", { botId: g.botId, id: c.id })}
+                >
                   Revoke
                 </Button>
               </li>
@@ -155,7 +236,13 @@ function CredentialForm({ entry, onDone }: { entry?: CredentialEntry; onDone: ()
     e.preventDefault();
     setBusy(true);
     setError("");
-    const r = await post(entry ? "/api/credentials/update" : "/api/credentials/add", { id: entry?.id, label, signInUrl, username, password });
+    const r = await post(entry ? "/api/credentials/update" : "/api/credentials/add", {
+      id: entry?.id,
+      label,
+      signInUrl,
+      username,
+      password,
+    });
     setBusy(false);
     if (!r.ok) return setError(await errorOf(r));
     setPassword("");
@@ -166,20 +253,42 @@ function CredentialForm({ entry, onDone }: { entry?: CredentialEntry; onDone: ()
       <FieldGroup className="gap-4">
         <Field>
           <FieldLabel htmlFor="cred-label">Label</FieldLabel>
-          <Input id="cred-label" placeholder="GitHub" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <Input
+            id="cred-label"
+            placeholder="GitHub"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+          />
         </Field>
         <Field>
           <FieldLabel htmlFor="cred-url">Sign-in URL</FieldLabel>
-          <Input id="cred-url" type="url" placeholder="https://github.com/login" value={signInUrl} onChange={(e) => setSignInUrl(e.target.value)} />
+          <Input
+            id="cred-url"
+            type="url"
+            placeholder="https://github.com/login"
+            value={signInUrl}
+            onChange={(e) => setSignInUrl(e.target.value)}
+          />
           <FieldDescription>Must start with https://.</FieldDescription>
         </Field>
         <Field>
           <FieldLabel htmlFor="cred-username">Username</FieldLabel>
-          <Input id="cred-username" autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} />
+          <Input
+            id="cred-username"
+            autoComplete="off"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
         </Field>
         <Field>
           <FieldLabel htmlFor="cred-password">{entry ? "New password" : "Password"}</FieldLabel>
-          <Input id="cred-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Input
+            id="cred-password"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
           {entry && <FieldDescription>Leave empty to keep the current one</FieldDescription>}
         </Field>
         {error && <FieldError className="break-words">{error}</FieldError>}

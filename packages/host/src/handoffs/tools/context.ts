@@ -1,8 +1,14 @@
 import type { ServerEvent } from "@claudebot/contract/events";
+
 import type { HandoffStore } from "../store.ts";
 
 /** An A2A agent card: how a bot describes itself to other bots. */
-export type AgentCard = { id: string; name: string; description: string; status: "idle" | "working" };
+export type AgentCard = {
+  id: string;
+  name: string;
+  description: string;
+  status: "idle" | "working";
+};
 
 /** What every bots tool may touch; the caller's id comes from the token and is never an argument. */
 export interface BotsToolContext {

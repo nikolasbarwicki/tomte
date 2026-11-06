@@ -1,7 +1,11 @@
 export const kTokens = (n: number) => `${Math.round(n / 1000)}k`;
 
 export const fileSize = (n: number) =>
-  n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 ** 2).toFixed(1)} MB`;
+  n < 1024
+    ? `${n} B`
+    : n < 1024 ** 2
+      ? `${(n / 1024).toFixed(1)} KB`
+      : `${(n / 1024 ** 2).toFixed(1)} MB`;
 
 const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
 
@@ -12,7 +16,11 @@ export const shortTime = (t: number) => {
   const daysAgo = Math.round((midnight(now) - midnight(d)) / 86_400_000);
   if (daysAgo === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   if (daysAgo > 0 && daysAgo < 7) return d.toLocaleDateString([], { weekday: "short" });
-  return d.toLocaleDateString([], { day: "numeric", month: "short", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+  return d.toLocaleDateString([], {
+    day: "numeric",
+    month: "short",
+    year: d.getFullYear() === now.getFullYear() ? undefined : "numeric",
+  });
 };
 
 /** Date and time without seconds, e.g. "Nov 6, 09:30"; the year shows only when it is not this year. */

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+
 import { body, json, type Handler } from "../http.ts";
 import { botRoutes } from "./bots.ts";
 import { chatRoutes } from "./chat.ts";
@@ -22,7 +23,12 @@ export function createApi(ctx: ApiContext): Handler {
       const r = await credentialApi(ctx.credentials, path, b);
       return r ? json(res, r.body, r.status) : void res.writeHead(404).end();
     }
-    const r: ApiRequest = { res, path, body: b, str: (key) => (typeof b[key] === "string" ? (b[key] as string) : "") };
+    const r: ApiRequest = {
+      res,
+      path,
+      body: b,
+      str: (key) => (typeof b[key] === "string" ? (b[key] as string) : ""),
+    };
     if (Object.hasOwn(anyBot, path)) return anyBot[path](r);
     const chat = ctx.chats.open();
     if (!chat) return json(res, { error: "no bot open; create one first" }, 409);

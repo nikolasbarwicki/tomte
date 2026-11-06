@@ -1,20 +1,35 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
 import { createBot } from "../bots/index.ts";
-import { migrate } from "../platform/db.ts";
 import { createHostServer, type HostServer } from "../host-server/index.ts";
-import { memorySecrets } from "../platform/secrets.ts";
 import { parseHostConfig } from "../platform/config.ts";
+import { migrate } from "../platform/db.ts";
+import { memorySecrets } from "../platform/secrets.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "..", "testing", "fake-claude.ts");
-const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH", "FAKE_CLAUDE_DIR"] as const;
-const UNATTENDED = "not available in unattended runs; report the login wall or CAPTCHA in your result instead";
+const ENV_KEYS = [
+  "AGENT_BROWSER_PATH",
+  "AGENT_BROWSER_EXECUTABLE_PATH",
+  "FAKE_CLAUDE_DIR",
+] as const;
+const UNATTENDED =
+  "not available in unattended runs; report the login wall or CAPTCHA in your result instead";
 
 let root: string;
 let cwd: string;
@@ -33,7 +48,8 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  for (const k of ENV_KEYS) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+  for (const k of ENV_KEYS)
+    saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -68,8 +84,20 @@ const until = async (check: () => boolean, ms = 4000) => {
   expect(check()).toBe(true);
 };
 
-const ui = (path: string, body: object) => fetch(`${server.url}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: server.url }, body: JSON.stringify(body) });
-const messages = () => (existsSync(join(claudeDir, "messages.jsonl")) ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => (JSON.parse(l) as { text: string }).text) : []);
+const ui = (path: string, body: object) =>
+  fetch(`${server.url}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: server.url },
+    body: JSON.stringify(body),
+  });
+const messages = () =>
+  existsSync(join(claudeDir, "messages.jsonl"))
+    ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => (JSON.parse(l) as { text: string }).text)
+    : [];
 
 /** A browser-enabled bot; `openChat` makes its routine turns chat-hosted, otherwise they run headless. */
 async function setup(openChat: boolean) {
@@ -79,22 +107,38 @@ async function setup(openChat: boolean) {
   const connect = async () => {
     const s = server.browser.lease(botId).servers[0];
     const client = new Client({ name: "test", version: "1.0.0" });
-    await client.connect(new StreamableHTTPClientTransport(new URL(s.url), { requestInit: { headers: { Authorization: `Bearer ${s.token}` } } }));
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(s.url), {
+        requestInit: { headers: { Authorization: `Bearer ${s.token}` } },
+      }),
+    );
     closers.push(() => client.close());
     return (name: string, args: Record<string, unknown> = {}) =>
-      client.callTool({ name, arguments: args }).then((r) => ({ isError: r.isError === true, text: (r.content as { text: string }[]).map((c) => c.text).join("\n") }));
+      client.callTool({ name, arguments: args }).then((r) => ({
+        isError: r.isError === true,
+        text: (r.content as { text: string }[]).map((c) => c.text).join("\n"),
+      }));
   };
   return { botId, call: await connect(), connect };
 }
 
 async function startRoutine(botId: string) {
-  const created = await ui("/api/routines/create", { botId, name: "nightly", instruction: "check", schedule: { kind: "cron", expr: "0 3 * * *", tz: "UTC" } });
+  const created = await ui("/api/routines/create", {
+    botId,
+    name: "nightly",
+    instruction: "check",
+    schedule: { kind: "cron", expr: "0 3 * * *", tz: "UTC" },
+  });
   const routine = (await created.json()) as { id: string };
   await ui("/api/routines/run", { id: routine.id });
   return routine.id;
 }
 
-const runs = async (id: string) => (await (await ui("/api/routines/runs", { id })).json()) as { output: string | null; status: string }[];
+const runs = async (id: string) =>
+  (await (await ui("/api/routines/runs", { id })).json()) as {
+    output: string | null;
+    status: string;
+  }[];
 
 describe.each([
   ["chat-hosted", true],
@@ -109,8 +153,14 @@ describe.each([
 
     expect((await call("browser_open", { url: "https://example.com" })).isError).toBe(false);
     expect((await call("browser_snapshot")).isError).toBe(false);
-    expect(await call("browser_request_takeover", { reason: "CAPTCHA" })).toEqual({ isError: true, text: UNATTENDED });
-    expect(await call("browser_login", { entry: "Example" })).toEqual({ isError: true, text: UNATTENDED });
+    expect(await call("browser_request_takeover", { reason: "CAPTCHA" })).toEqual({
+      isError: true,
+      text: UNATTENDED,
+    });
+    expect(await call("browser_login", { entry: "Example" })).toEqual({
+      isError: true,
+      text: UNATTENDED,
+    });
   });
 
   test("the tools work again once the routine is over", async () => {
@@ -131,9 +181,16 @@ describe.each([
 
 describe("login wall in a routine", () => {
   test("the routine's run result carries the bot's report", async () => {
-    await startServer({ pages: { "https://example.com/": { title: "Sign in", snapshot: '- textbox "user" [ref=e1]' } } });
+    await startServer({
+      pages: {
+        "https://example.com/": { title: "Sign in", snapshot: '- textbox "user" [ref=e1]' },
+      },
+    });
     const { botId } = await setup(false);
-    writeFileSync(join(claudeDir, "result.txt"), "Login wall at example.com; could not check the dashboard.");
+    writeFileSync(
+      join(claudeDir, "result.txt"),
+      "Login wall at example.com; could not check the dashboard.",
+    );
     const id = await startRoutine(botId);
     await until(() => messages().length === 1);
     let list = await runs(id);
@@ -141,7 +198,10 @@ describe("login wall in a routine", () => {
       await Bun.sleep(25);
       list = await runs(id);
     }
-    expect(list[0]).toMatchObject({ status: "succeeded", output: "Login wall at example.com; could not check the dashboard." });
+    expect(list[0]).toMatchObject({
+      status: "succeeded",
+      output: "Login wall at example.com; could not check the dashboard.",
+    });
   });
 });
 
@@ -176,7 +236,10 @@ describe("routine and chat never drive the browser at once", () => {
 
     const routineSide = call("browser_snapshot");
     await Bun.sleep(100);
-    expect(await chatCall("browser_snapshot")).toEqual({ isError: true, text: "previous browser call still running" });
+    expect(await chatCall("browser_snapshot")).toEqual({
+      isError: true,
+      text: "previous browser call still running",
+    });
     expect((await routineSide).isError).toBe(false);
   });
 });
@@ -205,7 +268,9 @@ describe("messages sent while a headless routine runs", () => {
 
   test("are not delivered once cancelled", async () => {
     await headlessHold();
-    const { queued } = (await (await ui("/api/send", { text: "oops" })).json()) as { queued: string };
+    const { queued } = (await (await ui("/api/send", { text: "oops" })).json()) as {
+      queued: string;
+    };
     await ui("/api/send", { text: "keep" });
     expect((await ui("/api/send/cancel", { id: queued })).status).toBe(200);
 

@@ -1,9 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { installManagedCli, resolveCli } from "./cli.ts";
 
 const envKeys = ["CLAUDE_PATH", "PATH"] as const;
@@ -25,10 +34,16 @@ describe("managed Claude CLI", () => {
   };
 
   /** Serves the registry metadata and the tarball without any network. */
-  const serve = (bytes: Buffer, integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`) => {
+  const serve = (
+    bytes: Buffer,
+    integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
+  ) => {
     globalThis.fetch = (async (url: string) =>
       String(url).startsWith("https://registry.npmjs.org/")
-        ? Response.json({ version: "9.9.9", dist: { tarball: "https://registry.test/claude.tgz", integrity } })
+        ? Response.json({
+            version: "9.9.9",
+            dist: { tarball: "https://registry.test/claude.tgz", integrity },
+          })
         : new Response(bytes)) as unknown as typeof fetch;
   };
 
@@ -43,7 +58,8 @@ describe("managed Claude CLI", () => {
   });
   afterEach(() => {
     globalThis.fetch = realFetch;
-    for (const k of envKeys) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+    for (const k of envKeys)
+      saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
     rmSync(dir, { recursive: true, force: true });
   });
 

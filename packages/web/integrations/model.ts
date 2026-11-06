@@ -1,9 +1,22 @@
-import { CATALOG_CATEGORIES, type CatalogCategory, type Integration, type IntegrationAuth, type IntegrationTool, type IntegrationTransport, type ToolPolicy } from "@claudebot/contract/events";
+import {
+  CATALOG_CATEGORIES,
+  type CatalogCategory,
+  type Integration,
+  type IntegrationAuth,
+  type IntegrationTool,
+  type IntegrationTransport,
+  type ToolPolicy,
+} from "@claudebot/contract/events";
 
-export const TRANSPORT_LABEL: Record<IntegrationTransport["type"], string> = { http: "HTTP", sse: "SSE", stdio: "Local command" };
+export const TRANSPORT_LABEL: Record<IntegrationTransport["type"], string> = {
+  http: "HTTP",
+  sse: "SSE",
+  stdio: "Local command",
+};
 
 /** Switched on but failed or signed out: what the sidebar badge counts and the list sorts first. */
-export const needsAttention = (i: Integration) => i.enabled && (i.state === "failed" || i.state === "needs-auth");
+export const needsAttention = (i: Integration) =>
+  i.enabled && (i.state === "failed" || i.state === "needs-auth");
 
 /** A custom server is always the user's; a built-in is once it has left `disconnected`. */
 export const isSetUp = (i: Integration) => i.catalogId === null || i.state !== "disconnected";
@@ -37,7 +50,9 @@ export function effort(auth: IntegrationAuth): string {
     case "bearer":
       return auth.ownClient ? "Token or own OAuth app" : "Token";
     case "oauth":
-      return auth.client === "dcr" ? "One-click sign-in" : `Own OAuth app · ${auth.ownClient.steps.length} steps`;
+      return auth.client === "dcr"
+        ? "One-click sign-in"
+        : `Own OAuth app · ${auth.ownClient.steps.length} steps`;
     default: {
       const _exhaustive: never = auth;
       return _exhaustive;
@@ -49,10 +64,19 @@ export function effort(auth: IntegrationAuth): string {
 export const isOneClick = (auth: IntegrationAuth) => auth.kind === "oauth" && auth.client === "dcr";
 
 /** Probing works once connected, after a failure, and for a custom server that needs no sign-in. */
-export const canProbe = (i: Integration) => i.state === "connected" || i.state === "failed" || (i.auth.kind === "none" && i.catalogId === null);
+export const canProbe = (i: Integration) =>
+  i.state === "connected" ||
+  i.state === "failed" ||
+  (i.auth.kind === "none" && i.catalogId === null);
 
 export const endpoint = (i: Integration) =>
-  i.transport.type === "stdio" ? [i.transport.command, ...i.transport.args, ...i.transport.envKeys.map((k) => `${k}=•••`)].join(" ") : i.transport.url;
+  i.transport.type === "stdio"
+    ? [
+        i.transport.command,
+        ...i.transport.args,
+        ...i.transport.envKeys.map((k) => `${k}=•••`),
+      ].join(" ")
+    : i.transport.url;
 
 export const host = (i: Integration) => {
   if (i.transport.type === "stdio") return i.transport.command;
@@ -67,10 +91,14 @@ export const host = (i: Integration) => {
 export type Hit = { kind: "tool" | "skill"; name: string };
 export type ListEntry = { integration: Integration; hit: Hit | null };
 
-const byLabel = (a: ListEntry, b: ListEntry) => a.integration.label.localeCompare(b.integration.label);
+const byLabel = (a: ListEntry, b: ListEntry) =>
+  a.integration.label.localeCompare(b.integration.label);
 
 /** Splits the list into the user's integrations (attention first, then by name) and the built-ins not set up yet, both filtered by `query`. */
-export function listSections(integrations: Integration[], query: string): { yours: ListEntry[]; available: ListEntry[] } {
+export function listSections(
+  integrations: Integration[],
+  query: string,
+): { yours: ListEntry[]; available: ListEntry[] } {
   const q = query.trim().toLowerCase();
   const entries: ListEntry[] = [];
   for (const integration of integrations) {
@@ -79,19 +107,34 @@ export function listSections(integrations: Integration[], query: string): { your
   }
   const yours = entries.filter((e) => isSetUp(e.integration));
   const available = entries.filter((e) => !isSetUp(e.integration));
-  yours.sort((a, b) => Number(needsAttention(b.integration)) - Number(needsAttention(a.integration)) || byLabel(a, b));
+  yours.sort(
+    (a, b) =>
+      Number(needsAttention(b.integration)) - Number(needsAttention(a.integration)) ||
+      byLabel(a, b),
+  );
   available.sort(byLabel);
   return { yours, available };
 }
 
 /** Built-ins still to connect, one group per category in `CATALOG_CATEGORIES` order; empty groups are left out. */
-export function byCategory(available: ListEntry[]): { category: CatalogCategory; entries: ListEntry[] }[] {
-  return CATALOG_CATEGORIES.map((category) => ({ category, entries: available.filter((e) => e.integration.catalog?.category === category) })).filter((g) => g.entries.length > 0);
+export function byCategory(
+  available: ListEntry[],
+): { category: CatalogCategory; entries: ListEntry[] }[] {
+  return CATALOG_CATEGORIES.map((category) => ({
+    category,
+    entries: available.filter((e) => e.integration.catalog?.category === category),
+  })).filter((g) => g.entries.length > 0);
 }
 
 function match(integration: Integration, q: string): ListEntry | undefined {
   const has = (s: string) => s.toLowerCase().includes(q);
-  if (!q || has(integration.label) || has(integration.name) || (integration.catalog && has(integration.catalog.tagline))) return { integration, hit: null };
+  if (
+    !q ||
+    has(integration.label) ||
+    has(integration.name) ||
+    (integration.catalog && has(integration.catalog.tagline))
+  )
+    return { integration, hit: null };
   const tool = integration.tools.find((t) => has(t.name));
   if (tool) return { integration, hit: { kind: "tool", name: tool.name } };
   const skill = integration.skills.find((k) => has(k.name));
@@ -106,13 +149,21 @@ export const TOOL_KINDS: { kind: ToolKind; label: string; hint: string }[] = [
   { kind: "destructive", label: "Destructive", hint: "May delete or overwrite" },
 ];
 
-export const toolKind = (t: IntegrationTool): ToolKind => (t.readOnly ? "read" : t.destructive ? "destructive" : "write");
+export const toolKind = (t: IntegrationTool): ToolKind =>
+  t.readOnly ? "read" : t.destructive ? "destructive" : "write";
 
 /** Tools matching `query`, grouped by kind in `TOOL_KINDS` order; empty groups are left out. */
 export function toolGroups(tools: IntegrationTool[], query: string) {
   const q = query.trim().toLowerCase();
-  const shown = q ? tools.filter((t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)) : tools;
-  return TOOL_KINDS.map((k) => ({ ...k, tools: shown.filter((t) => toolKind(t) === k.kind) })).filter((g) => g.tools.length > 0);
+  const shown = q
+    ? tools.filter(
+        (t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q),
+      )
+    : tools;
+  return TOOL_KINDS.map((k) => ({
+    ...k,
+    tools: shown.filter((t) => toolKind(t) === k.kind),
+  })).filter((g) => g.tools.length > 0);
 }
 
 export function policyCounts(tools: IntegrationTool[]): Record<ToolPolicy, number> {

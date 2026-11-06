@@ -1,15 +1,23 @@
+import type { IntegrationTransport } from "@claudebot/contract/events";
 import { useState } from "react";
 import { toast } from "sonner";
-import type { IntegrationTransport } from "@claudebot/contract/events";
-import { errorOf, post } from "../api.ts";
+
 import { Button } from "@/components/ui/button";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+
+import { errorOf, post } from "../api.ts";
 import { signIn } from "./auth.tsx";
 import { TRANSPORT_LABEL } from "./model.ts";
 
@@ -42,7 +50,9 @@ export function CustomForm({ onDone }: { onDone: (id: string) => void }) {
     }
     const r = await post(
       "/api/integrations/add-custom",
-      transport === "stdio" ? { name, transport, command: url, args: args.split(/\s+/).filter(Boolean), env, skillsDir } : { name, url, transport, token: oauth ? undefined : token, oauth, skillsDir },
+      transport === "stdio"
+        ? { name, transport, command: url, args: args.split(/\s+/).filter(Boolean), env, skillsDir }
+        : { name, url, transport, token: oauth ? undefined : token, oauth, skillsDir },
     );
     if (!r.ok) {
       tab?.close();
@@ -61,11 +71,20 @@ export function CustomForm({ onDone }: { onDone: (id: string) => void }) {
       <FieldGroup className="gap-4">
         <Field>
           <FieldLabel htmlFor="custom-name">Name</FieldLabel>
-          <Input id="custom-name" placeholder="cfdocs" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input
+            id="custom-name"
+            placeholder="cfdocs"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
         </Field>
         <Field>
           <FieldLabel htmlFor="custom-transport">Transport</FieldLabel>
-          <Select items={TRANSPORTS} value={transport} onValueChange={(v) => v && isTransport(v) && setTransport(v)}>
+          <Select
+            items={TRANSPORTS}
+            value={transport}
+            onValueChange={(v) => v && isTransport(v) && setTransport(v)}
+          >
             <SelectTrigger id="custom-transport" className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -82,23 +101,47 @@ export function CustomForm({ onDone }: { onDone: (id: string) => void }) {
           <>
             <Field>
               <FieldLabel htmlFor="custom-command">Command</FieldLabel>
-              <Input id="custom-command" placeholder="npx" value={url} onChange={(e) => setUrl(e.target.value)} />
+              <Input
+                id="custom-command"
+                placeholder="npx"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="custom-args">Arguments</FieldLabel>
-              <Input id="custom-args" placeholder="-y some-mcp-server" value={args} onChange={(e) => setArgs(e.target.value)} />
+              <Input
+                id="custom-args"
+                placeholder="-y some-mcp-server"
+                value={args}
+                onChange={(e) => setArgs(e.target.value)}
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor="custom-env">Environment</FieldLabel>
-              <Textarea id="custom-env" className="font-mono text-xs" placeholder="API_KEY=…" autoComplete="off" value={envText} onChange={(e) => setEnvText(e.target.value)} />
-              <FieldDescription>One KEY=value per line. Values are stored in the keychain.</FieldDescription>
+              <Textarea
+                id="custom-env"
+                className="font-mono text-xs"
+                placeholder="API_KEY=…"
+                autoComplete="off"
+                value={envText}
+                onChange={(e) => setEnvText(e.target.value)}
+              />
+              <FieldDescription>
+                One KEY=value per line. Values are stored in the keychain.
+              </FieldDescription>
             </Field>
           </>
         ) : (
           <>
             <Field>
               <FieldLabel htmlFor="custom-url">URL</FieldLabel>
-              <Input id="custom-url" placeholder="https://example.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} />
+              <Input
+                id="custom-url"
+                placeholder="https://example.com/mcp"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+              />
             </Field>
             <Field orientation="horizontal">
               <Switch id="custom-oauth" checked={oauth} onCheckedChange={setOauth} />
@@ -107,7 +150,13 @@ export function CustomForm({ onDone }: { onDone: (id: string) => void }) {
             {!oauth && (
               <Field>
                 <FieldLabel htmlFor="custom-token">Bearer token</FieldLabel>
-                <Input id="custom-token" type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} />
+                <Input
+                  id="custom-token"
+                  type="password"
+                  autoComplete="off"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                />
                 <FieldDescription>Optional.</FieldDescription>
               </Field>
             )}
@@ -115,7 +164,13 @@ export function CustomForm({ onDone }: { onDone: (id: string) => void }) {
         )}
         <Field>
           <FieldLabel htmlFor="custom-skills">Local skills folder</FieldLabel>
-          <Input id="custom-skills" className="font-mono text-xs" placeholder="/Users/me/skills" value={skillsDir} onChange={(e) => setSkillsDir(e.target.value)} />
+          <Input
+            id="custom-skills"
+            className="font-mono text-xs"
+            placeholder="/Users/me/skills"
+            value={skillsDir}
+            onChange={(e) => setSkillsDir(e.target.value)}
+          />
           <FieldDescription>Optional absolute path.</FieldDescription>
         </Field>
         {error && <FieldError className="break-words">{error}</FieldError>}
