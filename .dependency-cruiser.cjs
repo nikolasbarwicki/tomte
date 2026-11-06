@@ -3,6 +3,9 @@
  * Run with `bun run depcheck`.
  */
 const TESTS = "(\\.test\\.tsx?$|^src/testing/)";
+/** Folders whose files are private behind index.ts. */
+const MODULES = "(bots|browser|credentials|handoffs|harness|host-mcp|host-server|integrations|routines)";
+const PRIVATE = `^src/${MODULES}/(?!index\\.ts$)`;
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {
@@ -34,6 +37,34 @@ module.exports = {
       severity: "error",
       from: { path: "^src/contract/" },
       to: { path: "^(src|web)/", pathNot: "^src/contract/" },
+    },
+    {
+      name: "platform-is-foundation",
+      comment: "Rule 4: src/platform/ imports only platform/ and contract/.",
+      severity: "error",
+      from: { path: "^src/platform/" },
+      to: { path: "^(src|web)/", pathNot: "^src/(platform|contract)/" },
+    },
+    {
+      name: "feature-privacy",
+      comment: "Rule 5: from outside a feature folder, import only its index.ts. Files in the same folder, tests included, may import its private files.",
+      severity: "error",
+      from: { path: "^src/([^/]+)", pathNot: "^src/host\\.ts$" },
+      to: { path: PRIVATE, pathNot: "^src/$1/" },
+    },
+    {
+      name: "host-cli-privacy",
+      comment: "Rule 5 for the host CLI: only feature index.ts files, plus a dynamic import() of the browser-smoke subcommand.",
+      severity: "error",
+      from: { path: "^src/host\\.ts$" },
+      to: { path: PRIVATE, pathNot: "^src/browser/smoke\\.ts$" },
+    },
+    {
+      name: "host-cli-loads-smoke-dynamically",
+      comment: "Rule 5: the browser-smoke subcommand is loaded on demand, not at host startup.",
+      severity: "error",
+      from: { path: "^src/host\\.ts$" },
+      to: { path: "^src/browser/smoke\\.ts$", dependencyTypesNot: ["dynamic-import"] },
     },
     {
       name: "production-not-to-tests",
