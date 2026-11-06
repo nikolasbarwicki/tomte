@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { LiveMessage } from "@claudebot/contract/events";
+import { z } from "zod";
 
 import type { HostOrigin } from "../platform/config.ts";
 import type { BotBrowser, BrowserRuntimes } from "./runtime.ts";
@@ -24,54 +25,55 @@ export interface LiveViewOptions {
 const DEFAULT_FPS = 15;
 const DEFAULT_RETRY_MS = 1000;
 
-/** Parses an engine stream message into the shape viewers get, or undefined for anything else. */
-const rec = (v: unknown): Record<string, unknown> =>
-  v && typeof v === "object" ? (v as Record<string, unknown>) : {};
-const text = (v: unknown): string =>
-  typeof v === "string" || typeof v === "number" ? String(v) : "";
+/** A size the engine reports; missing or not a number reads as 0. */
+const size = z.coerce.number().catch(0);
+/** A label the engine reports; missing or not text reads as "". */
+const label = z.union([z.string(), z.number()]).transform(String).catch("");
+const EngineTab = z
+  .object({ tabId: label, title: label, url: label, active: z.unknown() })
+  .transform((t) => ({ id: t.tabId, title: t.title, url: t.url, active: t.active === true }))
+  .catch({ id: "", title: "", url: "", active: false });
+
+/** The engine stream messages viewers get, mapped to `LiveMessage`; anything else is dropped. */
+const EngineMessage = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("frame"),
+      data: z.string(),
+      metadata: z
+        .object({ deviceWidth: size, deviceHeight: size })
+        .catch({ deviceWidth: 0, deviceHeight: 0 }),
+    })
+    .transform((m): LiveMessage => ({
+      type: "frame",
+      data: m.data,
+      width: m.metadata.deviceWidth,
+      height: m.metadata.deviceHeight,
+    })),
+  z
+    .object({ type: z.literal("url"), url: z.string() })
+    .transform((m): LiveMessage => ({ type: "url", url: m.url })),
+  z
+    .object({ type: z.literal("tabs"), tabs: z.array(EngineTab) })
+    .transform((m): LiveMessage => ({ type: "tabs", tabs: m.tabs })),
+  z
+    .object({ type: z.literal("status"), viewportWidth: size, viewportHeight: size })
+    .transform((m): LiveMessage => ({
+      type: "status",
+      viewport: { width: m.viewportWidth, height: m.viewportHeight },
+    })),
+]);
 
 function toLiveMessage(raw: unknown): LiveMessage | undefined {
   if (typeof raw !== "string") return undefined;
-  let m: Record<string, unknown>;
+  let v: unknown;
   try {
-    m = rec(JSON.parse(raw));
+    v = JSON.parse(raw);
   } catch {
     return undefined;
   }
-  switch (m.type) {
-    case "frame": {
-      const meta = rec(m.metadata);
-      return typeof m.data === "string"
-        ? {
-            type: "frame",
-            data: m.data,
-            width: Number(meta.deviceWidth) || 0,
-            height: Number(meta.deviceHeight) || 0,
-          }
-        : undefined;
-    }
-    case "url":
-      return typeof m.url === "string" ? { type: "url", url: m.url } : undefined;
-    case "tabs":
-      return Array.isArray(m.tabs)
-        ? {
-            type: "tabs",
-            tabs: m.tabs.map((t) => ({
-              id: text(rec(t).tabId),
-              title: text(rec(t).title),
-              url: text(rec(t).url),
-              active: rec(t).active === true,
-            })),
-          }
-        : undefined;
-    case "status":
-      return {
-        type: "status",
-        viewport: { width: Number(m.viewportWidth) || 0, height: Number(m.viewportHeight) || 0 },
-      };
-    default:
-      return undefined;
-  }
+  const parsed = EngineMessage.safeParse(v);
+  return parsed.success ? parsed.data : undefined;
 }
 
 /** One viewer: holds at most the newest message of each type, so a slow connection never builds a backlog. */
