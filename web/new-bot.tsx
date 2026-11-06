@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -12,6 +14,7 @@ export function NewBotDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const [purpose, setPurpose] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
   const submit = async () => {
     setBusy(true);
     const r = await post("/api/bots/new", { name, purpose });
@@ -21,6 +24,8 @@ export function NewBotDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     setPurpose("");
     setError("");
     onOpenChange(false);
+    const { id } = z.object({ id: z.string() }).parse(await r.json());
+    void navigate({ to: "/bots/$botId", params: { botId: id } });
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link, useMatchRoute } from "@tanstack/react-router";
 import { useTheme } from "next-themes";
 import { BellIcon, BotIcon, FolderIcon, KeyRoundIcon, MoonIcon, PlugIcon, PlusIcon, SunIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,8 +25,6 @@ import { cn } from "@/lib/utils";
 import type { BotStatus, BotSummary, HostInfo, Notice } from "./events.ts";
 import { shortTime } from "./format.ts";
 
-export type View = "chat" | "integrations" | "credentials";
-
 const STATUS_LABEL: Record<BotStatus, string> = { idle: "Idle", working: "Working", unseen: "New reply" };
 
 export function StatusDot({ status, className }: { status: BotStatus; className?: string }) {
@@ -47,30 +46,26 @@ export function StatusDot({ status, className }: { status: BotStatus; className?
 
 export function AppSidebar({
   bots,
-  botId,
-  view,
   info,
   notices,
   integrationsNeedingAttention,
-  onView,
-  onOpenBot,
   onNewBot,
 }: {
   bots: BotSummary[];
-  botId: string | undefined;
-  view: View;
   info: HostInfo | undefined;
   notices: Notice[];
   integrationsNeedingAttention: number;
-  onView: (v: View) => void;
-  onOpenBot: (id: string) => void;
   onNewBot: () => void;
 }) {
   const { isMobile, setOpenMobile } = useSidebar();
+  const matchRoute = useMatchRoute();
   // On phones the sidebar is a sheet; picking a destination should reveal it.
-  const go = (fn: () => void) => () => {
-    fn();
+  const reveal = () => {
     if (isMobile) setOpenMobile(false);
+  };
+  const newBot = () => {
+    onNewBot();
+    reveal();
   };
   return (
     <Sidebar>
@@ -90,7 +85,7 @@ export function AppSidebar({
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Bots</SidebarGroupLabel>
-          <SidebarGroupAction title="New bot" onClick={go(onNewBot)}>
+          <SidebarGroupAction title="New bot" onClick={newBot}>
             <PlusIcon />
             <span className="sr-only">New bot</span>
           </SidebarGroupAction>
@@ -99,8 +94,9 @@ export function AppSidebar({
               {bots.map((b) => (
                 <SidebarMenuItem key={b.id}>
                   <SidebarMenuButton
-                    isActive={view === "chat" && b.id === botId}
-                    onClick={go(() => onOpenBot(b.id))}
+                    isActive={!!matchRoute({ to: "/bots/$botId", params: { botId: b.id } })}
+                    render={<Link to="/bots/$botId" params={{ botId: b.id }} />}
+                    onClick={reveal}
                     title={b.purpose || undefined}
                     className="h-auto items-start gap-2.5 py-2"
                   >
@@ -126,7 +122,7 @@ export function AppSidebar({
               ))}
             </SidebarMenu>
             {bots.length === 0 && (
-              <Button variant="outline" size="sm" className="mt-1 w-full" onClick={go(onNewBot)}>
+              <Button variant="outline" size="sm" className="mt-1 w-full" onClick={newBot}>
                 <PlusIcon /> New bot
               </Button>
             )}
@@ -136,7 +132,7 @@ export function AppSidebar({
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton isActive={view === "integrations"} onClick={go(() => onView("integrations"))}>
+            <SidebarMenuButton isActive={!!matchRoute({ to: "/integrations", fuzzy: true })} render={<Link to="/integrations" />} onClick={reveal}>
               <PlugIcon />
               <span>Integrations</span>
             </SidebarMenuButton>
@@ -147,7 +143,7 @@ export function AppSidebar({
             )}
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton isActive={view === "credentials"} onClick={go(() => onView("credentials"))}>
+            <SidebarMenuButton isActive={!!matchRoute({ to: "/credentials" })} render={<Link to="/credentials" />} onClick={reveal}>
               <KeyRoundIcon />
               <span>Credentials</span>
             </SidebarMenuButton>
