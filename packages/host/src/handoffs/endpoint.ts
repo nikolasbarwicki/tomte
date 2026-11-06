@@ -1,15 +1,19 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+
 import type { HostServerLease } from "../harness/index.ts";
 import { serveMcpRequest } from "../host-mcp/index.ts";
 import type { HostOrigin } from "../platform/config.ts";
 import type { TokenRegistry } from "../platform/tokens.ts";
 import type { HandoffStore } from "./store.ts";
-import type { BotsToolContext } from "./tools/context.ts";
 import { BOTS_INSTRUCTIONS, BOTS_SERVER_NAME, createBotsMcpServer } from "./tools.ts";
+import type { BotsToolContext } from "./tools/context.ts";
 
 export const BOTS_ENDPOINT_PATH = "/mcp/bots";
 
-export interface BotsEndpointDeps extends Pick<BotsToolContext, "cards" | "botName" | "deliver" | "filesDir" | "show"> {
+export interface BotsEndpointDeps extends Pick<
+  BotsToolContext,
+  "cards" | "botName" | "deliver" | "filesDir" | "show"
+> {
   /** Where the host is reachable; the Host header must name it. */
   host: HostOrigin;
   /** The host-wide token registry shared with the browser endpoint. */
@@ -30,13 +34,24 @@ export function createBotsEndpoint(deps: BotsEndpointDeps): BotsEndpoint {
       serveMcpRequest(req, res, {
         host: deps.host,
         tokens: deps.tokens,
-        server: (botId) => createBotsMcpServer({ botId, handoffs: deps.handoffs, cards: deps.cards, botName: deps.botName, deliver: deps.deliver, filesDir: deps.filesDir, show: deps.show }),
+        server: (botId) =>
+          createBotsMcpServer({
+            botId,
+            handoffs: deps.handoffs,
+            cards: deps.cards,
+            botName: deps.botName,
+            deliver: deps.deliver,
+            filesDir: deps.filesDir,
+            show: deps.show,
+          }),
       }),
 
     lease(botId) {
       const { token, revoke } = deps.tokens.issue(botId);
       return {
-        servers: [{ name: BOTS_SERVER_NAME, url: `${deps.host.localUrl}${BOTS_ENDPOINT_PATH}`, token }],
+        servers: [
+          { name: BOTS_SERVER_NAME, url: `${deps.host.localUrl}${BOTS_ENDPOINT_PATH}`, token },
+        ],
         instructions: BOTS_INSTRUCTIONS,
         release: revoke,
       };

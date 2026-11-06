@@ -1,16 +1,29 @@
 import type { Database } from "bun:sqlite";
+
 import type { LastMessage } from "@claudebot/contract/events";
 
 const PREVIEW_CHARS = 200;
 
 export type Activity = { last: LastMessage | null; seenAt: number };
 
-type ActivityRow = { last_from: LastMessage["from"] | null; last_text: string | null; last_at: number | null; seen_at: number };
+type ActivityRow = {
+  last_from: LastMessage["from"] | null;
+  last_text: string | null;
+  last_at: number | null;
+  seen_at: number;
+};
 
 export function getActivity(db: Database, botId: string): Activity | undefined {
-  const r = db.query<ActivityRow, [string]>("SELECT last_from, last_text, last_at, seen_at FROM bot_activity WHERE bot_id = ?").get(botId);
+  const r = db
+    .query<ActivityRow, [string]>(
+      "SELECT last_from, last_text, last_at, seen_at FROM bot_activity WHERE bot_id = ?",
+    )
+    .get(botId);
   if (!r) return undefined;
-  const last = r.last_from && r.last_text !== null && r.last_at !== null ? { from: r.last_from, text: r.last_text, at: r.last_at } : null;
+  const last =
+    r.last_from && r.last_text !== null && r.last_at !== null
+      ? { from: r.last_from, text: r.last_text, at: r.last_at }
+      : null;
   return { last, seenAt: r.seen_at };
 }
 
@@ -29,5 +42,7 @@ export function recordMessage(db: Database, botId: string, m: LastMessage) {
 }
 
 export function markSeen(db: Database, botId: string, at: number) {
-  db.query("INSERT INTO bot_activity (bot_id, seen_at) VALUES (?, ?) ON CONFLICT (bot_id) DO UPDATE SET seen_at = excluded.seen_at").run(botId, at);
+  db.query(
+    "INSERT INTO bot_activity (bot_id, seen_at) VALUES (?, ?) ON CONFLICT (bot_id) DO UPDATE SET seen_at = excluded.seen_at",
+  ).run(botId, at);
 }

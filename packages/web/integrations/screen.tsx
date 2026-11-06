@@ -1,9 +1,18 @@
-import { useState } from "react";
-import { Plus } from "lucide-react";
 import type { Integration } from "@claudebot/contract/events";
-import { Page } from "../page.tsx";
+import { Plus } from "lucide-react";
+import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+
+import { Page } from "../page.tsx";
 import { CustomForm } from "./custom-form.tsx";
 import { IntegrationDetail } from "./detail.tsx";
 import { IntegrationsList } from "./list.tsx";
@@ -26,7 +35,11 @@ export function Integrations({
   if (selected)
     return (
       <Page key={selected.id} title="Integrations">
-        <IntegrationDetail integration={selected} onBack={() => onSelect(undefined)} onTry={onTry} />
+        <IntegrationDetail
+          integration={selected}
+          onBack={() => onSelect(undefined)}
+          onTry={onTry}
+        />
       </Page>
     );
   return (
@@ -42,7 +55,9 @@ export function Integrations({
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Add custom MCP server</DialogTitle>
-              <DialogDescription>Connect a remote server by URL, or run one locally as a command.</DialogDescription>
+              <DialogDescription>
+                Connect a remote server by URL, or run one locally as a command.
+              </DialogDescription>
             </DialogHeader>
             {adding && (
               <CustomForm

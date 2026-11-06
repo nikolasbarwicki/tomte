@@ -10,9 +10,18 @@ export function chatRoutes({ dataRoot, chats, browser }: ApiContext): OpenChatRo
       const ids = Array.isArray(b.mentions) ? b.mentions : [];
       const mentions: Mention[] = [];
       for (const id of ids) {
-        const target = typeof id === "string" && id !== chat.bot.id ? getBot(dataRoot, id) : undefined;
-        if (!target) return json(res, { error: `cannot mention ${typeof id === "string" ? id : "that"}: unknown bot or the open bot` }, 400);
-        if (!mentions.some((m) => m.id === target.id)) mentions.push({ id: target.id, name: target.name });
+        const target =
+          typeof id === "string" && id !== chat.bot.id ? getBot(dataRoot, id) : undefined;
+        if (!target)
+          return json(
+            res,
+            {
+              error: `cannot mention ${typeof id === "string" ? id : "that"}: unknown bot or the open bot`,
+            },
+            400,
+          );
+        if (!mentions.some((m) => m.id === target.id))
+          mentions.push({ id: target.id, name: target.name });
       }
       const sent = chat.send(withMentions(str("text"), mentions), str("text"), mentions);
       if ("queued" in sent) return json(res, { ok: true, queued: sent.queued });
@@ -36,7 +45,8 @@ export function chatRoutes({ dataRoot, chats, browser }: ApiContext): OpenChatRo
       return json(res, { ok: true });
     },
     "/api/session/new": async ({ res }, chat) => {
-      if (!chat.newSession()) return json(res, { error: "a turn is running; wait for it to finish" }, 409);
+      if (!chat.newSession())
+        return json(res, { error: "a turn is running; wait for it to finish" }, 409);
       browser.cancelTakeover(chat.bot.id, "a new session started");
       return json(res, { ok: true });
     },

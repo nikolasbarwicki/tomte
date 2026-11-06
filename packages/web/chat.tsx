@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import type {
+  BotSummary,
+  ContextEvent,
+  FilesEvent,
+  MemoryScope,
+  Routine,
+} from "@claudebot/contract/events";
 import { ArrowUpIcon, ChevronDownIcon, MessageSquarePlusIcon, PanelRightIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,14 +20,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
 import { Progress } from "@/components/ui/progress";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
-import type { BotSummary, ContextEvent, FilesEvent, MemoryScope, Routine } from "@claudebot/contract/events";
+
 import { act } from "./api.ts";
 import { botTheme } from "./avatars.ts";
 import { BotAvatar } from "./bot-avatar.tsx";
@@ -75,7 +88,11 @@ export function ChatView({
   };
 
   // A takeover request needs the live view, so bring it up as soon as one arrives.
-  const takeoverId = items.flatMap((i) => (i.kind === "wait" && i.waitKind === "takeover" && i.resolved === undefined ? [i.id] : [])).at(-1);
+  const takeoverId = items
+    .flatMap((i) =>
+      i.kind === "wait" && i.waitKind === "takeover" && i.resolved === undefined ? [i.id] : [],
+    )
+    .at(-1);
   useEffect(() => {
     if (takeoverId) showBrowser();
   }, [takeoverId]);
@@ -99,7 +116,7 @@ export function ChatView({
         <AppBar>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-medium">{bot.name}</h1>
-            {bot.purpose && <p className="truncate text-xs text-muted-foreground">{bot.purpose}</p>}
+            {bot.purpose && <p className="text-muted-foreground truncate text-xs">{bot.purpose}</p>}
           </div>
           <ContextMeter context={context} />
           <Tooltip>
@@ -113,7 +130,8 @@ export function ChatView({
                   onClick={async () => {
                     const ok = await confirmAction({
                       title: `Start a new session for ${bot.name}?`,
-                      description: "The bot forgets this conversation. Memory, files and routines are kept.",
+                      description:
+                        "The bot forgets this conversation. Memory, files and routines are kept.",
                       action: "New session",
                     });
                     if (ok) await act("/api/session/new", {});
@@ -128,7 +146,14 @@ export function ChatView({
           <Tooltip>
             <TooltipTrigger
               render={
-                <Button variant="ghost" size="icon-sm" aria-label="Toggle bot panel" aria-pressed={panelOpen} className={cn(panelOpen && "bg-muted")} onClick={() => setPanelOpen(!panelOpen)} />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Toggle bot panel"
+                  aria-pressed={panelOpen}
+                  className={cn(panelOpen && "bg-muted")}
+                  onClick={() => setPanelOpen(!panelOpen)}
+                />
               }
             >
               <PanelRightIcon />
@@ -140,12 +165,20 @@ export function ChatView({
         <Composer bot={bot} bots={bots} draft={draft} onDraftTaken={onDraftTaken} />
       </div>
       {wide ? (
-        panelOpen && <aside className="flex w-[400px] shrink-0 flex-col border-l xl:w-[440px]">{panel}</aside>
+        panelOpen && (
+          <aside className="flex w-[400px] shrink-0 flex-col border-l xl:w-[440px]">{panel}</aside>
+        )
       ) : (
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent side="right" showCloseButton={false} className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md">
+          <SheetContent
+            side="right"
+            showCloseButton={false}
+            className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md"
+          >
             <SheetTitle className="sr-only">{bot.name}</SheetTitle>
-            <SheetDescription className="sr-only">Memory, files, routines and browser</SheetDescription>
+            <SheetDescription className="sr-only">
+              Memory, files, routines and browser
+            </SheetDescription>
             {panel}
           </SheetContent>
         </Sheet>
@@ -163,7 +196,13 @@ function ContextMeter({ context }: { context: ContextEvent | undefined }) {
       <HoverCardTrigger
         delay={10}
         closeDelay={100}
-        render={<Button variant="ghost" size="sm" className={cn("tabular-nums", high ? "text-destructive" : "text-muted-foreground")} />}
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn("tabular-nums", high ? "text-destructive" : "text-muted-foreground")}
+          />
+        }
       >
         {context ? `${pct}%` : "–"}
         <span className="hidden sm:inline">context</span>
@@ -177,7 +216,11 @@ function ContextMeter({ context }: { context: ContextEvent | undefined }) {
                 {kTokens(context.tokens)} / {kTokens(context.max)}
               </span>
             </div>
-            <Progress value={pct} aria-label="Context used" className={cn(high && "**:data-[slot=progress-indicator]:bg-destructive")} />
+            <Progress
+              value={pct}
+              aria-label="Context used"
+              className={cn(high && "**:data-[slot=progress-indicator]:bg-destructive")}
+            />
             {high && <p className="text-muted-foreground">Consider a new session.</p>}
           </>
         ) : (
@@ -192,14 +235,31 @@ function ContextMeter({ context }: { context: ContextEvent | undefined }) {
  * One of the open session's settings in the composer, after the Model Selector pattern. The host does not report the current values,
  * so only choices made here show.
  */
-function SessionSetting({ label, options, apply }: { label: string; options: string[]; apply: (value: string) => Promise<boolean> }) {
+function SessionSetting({
+  label,
+  options,
+  apply,
+}: {
+  label: string;
+  options: string[];
+  apply: (value: string) => Promise<boolean>;
+}) {
   const [value, setValue] = useState<string>();
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<InputGroupButton size="xs" variant="ghost" className="text-xs" aria-label={value ? `${label}: ${value}` : label} />}>
+      <DropdownMenuTrigger
+        render={
+          <InputGroupButton
+            size="xs"
+            variant="ghost"
+            className="text-xs"
+            aria-label={value ? `${label}: ${value}` : label}
+          />
+        }
+      >
         {value ? (
           <>
-            <span className="hidden text-muted-foreground sm:inline">{label}</span>
+            <span className="text-muted-foreground hidden sm:inline">{label}</span>
             <span className="capitalize">{value}</span>
           </>
         ) : (
@@ -231,7 +291,17 @@ function SessionSetting({ label, options, apply }: { label: string; options: str
 const MODELS = ["opus", "sonnet", "haiku"];
 const EFFORTS = ["low", "medium", "high", "max"];
 
-function Composer({ bot, bots, draft, onDraftTaken }: { bot: BotSummary; bots: BotSummary[]; draft: string | undefined; onDraftTaken: () => void }) {
+function Composer({
+  bot,
+  bots,
+  draft,
+  onDraftTaken,
+}: {
+  bot: BotSummary;
+  bots: BotSummary[];
+  draft: string | undefined;
+  onDraftTaken: () => void;
+}) {
   const [input, setInput] = useState(draft ?? "");
   const [caret, setCaret] = useState(input.length);
   const [picked, setPicked] = useState<MentionTarget[]>([]);
@@ -253,7 +323,12 @@ function Composer({ bot, bots, draft, onDraftTaken }: { bot: BotSummary; bots: B
   const candidates =
     typed === undefined
       ? []
-      : bots.filter((b) => b.id !== bot.id && !mentions.some((m) => m.id === b.id) && b.name.toLowerCase().includes(typed.toLowerCase()));
+      : bots.filter(
+          (b) =>
+            b.id !== bot.id &&
+            !mentions.some((m) => m.id === b.id) &&
+            b.name.toLowerCase().includes(typed.toLowerCase()),
+        );
   const active = Math.min(highlight, candidates.length - 1);
 
   const pick = (b: BotSummary) => {
@@ -285,14 +360,19 @@ function Composer({ bot, bots, draft, onDraftTaken }: { bot: BotSummary; bots: B
     }
   };
 
-  const syncCaret = (el: HTMLTextAreaElement) => setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : -1);
+  const syncCaret = (el: HTMLTextAreaElement) =>
+    setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : -1);
 
   return (
     <div className="shrink-0 px-4 pb-4">
       <div className="relative mx-auto max-w-3xl">
         {candidates.length > 0 && (
-          <div role="listbox" aria-label="Mention a bot" className="absolute bottom-full left-0 z-10 mb-2 w-72 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
-            <p className="px-2 py-1 text-xs text-muted-foreground">Hand off to</p>
+          <div
+            role="listbox"
+            aria-label="Mention a bot"
+            className="bg-popover text-popover-foreground ring-foreground/10 absolute bottom-full left-0 z-10 mb-2 w-72 rounded-lg p-1 shadow-md ring-1"
+          >
+            <p className="text-muted-foreground px-2 py-1 text-xs">Hand off to</p>
             {candidates.map((b, i) => (
               <button
                 key={b.id}
@@ -304,11 +384,16 @@ function Composer({ bot, bots, draft, onDraftTaken }: { bot: BotSummary; bots: B
                   pick(b);
                 }}
                 onMouseEnter={() => setHighlight(i)}
-                className={cn("flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm", i === active && "bg-muted")}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                  i === active && "bg-muted",
+                )}
               >
                 <BotAvatar avatar={b.avatar} className="size-5" />
                 <span className="shrink-0 font-medium">{b.name}</span>
-                {b.purpose && <span className="truncate text-xs text-muted-foreground">{b.purpose}</span>}
+                {b.purpose && (
+                  <span className="text-muted-foreground truncate text-xs">{b.purpose}</span>
+                )}
               </button>
             ))}
           </div>
@@ -320,7 +405,7 @@ function Composer({ bot, bots, draft, onDraftTaken }: { bot: BotSummary; bots: B
             void send();
           }}
         >
-          <InputGroup className="rounded-2xl bg-background shadow-xs dark:bg-input/30">
+          <InputGroup className="bg-background dark:bg-input/30 rounded-2xl shadow-xs">
             <div className="relative w-full">
               {/* The textarea's own text is transparent; this copy paints it, so mentions can take their bot's color. Stroke rather
                   than a heavier weight embolds them, since a wider glyph would push the caret out of line with the text. */}
@@ -333,11 +418,21 @@ function Composer({ bot, bots, draft, onDraftTaken }: { bot: BotSummary; bots: B
                   if (typeof s === "string") return s;
                   const target = bots.find((b) => b.id === s.mention.id);
                   return (
-                    <span key={i} style={target && botTheme(target.avatar.stroke)} className="bot-theme text-primary [-webkit-text-stroke:0.5px_currentColor]">
+                    <span
+                      key={i}
+                      style={target && botTheme(target.avatar.stroke)}
+                      className="bot-theme text-primary [-webkit-text-stroke:0.5px_currentColor]"
+                    >
                       {/* The icon sits on the `@` glyph, which keeps its width so the text stays in line with the textarea's; it is a
                           little smaller than the glyph and nudged left, leaving a gap before the name. */}
                       <span className="relative text-transparent [-webkit-text-stroke:0]">
-                        @{target && <BotAvatar avatar={target.avatar} className="absolute top-1/2 left-1/2 size-[0.95em] -translate-x-[60%] -translate-y-1/2" />}
+                        @
+                        {target && (
+                          <BotAvatar
+                            avatar={target.avatar}
+                            className="absolute top-1/2 left-1/2 size-[0.95em] -translate-x-[60%] -translate-y-1/2"
+                          />
+                        )}
                       </span>
                       {s.text.slice(1)}
                     </span>
@@ -351,7 +446,7 @@ function Composer({ bot, bots, draft, onDraftTaken }: { bot: BotSummary; bots: B
                 value={input}
                 placeholder={`Message ${bot.name}…`}
                 aria-label={`Message ${bot.name}`}
-                className="relative max-h-60 min-h-12 px-4 pt-3 text-transparent caret-foreground"
+                className="caret-foreground relative max-h-60 min-h-12 px-4 pt-3 text-transparent"
                 onScroll={(e) => {
                   if (backdrop.current) backdrop.current.scrollTop = e.currentTarget.scrollTop;
                 }}
@@ -386,13 +481,28 @@ function Composer({ bot, bots, draft, onDraftTaken }: { bot: BotSummary; bots: B
               />
             </div>
             <InputGroupAddon align="block-end">
-              <SessionSetting label="Model" options={MODELS} apply={(model) => act("/api/model", { model })} />
-              <SessionSetting label="Effort" options={EFFORTS} apply={(effort) => act("/api/effort", { effort })} />
+              <SessionSetting
+                label="Model"
+                options={MODELS}
+                apply={(model) => act("/api/model", { model })}
+              />
+              <SessionSetting
+                label="Effort"
+                options={EFFORTS}
+                apply={(effort) => act("/api/effort", { effort })}
+              />
               <p className="ml-auto hidden items-center gap-1 text-xs font-normal whitespace-nowrap @xl:flex">
                 <Kbd>@</Kbd> hand off to a bot · <Kbd>Shift</Kbd>
                 <Kbd>Enter</Kbd> new line
               </p>
-              <InputGroupButton type="submit" variant="default" size="icon-sm" className="ml-auto rounded-full @xl:ml-0" disabled={!input.trim()} aria-label="Send">
+              <InputGroupButton
+                type="submit"
+                variant="default"
+                size="icon-sm"
+                className="ml-auto rounded-full @xl:ml-0"
+                disabled={!input.trim()}
+                aria-label="Send"
+              >
                 <ArrowUpIcon />
               </InputGroupButton>
             </InputGroupAddon>

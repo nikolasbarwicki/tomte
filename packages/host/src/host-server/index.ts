@@ -1,21 +1,33 @@
+import type { Database } from "bun:sqlite";
 import { createServer, type RequestListener } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import type {
+  CredentialsEvent,
+  IntegrationsEvent,
+  RoutinesEvent,
+} from "@claudebot/contract/events";
 import { createServer as createVite } from "vite";
+
 import { getBot, listBots, botFilesPath } from "../bots/index.ts";
-import { createBrowser, type BrowserEndpoint, type BrowserRuntimeOptions, type LiveViewOptions, type SandboxStatus } from "../browser/index.ts";
+import {
+  createBrowser,
+  type BrowserEndpoint,
+  type BrowserRuntimeOptions,
+  type LiveViewOptions,
+  type SandboxStatus,
+} from "../browser/index.ts";
 import { createCredentials } from "../credentials/index.ts";
 import { createHandoffs, type BotsEndpoint } from "../handoffs/index.ts";
 import { combineLeases, type HostServersSource, type ResolvedCli } from "../harness/index.ts";
 import { createIntegrations } from "../integrations/index.ts";
-import { createRoutines } from "../routines/index.ts";
 import { hostOrigin, type HostConfig } from "../platform/config.ts";
 import type { SecretStore } from "../platform/secrets.ts";
-import { ensureWorkspace } from "../platform/workspace.ts";
 import { TokenRegistry } from "../platform/tokens.ts";
-import type { CredentialsEvent, IntegrationsEvent, RoutinesEvent } from "@claudebot/contract/events";
+import { ensureWorkspace } from "../platform/workspace.ts";
+import { createRoutines } from "../routines/index.ts";
 import { createApi } from "./api/index.ts";
 import { oauthCallback } from "./api/integrations.ts";
 import { createChats } from "./chats.ts";
@@ -69,7 +81,9 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
 
   /** Unset until startup finishes (503 meanwhile); the socket opens first so the port is known, but nothing is served yet. */
   let serve: RequestListener | undefined;
-  const http = createServer((req, res) => (serve ? serve(req, res) : void res.writeHead(503).end()));
+  const http = createServer((req, res) =>
+    serve ? serve(req, res) : void res.writeHead(503).end(),
+  );
   const listening = Promise.withResolvers<void>();
   http.once("error", listening.reject);
   http.listen(o.config.bind.port, o.config.bind.address, listening.resolve);
@@ -79,7 +93,11 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
 
   const events = createEventStream();
   const { broadcast } = events;
-  const credentials = createCredentials({ db, secrets, onChange: () => broadcast(credentialsEvent()) });
+  const credentials = createCredentials({
+    db,
+    secrets,
+    onChange: () => broadcast(credentialsEvent()),
+  });
   const tokens = new TokenRegistry();
   const browser = await createBrowser({
     dataRoot,
@@ -102,13 +120,22 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     tokens,
     host: origin,
     show: (botId, card) => chats.emitTo(botId, card),
-    cards: () => listBots(dataRoot).map((bot) => ({ id: bot.id, name: bot.name, description: bot.purpose, status: chats.isWorking(bot.id) ? "working" : "idle" })),
+    cards: () =>
+      listBots(dataRoot).map((bot) => ({
+        id: bot.id,
+        name: bot.name,
+        description: bot.purpose,
+        status: chats.isWorking(bot.id) ? "working" : "idle",
+      })),
     botName: (botId) => getBot(dataRoot, botId)?.name,
     filesDir: (botId) => botFilesPath(dataRoot, botId),
     deliver: (botId, text) =>
-      void chats.deliver(botId, text).catch((e) => console.error(`[bots] delivery to ${botId} failed: ${(e as Error).message}`)),
+      void chats
+        .deliver(botId, text)
+        .catch((e) => console.error(`[bots] delivery to ${botId} failed: ${(e as Error).message}`)),
   });
-  const hostServers: HostServersSource = (botId) => combineLeases([browser.endpoint.lease(botId), handoffs.endpoint.lease(botId)]);
+  const hostServers: HostServersSource = (botId) =>
+    combineLeases([browser.endpoint.lease(botId), handoffs.endpoint.lease(botId)]);
   const integrations = createIntegrations({
     db,
     hostDir: dataRoot,
@@ -141,11 +168,26 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       if (botId === chats.currentBotId()) broadcast(routinesEvent(botId));
     },
   });
-  const integrationsEvent = (): IntegrationsEvent => ({ type: "integrations", integrations: integrations.list() });
-  const credentialsEvent = (): CredentialsEvent => ({ type: "credentials", credentials: credentials.list() });
-  const routinesEvent = (botId: string): RoutinesEvent => ({ type: "routines", botId, routines: routines.list(botId) });
+  const integrationsEvent = (): IntegrationsEvent => ({
+    type: "integrations",
+    integrations: integrations.list(),
+  });
+  const credentialsEvent = (): CredentialsEvent => ({
+    type: "credentials",
+    credentials: credentials.list(),
+  });
+  const routinesEvent = (botId: string): RoutinesEvent => ({
+    type: "routines",
+    botId,
+    routines: routines.list(botId),
+  });
 
-  const stopHerdr = !o.config.herdr ? undefined : watchHerdr((title, body) => chats.notify("herdr", title, body), (l) => console.error(l));
+  const stopHerdr = !o.config.herdr
+    ? undefined
+    : watchHerdr(
+        (title, body) => chats.notify("herdr", title, body),
+        (l) => console.error(l),
+      );
 
   if (initial) await chats.switchTo(initial);
   void transcripts
@@ -175,14 +217,29 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     events,
     snapshot: () => {
       const botId = chats.currentBotId();
-      return [chats.botsEvent(), integrationsEvent(), credentialsEvent(), ...memoryEvents(dataRoot, botId), filesEvent(dataRoot, botId), ...chats.notices(), ...chats.replayOpen()];
+      return [
+        chats.botsEvent(),
+        integrationsEvent(),
+        credentialsEvent(),
+        ...memoryEvents(dataRoot, botId),
+        filesEvent(dataRoot, botId),
+        ...chats.notices(),
+        ...chats.replayOpen(),
+      ];
     },
   });
-  const routes = hostRoutes({ browser, handoffs, oauthCallback: (_req, res, url) => oauthCallback(integrations, res, url.searchParams), api });
+  const routes = hostRoutes({
+    browser,
+    handoffs,
+    oauthCallback: (_req, res, url) => oauthCallback(integrations, res, url.searchParams),
+    api,
+  });
 
   routines.start();
   handoffs.redeliverOpen();
-  serve = createRequestListener(routes, (req, res) => (vite ? vite.middlewares(req, res) : void res.writeHead(404).end()));
+  serve = createRequestListener(routes, (req, res) =>
+    vite ? vite.middlewares(req, res) : void res.writeHead(404).end(),
+  );
 
   return {
     port,

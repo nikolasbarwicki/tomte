@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
-const BRIEF = "goal: plan; context: none; constraints: none; deliverable: a plan; done when: written";
+const BRIEF =
+  "goal: plan; context: none; constraints: none; deliverable: a plan; done when: written";
 
 let host: HandoffHost;
 let scratch: string;
@@ -16,7 +18,9 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await host.stop();
-  savedConfig === undefined ? delete process.env.CLAUDE_CONFIG_DIR : (process.env.CLAUDE_CONFIG_DIR = savedConfig);
+  savedConfig === undefined
+    ? delete process.env.CLAUDE_CONFIG_DIR
+    : (process.env.CLAUDE_CONFIG_DIR = savedConfig);
   rmSync(scratch, { recursive: true, force: true });
 });
 
@@ -36,7 +40,12 @@ describe("the Claude CLI's working directory", () => {
 
   test("a routine run runs it there, with no chat open", async () => {
     const botId = host.createBot("Ada");
-    const created = await host.ui("/api/routines/create", { botId, name: "nightly", instruction: "check", schedule: { kind: "cron", expr: "0 3 * * *", tz: "UTC" } });
+    const created = await host.ui("/api/routines/create", {
+      botId,
+      name: "nightly",
+      instruction: "check",
+      schedule: { kind: "cron", expr: "0 3 * * *", tz: "UTC" },
+    });
     const routine = (await created.json()) as { id: string };
     expect((await host.ui("/api/routines/run", { id: routine.id })).status).toBe(200);
     await host.until(() => host.launches().length === 1);

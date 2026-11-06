@@ -36,18 +36,41 @@ if (!dir) {
   console.error("FAKE_AGENT_BROWSER_DIR is not set");
   process.exit(2);
 }
-const read = <T>(name: string, fallback: T): T => (existsSync(join(dir, name)) ? JSON.parse(readFileSync(join(dir, name), "utf8")) : fallback);
+const read = <T>(name: string, fallback: T): T =>
+  existsSync(join(dir, name)) ? JSON.parse(readFileSync(join(dir, name), "utf8")) : fallback;
 
 const argv = process.argv.slice(2);
 // Sweeps list sessions on a timer; they are not calls a test cares about.
-if (!argv.includes("list")) appendFileSync(join(dir, "calls.jsonl"), JSON.stringify({ argv, env: { AGENT_BROWSER_ENCRYPTION_KEY: process.env.AGENT_BROWSER_ENCRYPTION_KEY, AGENT_BROWSER_PLUGINS: process.env.AGENT_BROWSER_PLUGINS } }) + "\n");
+if (!argv.includes("list"))
+  appendFileSync(
+    join(dir, "calls.jsonl"),
+    JSON.stringify({
+      argv,
+      env: {
+        AGENT_BROWSER_ENCRYPTION_KEY: process.env.AGENT_BROWSER_ENCRYPTION_KEY,
+        AGENT_BROWSER_PLUGINS: process.env.AGENT_BROWSER_PLUGINS,
+      },
+    }) + "\n",
+  );
 
-const flagsWithValue = new Set(["--session", "--restore", "--executable-path", "--idle-timeout", "--action-policy", "--proxy", "--args", "--credential-provider", "--item", "--url"]);
+const flagsWithValue = new Set([
+  "--session",
+  "--restore",
+  "--executable-path",
+  "--idle-timeout",
+  "--action-policy",
+  "--proxy",
+  "--args",
+  "--credential-provider",
+  "--item",
+  "--url",
+]);
 const flags: Record<string, string> = {};
 const rest: string[] = [];
 for (let i = 0; i < argv.length; i++) {
   if (flagsWithValue.has(argv[i])) flags[argv[i]] = argv[++i];
-  else if (argv[i] === "--json" || argv[i] === "--headed" || argv[i] === "--no-navigate") flags[argv[i]] = "true";
+  else if (argv[i] === "--json" || argv[i] === "--headed" || argv[i] === "--no-navigate")
+    flags[argv[i]] = "true";
   else rest.push(argv[i]);
 }
 const [command, ...args] = rest;
@@ -61,7 +84,11 @@ const fail = (error: string) => {
 
 const script = read<Script>("script.json", {});
 const state = read<Record<string, string>>("state.json", {});
-const pageAt = (url: string): Page => script.pages?.[url] ?? { title: "Fake page", snapshot: `- heading "Fake page for ${url}" [ref=e1]` };
+const pageAt = (url: string): Page =>
+  script.pages?.[url] ?? {
+    title: "Fake page",
+    snapshot: `- heading "Fake page for ${url}" [ref=e1]`,
+  };
 
 /** The engine action each implemented command runs, as the real engine names it in policy denials; undefined when the policy never sees it. */
 function engineAction(): string | undefined {
@@ -87,9 +114,15 @@ function engineAction(): string | undefined {
 // Enforces --action-policy like the real engine: the deny list wins, then the allow list, then the default.
 function checkPolicy(action: string | undefined) {
   if (!flags["--action-policy"] || !action) return;
-  const policy = JSON.parse(readFileSync(flags["--action-policy"], "utf8")) as { default: "allow" | "deny"; allow?: string[]; deny?: string[] };
-  if (policy.deny?.includes(action)) fail(`Action '${action}' denied by policy: Action '${action}' is denied by policy`);
-  if (policy.default === "deny" && !policy.allow?.includes(action)) fail(`Action '${action}' denied by policy: Action '${action}' is not in the allow list`);
+  const policy = JSON.parse(readFileSync(flags["--action-policy"], "utf8")) as {
+    default: "allow" | "deny";
+    allow?: string[];
+    deny?: string[];
+  };
+  if (policy.deny?.includes(action))
+    fail(`Action '${action}' denied by policy: Action '${action}' is denied by policy`);
+  if (policy.default === "deny" && !policy.allow?.includes(action))
+    fail(`Action '${action}' denied by policy: Action '${action}' is not in the allow list`);
 }
 checkPolicy(engineAction());
 
@@ -98,21 +131,46 @@ async function authLogin() {
   const [, name] = args;
   const provider = flags["--credential-provider"];
   const url = flags["--url"];
-  const plugin = (JSON.parse(process.env.AGENT_BROWSER_PLUGINS ?? "[]") as { name: string; command: string; args?: string[] }[]).find((p) => p.name === provider);
+  const plugin = (
+    JSON.parse(process.env.AGENT_BROWSER_PLUGINS ?? "[]") as {
+      name: string;
+      command: string;
+      args?: string[];
+    }[]
+  ).find((p) => p.name === provider);
   if (!plugin || !url) fail("unknown credential provider");
   if (flags["--no-navigate"]) {
     const here = state[session] ? new URL(state[session]).origin : "about:blank";
-    if (here !== new URL(url).origin) fail(`Current page origin ${here} does not match credential origin ${new URL(url).origin}`);
+    if (here !== new URL(url).origin)
+      fail(`Current page origin ${here} does not match credential origin ${new URL(url).origin}`);
   }
   checkPolicy(`plugin:${provider}:credential.read`);
-  const child = Bun.spawn([plugin!.command, ...(plugin!.args ?? [])], { stdin: "pipe", stdout: "pipe", stderr: "ignore" });
-  child.stdin.write(JSON.stringify({ protocol: "agent-browser.plugin.v1", type: "credential.resolve", capability: "credential.read", request: { profileName: name, itemRef: flags["--item"], url } }));
+  const child = Bun.spawn([plugin!.command, ...(plugin!.args ?? [])], {
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  child.stdin.write(
+    JSON.stringify({
+      protocol: "agent-browser.plugin.v1",
+      type: "credential.resolve",
+      capability: "credential.read",
+      request: { profileName: name, itemRef: flags["--item"], url },
+    }),
+  );
   child.stdin.end();
-  const answer = JSON.parse((await new Response(child.stdout).text()) || "{}") as { success?: boolean; credential?: { username: string; password: string } };
+  const answer = JSON.parse((await new Response(child.stdout).text()) || "{}") as {
+    success?: boolean;
+    credential?: { username: string; password: string };
+  };
   if (!answer.success || !answer.credential) fail("credential provider failed");
   const expected = script.logins?.[url!];
   if (expected?.error) fail(expected.error);
-  if (expected && answer.credential!.username === expected.username && answer.credential!.password === expected.password) {
+  if (
+    expected &&
+    answer.credential!.username === expected.username &&
+    answer.credential!.password === expected.password
+  ) {
     state[session] = expected.then;
     writeFileSync(join(dir!, "state.json"), JSON.stringify(state));
   }
@@ -124,7 +182,8 @@ if (script.fail?.[command]) fail(script.fail[command]);
 
 switch (command) {
   case "open": {
-    if (script.viaProxy && flags["--proxy"]) await fetch(args[0], { proxy: flags["--proxy"] }).then((r) => r.arrayBuffer());
+    if (script.viaProxy && flags["--proxy"])
+      await fetch(args[0], { proxy: flags["--proxy"] }).then((r) => r.arrayBuffer());
     state[session] = script.redirects?.[args[0]] ?? args[0];
     writeFileSync(join(dir, "state.json"), JSON.stringify(state));
     reply({ title: pageAt(state[session]).title ?? "", url: state[session] });
@@ -140,7 +199,11 @@ switch (command) {
       if (!page.selectors?.[selector]) fail(`Selector '${selector}' did not match any element`);
       snapshot = page.selectors![selector];
     }
-    if (args.includes("-i")) snapshot = snapshot.split("\n").filter((l) => l.includes("[ref=")).join("\n");
+    if (args.includes("-i"))
+      snapshot = snapshot
+        .split("\n")
+        .filter((l) => l.includes("[ref="))
+        .join("\n");
     reply({ origin: url, refs: {}, removedRefs: [], snapshot });
     break;
   }
@@ -161,7 +224,19 @@ switch (command) {
     reply({ path: args[0] });
     break;
   case "tab":
-    reply({ tabs: state[session] ? [{ active: true, tabId: "t1", title: pageAt(state[session]).title ?? "", type: "page", url: state[session] }] : [] });
+    reply({
+      tabs: state[session]
+        ? [
+            {
+              active: true,
+              tabId: "t1",
+              title: pageAt(state[session]).title ?? "",
+              type: "page",
+              url: state[session],
+            },
+          ]
+        : [],
+    });
     break;
   case "click":
   case "fill":

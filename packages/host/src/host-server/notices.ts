@@ -26,7 +26,9 @@ export function createNotices(o: { broadcast(n: Notice): void; wake(): void }): 
       if (!unspoken.length) return undefined;
       const batch = unspoken;
       unspoken = [];
-      const lines = batch.map((n) => `- [${n.source}] ${n.title}${n.body ? ` — ${n.body}` : ""}`).join("\n");
+      const lines = batch
+        .map((n) => `- [${n.source}] ${n.title}${n.body ? ` — ${n.body}` : ""}`)
+        .join("\n");
       return {
         update: batch.map((n) => n.title).join(" · "),
         prompt:

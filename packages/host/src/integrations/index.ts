@@ -2,20 +2,38 @@ import type { Database } from "bun:sqlite";
 import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+
+import type { McpServerConfig, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  CatalogInfo,
+  Integration,
+  IntegrationAuth,
+  IntegrationTransport,
+  OwnClient,
+  ToolPolicy,
+} from "@claudebot/contract/events";
+import {
+  auth as mcpAuth,
+  type OAuthClientProvider,
+} from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
+import {
+  StdioClientTransport,
+  getDefaultEnvironment,
+} from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { auth as mcpAuth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
-import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
-import type { McpServerConfig, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  OAuthClientInformationMixed,
+  OAuthTokens,
+} from "@modelcontextprotocol/sdk/shared/auth.js";
+
 import { InvalidInput, NotFound } from "../platform/errors.ts";
 import { secretName, type SecretStore } from "../platform/secrets.ts";
 import { CATALOG, type CatalogEntry } from "./catalog.ts";
 import { buildPlugin, gitClone, scanSkills, type GitClone } from "./skills.ts";
 import * as store from "./store.ts";
 import type { DiscoveredTool, IntegrationRecord } from "./store.ts";
-import type { CatalogInfo, Integration, IntegrationAuth, IntegrationTransport, OwnClient, ToolPolicy } from "@claudebot/contract/events";
 
 export type { ToolPolicy };
 export type ServerName = string & { readonly __brand: "ServerName" };
@@ -45,7 +63,11 @@ export type ServerStatus = {
   name: string;
   status: string;
   error?: string;
-  tools?: { name: string; description?: string; annotations?: { readOnly?: boolean; destructive?: boolean } }[];
+  tools?: {
+    name: string;
+    description?: string;
+    annotations?: { readOnly?: boolean; destructive?: boolean };
+  }[];
 };
 
 /** A name already taken; maps to HTTP 409. */
@@ -58,7 +80,11 @@ const SIGN_IN_TTL_MS = 10 * 60_000;
 const EXPIRY_MARGIN_MS = 5 * 60_000;
 
 /** The OAuth half of an integration's keychain entry: the registered client and the current tokens. */
-type OAuthSecret = { client?: OAuthClientInformationMixed; tokens?: OAuthTokens; expiresAt?: number };
+type OAuthSecret = {
+  client?: OAuthClientInformationMixed;
+  tokens?: OAuthTokens;
+  expiresAt?: number;
+};
 type Secret = { token?: string; env?: Record<string, string>; oauth?: OAuthSecret };
 
 /** Google issues a refresh token only when asked for offline access, and re-issues one only on a fresh consent. */
@@ -81,7 +107,13 @@ class OAuthState implements OAuthClientProvider {
     private readonly persist?: (s: OAuthSecret) => Promise<void>,
   ) {}
   get clientMetadata() {
-    return { client_name: "Claudebot", redirect_uris: [this.redirectUrl], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" };
+    return {
+      client_name: "Claudebot",
+      redirect_uris: [this.redirectUrl],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+    };
   }
   state = () => this.stateValue;
   clientInformation = () => this.secret.client;
@@ -91,7 +123,8 @@ class OAuthState implements OAuthClientProvider {
   tokens = () => this.secret.tokens;
   async saveTokens(t: OAuthTokens) {
     this.secret.tokens = t;
-    this.secret.expiresAt = t.expires_in === undefined ? undefined : this.now() + t.expires_in * 1000;
+    this.secret.expiresAt =
+      t.expires_in === undefined ? undefined : this.now() + t.expires_in * 1000;
     await this.persist?.(this.secret);
   }
   redirectToAuthorization(u: URL) {
@@ -106,7 +139,10 @@ class OAuthState implements OAuthClientProvider {
 function parseServerName(raw: string): ServerName {
   if (!raw) throw new InvalidInput("name required");
   if (RESERVED.has(raw)) throw new InvalidInput(`"${raw}" is reserved`);
-  if (!NAME.test(raw)) throw new InvalidInput("name must start with a lowercase letter and use only lowercase letters, digits and _ (max 32)");
+  if (!NAME.test(raw))
+    throw new InvalidInput(
+      "name must start with a lowercase letter and use only lowercase letters, digits and _ (max 32)",
+    );
   return raw as ServerName;
 }
 
@@ -117,21 +153,32 @@ function parseRemoteUrl(raw: string): string {
   } catch {
     throw new InvalidInput("url is not valid");
   }
-  if (u.protocol !== "http:" && u.protocol !== "https:") throw new InvalidInput("url must start with http:// or https://");
+  if (u.protocol !== "http:" && u.protocol !== "https:")
+    throw new InvalidInput("url must start with http:// or https://");
   return u.toString();
 }
 
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function parseEnv(env: Record<string, string> = {}): Record<string, string> {
-  for (const k of Object.keys(env)) if (!ENV_KEY.test(k)) throw new InvalidInput(`"${k}" is not a valid environment variable name`);
+  for (const k of Object.keys(env))
+    if (!ENV_KEY.test(k)) throw new InvalidInput(`"${k}" is not a valid environment variable name`);
   return env;
 }
 
-function parseStdio(input: { command: string; args?: string[]; env?: Record<string, string> }): IntegrationTransport {
+function parseStdio(input: {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}): IntegrationTransport {
   const command = input.command.trim();
   if (!command) throw new InvalidInput("command required");
-  return { type: "stdio", command, args: input.args ?? [], envKeys: Object.keys(parseEnv(input.env)) };
+  return {
+    type: "stdio",
+    command,
+    args: input.args ?? [],
+    envKeys: Object.keys(parseEnv(input.env)),
+  };
 }
 
 const remoteUrl = (t: IntegrationTransport): string => {
@@ -139,16 +186,23 @@ const remoteUrl = (t: IntegrationTransport): string => {
   return t.url;
 };
 
-const bearerHeaders = (token?: string): Record<string, string> => (token ? { Authorization: `Bearer ${token}` } : {});
+const bearerHeaders = (token?: string): Record<string, string> =>
+  token ? { Authorization: `Bearer ${token}` } : {};
 
-const ownClientOf = (a: IntegrationAuth) => (a.kind === "none" ? undefined : "ownClient" in a ? a.ownClient : undefined);
+const ownClientOf = (a: IntegrationAuth) =>
+  a.kind === "none" ? undefined : "ownClient" in a ? a.ownClient : undefined;
 
-const takesToken = (a: IntegrationAuth) => a.kind === "bearer" || (a.kind === "oauth" && !!a.alternative);
+const takesToken = (a: IntegrationAuth) =>
+  a.kind === "bearer" || (a.kind === "oauth" && !!a.alternative);
 
 const toolId = (server: string, tool: string) => `mcp__${server}__${tool}`;
 
 /** Lists a remote server's tools straight through the MCP client; Claude Code is not involved. */
-async function discover(t: IntegrationTransport, token?: string, env?: Record<string, string>): Promise<DiscoveredTool[]> {
+async function discover(
+  t: IntegrationTransport,
+  token?: string,
+  env?: Record<string, string>,
+): Promise<DiscoveredTool[]> {
   const client = new Client({ name: "claudebot", version: "0.1.0" });
   const timer = new AbortController();
   const timeout = setTimeout(() => timer.abort(), DISCOVERY_TIMEOUT_MS);
@@ -156,9 +210,20 @@ async function discover(t: IntegrationTransport, token?: string, env?: Record<st
     const headers = bearerHeaders(token);
     const transport =
       t.type === "stdio"
-        ? new StdioClientTransport({ command: t.command, args: t.args, env: { ...getDefaultEnvironment(), ...env }, stderr: "ignore" })
+        ? new StdioClientTransport({
+            command: t.command,
+            args: t.args,
+            env: { ...getDefaultEnvironment(), ...env },
+            stderr: "ignore",
+          })
         : t.type === "sse"
-          ? new SSEClientTransport(new URL(t.url), { requestInit: { headers }, eventSourceInit: { fetch: (u, init) => fetch(u, { ...init, headers: { ...init?.headers, ...headers } }) } })
+          ? new SSEClientTransport(new URL(t.url), {
+              requestInit: { headers },
+              eventSourceInit: {
+                fetch: (u, init) =>
+                  fetch(u, { ...init, headers: { ...init?.headers, ...headers } }),
+              },
+            })
           : new StreamableHTTPClientTransport(new URL(t.url), { requestInit: { headers } });
     await client.connect(transport, { signal: timer.signal });
     const found: DiscoveredTool[] = [];
@@ -167,7 +232,12 @@ async function discover(t: IntegrationTransport, token?: string, env?: Record<st
       const page = await client.listTools({ cursor }, { signal: timer.signal });
       for (const x of page.tools) {
         const readOnly = x.annotations?.readOnlyHint === true;
-        found.push({ name: x.name, description: x.description ?? "", readOnly, destructive: !readOnly && x.annotations?.destructiveHint !== false });
+        found.push({
+          name: x.name,
+          description: x.description ?? "",
+          readOnly,
+          destructive: !readOnly && x.annotations?.destructiveHint !== false,
+        });
       }
       cursor = page.nextCursor;
     } while (cursor);
@@ -199,18 +269,46 @@ export function createIntegrations(deps: {
   const clonesDir = join(deps.hostDir, "skills");
   const skillsErrors = new Map<string, string>();
 
-  const info = (c: CatalogEntry): CatalogInfo => ({ category: c.category, tagline: c.tagline, icon: c.icon, examples: c.examples, skillsRepo: c.skillsRepo });
+  const info = (c: CatalogEntry): CatalogInfo => ({
+    category: c.category,
+    tagline: c.tagline,
+    icon: c.icon,
+    examples: c.examples,
+    skillsRepo: c.skillsRepo,
+  });
   const view = (r: IntegrationRecord): Integration => {
     const entry = catalog.find((c) => c.id === r.catalogId);
-    return { ...r, catalog: entry ? info(entry) : null, redirectUrl: deps.oauthRedirectUrl, label: entry?.label ?? r.name, tools: store.tools(db, r.id), skills: store.skills(db, r.id), skillsError: skillsErrors.get(r.id) };
+    return {
+      ...r,
+      catalog: entry ? info(entry) : null,
+      redirectUrl: deps.oauthRedirectUrl,
+      label: entry?.label ?? r.name,
+      tools: store.tools(db, r.id),
+      skills: store.skills(db, r.id),
+      skillsError: skillsErrors.get(r.id),
+    };
   };
 
   /** A built-in gets its row on its first connect, under this id, so the screen keeps showing the same item. A name a custom server took hides the entry. */
   const catalogRowId = (c: CatalogEntry) => `catalog:${c.id}`;
-  const unadded = () => catalog.filter((c) => !store.catalogRowExists(db, c.id) && !store.nameTaken(db, c.id));
+  const unadded = () =>
+    catalog.filter((c) => !store.catalogRowExists(db, c.id) && !store.nameTaken(db, c.id));
   const browse = (c: CatalogEntry): Integration => ({
-    id: catalogRowId(c), catalogId: c.id, catalog: info(c), label: c.label, name: c.id, transport: { type: "http", url: c.url }, auth: c.auth, redirectUrl: deps.oauthRedirectUrl,
-    enabled: true, state: "disconnected", error: null, tools: [], skills: [], createdAt: 0, updatedAt: 0,
+    id: catalogRowId(c),
+    catalogId: c.id,
+    catalog: info(c),
+    label: c.label,
+    name: c.id,
+    transport: { type: "http", url: c.url },
+    auth: c.auth,
+    redirectUrl: deps.oauthRedirectUrl,
+    enabled: true,
+    state: "disconnected",
+    error: null,
+    tools: [],
+    skills: [],
+    createdAt: 0,
+    updatedAt: 0,
   });
 
   /** The row id to connect: a browsed built-in's id inserts its row first. */
@@ -219,8 +317,16 @@ export function createIntegrations(deps: {
     if (!c) return id;
     const at = now();
     store.insert(db, {
-      id, catalogId: c.id, name: c.id, transport: { type: "http", url: c.url }, auth: c.auth,
-      enabled: true, state: "disconnected", error: null, createdAt: at, updatedAt: at,
+      id,
+      catalogId: c.id,
+      name: c.id,
+      transport: { type: "http", url: c.url },
+      auth: c.auth,
+      enabled: true,
+      state: "disconnected",
+      error: null,
+      createdAt: at,
+      updatedAt: at,
     });
     return id;
   }
@@ -232,7 +338,9 @@ export function createIntegrations(deps: {
   }
 
   const cloneDir = (r: IntegrationRecord) => join(clonesDir, r.name);
-  const skillsSource = (r: IntegrationRecord) => r.transport.skillsDir ?? (catalog.find((c) => c.id === r.catalogId)?.skillsRepo ? cloneDir(r) : undefined);
+  const skillsSource = (r: IntegrationRecord) =>
+    r.transport.skillsDir ??
+    (catalog.find((c) => c.id === r.catalogId)?.skillsRepo ? cloneDir(r) : undefined);
 
   /** Clones a built-in's skills repository once; a failure is shown on the card and never blocks the connection. */
   async function ensureClone(r: IntegrationRecord) {
@@ -262,7 +370,8 @@ export function createIntegrations(deps: {
   /** A catalog entry's auth is catalog data, so rows made by an earlier release follow it. */
   for (const c of catalog) {
     const row = store.list(db).find((r) => r.catalogId === c.id);
-    if (row && JSON.stringify(row.auth) !== JSON.stringify(c.auth)) store.setAuth(db, row.id, c.auth);
+    if (row && JSON.stringify(row.auth) !== JSON.stringify(c.auth))
+      store.setAuth(db, row.id, c.auth);
   }
 
   const readSecret = async (id: string): Promise<Secret> => {
@@ -280,9 +389,12 @@ export function createIntegrations(deps: {
     if (!o?.tokens) return {};
     if (o.expiresAt !== undefined && now() >= o.expiresAt - EXPIRY_MARGIN_MS) {
       const r = need(id);
-      const provider = new OAuthState(deps.oauthRedirectUrl, "", o, now, async (x) => secrets.set(secretName(id), JSON.stringify({ oauth: x } satisfies Secret)));
+      const provider = new OAuthState(deps.oauthRedirectUrl, "", o, now, async (x) =>
+        secrets.set(secretName(id), JSON.stringify({ oauth: x } satisfies Secret)),
+      );
       try {
-        if ((await mcpAuth(provider, { serverUrl: remoteUrl(r.transport) })) !== "AUTHORIZED") return {};
+        if ((await mcpAuth(provider, { serverUrl: remoteUrl(r.transport) })) !== "AUTHORIZED")
+          return {};
       } catch {
         return {};
       }
@@ -317,7 +429,8 @@ export function createIntegrations(deps: {
       store.upsertTools(db, id, await discover(r.transport, token, env), now());
       await ensureClone(r);
       syncSkills(r);
-      if (token && pasted && takesToken(r.auth)) await secrets.set(secretName(id), JSON.stringify({ token } satisfies Secret));
+      if (token && pasted && takesToken(r.auth))
+        await secrets.set(secretName(id), JSON.stringify({ token } satisfies Secret));
       store.setState(db, id, "connected", null, now());
     } catch (e) {
       store.setState(db, id, "failed", (e as Error).message, now());
@@ -329,7 +442,10 @@ export function createIntegrations(deps: {
   const probe = (id: string) => connect(added(id));
 
   /** Built-ins whose own clients carry the same `appLabel` (the Google services) sign in with one client the user entered once. */
-  async function sharedClient(id: string, ownClient: OwnClient): Promise<OAuthClientInformationMixed | undefined> {
+  async function sharedClient(
+    id: string,
+    ownClient: OwnClient,
+  ): Promise<OAuthClientInformationMixed | undefined> {
     for (const r of store.list(db)) {
       if (r.id === id || ownClientOf(r.auth)?.appLabel !== ownClient.appLabel) continue;
       const client = (await readSecret(r.id)).oauth?.client;
@@ -338,10 +454,14 @@ export function createIntegrations(deps: {
   }
 
   /** Registers (or reuses) a client, then returns the provider's authorize URL. A browsed built-in gets its row here; no secret is stored until sign-in completes. */
-  async function connectOAuth(rawId: string, own?: { clientId: string; clientSecret: string }): Promise<{ authorizeUrl: string }> {
+  async function connectOAuth(
+    rawId: string,
+    own?: { clientId: string; clientSecret: string },
+  ): Promise<{ authorizeUrl: string }> {
     const r = peek(rawId);
     const ownClient = ownClientOf(r.auth);
-    if (r.auth.kind !== "oauth" && !ownClient) throw new InvalidInput("this integration does not sign in with OAuth");
+    if (r.auth.kind !== "oauth" && !ownClient)
+      throw new InvalidInput("this integration does not sign in with OAuth");
     for (const [state, p] of pending) if (now() - p.at > SIGN_IN_TTL_MS) pending.delete(state);
     const state = randomBytes(24).toString("base64url");
     let client = (await readSecret(r.id)).oauth?.client;
@@ -349,39 +469,61 @@ export function createIntegrations(deps: {
       const clientId = own?.clientId.trim();
       const clientSecret = own?.clientSecret.trim();
       if (clientId || clientSecret) {
-        if (!clientId || !clientSecret) throw new InvalidInput("enter both the client ID and the client secret");
+        if (!clientId || !clientSecret)
+          throw new InvalidInput("enter both the client ID and the client secret");
         client = { client_id: clientId, client_secret: clientSecret };
       }
       client ??= await sharedClient(r.id, ownClient);
-      if (!client) throw new InvalidInput(`enter the client ID and secret of your ${ownClient.appLabel}`);
+      if (!client)
+        throw new InvalidInput(`enter the client ID and secret of your ${ownClient.appLabel}`);
     }
     const id = added(rawId);
     const provider = new OAuthState(deps.oauthRedirectUrl, state, client ? { client } : {}, now);
     let result;
     try {
-      result = await mcpAuth(provider, { serverUrl: remoteUrl(r.transport), scope: ownClient?.scope });
+      result = await mcpAuth(provider, {
+        serverUrl: remoteUrl(r.transport),
+        scope: ownClient?.scope,
+      });
     } catch (e) {
       throw new InvalidInput(`could not start sign-in: ${(e as Error).message}`);
     }
-    if (result !== "REDIRECT" || !provider.authorizeUrl) throw new InvalidInput("the server did not ask for sign-in");
+    if (result !== "REDIRECT" || !provider.authorizeUrl)
+      throw new InvalidInput("the server did not ask for sign-in");
     pending.set(state, { id, provider, at: now() });
     return { authorizeUrl: provider.authorizeUrl.toString() };
   }
 
   /** Completes a sign-in from the provider's redirect; an unknown or expired state throws InvalidInput and stores nothing. */
-  async function finishOAuth(state: string, result: { code?: string; error?: string }): Promise<Integration> {
+  async function finishOAuth(
+    state: string,
+    result: { code?: string; error?: string },
+  ): Promise<Integration> {
     const p = pending.get(state);
     pending.delete(state);
     if (!p) throw new InvalidInput("unknown or already used sign-in");
-    if (now() - p.at > SIGN_IN_TTL_MS) throw new InvalidInput("sign-in expired; press Connect again");
+    if (now() - p.at > SIGN_IN_TTL_MS)
+      throw new InvalidInput("sign-in expired; press Connect again");
     const r = store.get(db, p.id);
     if (!r) throw new NotFound("no such integration");
     try {
-      if (!result.code) throw new Error(result.error ? `sign-in refused: ${result.error}` : "no authorization code returned");
-      if ((await mcpAuth(p.provider, { serverUrl: remoteUrl(r.transport), authorizationCode: result.code })) !== "AUTHORIZED") throw new Error("the provider did not accept the sign-in");
+      if (!result.code)
+        throw new Error(
+          result.error ? `sign-in refused: ${result.error}` : "no authorization code returned",
+        );
+      if (
+        (await mcpAuth(p.provider, {
+          serverUrl: remoteUrl(r.transport),
+          authorizationCode: result.code,
+        })) !== "AUTHORIZED"
+      )
+        throw new Error("the provider did not accept the sign-in");
       const tokens = p.provider.secret.tokens!;
       store.upsertTools(db, r.id, await discover(r.transport, tokens.access_token), now());
-      await secrets.set(secretName(r.id), JSON.stringify({ oauth: p.provider.secret } satisfies Secret));
+      await secrets.set(
+        secretName(r.id),
+        JSON.stringify({ oauth: p.provider.secret } satisfies Secret),
+      );
       store.setState(db, r.id, "connected", null, now());
     } catch (e) {
       store.setState(db, r.id, "failed", (e as Error).message, now());
@@ -396,7 +538,9 @@ export function createIntegrations(deps: {
       .list(db)
       .filter((r) => toolName.startsWith(`mcp__${r.name}__`))
       .sort((a, b) => b.name.length - a.name.length);
-    const hit = matches.find((r) => store.toolPolicy(db, r.id, toolName.slice(`mcp__${r.name}__`.length))) ?? matches[0];
+    const hit =
+      matches.find((r) => store.toolPolicy(db, r.id, toolName.slice(`mcp__${r.name}__`.length))) ??
+      matches[0];
     return hit && { r: hit, tool: toolName.slice(`mcp__${hit.name}__`.length) };
   }
 
@@ -409,24 +553,43 @@ export function createIntegrations(deps: {
     list: (): Integration[] => [...store.list(db).map(view), ...unadded().map(browse)],
 
     async addCustom(
-      input: { name: string; token?: string; skillsDir?: string } & ({ url: string; transport: "http" | "sse"; oauth?: boolean } | { transport: "stdio"; command: string; args?: string[]; env?: Record<string, string> }),
+      input: { name: string; token?: string; skillsDir?: string } & (
+        | { url: string; transport: "http" | "sse"; oauth?: boolean }
+        | { transport: "stdio"; command: string; args?: string[]; env?: Record<string, string> }
+      ),
     ): Promise<Integration> {
       const token = input.token?.trim() || undefined;
       const name = parseServerName(input.name);
       const skillsDir = input.skillsDir?.trim() || undefined;
-      if (skillsDir && !isAbsolute(skillsDir)) throw new InvalidInput("skills folder must be an absolute path");
+      if (skillsDir && !isAbsolute(skillsDir))
+        throw new InvalidInput("skills folder must be an absolute path");
       const transport: IntegrationTransport = {
-        ...(input.transport === "stdio" ? parseStdio(input) : { type: input.transport, url: parseRemoteUrl(input.url) }),
+        ...(input.transport === "stdio"
+          ? parseStdio(input)
+          : { type: input.transport, url: parseRemoteUrl(input.url) }),
         ...(skillsDir && { skillsDir }),
       };
-      if (store.nameTaken(db, name)) throw new NameTaken(`an integration named "${name}" already exists`);
+      if (store.nameTaken(db, name))
+        throw new NameTaken(`an integration named "${name}" already exists`);
       const oauth = input.transport !== "stdio" && !!input.oauth;
       if (oauth && token) throw new InvalidInput("choose either a token or OAuth");
       const at = now();
       const id = randomUUID();
       store.insert(db, {
-        id, catalogId: null, name, transport, auth: oauth ? { kind: "oauth", client: "dcr" } : token && transport.type !== "stdio" ? { kind: "bearer" } : { kind: "none" },
-        enabled: true, state: "disconnected", error: null, createdAt: at, updatedAt: at,
+        id,
+        catalogId: null,
+        name,
+        transport,
+        auth: oauth
+          ? { kind: "oauth", client: "dcr" }
+          : token && transport.type !== "stdio"
+            ? { kind: "bearer" }
+            : { kind: "none" },
+        enabled: true,
+        state: "disconnected",
+        error: null,
+        createdAt: at,
+        updatedAt: at,
       });
       if (input.transport === "stdio") {
         const env = parseEnv(input.env);
@@ -447,7 +610,8 @@ export function createIntegrations(deps: {
     async setBearer(rawId: string, token: string) {
       const t = token.trim();
       if (!t) throw new InvalidInput("token required");
-      if (!takesToken(peek(rawId).auth)) throw new InvalidInput("this integration does not take a token");
+      if (!takesToken(peek(rawId).auth))
+        throw new InvalidInput("this integration does not take a token");
       const id = added(rawId);
       return connect(id, t);
     },
@@ -506,27 +670,44 @@ export function createIntegrations(deps: {
         const source = skillsSource(r);
         if (source) {
           if (active) syncSkills(r);
-          const enabled = active && !skillsErrors.has(r.id) ? store.skills(db, r.id).filter((k) => k.enabled).map((k) => k.name) : [];
+          const enabled =
+            active && !skillsErrors.has(r.id)
+              ? store
+                  .skills(db, r.id)
+                  .filter((k) => k.enabled)
+                  .map((k) => k.name)
+              : [];
           const path = buildPlugin(pluginsDir, r.name, source, enabled);
           if (path) plugins.push({ type: "local", path, skipMcpDiscovery: true });
         }
         if (!r.enabled || r.state !== "connected") continue;
         if (r.transport.type === "stdio") {
           const env = (await readSecret(r.id)).env;
-          mcpServers[r.name as ServerName] = { type: "stdio", command: r.transport.command, args: r.transport.args, ...(env && { env }) };
+          mcpServers[r.name as ServerName] = {
+            type: "stdio",
+            command: r.transport.command,
+            args: r.transport.args,
+            ...(env && { env }),
+          };
         } else {
-        const { token, expiresAt: exp } = r.auth.kind === "none" ? {} : await readToken(r.id);
-        if (r.auth.kind !== "none" && !token) {
-          if (r.auth.kind === "oauth" || ownClientOf(r.auth)) {
-            store.setState(db, r.id, "needs-auth", null, now());
-            setTimeout(onChange, 0);
+          const { token, expiresAt: exp } = r.auth.kind === "none" ? {} : await readToken(r.id);
+          if (r.auth.kind !== "none" && !token) {
+            if (r.auth.kind === "oauth" || ownClientOf(r.auth)) {
+              store.setState(db, r.id, "needs-auth", null, now());
+              setTimeout(onChange, 0);
+            }
+            continue;
           }
-          continue;
+          if (exp !== undefined)
+            expiresAt = Math.min(expiresAt ?? Infinity, exp - EXPIRY_MARGIN_MS);
+          mcpServers[r.name as ServerName] = {
+            type: r.transport.type,
+            url: r.transport.url,
+            ...(token && { headers: bearerHeaders(token) }),
+          };
         }
-        if (exp !== undefined) expiresAt = Math.min(expiresAt ?? Infinity, exp - EXPIRY_MARGIN_MS);
-        mcpServers[r.name as ServerName] = { type: r.transport.type, url: r.transport.url, ...(token && { headers: bearerHeaders(token) }) };
-        }
-        for (const t of store.tools(db, r.id)) if (t.policy === "off") disallowedTools.push(toolId(r.name, t.name));
+        for (const t of store.tools(db, r.id))
+          if (t.policy === "off") disallowedTools.push(toolId(r.name, t.name));
       }
       return { mcpServers, disallowedTools, plugins, policyOf, expiresAt };
     },
@@ -541,15 +722,29 @@ export function createIntegrations(deps: {
         if (!r || !r.enabled || r.state !== "connected") continue;
         if (s.status === "needs-auth" || s.status === "failed") {
           // Claude Code reports a rejected bearer as `failed` (HTTP 401), never `needs-auth`; for an OAuth integration that means the grant is gone.
-          const signIn = s.status === "needs-auth" || (r.auth.kind === "oauth" && /\b401\b/.test(s.error ?? ""));
-          store.setState(db, r.id, signIn ? "needs-auth" : "failed", signIn ? null : (s.error ?? "connection failed"), now());
+          const signIn =
+            s.status === "needs-auth" || (r.auth.kind === "oauth" && /\b401\b/.test(s.error ?? ""));
+          store.setState(
+            db,
+            r.id,
+            signIn ? "needs-auth" : "failed",
+            signIn ? null : (s.error ?? "connection failed"),
+            now(),
+          );
           changed = true;
         } else if (s.status === "connected" && s.tools) {
           const known = new Set(store.tools(db, r.id).map((t) => t.name));
-          const added = s.tools.filter((t) => !known.has(t.name)).map((t) => {
-            const readOnly = t.annotations?.readOnly === true;
-            return { name: t.name, description: t.description ?? "", readOnly, destructive: !readOnly && t.annotations?.destructive !== false };
-          });
+          const added = s.tools
+            .filter((t) => !known.has(t.name))
+            .map((t) => {
+              const readOnly = t.annotations?.readOnly === true;
+              return {
+                name: t.name,
+                description: t.description ?? "",
+                readOnly,
+                destructive: !readOnly && t.annotations?.destructive !== false,
+              };
+            });
           if (added.length) {
             store.upsertTools(db, r.id, added, now());
             changed = true;

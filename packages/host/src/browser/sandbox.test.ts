@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { claudeHarness } from "../harness/index.ts";
 import { browserIsolation, sandboxStatus } from "./sandbox.ts";
 
@@ -16,16 +17,23 @@ describe("sandbox availability", () => {
 
   test("Linux names each missing dependency", () => {
     expect(sandboxStatus(probe("linux", ["bwrap", "socat"])).status).toBe("available");
-    expect(sandboxStatus(probe("linux", ["bwrap"]))).toEqual({ status: "unavailable", reason: expect.stringContaining("socat") });
+    expect(sandboxStatus(probe("linux", ["bwrap"]))).toEqual({
+      status: "unavailable",
+      reason: expect.stringContaining("socat"),
+    });
   });
 
   test("other platforms are unavailable with a reason", () => {
-    expect(sandboxStatus(probe("win32"))).toEqual({ status: "unavailable", reason: expect.stringContaining("win32") });
+    expect(sandboxStatus(probe("win32"))).toEqual({
+      status: "unavailable",
+      reason: expect.stringContaining("win32"),
+    });
   });
 });
 
 describe("claude isolation profile", () => {
-  const launch = (isolation = {}) => claudeHarness.launch({ hostServers: [], systemPromptAppend: "", isolation }).options;
+  const launch = (isolation = {}) =>
+    claudeHarness.launch({ hostServers: [], systemPromptAppend: "", isolation }).options;
 
   test("browser bots get a hard sandbox with outbound traffic and denied state dir", () => {
     const o = launch(browserIsolation());
@@ -37,7 +45,9 @@ describe("claude isolation profile", () => {
       filesystem: { denyRead: expect.arrayContaining([expect.stringContaining(".agent-browser")]) },
     });
     expect(o.sandbox?.network?.allowLocalBinding).toBeUndefined();
-    expect(o.disallowedTools).toContainEqual(expect.stringMatching(/^Read\(\/\/.*\.agent-browser\/\*\*\)$/));
+    expect(o.disallowedTools).toContainEqual(
+      expect.stringMatching(/^Read\(\/\/.*\.agent-browser\/\*\*\)$/),
+    );
   });
 
   test("bots without the browser stay unconfined", () => {

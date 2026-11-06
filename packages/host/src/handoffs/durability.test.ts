@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
 import { startHandoffHost, parse, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
@@ -12,7 +13,9 @@ async function open() {
   const b = host.createBot("Bob", "searches");
   const alice = await host.actAs(a);
   const bob = await host.actAs(b);
-  const { handoff_id } = parse<{ handoff_id: string }>(await alice.call("hand_off", { to: b, title: "T", brief: BRIEF }));
+  const { handoff_id } = parse<{ handoff_id: string }>(
+    await alice.call("hand_off", { to: b, title: "T", brief: BRIEF }),
+  );
   await host.until(() => host.messagesOf(b).length === 1);
   return { a, b, alice, bob, handoff_id };
 }
@@ -22,7 +25,9 @@ describe("restart", () => {
     const { b, handoff_id } = await open();
     await host.restart();
     await host.until(() => host.messagesOf(b).length === 2);
-    expect(host.messagesOf(b)[1]).toContain(`<handoff id="${handoff_id}" requester="Alice" title="T" resumed="true">`);
+    expect(host.messagesOf(b)[1]).toContain(
+      `<handoff id="${handoff_id}" requester="Alice" title="T" resumed="true">`,
+    );
     expect(host.messagesOf(b)[1]).toContain(BRIEF);
   });
 
@@ -52,13 +57,19 @@ describe("removing a bot", () => {
     const { a, b, alice, handoff_id } = await open();
     const c = host.createBot("Cara", "writes");
     const bob = await host.actAs(b);
-    const second = parse<{ handoff_id: string }>(await bob.call("hand_off", { to: c, title: "U", brief: BRIEF }));
+    const second = parse<{ handoff_id: string }>(
+      await bob.call("hand_off", { to: c, title: "U", brief: BRIEF }),
+    );
     await host.until(() => host.messagesOf(c).length === 1);
 
     await host.server.removeBot(b);
     await host.until(() => host.messagesOf(a).length === 1 && host.messagesOf(c).length === 2);
-    expect(host.messagesOf(a)[0]).toContain(`<handoff-update id="${handoff_id}" from="Bob" status="failed">`);
-    expect(host.messagesOf(c)[1]).toContain(`<handoff-update id="${second.handoff_id}" from="Bob" status="failed">`);
+    expect(host.messagesOf(a)[0]).toContain(
+      `<handoff-update id="${handoff_id}" from="Bob" status="failed">`,
+    );
+    expect(host.messagesOf(c)[1]).toContain(
+      `<handoff-update id="${second.handoff_id}" from="Bob" status="failed">`,
+    );
     const again = await alice.call("cancel_handoff", { handoff_id, reason: "x" });
     expect(again.isError).toBe(true);
   });

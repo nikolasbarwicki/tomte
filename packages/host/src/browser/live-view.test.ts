@@ -1,16 +1,18 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBot } from "../bots/index.ts";
-import { migrate } from "../platform/db.ts";
-import { createHostServer, type HostServer } from "../host-server/index.ts";
-import { memorySecrets } from "../platform/secrets.ts";
+
 import type { LiveMessage } from "@claudebot/contract/events";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
+import { createBot } from "../bots/index.ts";
+import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { parseHostConfig } from "../platform/config.ts";
+import { migrate } from "../platform/db.ts";
+import { memorySecrets } from "../platform/secrets.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH"] as const;
@@ -33,7 +35,8 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  for (const k of ENV_KEYS) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+  for (const k of ENV_KEYS)
+    saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -44,7 +47,8 @@ beforeEach(async () => {
   // Stands in for the engine's stream: the host reads its port from `stream status`.
   engineStream = Bun.serve({
     port: 0,
-    fetch: (req, s) => (s.upgrade(req, { data: undefined }) ? undefined : new Response("no", { status: 400 })),
+    fetch: (req, s) =>
+      s.upgrade(req, { data: undefined }) ? undefined : new Response("no", { status: 400 }),
     websocket: {
       open: (ws) => void sockets.add(ws),
       close: (ws) => void sockets.delete(ws),
@@ -70,7 +74,12 @@ afterEach(async () => {
 });
 
 const calls = () => existsSync(join(fakeDir, "calls.jsonl"));
-const api = (path: string, body: object) => fetch(`${server.url}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+const api = (path: string, body: object) =>
+  fetch(`${server.url}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 async function enabledBot() {
   const id = createBot(cwd, "bot").id;
@@ -103,7 +112,8 @@ async function watch(botId: string, headers: Record<string, string> = {}) {
   })();
   /** The next `n` messages, waiting for them to arrive. */
   async function next(n = 1): Promise<LiveMessage[]> {
-    while (queue.length < n) await new Promise((r) => arrived.addEventListener("message", r, { once: true }));
+    while (queue.length < n)
+      await new Promise((r) => arrived.addEventListener("message", r, { once: true }));
     return queue.splice(0, n);
   }
   /** Everything that arrives within `ms`. */
@@ -119,13 +129,23 @@ const until = async (check: () => boolean) => {
   expect(check()).toBe(true);
 };
 
-const frame = (n: number) => JSON.stringify({ type: "frame", data: `jpeg-${n}`, seq: n, metadata: { deviceWidth: 1280, deviceHeight: 720 } });
+const frame = (n: number) =>
+  JSON.stringify({
+    type: "frame",
+    data: `jpeg-${n}`,
+    seq: n,
+    metadata: { deviceWidth: 1280, deviceHeight: 720 },
+  });
 
 async function startBrowser(botId: string) {
   const lease = server.browser.lease(botId);
   const [s] = lease.servers;
   const client = new Client({ name: "test", version: "1.0.0" });
-  await client.connect(new StreamableHTTPClientTransport(new URL(s.url), { requestInit: { headers: { Authorization: `Bearer ${s.token}` } } }));
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(s.url), {
+      requestInit: { headers: { Authorization: `Bearer ${s.token}` } },
+    }),
+  );
   closers.push(() => client.close());
   await client.callTool({ name: "browser_open", arguments: { url: "https://example.com" } });
 }
@@ -136,7 +156,10 @@ describe("live view", () => {
     const view = await watch(id);
     expect(view.res.status).toBe(200);
     expect(view.res.headers.get("content-type")).toBe("text/event-stream");
-    expect(await view.next(2)).toEqual([{ type: "control", holder: "bot" }, { type: "state", state: "stopped" }]);
+    expect(await view.next(2)).toEqual([
+      { type: "control", holder: "bot" },
+      { type: "state", state: "stopped" },
+    ]);
     await Bun.sleep(200);
     expect(calls()).toBe(false);
   });
@@ -144,20 +167,46 @@ describe("live view", () => {
   test("the stream resumes when the browser starts, and relays frame, url, tabs and status only", async () => {
     const id = await enabledBot();
     const view = await watch(id);
-    expect(await view.next(2)).toEqual([{ type: "control", holder: "bot" }, { type: "state", state: "stopped" }]);
+    expect(await view.next(2)).toEqual([
+      { type: "control", holder: "bot" },
+      { type: "state", state: "stopped" },
+    ]);
 
     await startBrowser(id);
     await until(() => sockets.size === 1);
     for (const ws of sockets) {
       ws.send(JSON.stringify({ type: "command", action: "fill", params: { value: "hunter2" } }));
-      ws.send(JSON.stringify({ type: "tabs", tabs: [{ tabId: "t1", title: "Example", url: "https://example.com/", active: true, targetId: "x" }] }));
+      ws.send(
+        JSON.stringify({
+          type: "tabs",
+          tabs: [
+            {
+              tabId: "t1",
+              title: "Example",
+              url: "https://example.com/",
+              active: true,
+              targetId: "x",
+            },
+          ],
+        }),
+      );
       ws.send(JSON.stringify({ type: "url", url: "https://example.com/" }));
-      ws.send(JSON.stringify({ type: "status", connected: true, viewportWidth: 1280, viewportHeight: 720 }));
+      ws.send(
+        JSON.stringify({
+          type: "status",
+          connected: true,
+          viewportWidth: 1280,
+          viewportHeight: 720,
+        }),
+      );
       ws.send(frame(1));
     }
     const got = await view.drain(400);
     expect(got).toContainEqual({ type: "state", state: "live" });
-    expect(got).toContainEqual({ type: "tabs", tabs: [{ id: "t1", title: "Example", url: "https://example.com/", active: true }] });
+    expect(got).toContainEqual({
+      type: "tabs",
+      tabs: [{ id: "t1", title: "Example", url: "https://example.com/", active: true }],
+    });
     expect(got).toContainEqual({ type: "url", url: "https://example.com/" });
     expect(got).toContainEqual({ type: "frame", data: "jpeg-1", width: 1280, height: 720 });
     expect(JSON.stringify(got)).not.toContain("hunter2");
@@ -207,34 +256,61 @@ describe("live view", () => {
     writeFileSync(join(fakeDir, "script.json"), JSON.stringify({}));
     for (const ws of sockets) (ws as unknown as { close(): void }).close();
     await until(() => sockets.size === 0);
-    expect((await view.drain(300)).some((m) => m.type === "state" && m.state === "stopped")).toBe(true);
+    expect((await view.drain(300)).some((m) => m.type === "state" && m.state === "stopped")).toBe(
+      true,
+    );
   });
 
   test("a bot with the switch off has no live view", async () => {
     const id = createBot(cwd, "off").id;
-    const res = await fetch(`${server.url}/api/browser/live`, { method: "POST", headers: { "content-type": "application/json", origin: server.url }, body: JSON.stringify({ botId: id }) });
+    const res = await fetch(`${server.url}/api/browser/live`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: server.url },
+      body: JSON.stringify({ botId: id }),
+    });
     expect(res.status).toBe(403);
   });
 });
 
 describe("live view hardening", () => {
   const raw = (headers: Record<string, string>, body: string, method = "POST") =>
-    fetch(`${server.url}/api/browser/live`, { method, headers, body: method === "POST" ? body : undefined });
+    fetch(`${server.url}/api/browser/live`, {
+      method,
+      headers,
+      body: method === "POST" ? body : undefined,
+    });
 
   test("rejects a missing or cross-origin Origin", async () => {
     const id = await enabledBot();
     const body = JSON.stringify({ botId: id });
     expect((await raw({ "content-type": "application/json" }, body)).status).toBe(403);
-    expect((await raw({ "content-type": "application/json", origin: "https://evil.example" }, body)).status).toBe(403);
-    expect((await raw({ "content-type": "application/json", origin: "http://127.0.0.1:1" }, body)).status).toBe(403);
-    expect((await raw({ "content-type": "application/json", origin: "null" }, body)).status).toBe(403);
+    expect(
+      (await raw({ "content-type": "application/json", origin: "https://evil.example" }, body))
+        .status,
+    ).toBe(403);
+    expect(
+      (await raw({ "content-type": "application/json", origin: "http://127.0.0.1:1" }, body))
+        .status,
+    ).toBe(403);
+    expect((await raw({ "content-type": "application/json", origin: "null" }, body)).status).toBe(
+      403,
+    );
   });
 
   test("rejects a simple-form content type and a non-POST method", async () => {
     const id = await enabledBot();
     const body = JSON.stringify({ botId: id });
-    expect((await raw({ "content-type": "text/plain", origin: server.url }, body)).status).toBe(415);
-    expect((await raw({ "content-type": "application/x-www-form-urlencoded", origin: server.url }, `botId=${id}`)).status).toBe(415);
+    expect((await raw({ "content-type": "text/plain", origin: server.url }, body)).status).toBe(
+      415,
+    );
+    expect(
+      (
+        await raw(
+          { "content-type": "application/x-www-form-urlencoded", origin: server.url },
+          `botId=${id}`,
+        )
+      ).status,
+    ).toBe(415);
     expect((await raw({ origin: server.url }, body)).status).toBe(415);
     expect((await raw({ origin: server.url }, "", "GET")).status).toBe(405);
   });
@@ -244,7 +320,14 @@ describe("live view hardening", () => {
     const status = await new Promise<number>((resolve, reject) => {
       const req = require("node:http").request(
         `${server.url}/api/browser/live`,
-        { method: "POST", headers: { host: "evil.example", origin: "http://evil.example", "content-type": "application/json" } },
+        {
+          method: "POST",
+          headers: {
+            host: "evil.example",
+            origin: "http://evil.example",
+            "content-type": "application/json",
+          },
+        },
         (res: { statusCode: number; resume(): void }) => (res.resume(), resolve(res.statusCode)),
       );
       req.on("error", reject);

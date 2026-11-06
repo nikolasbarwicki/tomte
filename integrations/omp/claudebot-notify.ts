@@ -25,10 +25,14 @@ export default function claudebotNotify(pi: ExtensionAPI) {
   });
 
   pi.on("tool_approval_requested", (event, ctx) =>
-    post(`omp needs approval · ${project(ctx.cwd)}`, [event.toolName, event.reason].filter(Boolean).join(": ")),
+    post(
+      `omp needs approval · ${project(ctx.cwd)}`,
+      [event.toolName, event.reason].filter(Boolean).join(": "),
+    ),
   );
 
   pi.on("auto_retry_end", (event, ctx) => {
-    if (!event.success) return post(`omp retries failed · ${project(ctx.cwd)}`, event.finalError ?? "");
+    if (!event.success)
+      return post(`omp retries failed · ${project(ctx.cwd)}`, event.finalError ?? "");
   });
 }

@@ -1,14 +1,28 @@
-import { Streamdown } from "streamdown";
+import type { BotSummary, FilesEvent, MemoryScope, Routine } from "@claudebot/contract/events";
 import { EllipsisIcon, FileIcon, FolderOpenIcon, GlobeIcon, TrashIcon, XIcon } from "lucide-react";
+import { Streamdown } from "streamdown";
+
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { BotSummary, FilesEvent, MemoryScope, Routine } from "@claudebot/contract/events";
+
 import { act } from "./api.ts";
 import { BrowserPanel } from "./browser-panel.tsx";
 import { confirmAction } from "./confirm.tsx";
@@ -39,7 +53,11 @@ export function BotPanel({
   onClose: () => void;
 }) {
   return (
-    <Tabs value={tab} onValueChange={(v) => isPanelTab(v) && onTab(v)} className="h-full min-h-0 gap-0">
+    <Tabs
+      value={tab}
+      onValueChange={(v) => isPanelTab(v) && onTab(v)}
+      className="h-full min-h-0 gap-0"
+    >
       <div className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
         <TabsList className="min-w-0 flex-1">
           <TabsTrigger value="memory">Memory</TabsTrigger>
@@ -51,7 +69,9 @@ export function BotPanel({
           </TabsTrigger>
           <TabsTrigger value="browser">
             Browser
-            {bot.browser.enabled && <span className="size-1.5 rounded-full bg-emerald-500" aria-label="on" />}
+            {bot.browser.enabled && (
+              <span className="size-1.5 rounded-full bg-emerald-500" aria-label="on" />
+            )}
           </TabsTrigger>
         </TabsList>
         <Button variant="ghost" size="icon-sm" aria-label="Close panel" onClick={onClose}>
@@ -81,15 +101,23 @@ export function BotPanel({
 }
 
 function Count({ n }: { n: number }) {
-  return n > 0 ? <span className="text-xs text-muted-foreground tabular-nums">{n}</span> : null;
+  return n > 0 ? <span className="text-muted-foreground text-xs tabular-nums">{n}</span> : null;
 }
 
-function Section({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="grid gap-2">
       <div>
         <h3 className="text-sm font-medium">{title}</h3>
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <p className="text-muted-foreground text-xs">{description}</p>
       </div>
       {children}
     </section>
@@ -97,9 +125,12 @@ function Section({ title, description, children }: { title: string; description:
 }
 
 function MemoryText({ text, empty }: { text: string; empty: string }) {
-  if (!text.trim()) return <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">{empty}</p>;
+  if (!text.trim())
+    return (
+      <p className="text-muted-foreground rounded-lg border border-dashed p-3 text-sm">{empty}</p>
+    );
   return (
-    <div className="rounded-lg bg-muted/50 p-3 text-sm break-words">
+    <div className="bg-muted/50 rounded-lg p-3 text-sm break-words">
       <Streamdown linkSafety={{ enabled: false }}>{text}</Streamdown>
     </div>
   );
@@ -120,15 +151,27 @@ function Memory({ bot, memory }: { bot: BotSummary; memory: Record<MemoryScope, 
 
 function Files({ bot, files }: { bot: BotSummary; files: FilesEvent }) {
   const remove = async (path: string) => {
-    if (await confirmAction({ title: `Delete ${path}?`, description: "This cannot be undone.", action: "Delete", destructive: true })) {
+    if (
+      await confirmAction({
+        title: `Delete ${path}?`,
+        description: "This cannot be undone.",
+        action: "Delete",
+        destructive: true,
+      })
+    ) {
       await act("/api/files/delete", { path });
     }
   };
   return (
     <div className="grid gap-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">Everything {bot.name} produced.</p>
-        <Button variant="outline" size="sm" title={files.dir} onClick={() => act("/api/files/reveal", {})}>
+        <p className="text-muted-foreground text-xs">Everything {bot.name} produced.</p>
+        <Button
+          variant="outline"
+          size="sm"
+          title={files.dir}
+          onClick={() => act("/api/files/reveal", {})}
+        >
           <FolderOpenIcon /> Open folder
         </Button>
       </div>
@@ -139,22 +182,41 @@ function Files({ bot, files }: { bot: BotSummary; files: FilesEvent }) {
               <FileIcon />
             </EmptyMedia>
             <EmptyTitle className="text-sm">No files yet</EmptyTitle>
-            <EmptyDescription className="text-xs">Reports, exports and anything else the bot saves show up here.</EmptyDescription>
+            <EmptyDescription className="text-xs">
+              Reports, exports and anything else the bot saves show up here.
+            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (
         <ul className="-mx-2 grid">
           {files.files.map((f) => (
-            <li key={f.path} className="group flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-muted/60">
-              <FileIcon className="size-4 shrink-0 text-muted-foreground" />
-              <button type="button" className="grid min-w-0 flex-1 text-left" title={`Show ${f.path} in Finder`} onClick={() => act("/api/files/reveal", { path: f.path })}>
+            <li
+              key={f.path}
+              className="group hover:bg-muted/60 flex items-center gap-3 rounded-lg px-2 py-1.5"
+            >
+              <FileIcon className="text-muted-foreground size-4 shrink-0" />
+              <button
+                type="button"
+                className="grid min-w-0 flex-1 text-left"
+                title={`Show ${f.path} in Finder`}
+                onClick={() => act("/api/files/reveal", { path: f.path })}
+              >
                 <span className="truncate text-sm">{f.path}</span>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-muted-foreground text-xs">
                   {fileSize(f.size)} · {dateTime(f.mtime)}
                 </span>
               </button>
               <DropdownMenu>
-                <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label={`Actions for ${f.path}`} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100" />}>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`Actions for ${f.path}`}
+                      className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100"
+                    />
+                  }
+                >
                   <EllipsisIcon />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-40">
@@ -183,7 +245,10 @@ function Browser({ bot, unavailable }: { bot: BotSummary; unavailable: string | 
           <FieldLabel htmlFor="browser-enabled">
             <GlobeIcon className="size-4" /> Web browser
           </FieldLabel>
-          <FieldDescription className="text-xs">Gives {bot.name} its own browser. It starts on the bot's first browser call, not when you switch it on.</FieldDescription>
+          <FieldDescription className="text-xs">
+            Gives {bot.name} its own browser. It starts on the bot's first browser call, not when
+            you switch it on.
+          </FieldDescription>
         </FieldContent>
         <Switch
           id="browser-enabled"
@@ -197,7 +262,9 @@ function Browser({ bot, unavailable }: { bot: BotSummary; unavailable: string | 
           <AlertDescription>Unavailable: {unavailable}</AlertDescription>
         </Alert>
       )}
-      {bot.browser.enabled && <BrowserPanel key={bot.id} botId={bot.id} botName={bot.name} headed={bot.browser.headed} />}
+      {bot.browser.enabled && (
+        <BrowserPanel key={bot.id} botId={bot.id} botName={bot.name} headed={bot.browser.headed} />
+      )}
     </div>
   );
 }

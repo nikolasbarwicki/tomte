@@ -1,12 +1,17 @@
 import { toast } from "sonner";
 
 export const post = (path: string, body: unknown) =>
-  fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 /** The `error` the host put in a failed response, or a generic line when it sent none. */
 export async function errorOf(res: Response): Promise<string> {
   const body: unknown = await res.json().catch(() => undefined);
-  if (body && typeof body === "object" && "error" in body && typeof body.error === "string") return body.error;
+  if (body && typeof body === "object" && "error" in body && typeof body.error === "string")
+    return body.error;
   return `Request failed (${res.status})`;
 }
 

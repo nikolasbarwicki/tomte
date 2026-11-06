@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
 import { startHandoffHost, parse, type BotCaller, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
@@ -16,11 +17,15 @@ async function bots(n: number) {
   return { ids, as: callers };
 }
 
-const handOff = (who: Bot, to: string, extra: Record<string, unknown> = {}) => who.call("hand_off", { to, title: "t", brief: BRIEF, ...extra });
+const handOff = (who: Bot, to: string, extra: Record<string, unknown> = {}) =>
+  who.call("hand_off", { to, title: "t", brief: BRIEF, ...extra });
 
 describe("hand_off guardrails", () => {
   test("refuses a cycle of two and of three, and allows the edge once the loop's handoff finishes", async () => {
-    const { ids: [a, b, c], as: [alice, bob, cy] } = await bots(3);
+    const {
+      ids: [a, b, c],
+      as: [alice, bob, cy],
+    } = await bots(3);
     const ab = parse<{ handoff_id: string }>(await handOff(alice, b)).handoff_id;
     const back = await handOff(bob, a);
     expect(back.isError).toBe(true);
@@ -34,7 +39,10 @@ describe("hand_off guardrails", () => {
   });
 
   test("allows a chain of three and refuses a fourth link for depth", async () => {
-    const { ids: [, b, c, d, e], as: [alice, bob, cy, dan] } = await bots(5);
+    const {
+      ids: [, b, c, d, e],
+      as: [alice, bob, cy, dan],
+    } = await bots(5);
     expect((await handOff(alice, b)).isError).toBe(false);
     expect((await handOff(bob, c)).isError).toBe(false);
     expect((await handOff(cy, d)).isError).toBe(false);
@@ -44,7 +52,10 @@ describe("hand_off guardrails", () => {
   });
 
   test("refuses a link that would join two chains too deep, even though neither is too deep alone", async () => {
-    const { ids: [, b, c, d, e], as: [alice, , cy, dan] } = await bots(5);
+    const {
+      ids: [, b, c, d, e],
+      as: [alice, , cy, dan],
+    } = await bots(5);
     await handOff(alice, b);
     await handOff(cy, d);
     const r = await handOff(dan, e);
@@ -53,7 +64,10 @@ describe("hand_off guardrails", () => {
   });
 
   test("refuses a sixth open handoff from one requester until one finishes", async () => {
-    const { ids, as: [alice, ...others] } = await bots(7);
+    const {
+      ids,
+      as: [alice, ...others],
+    } = await bots(7);
     const first = parse<{ handoff_id: string }>(await handOff(alice, ids[1]!)).handoff_id;
     for (const to of ids.slice(2, 6)) expect((await handOff(alice, to)).isError).toBe(false);
     const sixth = await handOff(alice, ids[6]!);
@@ -65,7 +79,10 @@ describe("hand_off guardrails", () => {
   });
 
   test("refuses self, unknown bot, empty brief and over-long title, creating nothing", async () => {
-    const { ids: [a, b], as: [alice] } = await bots(2);
+    const {
+      ids: [a, b],
+      as: [alice],
+    } = await bots(2);
     expect((await handOff(alice, a)).isError).toBe(true);
     expect((await handOff(alice, "no-such-bot")).isError).toBe(true);
     expect((await handOff(alice, b, { brief: "   " })).isError).toBe(true);

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
+
 import type { IsolationProfile } from "../harness/index.ts";
 
 export type SandboxStatus = { status: "available" } | { status: "unavailable"; reason: string };
@@ -13,7 +14,12 @@ export const engineStateDir = () => join(homedir(), ".agent-browser");
  * so a sandboxed `security` command could read claudebot's keychain items; denying the user keychain files closes that.
  */
 export const browserIsolation = (): IsolationProfile => ({
-  shell: { denyRead: [engineStateDir(), ...(process.platform === "darwin" ? [join(homedir(), "Library", "Keychains")] : [])] },
+  shell: {
+    denyRead: [
+      engineStateDir(),
+      ...(process.platform === "darwin" ? [join(homedir(), "Library", "Keychains")] : []),
+    ],
+  },
 });
 
 export interface SandboxProbe {
@@ -25,7 +31,8 @@ export interface SandboxProbe {
 const systemProbe: SandboxProbe = {
   platform: process.platform,
   exists: existsSync,
-  onPath: (name) => (process.env.PATH ?? "").split(delimiter).some((d) => d && existsSync(join(d, name))),
+  onPath: (name) =>
+    (process.env.PATH ?? "").split(delimiter).some((d) => d && existsSync(join(d, name))),
 };
 
 /**
@@ -36,10 +43,14 @@ export function sandboxStatus(probe: SandboxProbe = systemProbe): SandboxStatus 
   const unavailable = (reason: string): SandboxStatus => ({ status: "unavailable", reason });
   switch (probe.platform) {
     case "darwin":
-      return probe.exists("/usr/bin/sandbox-exec") ? { status: "available" } : unavailable("the macOS sandbox (sandbox-exec) is missing");
+      return probe.exists("/usr/bin/sandbox-exec")
+        ? { status: "available" }
+        : unavailable("the macOS sandbox (sandbox-exec) is missing");
     case "linux": {
       const missing = ["bwrap", "socat"].filter((n) => !probe.onPath(n));
-      return missing.length ? unavailable(`the shell sandbox needs ${missing.join(" and ")} installed`) : { status: "available" };
+      return missing.length
+        ? unavailable(`the shell sandbox needs ${missing.join(" and ")} installed`)
+        : { status: "available" };
     }
     default:
       return unavailable(`the shell sandbox is not supported on ${probe.platform}`);

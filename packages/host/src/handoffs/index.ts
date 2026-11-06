@@ -1,6 +1,12 @@
 import type { Database } from "bun:sqlite";
+
 import { redeliverOpenHandoffs, removeBotHandoffs } from "./cleanup.ts";
-import { BOTS_ENDPOINT_PATH, createBotsEndpoint, type BotsEndpoint, type BotsEndpointDeps } from "./endpoint.ts";
+import {
+  BOTS_ENDPOINT_PATH,
+  createBotsEndpoint,
+  type BotsEndpoint,
+  type BotsEndpointDeps,
+} from "./endpoint.ts";
 import { handoffIdsIn, parseHandoffTags } from "./format.ts";
 import { createHandoffStore } from "./store.ts";
 import { sentCardsFromTool } from "./tools/card.ts";
@@ -44,7 +50,8 @@ export function createHandoffs({ db, ...deps }: HandoffsOptions): Handoffs {
           text: t.text,
         };
       }),
-    sentCards: (tool, input, ownerId) => sentCardsFromTool(tool, input, ownerId, { handoffs, botName: deps.botName }),
+    sentCards: (tool, input, ownerId) =>
+      sentCardsFromTool(tool, input, ownerId, { handoffs, botName: deps.botName }),
     startDelivered(text) {
       for (const id of handoffIdsIn(text)) handoffs.start(id);
     },

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
 import { startHandoffHost, parse, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
@@ -12,7 +13,9 @@ async function open() {
   const b = host.createBot("Bob", "searches");
   const alice = await host.actAs(a);
   const bob = await host.actAs(b);
-  const { handoff_id } = parse<{ handoff_id: string }>(await alice.call("hand_off", { to: b, title: "T", brief: BRIEF }));
+  const { handoff_id } = parse<{ handoff_id: string }>(
+    await alice.call("hand_off", { to: b, title: "T", brief: BRIEF }),
+  );
   await host.until(() => host.messagesOf(b).length === 1);
   return { a, b, alice, bob, handoff_id };
 }
@@ -20,9 +23,14 @@ async function open() {
 describe("fail_handoff", () => {
   test("declining a submitted handoff delivers the reason to the requester", async () => {
     const { a, bob, handoff_id } = await open();
-    expect(parse(await bob.call("fail_handoff", { handoff_id, reason: "not my area" }))).toEqual({ handoff_id, status: "failed" });
+    expect(parse(await bob.call("fail_handoff", { handoff_id, reason: "not my area" }))).toEqual({
+      handoff_id,
+      status: "failed",
+    });
     await host.until(() => host.messagesOf(a).length === 1);
-    expect(host.messagesOf(a)[0]).toContain(`<handoff-update id="${handoff_id}" from="Bob" status="failed">`);
+    expect(host.messagesOf(a)[0]).toContain(
+      `<handoff-update id="${handoff_id}" from="Bob" status="failed">`,
+    );
     expect(host.messagesOf(a)[0]).toContain("not my area");
   });
 });
@@ -30,7 +38,9 @@ describe("fail_handoff", () => {
 describe("cancel_handoff", () => {
   test("tells the assignee to stop", async () => {
     const { b, alice, handoff_id } = await open();
-    expect(parse(await alice.call("cancel_handoff", { handoff_id, reason: "no longer needed" }))).toEqual({ handoff_id, status: "canceled" });
+    expect(
+      parse(await alice.call("cancel_handoff", { handoff_id, reason: "no longer needed" })),
+    ).toEqual({ handoff_id, status: "canceled" });
     await host.until(() => host.messagesOf(b).length === 2);
     expect(host.messagesOf(b)[1]).toContain(`status="canceled"`);
     expect(host.messagesOf(b)[1]).toContain("no longer needed");
@@ -62,7 +72,11 @@ describe("final handoffs", () => {
       const closer = end === "cancel_handoff" ? alice : bob;
       const args = end === "complete_handoff" ? { result: "r" } : { reason: "r" };
       expect((await closer.call(end, { handoff_id, ...args })).isError).toBe(false);
-      await host.until(() => host.messagesOf(end === "cancel_handoff" ? b : a).length === (end === "cancel_handoff" ? 2 : 1));
+      await host.until(
+        () =>
+          host.messagesOf(end === "cancel_handoff" ? b : a).length ===
+          (end === "cancel_handoff" ? 2 : 1),
+      );
       const before = [host.messagesOf(a).length, host.messagesOf(b).length];
 
       for (const [who, tool, extra] of [

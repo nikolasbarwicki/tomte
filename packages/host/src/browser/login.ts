@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { fileURLToPath } from "node:url";
+
+import type { CredentialEntry } from "@claudebot/contract/events";
 import { z } from "zod";
+
 import type { Credentials } from "../credentials/index.ts";
 import type { HostOrigin } from "../platform/config.ts";
 import { credentialSecretName, type SecretStore } from "../platform/secrets.ts";
-import type { CredentialEntry } from "@claudebot/contract/events";
 import { EngineError, type PageData } from "./engine-cli.ts";
 import type { HumanWaits, WaitingForUser } from "./human-waits.ts";
 import type { PageState } from "./page-state.ts";
@@ -33,7 +35,12 @@ export class LoginNonces {
 
   issue(botId: string, entry: Pick<CredentialEntry, "id" | "origin">): string {
     const nonce = randomBytes(32).toString("base64url");
-    this.issued.set(nonce, { botId, entryId: entry.id, origin: entry.origin, expiresAt: this.now() + NONCE_TTL_MS });
+    this.issued.set(nonce, {
+      botId,
+      entryId: entry.id,
+      origin: entry.origin,
+      expiresAt: this.now() + NONCE_TTL_MS,
+    });
     return nonce;
   }
 
@@ -76,7 +83,10 @@ export interface BrowserLogin {
   /** Signs the bot's browser in with the entry called `label`, asking the user the first time. */
   login(botId: string, browser: BotBrowser, page: PageState, label: string): Promise<LoginResult>;
   /** The plugin's request: a username and password for a valid nonce, or nothing. */
-  exchange(nonce: string, url: string): Promise<{ username: string; password: string; url: string } | undefined>;
+  exchange(
+    nonce: string,
+    url: string,
+  ): Promise<{ username: string; password: string; url: string } | undefined>;
   /** Serves `CREDENTIAL_EXCHANGE_PATH`. */
   handle(req: IncomingMessage, res: ServerResponse, host: HostOrigin): Promise<void>;
 }
@@ -93,7 +103,10 @@ const PASSWORD_FIELD = /pass/i;
  * input field at all means the user is in. After an engine error, any leftover field means a step the engine
  * could not complete (such as a username-only page).
  */
-export function classifyAfterLogin(snapshot: string, engineFailed: boolean): "signed_in" | "needs_another_step" | "failed" {
+export function classifyAfterLogin(
+  snapshot: string,
+  engineFailed: boolean,
+): "signed_in" | "needs_another_step" | "failed" {
   const names = snapshot.split("\n").flatMap((l) => FIELD.exec(l)?.[1] ?? []);
   if (names.some((n) => CODE_FIELD.test(n))) return "needs_another_step";
   if (names.some((n) => PASSWORD_FIELD.test(n))) return "failed";
@@ -136,14 +149,40 @@ export function createBrowserLogin(deps: BrowserLoginDeps): BrowserLogin {
     return wait;
   }
 
-  async function signIn(botId: string, browser: BotBrowser, page: PageState, entry: CredentialEntry): Promise<LoginResult> {
+  async function signIn(
+    botId: string,
+    browser: BotBrowser,
+    page: PageState,
+    entry: CredentialEntry,
+  ): Promise<LoginResult> {
     const nonce = nonces.issue(botId, entry);
-    const plugins = JSON.stringify([{ name: CREDENTIAL_PLUGIN_NAME, command: process.execPath, args: [PLUGIN_SCRIPT, deps.exchangeUrl()], capabilities: ["credential.read"] }]);
+    const plugins = JSON.stringify([
+      {
+        name: CREDENTIAL_PLUGIN_NAME,
+        command: process.execPath,
+        args: [PLUGIN_SCRIPT, deps.exchangeUrl()],
+        capabilities: ["credential.read"],
+      },
+    ]);
     let loginError: string | undefined;
     try {
       // The engine follows redirects and fills wherever it lands, but with --no-navigate it refuses a page that does not match the entry's origin.
       await browser.call(["open", entry.signInUrl]);
-      await browser.call(["auth", "login", entry.id, "--credential-provider", CREDENTIAL_PLUGIN_NAME, "--item", nonce, "--no-navigate", "--url", entry.signInUrl], { env: { AGENT_BROWSER_PLUGINS: plugins } });
+      await browser.call(
+        [
+          "auth",
+          "login",
+          entry.id,
+          "--credential-provider",
+          CREDENTIAL_PLUGIN_NAME,
+          "--item",
+          nonce,
+          "--no-navigate",
+          "--url",
+          entry.signInUrl,
+        ],
+        { env: { AGENT_BROWSER_PLUGINS: plugins } },
+      );
     } catch (e) {
       if (!(e instanceof EngineError)) throw e;
       loginError = e.message;
@@ -158,7 +197,8 @@ export function createBrowserLogin(deps: BrowserLoginDeps): BrowserLogin {
       if (!(e instanceof EngineError)) throw e;
     }
     const status = classifyAfterLogin(snapshot, loginError !== undefined);
-    if (status === "failed") return { status, reason: loginError ?? "the site did not accept the stored credential" };
+    if (status === "failed")
+      return { status, reason: loginError ?? "the site did not accept the stored credential" };
     return { status, site: entry.origin };
   }
 
@@ -166,12 +206,26 @@ export function createBrowserLogin(deps: BrowserLoginDeps): BrowserLogin {
     list: () => deps.credentials.list().map((e) => ({ label: e.label, site: e.origin })),
 
     async login(botId, browser, page, label) {
-      const matches = deps.credentials.list().filter((e) => e.label.toLowerCase() === label.trim().toLowerCase());
-      if (matches.length === 0) return { status: "failed", reason: `no stored credential called "${label}"; call browser_credentials to see the available ones` };
-      if (matches.length > 1) return { status: "failed", reason: `several stored credentials are called "${label}"; ask the user to rename one` };
+      const matches = deps.credentials
+        .list()
+        .filter((e) => e.label.toLowerCase() === label.trim().toLowerCase());
+      if (matches.length === 0)
+        return {
+          status: "failed",
+          reason: `no stored credential called "${label}"; call browser_credentials to see the available ones`,
+        };
+      if (matches.length > 1)
+        return {
+          status: "failed",
+          reason: `several stored credentials are called "${label}"; ask the user to rename one`,
+        };
       const [entry] = matches;
       if (!deps.credentials.hasGrant(botId, entry.id)) {
-        if (asking.has(`${botId}\n${entry.id}`)) return { status: "failed", reason: `the user has not answered the request to use "${entry.label}" yet; end your turn and wait for their answer` };
+        if (asking.has(`${botId}\n${entry.id}`))
+          return {
+            status: "failed",
+            reason: `the user has not answered the request to use "${entry.label}" yet; end your turn and wait for their answer`,
+          };
         return ask(botId, entry);
       }
       return signIn(botId, browser, page, entry);
@@ -182,11 +236,16 @@ export function createBrowserLogin(deps: BrowserLoginDeps): BrowserLogin {
       if (!hit || !deps.credentials.hasGrant(hit.botId, hit.entryId)) return undefined;
       const entry = deps.credentials.get(hit.entryId);
       const password = await deps.secrets.get(credentialSecretName(hit.entryId));
-      return entry && password ? { username: entry.username, password, url: entry.signInUrl } : undefined;
+      return entry && password
+        ? { username: entry.username, password, url: entry.signInUrl }
+        : undefined;
     },
 
     async handle(req, res, host) {
-      const deny = (status: number) => void res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify({ error: "denied" }));
+      const deny = (status: number) =>
+        void res
+          .writeHead(status, { "content-type": "application/json" })
+          .end(JSON.stringify({ error: "denied" }));
       if (req.method !== "POST") return deny(405);
       if (!host.namesHost(req.headers.host)) return deny(403);
       if (req.headers.origin !== undefined) return deny(403);
@@ -194,13 +253,17 @@ export function createBrowserLogin(deps: BrowserLoginDeps): BrowserLogin {
       try {
         const chunks: Buffer[] = [];
         for await (const c of req) chunks.push(c as Buffer);
-        body = z.object({ nonce: z.string(), url: z.string() }).parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+        body = z
+          .object({ nonce: z.string(), url: z.string() })
+          .parse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
       } catch {
         return deny(400);
       }
       const credential = await this.exchange(body.nonce, body.url);
       if (!credential) return deny(403);
-      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(credential));
+      res
+        .writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
+        .end(JSON.stringify(credential));
     },
   };
 }

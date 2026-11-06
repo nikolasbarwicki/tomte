@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type { ServerResponse } from "node:http";
+
 import type { Browser } from "../../browser/index.ts";
 import type { Credentials } from "../../credentials/index.ts";
 import type { ResolvedCli } from "../../harness/index.ts";

@@ -7,7 +7,8 @@ const WEB = "^packages/web/";
 const CONTRACT = "^packages/contract/";
 const TESTS = `(\\.test\\.tsx?$|${HOST}testing/)`;
 /** Folders under packages/host/src whose files are private behind index.ts. */
-const MODULES = "(bots|browser|credentials|handoffs|harness|host-mcp|host-server|integrations|routines)";
+const MODULES =
+  "(bots|browser|credentials|handoffs|harness|host-mcp|host-server|integrations|routines)";
 const PRIVATE = `${HOST}${MODULES}/(?!index\\.ts$)`;
 const HOST_SMOKE = `${HOST}browser/smoke\\.ts$`;
 const HOST_CLI = `${HOST}host\\.ts$`;
@@ -24,7 +25,8 @@ module.exports = {
     },
     {
       name: "host-not-to-web",
-      comment: "Rule 2: the host never imports the web package; shared types live in packages/contract/.",
+      comment:
+        "Rule 2: the host never imports the web package; shared types live in packages/contract/.",
       severity: "error",
       from: { path: HOST },
       to: { path: WEB },
@@ -52,14 +54,16 @@ module.exports = {
     },
     {
       name: "feature-privacy",
-      comment: "Rule 5: from outside a feature folder, import only its index.ts. Files in the same folder, tests included, may import its private files.",
+      comment:
+        "Rule 5: from outside a feature folder, import only its index.ts. Files in the same folder, tests included, may import its private files.",
       severity: "error",
       from: { path: `${HOST}([^/]+)`, pathNot: HOST_CLI },
       to: { path: PRIVATE, pathNot: `${HOST}$1/` },
     },
     {
       name: "host-cli-privacy",
-      comment: "Rule 5 for the host CLI: only feature index.ts files, plus a dynamic import() of the browser-smoke subcommand.",
+      comment:
+        "Rule 5 for the host CLI: only feature index.ts files, plus a dynamic import() of the browser-smoke subcommand.",
       severity: "error",
       from: { path: HOST_CLI },
       to: { path: PRIVATE, pathNot: HOST_SMOKE },
@@ -73,14 +77,16 @@ module.exports = {
     },
     {
       name: "production-not-to-tests",
-      comment: "Rule 6: production code never imports test files or testing/. The browser-smoke subcommand may load fakes through a dynamic import().",
+      comment:
+        "Rule 6: production code never imports test files or testing/. The browser-smoke subcommand may load fakes through a dynamic import().",
       severity: "error",
       from: { path: "^packages/", pathNot: `${TESTS}|${HOST_SMOKE}` },
       to: { path: TESTS },
     },
     {
       name: "smoke-loads-fakes-dynamically",
-      comment: "Rule 6: the browser-smoke subcommand reaches test support only through a dynamic import().",
+      comment:
+        "Rule 6: the browser-smoke subcommand reaches test support only through a dynamic import().",
       severity: "error",
       from: { path: HOST_SMOKE },
       to: { path: TESTS, dependencyTypesNot: ["dynamic-import"] },

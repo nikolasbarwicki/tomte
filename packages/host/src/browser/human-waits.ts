@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+
 import type { ServerEvent, WaitAction } from "@claudebot/contract/events";
 
 /** What the bot's tool returns for a human wait: at once, never after the user answers. */
@@ -62,26 +63,44 @@ export function createHumanWaits(o: HumanWaitsOptions): HumanWaits {
     const w = waits.get(id);
     if (!w) return false;
     waits.delete(id);
-    const label = w.spec.actions.find((a) => a.id === outcome)?.label ?? (outcome === CANCELLED ? "Cancelled" : "Timed out");
+    const label =
+      w.spec.actions.find((a) => a.id === outcome)?.label ??
+      (outcome === CANCELLED ? "Cancelled" : "Timed out");
     o.emit(w.botId, { type: "wait_resolved", id, label });
     w.spec.onResolve?.(outcome);
-    o.deliver(w.botId, `<browser-wait-result id="${id}">\n${message ?? w.spec.resume(outcome)}\n</browser-wait-result>`);
+    o.deliver(
+      w.botId,
+      `<browser-wait-result id="${id}">\n${message ?? w.spec.resume(outcome)}\n</browser-wait-result>`,
+    );
     return true;
   }
 
   return {
     request(botId, spec) {
       const id = randomUUID();
-      const card = { type: "wait" as const, id, kind: spec.kind, title: spec.title, detail: spec.detail, actions: spec.actions };
+      const card = {
+        type: "wait" as const,
+        id,
+        kind: spec.kind,
+        title: spec.title,
+        detail: spec.detail,
+        actions: spec.actions,
+      };
       waits.set(id, { botId, spec, card });
       o.emit(botId, card);
       return { status: "waiting_for_user", id };
     },
-    answer: (id, actionId) => !!waits.get(id)?.spec.actions.some((a) => a.id === actionId) && finish(id, actionId),
+    answer: (id, actionId) =>
+      !!waits.get(id)?.spec.actions.some((a) => a.id === actionId) && finish(id, actionId),
     resolve: (id, outcome) => finish(id, outcome),
     cancelBot(botId, reason) {
       const ids = [...waits].filter(([, w]) => w.botId === botId).map(([id]) => id);
-      for (const id of ids) finish(id, CANCELLED, `Your pending request "${waits.get(id)!.spec.title}" was cancelled: ${reason}. Do not wait for it.`);
+      for (const id of ids)
+        finish(
+          id,
+          CANCELLED,
+          `Your pending request "${waits.get(id)!.spec.title}" was cancelled: ${reason}. Do not wait for it.`,
+        );
       return ids.length;
     },
     pending: (botId) => [...waits.values()].filter((w) => w.botId === botId).map((w) => w.card),

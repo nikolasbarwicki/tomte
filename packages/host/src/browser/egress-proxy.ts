@@ -1,5 +1,11 @@
 import { lookup } from "node:dns/promises";
-import { request as httpRequest, createServer, type IncomingMessage, type OutgoingHttpHeaders, type Server } from "node:http";
+import {
+  request as httpRequest,
+  createServer,
+  type IncomingMessage,
+  type OutgoingHttpHeaders,
+  type Server,
+} from "node:http";
 import { connect, isIP, type AddressInfo, type Socket } from "node:net";
 
 /** Resolves a hostname to every address it has. */
@@ -21,7 +27,8 @@ export interface EgressProxy {
   blockedSince(sinceMs: number): string[];
 }
 
-const defaultResolve: Resolve = async (host) => (await lookup(host, { all: true })).map((a) => a.address);
+const defaultResolve: Resolve = async (host) =>
+  (await lookup(host, { all: true })).map((a) => a.address);
 const defaultDial: Dial = (address, port) => connect({ host: address, port });
 
 function parseV4(s: string): number[] | undefined {
@@ -38,7 +45,11 @@ function parseV6(raw: string): number[] | undefined {
   if (dotted) {
     const v4 = parseV4(dotted[1]);
     if (!v4) return undefined;
-    s = s.slice(0, -dotted[1].length) + ((v4[0] << 8) | v4[1]).toString(16) + ":" + ((v4[2] << 8) | v4[3]).toString(16);
+    s =
+      s.slice(0, -dotted[1].length) +
+      ((v4[0] << 8) | v4[1]).toString(16) +
+      ":" +
+      ((v4[2] << 8) | v4[3]).toString(16);
   }
   const halves = s.split("::");
   if (halves.length > 2) return undefined;
@@ -63,13 +74,23 @@ export function isBlockedAddress(address: string): boolean {
   const first5Zero = g.slice(0, 5).every((x) => x === 0);
   if (first5Zero && g[5] === 0xffff) return blockedV4(embedded); // ::ffff:a.b.c.d
   if (first5Zero && g[5] === 0) return true; // ::, ::1 and IPv4-compatible ::a.b.c.d
-  if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)) return blockedV4(embedded); // NAT64
+  if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0))
+    return blockedV4(embedded); // NAT64
   if ((g[0] & 0xffc0) === 0xfe80) return true; // fe80::/10
   if (g[0] === 0xfd00 && g[1] === 0x0ec2 && g[7] === 0x254) return true; // AWS metadata over IPv6
   return false;
 }
 
-const HOP_HEADERS = ["connection", "proxy-connection", "proxy-authorization", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade"];
+const HOP_HEADERS = [
+  "connection",
+  "proxy-connection",
+  "proxy-authorization",
+  "keep-alive",
+  "transfer-encoding",
+  "te",
+  "trailer",
+  "upgrade",
+];
 
 export function createEgressProxy(o: EgressProxyOptions = {}): EgressProxy {
   const resolve = o.resolve ?? defaultResolve;
@@ -98,14 +119,25 @@ export function createEgressProxy(o: EgressProxyOptions = {}): EgressProxy {
       return void res.writeHead(400).end();
     }
     const address = await allowedAddress(target.hostname);
-    if (!address) return void res.writeHead(403, { "content-type": "text/plain" }).end(`Blocked by claudebot: ${target.hostname} is not reachable from the bot's browser`);
+    if (!address)
+      return void res
+        .writeHead(403, { "content-type": "text/plain" })
+        .end(`Blocked by claudebot: ${target.hostname} is not reachable from the bot's browser`);
     const headers: OutgoingHttpHeaders = { ...req.headers, host: target.host };
     for (const h of HOP_HEADERS) delete headers[h];
     const port = Number(target.port || 80);
-    const upstream = httpRequest({ method: req.method, path: target.pathname + target.search, headers, createConnection: () => dial(address, port) }, (r) => {
-      res.writeHead(r.statusCode ?? 502, r.headers);
-      r.pipe(res);
-    });
+    const upstream = httpRequest(
+      {
+        method: req.method,
+        path: target.pathname + target.search,
+        headers,
+        createConnection: () => dial(address, port),
+      },
+      (r) => {
+        res.writeHead(r.statusCode ?? 502, r.headers);
+        r.pipe(res);
+      },
+    );
     upstream.on("error", () => (res.headersSent ? res.destroy() : res.writeHead(502).end()));
     res.on("close", () => upstream.destroy());
     req.pipe(upstream);
@@ -125,7 +157,9 @@ export function createEgressProxy(o: EgressProxyOptions = {}): EgressProxy {
     const upstream = dial(address, Number(m[3]));
     sockets.add(upstream);
     upstream.on("close", () => sockets.delete(upstream));
-    upstream.on("error", () => (client.writable ? client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n") : client.destroy()));
+    upstream.on("error", () =>
+      client.writable ? client.end("HTTP/1.1 502 Bad Gateway\r\n\r\n") : client.destroy(),
+    );
     upstream.once("connect", () => {
       client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
       if (head.length) upstream.write(head);
@@ -153,6 +187,8 @@ export function createEgressProxy(o: EgressProxyOptions = {}): EgressProxy {
       server.close(() => closed.resolve());
       await closed.promise;
     },
-    blockedSince: (sinceMs) => [...new Set(blocks.filter((b) => b.at >= sinceMs).map((b) => b.host))],
+    blockedSince: (sinceMs) => [
+      ...new Set(blocks.filter((b) => b.at >= sinceMs).map((b) => b.host)),
+    ],
   };
 }

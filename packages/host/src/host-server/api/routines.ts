@@ -1,5 +1,7 @@
 import type { ServerResponse } from "node:http";
+
 import { z } from "zod";
+
 import { getBot } from "../../bots/index.ts";
 import { NotFound } from "../../platform/errors.ts";
 import { Conflict, RoutineInput } from "../../routines/index.ts";
@@ -13,7 +15,12 @@ const RunsQuery = Id.extend({ before: z.number().optional(), limit: z.number().i
 const Preview = z.object({ schedule: RoutineInput.shape.schedule });
 
 /** Routine routes address bots and routines by id, so they work whichever bot is open. */
-export async function routineApi({ dataRoot, routines }: ApiContext, res: ServerResponse, path: string, b: Record<string, unknown>) {
+export async function routineApi(
+  { dataRoot, routines }: ApiContext,
+  res: ServerResponse,
+  path: string,
+  b: Record<string, unknown>,
+) {
   try {
     switch (path) {
       case "/api/routines/list": {
@@ -43,7 +50,8 @@ export async function routineApi({ dataRoot, routines }: ApiContext, res: Server
     }
     res.writeHead(404).end();
   } catch (e) {
-    if (e instanceof z.ZodError) return json(res, { error: e.issues.map((i) => i.message).join("; ") }, 400);
+    if (e instanceof z.ZodError)
+      return json(res, { error: e.issues.map((i) => i.message).join("; ") }, 400);
     if (e instanceof Conflict) return json(res, { error: e.message }, 409);
     if (e instanceof NotFound) return json(res, { error: e.message }, 404);
     throw e;

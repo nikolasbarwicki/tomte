@@ -12,16 +12,16 @@ Behind on everything around the bot: unattended approvals, event triggers, reach
 
 ## Priorities
 
-| # | Item | Why now |
-|---|---|---|
-| 1 | Approvals that park an unattended run | Routines cannot use any default-policy integration tool today |
-| 2 | Event triggers (webhook first) ([research](research/webhook-research.md)) | Turns a bot from a cron job into an employee |
-| 3 | Bot-facing tools to create routines, bots and skills | Prerequisite for a Chief of Staff bot |
-| 4 | Second harness (Codex) and per-bot model choice | Every competitor sells "bring your own plan" |
-| 5 | Remote access, one chat channel, always-on hosting | Approvals and routines are useless away from the desk |
-| 6 | Small items: queue, templates, bot edit/delete, usage, catalog ([Google OAuth research](research/google-oauth-research.md)) | Cheap, each fixes a concrete gap |
-| 7 | Expose bots over A2A or MCP to external agents | Handoffs are already A2A-shaped |
-| 8 | Bot-authored skills | OpenBot has it; depends on item 3 |
+| #   | Item                                                                                                                        | Why now                                                       |
+| --- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| 1   | Approvals that park an unattended run                                                                                       | Routines cannot use any default-policy integration tool today |
+| 2   | Event triggers (webhook first) ([research](research/webhook-research.md))                                                   | Turns a bot from a cron job into an employee                  |
+| 3   | Bot-facing tools to create routines, bots and skills                                                                        | Prerequisite for a Chief of Staff bot                         |
+| 4   | Second harness (Codex) and per-bot model choice                                                                             | Every competitor sells "bring your own plan"                  |
+| 5   | Remote access, one chat channel, always-on hosting                                                                          | Approvals and routines are useless away from the desk         |
+| 6   | Small items: queue, templates, bot edit/delete, usage, catalog ([Google OAuth research](research/google-oauth-research.md)) | Cheap, each fixes a concrete gap                              |
+| 7   | Expose bots over A2A or MCP to external agents                                                                              | Handoffs are already A2A-shaped                               |
+| 8   | Bot-authored skills                                                                                                         | OpenBot has it; depends on item 3                             |
 
 Items 1 and 2 come first because they extend the safety advantage into unattended work, where competitors are weakest.
 
@@ -32,12 +32,14 @@ Items 1 and 2 come first because they extend the safety advantage into unattende
 **Competitors.** Rerun: coworkers stop before consequential actions, any teammate can answer, the run resumes where it stopped, and rules can answer on the user's behalf. Rakazo: Never ask / Auto / Ask modes with Allow and Block lists that grow from approval cards; a blocked action is refused without a card.
 
 **Plan.**
+
 - Add a `waiting` run status. A headless approval creates a wait (reuse the existing `wait` / `wait_resolved` events and `human-waits.ts`), pushes a `Notice`, and ends the run's turn.
 - On approval, resume the run through `deliver()` into the bot's session. On deny, tell the bot and let it finish.
 - Add Allow and Block lists per tool, fed from approval cards, so repeated approvals become rules.
 - Auto-expire a wait after a fixed time, as takeover does (30 minutes).
 
 **Decisions needed.**
+
 - Resume in the same turn or as a new message. ADR-0002 already commits to "tools return at once, events arrive as messages"; follow it.
 - Whether to add an approval model (Rakazo's Auto mode) or stay with static lists. Start with lists.
 
@@ -50,11 +52,13 @@ Items 1 and 2 come first because they extend the safety advantage into unattende
 Research and plan: [`research/webhook-research.md`](research/webhook-research.md).
 
 **Plan.**
+
 - Add a `webhook` trigger: a per-routine secret URL on the host that fires the routine with the request body passed in as data.
 - Later: a poller for Gmail and GitHub changes, built on the integration clients already connected.
 - Copy Rakazo's rule: writes in webhook-started runs still ask, because outside text can steer the bot. Treat the payload like page content (untrusted, wrapped). This depends on item 1 and applies even in a bot's most permissive policy.
 
 **Decisions needed.**
+
 - The host binds to `127.0.0.1`. A webhook needs a tunnel or relay. Pick one before building (documented tunnel recipe vs. a hosted relay). Tied to item 5.
 - Dedupe and replay: a webhook fired twice must not run twice. `fire()` cannot be reused for this: `claimOccurrence` in `packages/host/src/routines/store.ts` dedupes on the schedule timestamp (`last_scheduled_for`), and a webhook has none. Needs its own key, for example a per-request id or a hash of the payload with a short window, stored with the run, and a decision on what a sender that cannot supply an id gets.
 
@@ -65,6 +69,7 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 **Problem.** Bot-facing host tools are `ask_user`, `remember`, the handoff tools and the browser tools; none of them manages routines, bots or skills. Routine CRUD exists only under `/api/routines/*`. MausBot ("automations from one sentence"), Rerun (Foreman), Turnstone and Rakazo (Chief of Staff) all let a bot set these up.
 
 **Plan.**
+
 - Add `create_routine` / `list_routines` / `update_routine` host tools, calling the same code as the HTTP routes.
 - Add `create_bot` (name, purpose, initial memory). Pair it with the unfinished bot delete flow (item 6) so created bots can be cleaned up.
 - Ship a Chief of Staff template that combines these with `hand_off`. Handoffs have landed, so this waits only on `create_routine` and `create_bot`.
@@ -78,6 +83,7 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 **Problem.** Claude Code is the only harness. `Harness` in `packages/host/src/harness/index.ts` is the seam; the handoff endpoint is already harness-neutral. Every competitor offers several providers; OpenBot also moves a bot to a backup provider on a plan limit.
 
 **Plan.**
+
 - Implement a Codex harness behind the existing `Harness` interface.
 - Per-bot harness and model, switchable mid-conversation without losing memory or files.
 - Fallback provider on rate limit or outage, with a note in the chat. Routines are the likeliest to hit limits unattended.
@@ -91,6 +97,7 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 **Problem.** The UI is loopback-only with no auth, and the host is a manual `bun packages/host/src/host.ts`. Rerun is a PWA, OpenBot has iOS and Android apps, Rakazo adds Slack, WhatsApp, Telegram and iMessage. Approvals (item 1) and routines only help if the user can answer them away from the desk.
 
 **Plan, in order.**
+
 1. Authenticated remote access to the existing UI (tunnel or reverse proxy, with a login). Keep the loopback endpoints for bot tools untouched.
 2. One chat channel (Slack, Telegram or Discord) that posts bot messages, approval cards and `Notice`s, and routes replies into `deliver()`. Telegram and Discord are channels only, not catalog integrations.
 3. A service wrapper (launchd, systemd) or Docker image so the host stays up. Update docs.
@@ -106,6 +113,7 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 **Problem.** `/api/send` used to return 409 when `chat.busy` or a headless routine run held the bot, so the user had to wait and retype.
 
 **Shipped.**
+
 - On busy, `/api/send` pushes a user entry onto `chat.inbox` and emits a `queued` event. `drain()` starts the next turn once the bot is free and no headless run holds it, merging several texts into one turn. It emits `dequeued`, then the normal `user` event, when the entry reaches the bot.
 - Inbox entries are tagged by `source` (`user` or `host`). Only user entries carry an id and can be cancelled: `/api/send/cancel` removes one while it has not drained and answers 404 once it has.
 - The transcript shows queued messages dimmed below the working marker, with a Cancel button. A reconnecting page and `reload()` both replay or carry them.
@@ -118,6 +126,7 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 **Problem.** The create form (`NewBot` in `packages/web/main.tsx`) takes a name and a free-text purpose. `createBot` in `packages/host/src/bots/index.ts` stores only these; `memory.md` starts empty. A new user faces a blank box.
 
 **Plan.**
+
 - A static template list in the web bundle: name, purpose, memory seed, suggested integrations. Start with Inbox Manager, Coding Agent, Researcher.
 - Picking one fills the form; the user can still edit. `/api/bots/new` gains an optional `memory` field written to `botMemoryPath`.
 - Suggested integrations are shown as hints, not granted. Grants stay a user action.
@@ -130,6 +139,7 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 **Problem.** No edit route or UI. `HostServer.removeBot` exists and calls `removeBotBrowser` and `removeBotHandoffs`, but nothing calls it outside tests, and it leaves the bot's directory, routines and chat state alone (`packages/host/src/handoffs/cleanup.ts`: "Claudebot has no bot-delete path yet").
 
 **Plan.**
+
 - Edit: `/api/bots/update` for name and purpose. `openThread` snapshots both into the `Thread` through `botContext`, so `configStale` and `thread.close()` are not enough: a reopened thread keeps the old persona. Save the bot, update `chat.bot`, then replace `chat.thread` with `openThread(chat.bot, true, ...)` as `/api/session/new` does. If a turn is running, defer the swap to turn end with its own flag beside `configStale`.
 - Delete: `/api/bots/delete` that refuses while a turn or headless run is active, then calls `removeBot`, deletes the bot's routines, closes and drops its `Chat`, and removes the bot directory.
 - UI: edit and delete in the bot header; delete asks for confirmation naming what goes (memory, files, routines, open handoffs).
@@ -143,6 +153,7 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 **Problem.** The SDK `result` message carries `total_cost_usd` and `usage`; the host drops them. Handoff guards limit counts, not spend.
 
 **Plan.**
+
 - Record cost and token usage per turn, keyed by bot and, when set, by routine run or handoff id.
 - Show cost on each run in the Routines panel and on handoff cards, plus a per-bot total for the current month.
 - No budgets or caps here; that is a separate decision once numbers exist.
@@ -156,6 +167,7 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 **Problem.** `CatalogEntry` in `packages/host/src/integrations/catalog.ts` is data-only, so each new service is an entry, not code. The list was short; it now has 30 entries, and the open work is the Composio spike below. Google service setup for a public release: [`research/google-oauth-research.md`](research/google-oauth-research.md).
 
 **Plan.**
+
 - **Shipped.** 30 catalog entries in `packages/host/src/integrations/catalog.ts` (commit `5c61276`), plus 4 services (Figma, Trello, Obsidian, Paper) as custom-server recipes in [`custom-integrations.md`](custom-integrations.md). Spec: [`.scratch/integrations-catalog/spec.md`](../.scratch/integrations-catalog/spec.md). Live sign-in checks: [`.scratch/integrations-catalog/live-checklist.md`](../.scratch/integrations-catalog/live-checklist.md). Per-service research: [`research/integrations/`](research/integrations/).
 - Spike Composio's MCP endpoint against the existing OAuth and bearer flows. If it fits, one entry covers thousands of apps; if its auth model needs a new code path, drop it. Unverified until tried.
 

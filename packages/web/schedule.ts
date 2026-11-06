@@ -39,11 +39,15 @@ export function toSchedule(p: Preset, tz = browserZone()): Schedule {
 
 export function fromSchedule(s: Schedule): Preset {
   if (s.kind === "once") return { kind: "once", at: s.at };
-  const time = (m: string, h: string) => (Number(h) < 24 && Number(m) < 60 ? `${pad(Number(h))}:${pad(Number(m))}` : undefined);
+  const time = (m: string, h: string) =>
+    Number(h) < 24 && Number(m) < 60 ? `${pad(Number(h))}:${pad(Number(m))}` : undefined;
   let m: RegExpMatchArray | null;
-  if ((m = s.expr.match(/^(\d{1,2}) \* \* \* \*$/)) && Number(m[1]) < 60) return { kind: "hourly", minute: Number(m[1]) };
-  if ((m = s.expr.match(/^(\d{1,2}) (\d{1,2}) \* \* \*$/)) && time(m[1], m[2])) return { kind: "daily", time: time(m[1], m[2])! };
-  if ((m = s.expr.match(/^(\d{1,2}) (\d{1,2}) \* \* 1-5$/)) && time(m[1], m[2])) return { kind: "weekdays", time: time(m[1], m[2])! };
+  if ((m = s.expr.match(/^(\d{1,2}) \* \* \* \*$/)) && Number(m[1]) < 60)
+    return { kind: "hourly", minute: Number(m[1]) };
+  if ((m = s.expr.match(/^(\d{1,2}) (\d{1,2}) \* \* \*$/)) && time(m[1], m[2]))
+    return { kind: "daily", time: time(m[1], m[2])! };
+  if ((m = s.expr.match(/^(\d{1,2}) (\d{1,2}) \* \* 1-5$/)) && time(m[1], m[2]))
+    return { kind: "weekdays", time: time(m[1], m[2])! };
   if ((m = s.expr.match(/^(\d{1,2}) (\d{1,2}) \* \* ([0-6])$/)) && time(m[1], m[2]))
     return { kind: "weekly", day: Number(m[3]), time: time(m[1], m[2])! };
   return { kind: "custom", expr: s.expr };

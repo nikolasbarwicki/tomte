@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { DataRootLocked } from "../platform/data-root-lock.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
@@ -23,14 +24,18 @@ const start = async (dataRoot: string) => {
   hosts.push(host);
   return host;
 };
-const serves = async (host: HandoffHost) => (await fetch(`${host.server.url}/api/info`).catch(() => undefined))?.status === 200;
+const serves = async (host: HandoffHost) =>
+  (await fetch(`${host.server.url}/api/info`).catch(() => undefined))?.status === 200;
 const lockedBy = (e: unknown) => (e instanceof DataRootLocked ? e : undefined);
 
 test("a second host on a running host's data root refuses to start naming its pid while the first keeps serving", async () => {
   const root = join(scratch, "state");
   const first = await start(root);
 
-  const error = await start(root).then(() => undefined, (e) => e);
+  const error = await start(root).then(
+    () => undefined,
+    (e) => e,
+  );
   expect(lockedBy(error)?.pid).toBe(process.pid);
   expect((error as Error).message).toContain(`pid ${process.pid}`);
 
@@ -53,7 +58,10 @@ test("a lock left by a process that was killed does not block a new host", async
   const reader = child.stdout.getReader();
   expect(new TextDecoder().decode((await reader.read()).value)).toContain("locked");
 
-  const blocked = await start(root).then(() => undefined, (e) => e);
+  const blocked = await start(root).then(
+    () => undefined,
+    (e) => e,
+  );
   expect(lockedBy(blocked)?.pid).toBe(child.pid);
 
   child.kill("SIGKILL");

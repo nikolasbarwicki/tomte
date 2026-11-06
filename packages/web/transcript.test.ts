@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
+
 import type { ServerEvent } from "@claudebot/contract/events";
+
 import { reduce, type Item } from "./transcript.tsx";
 
 const play = (events: ServerEvent[]) => events.reduce<Item[]>(reduce, []);

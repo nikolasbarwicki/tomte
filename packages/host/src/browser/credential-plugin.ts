@@ -4,7 +4,8 @@
 // one-time nonce. It prints only the protocol envelope on stdout and never logs.
 const PROTOCOL = "agent-browser.plugin.v1";
 
-const reply = (body: object) => process.stdout.write(JSON.stringify({ protocol: PROTOCOL, ...body }));
+const reply = (body: object) =>
+  process.stdout.write(JSON.stringify({ protocol: PROTOCOL, ...body }));
 
 const input = JSON.parse(await Bun.stdin.text());
 if (input.protocol !== PROTOCOL) {

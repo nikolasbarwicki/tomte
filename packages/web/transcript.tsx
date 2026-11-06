@@ -1,6 +1,5 @@
-import { useState } from "react";
+import type { BotSummary, ServerEvent, WaitAction } from "@claudebot/contract/events";
 import { Link } from "@tanstack/react-router";
-import { Streamdown } from "streamdown";
 import {
   AlarmClockIcon,
   ArrowDownLeftIcon,
@@ -16,13 +15,30 @@ import {
   WrenchIcon,
   XIcon,
 } from "lucide-react";
+import { useState } from "react";
+import { Streamdown } from "streamdown";
+
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
-import { Item as ItemRow, ItemActions, ItemContent, ItemDescription, ItemFooter, ItemMedia, ItemTitle } from "@/components/ui/item";
+import {
+  Item as ItemRow,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemFooter,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent } from "@/components/ui/message";
 import {
@@ -34,9 +50,17 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 import { Spinner } from "@/components/ui/spinner";
-import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
+import {
+  Trace,
+  TraceCollapsible,
+  TraceCollapsibleContent,
+  TraceCollapsibleTrigger,
+  TraceIcon,
+  TraceLine,
+  TraceTitle,
+} from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
-import type { BotSummary, ServerEvent, WaitAction } from "@claudebot/contract/events";
+
 import { act } from "./api.ts";
 import { botTheme } from "./avatars.ts";
 import { BotAvatar } from "./bot-avatar.tsx";
@@ -51,21 +75,47 @@ export type Item =
   | { kind: "tool"; name: string; input: string }
   | { kind: "ask"; id: string; question: string; answer?: string }
   | { kind: "approve"; id: string; tool: string; reason: string; input: string; answer?: string }
-  | { kind: "wait"; id: string; waitKind: string; title: string; detail?: string; actions: WaitAction[]; resolved?: string }
+  | {
+      kind: "wait";
+      id: string;
+      waitKind: string;
+      title: string;
+      detail?: string;
+      actions: WaitAction[];
+      resolved?: string;
+    }
   | { kind: "session" }
   | { kind: "routine"; name: string; trigger: string }
-  | { kind: "handoff"; direction: "sent" | "received"; bot: string; botId?: string; title: string; status: string; text: string };
+  | {
+      kind: "handoff";
+      direction: "sent" | "received";
+      bot: string;
+      botId?: string;
+      title: string;
+      status: string;
+      text: string;
+    };
 
 export function reduce(items: Item[], e: ServerEvent): Item[] {
-  if (e.type === "queued") return [...items, { kind: "queued", id: e.id, text: e.text, mentions: e.mentions }];
+  if (e.type === "queued")
+    return [...items, { kind: "queued", id: e.id, text: e.text, mentions: e.mentions }];
   if (e.type === "dequeued") return items.filter((i) => !(i.kind === "queued" && i.id === e.id));
   // Queued messages stay after the live thread, so output that arrives while they wait carries on from the item before them.
   const queued = items.filter((i) => i.kind === "queued");
   if (queued.length === 0) return reduceLive(items, e);
-  return [...reduceLive(items.filter((i) => i.kind !== "queued"), e), ...queued];
+  return [
+    ...reduceLive(
+      items.filter((i) => i.kind !== "queued"),
+      e,
+    ),
+    ...queued,
+  ];
 }
 
-function reduceLive(items: Item[], e: Exclude<ServerEvent, { type: "queued" | "dequeued" }>): Item[] {
+function reduceLive(
+  items: Item[],
+  e: Exclude<ServerEvent, { type: "queued" | "dequeued" }>,
+): Item[] {
   const last = items[items.length - 1];
   switch (e.type) {
     case "user":
@@ -81,13 +131,30 @@ function reduceLive(items: Item[], e: Exclude<ServerEvent, { type: "queued" | "d
     case "ask":
       return [...items, { kind: "ask", id: e.id, question: e.question }];
     case "approve":
-      return [...items, { kind: "approve", id: e.id, tool: e.tool, reason: e.reason, input: e.input }];
+      return [
+        ...items,
+        { kind: "approve", id: e.id, tool: e.tool, reason: e.reason, input: e.input },
+      ];
     case "answered":
-      return items.map((i) => ((i.kind === "ask" || i.kind === "approve") && i.id === e.id ? { ...i, answer: e.value } : i));
+      return items.map((i) =>
+        (i.kind === "ask" || i.kind === "approve") && i.id === e.id ? { ...i, answer: e.value } : i,
+      );
     case "wait":
-      return [...items, { kind: "wait", id: e.id, waitKind: e.kind, title: e.title, detail: e.detail, actions: e.actions }];
+      return [
+        ...items,
+        {
+          kind: "wait",
+          id: e.id,
+          waitKind: e.kind,
+          title: e.title,
+          detail: e.detail,
+          actions: e.actions,
+        },
+      ];
     case "wait_resolved":
-      return items.map((i) => (i.kind === "wait" && i.id === e.id ? { ...i, resolved: e.label } : i));
+      return items.map((i) =>
+        i.kind === "wait" && i.id === e.id ? { ...i, resolved: e.label } : i,
+      );
     case "error":
       return [...items, { kind: "error", text: e.message }];
     case "info":
@@ -99,9 +166,26 @@ function reduceLive(items: Item[], e: Exclude<ServerEvent, { type: "queued" | "d
     case "routine":
       return [...items, { kind: "routine", name: e.name, trigger: e.trigger }];
     case "handoff":
-      return [...items, { kind: "handoff", direction: e.direction, bot: e.bot, botId: e.botId, title: e.title, status: e.status, text: e.text }];
+      return [
+        ...items,
+        {
+          kind: "handoff",
+          direction: e.direction,
+          bot: e.bot,
+          botId: e.botId,
+          title: e.title,
+          status: e.status,
+          text: e.text,
+        },
+      ];
     case "compacted":
-      return [...items, { kind: "info", text: `Context compacted (${e.trigger}) · ${kTokens(e.preTokens)} tokens summarized` }];
+      return [
+        ...items,
+        {
+          kind: "info",
+          text: `Context compacted (${e.trigger}) · ${kTokens(e.preTokens)} tokens summarized`,
+        },
+      ];
     case "done":
     case "reset":
     case "notify":
@@ -131,7 +215,19 @@ function toRows(items: Item[]): Row[] {
 }
 
 /** The thread. Message Scroller follows new output while the reader is at the live edge and anchors each new user turn near the top. */
-export function Transcript({ bot, bots, items, busy, onShowBrowser }: { bot: BotSummary; bots: BotSummary[]; items: Item[]; busy: boolean; onShowBrowser: () => void }) {
+export function Transcript({
+  bot,
+  bots,
+  items,
+  busy,
+  onShowBrowser,
+}: {
+  bot: BotSummary;
+  bots: BotSummary[];
+  items: Item[];
+  busy: boolean;
+  onShowBrowser: () => void;
+}) {
   if (items.length === 0 && !busy) {
     return (
       <Empty className="min-h-0 flex-1">
@@ -140,7 +236,10 @@ export function Transcript({ bot, bots, items, busy, onShowBrowser }: { bot: Bot
             <BotIcon />
           </EmptyMedia>
           <EmptyTitle>Message {bot.name}</EmptyTitle>
-          <EmptyDescription>{bot.purpose || "Tell it what this bot is for and what to do first. It remembers how you like things done."}</EmptyDescription>
+          <EmptyDescription>
+            {bot.purpose ||
+              "Tell it what this bot is for and what to do first. It remembers how you like things done."}
+          </EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -151,10 +250,23 @@ export function Transcript({ bot, bots, items, busy, onShowBrowser }: { bot: Bot
     <MessageScrollerProvider autoScroll>
       <MessageScroller className="flex-1">
         <MessageScrollerViewport>
-          <MessageScrollerContent aria-busy={busy} className="mx-auto w-full max-w-3xl gap-4 px-4 py-6">
+          <MessageScrollerContent
+            aria-busy={busy}
+            className="mx-auto w-full max-w-3xl gap-4 px-4 py-6"
+          >
             {rows.map((row, i) => (
-              <MessageScrollerItem key={i} messageId={String(i)} scrollAnchor={row.kind === "user"} className={cn(row.kind === "handoff" && UNCLIPPED)}>
-                <RowView row={row} running={busy && i === rows.length - 1} bots={bots} onShowBrowser={onShowBrowser} />
+              <MessageScrollerItem
+                key={i}
+                messageId={String(i)}
+                scrollAnchor={row.kind === "user"}
+                className={cn(row.kind === "handoff" && UNCLIPPED)}
+              >
+                <RowView
+                  row={row}
+                  running={busy && i === rows.length - 1}
+                  bots={bots}
+                  onShowBrowser={onShowBrowser}
+                />
               </MessageScrollerItem>
             ))}
             {busy && (
@@ -181,7 +293,17 @@ export function Transcript({ bot, bots, items, busy, onShowBrowser }: { bot: Bot
 }
 
 /** `running`: the row is the live edge of a turn still in progress. */
-function RowView({ row, running, bots, onShowBrowser }: { row: Row; running: boolean; bots: BotSummary[]; onShowBrowser: () => void }) {
+function RowView({
+  row,
+  running,
+  bots,
+  onShowBrowser,
+}: {
+  row: Row;
+  running: boolean;
+  bots: BotSummary[];
+  onShowBrowser: () => void;
+}) {
   switch (row.kind) {
     case "user":
       return <UserMessage text={row.text} mentions={row.mentions} bots={bots} />;
@@ -203,7 +325,9 @@ function RowView({ row, running, bots, onShowBrowser }: { row: Row; running: boo
       return (
         <Alert variant="destructive">
           <CircleAlertIcon />
-          <AlertDescription className="break-words whitespace-pre-wrap">{row.text}</AlertDescription>
+          <AlertDescription className="break-words whitespace-pre-wrap">
+            {row.text}
+          </AlertDescription>
         </Alert>
       );
     case "update":
@@ -222,7 +346,9 @@ function RowView({ row, running, bots, onShowBrowser }: { row: Row; running: boo
     case "session":
       return (
         <Marker variant="separator" className="text-xs">
-          <MarkerContent>New session · earlier messages are no longer in the bot's context</MarkerContent>
+          <MarkerContent>
+            New session · earlier messages are no longer in the bot's context
+          </MarkerContent>
         </Marker>
       );
     case "routine":
@@ -232,7 +358,8 @@ function RowView({ row, running, bots, onShowBrowser }: { row: Row; running: boo
             <AlarmClockIcon className="size-3.5" />
           </MarkerIcon>
           <MarkerContent>
-            Routine <span className="font-semibold text-foreground">{row.name}</span> · {row.trigger === "manual" ? "test run" : "scheduled"}
+            Routine <span className="text-foreground font-semibold">{row.name}</span> ·{" "}
+            {row.trigger === "manual" ? "test run" : "scheduled"}
           </MarkerContent>
         </Marker>
       );
@@ -248,9 +375,21 @@ function RowView({ row, running, bots, onShowBrowser }: { row: Row; running: boo
 }
 
 /** A message from the user. `queuedId` marks one still waiting for the bot: it is dimmed and can be cancelled. */
-function UserMessage({ text, mentions = [], bots, queuedId }: { text: string; mentions?: { id: string; name: string }[]; bots: BotSummary[]; queuedId?: string }) {
+function UserMessage({
+  text,
+  mentions = [],
+  bots,
+  queuedId,
+}: {
+  text: string;
+  mentions?: { id: string; name: string }[];
+  bots: BotSummary[];
+  queuedId?: string;
+}) {
   const bound = bindMentions(text, mentions);
-  const leading = mentions.filter((m) => !bound.mentions.includes(m)).map((m) => ({ mention: m, text: `@${m.name}` }));
+  const leading = mentions
+    .filter((m) => !bound.mentions.includes(m))
+    .map((m) => ({ mention: m, text: `@${m.name}` }));
   return (
     <Message align="end">
       <MessageContent>
@@ -265,7 +404,7 @@ function UserMessage({ text, mentions = [], bots, queuedId }: { text: string; me
                   to="/bots/$botId"
                   params={{ botId: target.id }}
                   style={botTheme(target.avatar.stroke)}
-                  className="bot-theme inline-flex items-baseline gap-1 rounded-full bg-background px-1.5 font-semibold text-primary transition-colors hover:bg-secondary"
+                  className="bot-theme bg-background text-primary hover:bg-secondary inline-flex items-baseline gap-1 rounded-full px-1.5 font-semibold transition-colors"
                 >
                   <BotAvatar avatar={target.avatar} className="size-[1.1em] self-center" />
                   {s.text.slice(1)}
@@ -279,9 +418,14 @@ function UserMessage({ text, mentions = [], bots, queuedId }: { text: string; me
           </BubbleContent>
         </Bubble>
         {queuedId && (
-          <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+          <div className="text-muted-foreground flex items-center justify-end gap-1 text-xs">
             Queued · runs after the current turn
-            <Button type="button" variant="ghost" size="sm" onClick={() => void act("/api/send/cancel", { id: queuedId })}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => void act("/api/send/cancel", { id: queuedId })}
+            >
               <XIcon data-icon="inline-start" />
               Cancel
             </Button>
@@ -307,7 +451,9 @@ function Steps({ tools, running }: { tools: ToolItem[]; running: boolean }) {
             </TraceLine>
           </TraceCollapsibleTrigger>
           <TraceCollapsibleContent>
-            <pre className="max-h-80 overflow-auto font-mono text-xs whitespace-pre-wrap">{tool.input}</pre>
+            <pre className="max-h-80 overflow-auto font-mono text-xs whitespace-pre-wrap">
+              {tool.input}
+            </pre>
           </TraceCollapsibleContent>
         </TraceCollapsible>
       ))}
@@ -342,12 +488,16 @@ function Request({
       </ItemMedia>
       <ItemContent className="min-w-0">
         <ItemTitle className="line-clamp-none">{title}</ItemTitle>
-        {description && <ItemDescription className="line-clamp-none whitespace-pre-wrap">{description}</ItemDescription>}
+        {description && (
+          <ItemDescription className="line-clamp-none whitespace-pre-wrap">
+            {description}
+          </ItemDescription>
+        )}
       </ItemContent>
       {open ? (
         actions && <ItemActions className="flex-wrap">{actions}</ItemActions>
       ) : (
-        <ItemActions className="text-xs text-muted-foreground">
+        <ItemActions className="text-muted-foreground text-xs">
           <CircleCheckIcon className="size-3.5" /> {answer}
         </ItemActions>
       )}
@@ -356,7 +506,13 @@ function Request({
   );
 }
 
-function WaitCard({ item, onShowBrowser }: { item: Extract<Item, { kind: "wait" }>; onShowBrowser: () => void }) {
+function WaitCard({
+  item,
+  onShowBrowser,
+}: {
+  item: Extract<Item, { kind: "wait" }>;
+  onShowBrowser: () => void;
+}) {
   const takeover = item.waitKind === "takeover";
   return (
     <Request
@@ -367,7 +523,12 @@ function WaitCard({ item, onShowBrowser }: { item: Extract<Item, { kind: "wait" 
       actions={
         <>
           {item.actions.map((a, i) => (
-            <Button key={a.id} size="sm" variant={i === 0 ? "default" : "outline"} onClick={() => act("/api/waits/answer", { id: item.id, action: a.id })}>
+            <Button
+              key={a.id}
+              size="sm"
+              variant={i === 0 ? "default" : "outline"}
+              onClick={() => act("/api/waits/answer", { id: item.id, action: a.id })}
+            >
               {a.label}
             </Button>
           ))}
@@ -399,7 +560,12 @@ function AskCard({ item }: { item: Extract<Item, { kind: "ask" }> }) {
               void act("/api/answer", { id: item.id, value: reply });
             }}
           >
-            <Input autoFocus placeholder="Your answer" value={reply} onChange={(e) => setReply(e.target.value)} />
+            <Input
+              autoFocus
+              placeholder="Your answer"
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+            />
             <Button type="submit" disabled={!reply.trim()}>
               Answer
             </Button>
@@ -423,7 +589,11 @@ function ApproveCard({ item }: { item: Extract<Item, { kind: "approve" }> }) {
       answer={item.answer === "allow" ? "Allowed" : item.answer === "deny" ? "Denied" : item.answer}
       actions={
         <>
-          <Button size="sm" variant="outline" onClick={() => act("/api/answer", { id: item.id, value: "deny" })}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => act("/api/answer", { id: item.id, value: "deny" })}
+          >
             Deny
           </Button>
           <Button size="sm" onClick={() => act("/api/answer", { id: item.id, value: "allow" })}>
@@ -431,7 +601,11 @@ function ApproveCard({ item }: { item: Extract<Item, { kind: "approve" }> }) {
           </Button>
         </>
       }
-      footer={<pre className="max-h-60 w-full overflow-auto rounded-md bg-muted/60 p-3 font-mono text-xs whitespace-pre-wrap">{item.input}</pre>}
+      footer={
+        <pre className="bg-muted/60 max-h-60 w-full overflow-auto rounded-md p-3 font-mono text-xs whitespace-pre-wrap">
+          {item.input}
+        </pre>
+      }
     />
   );
 }
@@ -443,29 +617,54 @@ const HANDOFF_STATUS: Record<string, string> = {
 };
 
 /** `other`: the bot on the far side, when it still exists; the card takes its color. */
-function HandoffCard({ item, other }: { item: Extract<Item, { kind: "handoff" }>; other: BotSummary | undefined }) {
+function HandoffCard({
+  item,
+  other,
+}: {
+  item: Extract<Item, { kind: "handoff" }>;
+  other: BotSummary | undefined;
+}) {
   const received = item.direction === "received";
   return (
-    <div style={other && botTheme(other.avatar.stroke)} className={cn("grid gap-2 rounded-xl border bg-card p-4 text-sm shadow-[0_0_24px_1px_rgb(0_0_0/0.06)] dark:shadow-[0_0_24px_1px_rgb(0_0_0/0.4)]", other && "bot-theme")}>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {received ? <ArrowDownLeftIcon className="size-3.5" /> : <ArrowUpRightIcon className="size-3.5" />}
+    <div
+      style={other && botTheme(other.avatar.stroke)}
+      className={cn(
+        "grid gap-2 rounded-xl border bg-card p-4 text-sm shadow-[0_0_24px_1px_rgb(0_0_0/0.06)] dark:shadow-[0_0_24px_1px_rgb(0_0_0/0.4)]",
+        other && "bot-theme",
+      )}
+    >
+      <div className="text-muted-foreground flex items-center gap-2 text-xs">
+        {received ? (
+          <ArrowDownLeftIcon className="size-3.5" />
+        ) : (
+          <ArrowUpRightIcon className="size-3.5" />
+        )}
         <span className="flex items-center gap-1">
           Handoff {received ? "from" : "to"}
           {other ? (
-            <Link to="/bots/$botId" params={{ botId: other.id }} className="inline-flex items-center gap-1 rounded-full py-0.5 pr-2 pl-1 font-medium text-primary transition-colors hover:bg-primary/10">
+            <Link
+              to="/bots/$botId"
+              params={{ botId: other.id }}
+              className="text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded-full py-0.5 pr-2 pl-1 font-medium transition-colors"
+            >
               <BotAvatar avatar={other.avatar} className="size-4" />
               {item.bot}
             </Link>
           ) : (
-            <span className="font-medium text-foreground">{item.bot}</span>
+            <span className="text-foreground font-medium">{item.bot}</span>
           )}
         </span>
-        <Badge variant="secondary" className={cn("ml-auto capitalize", HANDOFF_STATUS[item.status])}>
+        <Badge
+          variant="secondary"
+          className={cn("ml-auto capitalize", HANDOFF_STATUS[item.status])}
+        >
           {item.status}
         </Badge>
       </div>
       {item.title && <p className="font-medium">{item.title}</p>}
-      <div className="max-h-48 overflow-y-auto whitespace-pre-wrap text-muted-foreground">{item.text}</div>
+      <div className="text-muted-foreground max-h-48 overflow-y-auto whitespace-pre-wrap">
+        {item.text}
+      </div>
     </div>
   );
 }

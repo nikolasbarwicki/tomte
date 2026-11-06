@@ -1,5 +1,14 @@
+import type { LiveMessage } from "@claudebot/contract/events";
+import {
+  EllipsisIcon,
+  GlobeIcon,
+  HandIcon,
+  LogOutIcon,
+  MousePointerClickIcon,
+  RotateCwIcon,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { EllipsisIcon, GlobeIcon, HandIcon, LogOutIcon, MousePointerClickIcon, RotateCwIcon } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,12 +18,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+
 import { act, errorOf, post } from "./api.ts";
 import { confirmAction } from "./confirm.tsx";
-import type { LiveMessage } from "@claudebot/contract/events";
 
 type Tab = Extract<LiveMessage, { type: "tabs" }>["tabs"][number];
 interface Live {
@@ -35,8 +50,12 @@ function useLive(botId: string): Live {
     setState({ live: false, tabs: [], holder: "bot" });
     const apply = (m: LiveMessage) =>
       setState((s) => {
-        if (m.type === "state") return m.state === "live" ? { ...s, live: true } : { ...s, live: false, frame: undefined, tabs: [] };
-        if (m.type === "frame") return { ...s, frame: m.data, size: { width: m.width, height: m.height } };
+        if (m.type === "state")
+          return m.state === "live"
+            ? { ...s, live: true }
+            : { ...s, live: false, frame: undefined, tabs: [] };
+        if (m.type === "frame")
+          return { ...s, frame: m.data, size: { width: m.width, height: m.height } };
         if (m.type === "control") return { ...s, holder: m.holder };
         if (m.type === "url") return { ...s, url: m.url };
         if (m.type === "tabs") return { ...s, tabs: m.tabs };
@@ -46,7 +65,12 @@ function useLive(botId: string): Live {
       // A POST: the host only serves this stream to same-origin JSON requests.
       while (!abort.signal.aborted) {
         try {
-          const res = await fetch("/api/browser/live", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ botId }), signal: abort.signal });
+          const res = await fetch("/api/browser/live", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ botId }),
+            signal: abort.signal,
+          });
           if (!res.ok || !res.body) throw new Error(String(res.status));
           const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
           let buffer = "";
@@ -69,25 +93,32 @@ function useLive(botId: string): Live {
   return state;
 }
 
-const MODIFIERS = (e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) => (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
+const MODIFIERS = (e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) =>
+  (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
 const BUTTONS = ["left", "middle", "right"] as const;
 
 /** Sends input to the bot's browser while the user holds control. Events are fire-and-forget and never kept. */
 function useInput(botId: string, size: Live["size"]) {
   const frame = useRef<HTMLImageElement>(null);
   const lastMove = useRef(0);
-  const send = (event: Record<string, unknown>) => void post("/api/browser/input", { botId, ...event }).catch(() => undefined);
+  const send = (event: Record<string, unknown>) =>
+    void post("/api/browser/input", { botId, ...event }).catch(() => undefined);
   const point = (clientX: number, clientY: number) => {
     const r = frame.current?.getBoundingClientRect();
     if (!r || !size || !r.width || !r.height) return undefined;
-    return { x: ((clientX - r.left) / r.width) * size.width, y: ((clientY - r.top) / r.height) * size.height };
+    return {
+      x: ((clientX - r.left) / r.width) * size.width,
+      y: ((clientY - r.top) / r.height) * size.height,
+    };
   };
   const mouse = (eventType: string, e: React.MouseEvent, extra: Record<string, unknown> = {}) => {
     const p = point(e.clientX, e.clientY);
     if (p) send({ kind: "mouse", eventType, ...p, modifiers: MODIFIERS(e), ...extra });
   };
   const touch = (eventType: string, e: React.TouchEvent) => {
-    const touchPoints = Array.from(e.touches).map((t) => point(t.clientX, t.clientY)).filter((p) => p !== undefined);
+    const touchPoints = Array.from(e.touches)
+      .map((t) => point(t.clientX, t.clientY))
+      .filter((p) => p !== undefined);
     send({ kind: "touch", eventType, touchPoints });
   };
   return {
@@ -98,9 +129,18 @@ function useInput(botId: string, size: Live["size"]) {
         lastMove.current = Date.now();
         mouse("mouseMoved", e, { button: e.buttons ? BUTTONS[Math.min(e.button, 2)] : "none" });
       },
-      onMouseDown: (e: React.MouseEvent) => mouse("mousePressed", e, { button: BUTTONS[Math.min(e.button, 2)], clickCount: e.detail || 1 }),
-      onMouseUp: (e: React.MouseEvent) => mouse("mouseReleased", e, { button: BUTTONS[Math.min(e.button, 2)], clickCount: e.detail || 1 }),
-      onWheel: (e: React.WheelEvent) => mouse("mouseWheel", e, { deltaX: e.deltaX, deltaY: e.deltaY }),
+      onMouseDown: (e: React.MouseEvent) =>
+        mouse("mousePressed", e, {
+          button: BUTTONS[Math.min(e.button, 2)],
+          clickCount: e.detail || 1,
+        }),
+      onMouseUp: (e: React.MouseEvent) =>
+        mouse("mouseReleased", e, {
+          button: BUTTONS[Math.min(e.button, 2)],
+          clickCount: e.detail || 1,
+        }),
+      onWheel: (e: React.WheelEvent) =>
+        mouse("mouseWheel", e, { deltaX: e.deltaX, deltaY: e.deltaY }),
       onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
       onTouchStart: (e: React.TouchEvent) => touch("touchStart", e),
       onTouchMove: (e: React.TouchEvent) => touch("touchMove", e),
@@ -111,18 +151,41 @@ function useInput(botId: string, size: Live["size"]) {
       onKeyDown: (e: React.KeyboardEvent) => {
         e.preventDefault();
         const printable = e.key.length === 1 && !e.ctrlKey && !e.metaKey;
-        send({ kind: "keyboard", eventType: "keyDown", key: e.key, code: e.code, text: printable ? e.key : undefined, windowsVirtualKeyCode: e.keyCode, modifiers: MODIFIERS(e) });
+        send({
+          kind: "keyboard",
+          eventType: "keyDown",
+          key: e.key,
+          code: e.code,
+          text: printable ? e.key : undefined,
+          windowsVirtualKeyCode: e.keyCode,
+          modifiers: MODIFIERS(e),
+        });
       },
       onKeyUp: (e: React.KeyboardEvent) => {
         e.preventDefault();
-        send({ kind: "keyboard", eventType: "keyUp", key: e.key, code: e.code, windowsVirtualKeyCode: e.keyCode, modifiers: MODIFIERS(e) });
+        send({
+          kind: "keyboard",
+          eventType: "keyUp",
+          key: e.key,
+          code: e.code,
+          windowsVirtualKeyCode: e.keyCode,
+          modifiers: MODIFIERS(e),
+        });
       },
     },
   };
 }
 
 /** The bot's browser: a live view, the controls for taking it over, and the host actions for restarting it. */
-export function BrowserPanel({ botId, botName, headed }: { botId: string; botName: string; headed: boolean }) {
+export function BrowserPanel({
+  botId,
+  botName,
+  headed,
+}: {
+  botId: string;
+  botName: string;
+  headed: boolean;
+}) {
   const { live, frame: data, size, url: navigated, tabs, holder } = useLive(botId);
   const [error, setError] = useState<string>();
   const input = useInput(botId, size);
@@ -135,7 +198,8 @@ export function BrowserPanel({ botId, botName, headed }: { botId: string; botNam
   const signOut = async () => {
     const ok = await confirmAction({
       title: `Sign ${botName} out of everything?`,
-      description: "The browser closes and its saved logins are deleted. Stored credentials and grants are kept.",
+      description:
+        "The browser closes and its saved logins are deleted. Stored credentials and grants are kept.",
       action: "Sign out",
       destructive: true,
     });
@@ -145,16 +209,34 @@ export function BrowserPanel({ botId, botName, headed }: { botId: string; botNam
   return (
     <div className="grid gap-3">
       <div className="flex items-center gap-2">
-        <span className={cn("size-2 shrink-0 rounded-full", !live ? "bg-muted-foreground/40" : userHolds ? "bg-blue-500" : "bg-emerald-500")} />
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-          {!live ? "Not running" : userHolds ? "You have control" : holder === "draining" ? "Handing control to you…" : `${botName} is in control`}
+        <span
+          className={cn(
+            "size-2 shrink-0 rounded-full",
+            !live ? "bg-muted-foreground/40" : userHolds ? "bg-blue-500" : "bg-emerald-500",
+          )}
+        />
+        <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
+          {!live
+            ? "Not running"
+            : userHolds
+              ? "You have control"
+              : holder === "draining"
+                ? "Handing control to you…"
+                : `${botName} is in control`}
         </span>
         <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Browser settings" />}>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="icon-xs" aria-label="Browser settings" />}
+          >
             <EllipsisIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuCheckboxItem checked={headed} onCheckedChange={(checked) => act("/api/bots/browser/headed", { botId, headed: checked })}>
+            <DropdownMenuCheckboxItem
+              checked={headed}
+              onCheckedChange={(checked) =>
+                act("/api/bots/browser/headed", { botId, headed: checked })
+              }
+            >
               Show window
             </DropdownMenuCheckboxItem>
             <DropdownMenuItem onClick={() => act("/api/bots/browser/restart", { botId })}>
@@ -171,19 +253,22 @@ export function BrowserPanel({ botId, botName, headed }: { botId: string; botNam
         <>
           <div className="overflow-hidden rounded-lg border">
             {tabs.length > 1 && (
-              <div className="flex gap-1 overflow-x-auto border-b bg-muted/60 px-1.5 pt-1.5">
+              <div className="bg-muted/60 flex gap-1 overflow-x-auto border-b px-1.5 pt-1.5">
                 {tabs.map((t) => (
                   <span
                     key={t.id}
                     title={t.url}
-                    className={cn("max-w-40 shrink-0 truncate rounded-t-md px-2.5 py-1 text-xs", t.active ? "bg-background font-medium" : "text-muted-foreground")}
+                    className={cn(
+                      "max-w-40 shrink-0 truncate rounded-t-md px-2.5 py-1 text-xs",
+                      t.active ? "bg-background font-medium" : "text-muted-foreground",
+                    )}
                   >
                     {t.title || t.url || t.id}
                   </span>
                 ))}
               </div>
             )}
-            <div className="flex items-center gap-2 border-b bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground">
+            <div className="bg-muted/30 text-muted-foreground flex items-center gap-2 border-b px-2.5 py-1.5 text-xs">
               <GlobeIcon className="size-3.5 shrink-0" />
               <span className="truncate" title={url}>
                 {url ?? ""}
@@ -191,7 +276,10 @@ export function BrowserPanel({ botId, botName, headed }: { botId: string; botNam
             </div>
             {data ? (
               <div
-                className={cn("leading-none outline-none", userHolds && "cursor-crosshair ring-2 ring-blue-500 ring-inset")}
+                className={cn(
+                  "leading-none outline-none",
+                  userHolds && "cursor-crosshair ring-2 ring-blue-500 ring-inset",
+                )}
                 tabIndex={userHolds ? 0 : -1}
                 {...(userHolds ? input.keys : {})}
               >
@@ -205,7 +293,7 @@ export function BrowserPanel({ botId, botName, headed }: { botId: string; botNam
                 />
               </div>
             ) : (
-              <div className="flex aspect-video items-center justify-center gap-2 text-xs text-muted-foreground">
+              <div className="text-muted-foreground flex aspect-video items-center justify-center gap-2 text-xs">
                 <Spinner /> Waiting for the page…
               </div>
             )}
@@ -216,19 +304,28 @@ export function BrowserPanel({ botId, botName, headed }: { botId: string; botNam
                 <Button size="sm" onClick={() => control("hand_back")}>
                   <HandIcon /> Hand back
                 </Button>
-                <span className="text-xs text-muted-foreground">Click the page to type into it.</span>
+                <span className="text-muted-foreground text-xs">
+                  Click the page to type into it.
+                </span>
               </>
             ) : (
               <>
-                <Button size="sm" variant="outline" disabled={holder === "draining"} onClick={() => control("take")}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={holder === "draining"}
+                  onClick={() => control("take")}
+                >
                   {holder === "draining" ? <Spinner /> : <MousePointerClickIcon />}
                   {holder === "draining" ? "Taking control…" : "Take control"}
                 </Button>
-                <span className="text-xs text-muted-foreground">View only while the bot is in control.</span>
+                <span className="text-muted-foreground text-xs">
+                  View only while the bot is in control.
+                </span>
               </>
             )}
           </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && <p className="text-destructive text-xs">{error}</p>}
         </>
       ) : (
         <Empty className="border border-dashed p-6">
@@ -237,7 +334,9 @@ export function BrowserPanel({ botId, botName, headed }: { botId: string; botNam
               <GlobeIcon />
             </EmptyMedia>
             <EmptyTitle className="text-sm">The browser is not running</EmptyTitle>
-            <EmptyDescription className="text-xs">It starts when {botName} first uses it.</EmptyDescription>
+            <EmptyDescription className="text-xs">
+              It starts when {botName} first uses it.
+            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       )}

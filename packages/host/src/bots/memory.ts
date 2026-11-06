@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+
 import type { MemoryScope } from "@claudebot/contract/events";
 
 export type MemoryPaths = Record<MemoryScope, string>;
