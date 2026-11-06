@@ -31,6 +31,7 @@ import { parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { defined } from "../testing/defined.ts";
+import { asDevice, pairDevice } from "../testing/paired-device.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "..", "testing", "fake-claude.ts");
@@ -45,6 +46,7 @@ let cwd: string;
 let fakeDir: string;
 let claudeDir: string;
 let server: HostServer;
+let device: string;
 let engineStream: ReturnType<typeof Bun.serve> | undefined;
 const sockets = new Set<{ send(s: string): void }>();
 const engineInput: string[] = [];
@@ -88,6 +90,7 @@ async function startServer(takeoverInactivityMs?: number) {
     liveView: { retryMs: 50 },
     ...(takeoverInactivityMs !== undefined && { takeoverInactivityMs }),
   });
+  device = pairDevice(server);
 }
 
 beforeEach(async () => {
@@ -115,8 +118,16 @@ const until = async (check: () => boolean, ms = 4000) => {
 const ui = (
   path: string,
   body: object,
-  headers: Record<string, string> = { "content-type": "application/json", origin: server.url },
-) => fetch(`${server.url}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+  headers: Record<string, string> = {
+    "content-type": "application/json",
+    origin: server.clientUrl,
+  },
+) =>
+  fetch(`${server.clientUrl}${path}`, {
+    method: "POST",
+    headers: { ...asDevice(device), ...headers },
+    body: JSON.stringify(body),
+  });
 
 /** Everything the chat page receives on /api/events, as it arrives. */
 function events() {
@@ -124,10 +135,8 @@ function events() {
   const abort = new AbortController();
   closers.push(() => abort.abort());
   void (async () => {
-    const res = await fetch(`${server.url}/api/events`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
+    const res = await fetch(`${server.clientUrl}/api/events`, {
+      headers: asDevice(device),
       signal: abort.signal,
     });
     const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
@@ -149,9 +158,13 @@ function watchHolder(botId: string) {
   const abort = new AbortController();
   closers.push(() => abort.abort());
   void (async () => {
-    const res = await fetch(`${server.url}/api/browser/live`, {
+    const res = await fetch(`${server.clientUrl}/api/browser/live`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: server.url },
+      headers: {
+        "content-type": "application/json",
+        origin: server.clientUrl,
+        ...asDevice(device),
+      },
       body: JSON.stringify({ botId }),
       signal: abort.signal,
     });
@@ -299,7 +312,7 @@ describe("human wait: takeover request", () => {
         await ui(
           "/api/waits/answer",
           { id: wait.id, action: "done" },
-          { "content-type": "text/plain", origin: server.url },
+          { "content-type": "text/plain", origin: server.clientUrl },
         )
       ).status,
     ).toBe(415);
@@ -590,8 +603,12 @@ describe("takeover input", () => {
       ).status,
     ).toBe(403);
     expect(
-      (await ui("/api/browser/input", event, { "content-type": "text/plain", origin: server.url }))
-        .status,
+      (
+        await ui("/api/browser/input", event, {
+          "content-type": "text/plain",
+          origin: server.clientUrl,
+        })
+      ).status,
     ).toBe(415);
     expect(
       (
@@ -603,7 +620,11 @@ describe("takeover input", () => {
       ).status,
     ).toBe(403);
     expect(
-      (await fetch(`${server.url}/api/browser/input`, { headers: { origin: server.url } })).status,
+      (
+        await fetch(`${server.clientUrl}/api/browser/input`, {
+          headers: { origin: server.clientUrl, ...asDevice(device) },
+        })
+      ).status,
     ).toBe(405);
     expect(engineInput).toEqual([]);
   });

@@ -245,7 +245,7 @@ describe("tools", () => {
     expect((await call("browser_fill", { ref: "r3.e2", text: "-5" })).isError).toBeFalsy();
     expect(
       engineCommands()
-        .filter((c) => c[0] !== "snapshot" && c[0] !== "open")
+        .filter((c) => !["snapshot", "open", "set"].includes(c[0] ?? ""))
         .map((c) => c.join(" ")),
     ).toEqual(["fill @e2 - item", "fill @e2 -5"]);
     await closeAll();

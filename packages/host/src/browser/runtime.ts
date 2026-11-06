@@ -84,6 +84,13 @@ export interface BrowserRuntimes {
   sweep(): Promise<void>;
 }
 
+/**
+ * The size every bot browser is pinned to. Chrome for Testing's headless window can leave the page a smaller viewport
+ * than the engine reports in its frame metadata (a 1280x720 window gave a 1280x577 page), which sends takeover clicks
+ * to the wrong place; setting the viewport explicitly makes the page, the frames and the input coordinates agree.
+ */
+const VIEWPORT = { width: 1280, height: 720 };
+
 interface BotState {
   lane: Lane;
   /** A browser was started and not closed by this runtime. */
@@ -97,6 +104,8 @@ interface BotState {
   /** The user holds the browser; bot calls are refused. */
   held: boolean;
   refused: boolean;
+  /** The browser's viewport was pinned since it last started. */
+  viewportPinned: boolean;
 }
 
 /** The engine key is generated once and lives in the secret store; it is never written to disk. */
@@ -139,6 +148,7 @@ export function createBrowserRuntimes(
           restoreWarned: false,
           held: false,
           refused: false,
+          viewportPinned: false,
         }),
       );
     return s;
@@ -174,6 +184,7 @@ export function createBrowserRuntimes(
   function noteRestart(s: BotState, what: string) {
     s.restarts++;
     s.fingerprint = undefined;
+    s.viewportPinned = false;
     s.restoreWarned = false;
     s.notices.push(
       `Your browser ${what}. Open pages and element refs from before are gone; take a new snapshot before continuing.`,
@@ -207,6 +218,22 @@ export function createBrowserRuntimes(
     return runEngine(await launch(), botId, command, timeoutMs);
   }
 
+  /** Pins a freshly started browser's viewport. A failure is logged and retried with the bot's next call: it only misplaces takeover input. */
+  async function pinViewport(l: EngineLaunch, botId: string, s: BotState) {
+    try {
+      await runEngine(
+        l,
+        botId,
+        ["set", "viewport", String(VIEWPORT.width), String(VIEWPORT.height)],
+        timeoutMs,
+      );
+      s.viewportPinned = true;
+    } catch (e) {
+      if (!(e instanceof EngineError)) throw e;
+      console.error(`[browser] pinning the viewport of ${botId} failed: ${e.message}`);
+    }
+  }
+
   async function call(botId: string, command: string[], extraEnv?: Record<string, string>) {
     const l = await launch(botId);
     if (extraEnv) l.env = { ...l.env, ...extraEnv };
@@ -215,6 +242,7 @@ export function createBrowserRuntimes(
     try {
       const data = await runEngine(l, botId, command, timeoutMs);
       observe(botId, s, data);
+      if (!s.viewportPinned) await pinViewport(l, botId, s);
       return data;
     } finally {
       s.lastUsed = now();

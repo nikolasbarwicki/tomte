@@ -33,6 +33,7 @@ import { parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { defined } from "../testing/defined.ts";
+import { clientPost, asDevice, pairDevice } from "../testing/paired-device.ts";
 import {
   classifyAfterLogin,
   CREDENTIAL_EXCHANGE_PATH,
@@ -58,6 +59,7 @@ let cwd: string;
 let fakeDir: string;
 let claudeDir: string;
 let server: HostServer;
+let device: string;
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 const closers: (() => unknown)[] = [];
 
@@ -91,6 +93,7 @@ beforeEach(async () => {
     browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir } },
     sandbox: () => ({ status: "available" }),
   });
+  device = pairDevice(server);
 });
 
 afterEach(async () => {
@@ -103,12 +106,7 @@ const until = async (check: () => boolean, ms = 4000) => {
   expect(check()).toBe(true);
 };
 
-const ui = (path: string, body: object) =>
-  fetch(`${server.url}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: server.url },
-    body: JSON.stringify(body),
-  });
+const ui = (path: string, body: object) => clientPost(server, device, path, body);
 
 const script = (extra: object = {}) =>
   writeFileSync(
@@ -160,10 +158,8 @@ function events() {
   const abort = new AbortController();
   closers.push(() => abort.abort());
   void (async () => {
-    const res = await fetch(`${server.url}/api/events`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
+    const res = await fetch(`${server.clientUrl}/api/events`, {
+      headers: asDevice(device),
       signal: abort.signal,
     });
     const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
@@ -385,7 +381,7 @@ describe("browser_login", () => {
     }[];
     const plugin = defined(plugins[0], "plugin");
     expect(plugin.name).toBe("claudebot");
-    expect(plugin.args[1]).toBe(`${server.url}${CREDENTIAL_EXCHANGE_PATH}`);
+    expect(plugin.args[1]).toBe(`${server.agentUrl}${CREDENTIAL_EXCHANGE_PATH}`);
     expect(login.env.AGENT_BROWSER_PLUGINS).not.toContain(nonce);
 
     const state = JSON.parse(readFileSync(join(fakeDir, "state.json"), "utf8")) as Record<
@@ -554,7 +550,7 @@ describe("the password stays in the keychain", () => {
 
 describe("the credential exchange", () => {
   const exchange = (body: object, headers: Record<string, string> = {}) =>
-    fetch(`${server.url}${CREDENTIAL_EXCHANGE_PATH}`, {
+    fetch(`${server.agentUrl}${CREDENTIAL_EXCHANGE_PATH}`, {
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
@@ -583,7 +579,7 @@ describe("the credential exchange", () => {
   });
 
   test("refuses a request for another Host", async () => {
-    const res = await fetch(`${server.url}${CREDENTIAL_EXCHANGE_PATH}`, {
+    const res = await fetch(`${server.agentUrl}${CREDENTIAL_EXCHANGE_PATH}`, {
       method: "POST",
       headers: { host: "rebind.example" },
       body: "{}",

@@ -23,3 +23,7 @@ The engine is wrapped by the host. Bots reach it only through a Streamable HTTP 
 - Human waits (takeover, credential approval) return immediately and resume the bot with a message, so no harness tool-call timeout is involved.
 - The host owns engine process hygiene and is a single point that must stay correct: token checks, Host/Origin checks and the egress proxy are part of the trust boundary.
 - Engine per-call state cannot rely on process environment (the daemon fixes it at start), so per-call secrets such as the login nonce travel as arguments.
+
+## Note: the agent listener
+
+The loopback endpoint this ADR describes is now the **agent listener**: a second socket on `127.0.0.1` with its own free port, separate from the **client listener** that serves the web UI and `/api/*`. The browser endpoint, the bots endpoint and the credential exchange are served only there, and the client listener answers 404 for them. The checks above (Host, no Origin, per-session bearer token) are unchanged, and each harness's MCP config points at the agent listener. [ADR-0005](0005-agent-and-client-listeners-and-device-auth.md) records why the two listeners stay separate.

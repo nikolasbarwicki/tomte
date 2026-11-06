@@ -6,10 +6,12 @@ import type { z } from "zod";
 
 import type { Browser } from "../../browser/index.ts";
 import type { Credentials } from "../../credentials/index.ts";
+import type { DeviceAuth } from "../../device-auth/index.ts";
 import type { ResolvedCli } from "../../harness/index.ts";
 import type { Integrations } from "../../integrations/index.ts";
 import type { Routines } from "../../routines/index.ts";
 import type { Chats, OpenChat } from "../chats.ts";
+import type { DeviceSessions } from "../device-sessions.ts";
 import type { EventStream } from "../events.ts";
 
 /** What the `/api/*` handlers call into. */
@@ -25,6 +27,9 @@ export interface ApiContext {
   routines: Routines;
   integrations: Integrations;
   credentials: Credentials;
+  devices: DeviceAuth;
+  /** Which device each request came from, and the responses still open for it. */
+  sessions: DeviceSessions;
   events: EventStream;
   /** Everything a page receives when it connects. */
   snapshot(): HostEvent[];

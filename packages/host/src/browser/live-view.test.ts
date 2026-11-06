@@ -14,6 +14,7 @@ import { parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { defined } from "../testing/defined.ts";
+import { asDevice, clientPost, pairDevice } from "../testing/paired-device.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH"] as const;
@@ -22,6 +23,7 @@ let root: string;
 let cwd: string;
 let fakeDir: string;
 let server: HostServer;
+let device: string;
 let engineStream: ReturnType<typeof Bun.serve> | undefined;
 const sockets = new Set<{ send(s: string): void }>();
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
@@ -66,6 +68,7 @@ beforeEach(async () => {
     browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir } },
     liveView: { retryMs: 50 },
   });
+  device = pairDevice(server);
 });
 
 afterEach(async () => {
@@ -76,12 +79,7 @@ afterEach(async () => {
 });
 
 const calls = () => existsSync(join(fakeDir, "calls.jsonl"));
-const api = (path: string, body: object) =>
-  fetch(`${server.url}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+const api = (path: string, body: object) => clientPost(server, device, path, body);
 
 async function enabledBot() {
   const id = createBot(cwd, "bot").id;
@@ -91,9 +89,14 @@ async function enabledBot() {
 
 /** Opens the live view the way the page does: same-origin POST with a JSON body. */
 async function watch(botId: string, headers: Record<string, string> = {}) {
-  const res = await fetch(`${server.url}/api/browser/live`, {
+  const res = await fetch(`${server.clientUrl}/api/browser/live`, {
     method: "POST",
-    headers: { "content-type": "application/json", origin: server.url, ...headers },
+    headers: {
+      "content-type": "application/json",
+      origin: server.clientUrl,
+      ...asDevice(device),
+      ...headers,
+    },
     body: JSON.stringify({ botId }),
   });
   const reader = res.body?.getReader();
@@ -265,20 +268,16 @@ describe("live view", () => {
 
   test("a bot with the switch off has no live view", async () => {
     const id = createBot(cwd, "off").id;
-    const res = await fetch(`${server.url}/api/browser/live`, {
-      method: "POST",
-      headers: { "content-type": "application/json", origin: server.url },
-      body: JSON.stringify({ botId: id }),
-    });
+    const res = await api("/api/browser/live", { botId: id });
     expect(res.status).toBe(403);
   });
 });
 
 describe("live view hardening", () => {
   const raw = (headers: Record<string, string>, body: string, method = "POST") =>
-    fetch(`${server.url}/api/browser/live`, {
+    fetch(`${server.clientUrl}/api/browser/live`, {
       method,
-      headers,
+      headers: { ...asDevice(device), ...headers },
       body: method === "POST" ? body : undefined,
     });
 
@@ -302,31 +301,32 @@ describe("live view hardening", () => {
   test("rejects a simple-form content type and a non-POST method", async () => {
     const id = await enabledBot();
     const body = JSON.stringify({ botId: id });
-    expect((await raw({ "content-type": "text/plain", origin: server.url }, body)).status).toBe(
-      415,
-    );
+    expect(
+      (await raw({ "content-type": "text/plain", origin: server.clientUrl }, body)).status,
+    ).toBe(415);
     expect(
       (
         await raw(
-          { "content-type": "application/x-www-form-urlencoded", origin: server.url },
+          { "content-type": "application/x-www-form-urlencoded", origin: server.clientUrl },
           `botId=${id}`,
         )
       ).status,
     ).toBe(415);
-    expect((await raw({ origin: server.url }, body)).status).toBe(415);
-    expect((await raw({ origin: server.url }, "", "GET")).status).toBe(405);
+    expect((await raw({ origin: server.clientUrl }, body)).status).toBe(415);
+    expect((await raw({ origin: server.clientUrl }, "", "GET")).status).toBe(405);
   });
 
   test("rejects a bad Host header", async () => {
     const id = await enabledBot();
     const status = await new Promise<number>((resolve, reject) => {
       const req = require("node:http").request(
-        `${server.url}/api/browser/live`,
+        `${server.clientUrl}/api/browser/live`,
         {
           method: "POST",
           headers: {
             host: "evil.example",
             origin: "http://evil.example",
+            ...asDevice(device),
             "content-type": "application/json",
           },
         },
@@ -339,7 +339,7 @@ describe("live view hardening", () => {
   });
 
   test("an unknown or missing bot is refused", async () => {
-    const headers = { "content-type": "application/json", origin: server.url };
+    const headers = { "content-type": "application/json", origin: server.clientUrl };
     expect((await raw(headers, "{}")).status).toBe(400);
     expect((await raw(headers, "not json")).status).toBe(400);
     expect((await raw(headers, JSON.stringify({ botId: "nope" }))).status).toBe(403);

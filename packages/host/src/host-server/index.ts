@@ -1,6 +1,4 @@
 import type { Database } from "bun:sqlite";
-import { createServer, type RequestListener } from "node:http";
-import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 
 import type {
@@ -19,20 +17,25 @@ import {
   type SandboxStatus,
 } from "../browser/index.ts";
 import { createCredentials } from "../credentials/index.ts";
+import { createDeviceAuth, type DeviceAuth } from "../device-auth/index.ts";
 import { createHandoffs, type BotsEndpoint } from "../handoffs/index.ts";
 import { combineLeases, type HostServersSource, type ResolvedCli } from "../harness/index.ts";
 import { createIntegrations } from "../integrations/index.ts";
-import { hostOrigin, type HostConfig } from "../platform/config.ts";
+import { AGENT_ADDRESS, clientOrigin, agentOrigin, type HostConfig } from "../platform/config.ts";
 import type { SecretStore } from "../platform/secrets.ts";
 import { TokenRegistry } from "../platform/tokens.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
 import { createRoutines } from "../routines/index.ts";
 import { createApi } from "./api/index.ts";
 import { oauthCallback } from "./api/integrations.ts";
+import { pairRoute } from "./api/pair.ts";
+import { withBoundary } from "./boundary.ts";
 import { createChats } from "./chats.ts";
+import { createDeviceSessions } from "./device-sessions.ts";
 import { createEventStream } from "./events.ts";
 import { watchHerdr } from "./herdr.ts";
-import { createRequestListener, hostRoutes } from "./http.ts";
+import { agentRoutes, clientRoutes, createRequestListener } from "./http.ts";
+import { openListener } from "./listener.ts";
 import { createTranscripts } from "./transcript.ts";
 import { filesEvent, memoryEvents } from "./views.ts";
 
@@ -52,18 +55,23 @@ export interface HostServerOptions {
   liveView?: Pick<LiveViewOptions, "maxFps" | "retryMs">;
   /** How long the user may hold a bot's browser without input before control ends; 30 minutes when omitted. */
   takeoverInactivityMs?: number;
+  /** The clock device auth reads for pairing code expiry, in epoch milliseconds; the system clock when omitted. */
+  now?: () => number;
 }
 
 export interface HostServer {
-  port: number;
-  /** The loopback URL the host listens on. */
-  url: string;
+  /** The client listener's loopback URL: the web UI, `/api/*`, live view and `/oauth/callback`. */
+  clientUrl: string;
+  /** The agent listener's loopback URL: the browser endpoint, the bots endpoint and the credential exchange. */
+  agentUrl: string;
   /** The origin users and OAuth providers reach. */
   publicUrl: string;
   /** The browser endpoint's token leases, so a caller can act as a bot session. */
   browser: BrowserEndpoint;
   /** The bots endpoint's token leases, so a caller can act as a bot session. */
   bots: BotsEndpoint;
+  /** Pairing codes and device tokens, so a caller can pair a device without going through the exchange. */
+  devices: DeviceAuth;
   currentBotId: () => string | undefined;
   /** Closes every thread and browser, then stops listening. */
   close(): Promise<void>;
@@ -78,17 +86,13 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const initial = o.botId ? getBot(dataRoot, o.botId) : listBots(dataRoot)[0];
   if (o.botId && !initial) throw new Error(`no bot ${o.botId} in ${dataRoot}`);
 
-  /** Unset until startup finishes (503 meanwhile); the socket opens first so the port is known, but nothing is served yet. */
-  let serve: RequestListener | undefined;
-  const http = createServer((req, res) =>
-    serve ? serve(req, res) : void res.writeHead(503).end(),
-  );
-  const listening = Promise.withResolvers<void>();
-  http.once("error", listening.reject);
-  http.listen(o.config.bind.port, o.config.bind.address, listening.resolve);
-  await listening.promise;
-  const port = (http.address() as AddressInfo).port;
-  const origin = hostOrigin(o.config, port);
+  const clientListener = await openListener(o.config.bind.address, o.config.bind.port);
+  const agentListener = await openListener(AGENT_ADDRESS, 0).catch(async (e) => {
+    await clientListener.stop();
+    throw e;
+  });
+  const clientAt = clientOrigin(o.config, clientListener.port);
+  const agentAt = agentOrigin(agentListener.port);
 
   const events = createEventStream();
   const { broadcast } = events;
@@ -103,7 +107,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     secrets,
     credentials,
     tokens,
-    host: origin,
+    agent: agentAt,
     bot: (botId) => getBot(dataRoot, botId),
     filesDir: (botId) => botFilesPath(dataRoot, botId),
     unattended: (botId) => chats.unattended(botId),
@@ -117,7 +121,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const handoffs = createHandoffs({
     db,
     tokens,
-    host: origin,
+    host: agentAt,
     show: (botId, card) => chats.emitTo(botId, card),
     cards: () =>
       listBots(dataRoot).map((bot) => ({
@@ -139,7 +143,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     db,
     hostDir: dataRoot,
     secrets,
-    oauthRedirectUrl: `${origin.publicUrl}/oauth/callback`,
+    oauthRedirectUrl: `${clientAt.publicUrl}/oauth/callback`,
     onChange: () => {
       broadcast(integrationsEvent());
       chats.reconfigure(undefined, "integrations changed");
@@ -199,11 +203,13 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const vite = o.config.vite
     ? await createVite({
         root: webRoot,
-        server: { middlewareMode: true, hmr: { server: http } },
+        server: { middlewareMode: true, hmr: { server: clientListener.http } },
         appType: "spa",
       })
     : undefined;
 
+  const devices = createDeviceAuth({ db, ...(o.now !== undefined && { now: o.now }) });
+  const sessions = createDeviceSessions();
   const api = createApi({
     cwd,
     dataRoot,
@@ -214,6 +220,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     routines,
     integrations,
     credentials,
+    devices,
+    sessions,
     events,
     snapshot: () => {
       const botId = chats.currentBotId();
@@ -228,41 +236,49 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       ];
     },
   });
-  const routes = hostRoutes({
+  const client = clientRoutes({
     browser,
-    handoffs,
     oauthCallback: (_req, res, url) => oauthCallback(integrations, res, url.searchParams),
+    pair: pairRoute(devices, clientAt.publicUrl),
     api,
   });
+  const agent = agentRoutes({ browser, handoffs });
 
   routines.start();
   handoffs.redeliverOpen();
-  serve = createRequestListener(routes, (req, res) =>
-    vite ? vite.middlewares(req, res) : void res.writeHead(404).end(),
+  clientListener.serve(
+    withBoundary(
+      clientAt,
+      devices,
+      sessions,
+      createRequestListener(client, (req, res) =>
+        vite ? vite.middlewares(req, res) : void res.writeHead(404).end(),
+      ),
+    ),
   );
+  agentListener.serve(createRequestListener(agent, (_req, res) => void res.writeHead(404).end()));
 
   return {
-    port,
-    url: origin.localUrl,
-    publicUrl: origin.publicUrl,
+    clientUrl: clientAt.localUrl,
+    agentUrl: agentAt.localUrl,
+    publicUrl: clientAt.publicUrl,
     browser: browser.endpoint,
     bots: handoffs.endpoint,
+    devices,
     currentBotId: chats.currentBotId,
     async removeBot(botId) {
       await browser.removeBot(botId);
       handoffs.removeBot(botId);
     },
     async close() {
-      serve = undefined;
+      clientListener.pause();
+      agentListener.pause();
       chats.close();
       stopHerdr?.();
       routines.stop();
       await browser.close();
       await vite?.close();
-      http.closeAllConnections();
-      const closed = Promise.withResolvers<void>();
-      http.close(() => closed.resolve());
-      await closed.promise;
+      await Promise.all([clientListener.stop(), agentListener.stop()]);
     },
   };
 }

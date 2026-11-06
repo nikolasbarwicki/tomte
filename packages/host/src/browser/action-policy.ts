@@ -27,6 +27,7 @@ const ALLOWED_ACTIONS = [
   "tab_switch",
   "tab_close",
   "back",
+  "viewport",
   "stream_status",
   // `auth login` is checked as `auth_login`, and again for the credential plugin it asks.
   "auth_login",

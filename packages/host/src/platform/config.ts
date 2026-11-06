@@ -42,6 +42,9 @@ const MODES: readonly string[] = ["local", "remote"] satisfies HostMode[];
 /** Both modes bind loopback on a free port unless told otherwise; the remote mode spec sets its own defaults. */
 const DEFAULT_BIND = { address: "127.0.0.1", port: 0 };
 
+/** The agent listener's address; it never leaves this machine. */
+export const AGENT_ADDRESS = "127.0.0.1";
+
 /** What the default data root depends on; tests pass their own. */
 export interface HostSystem {
   platform: NodeJS.Platform;
@@ -169,23 +172,40 @@ export function parseHostConfig(
   };
 }
 
-/** Where the running host is reachable, known once its socket is bound. */
+/** Where one of the host's listeners is reachable, known once its socket is bound. */
 export interface HostOrigin {
-  /** `http://<bind address>:<port>`: how bots and the credential plugin on this machine reach the host. */
+  /** `http://<bind address>:<port>`: how callers on this machine reach the listener. */
   readonly localUrl: string;
-  /** The origin users and OAuth providers reach; the only source for the host's external origin. `X-Forwarded-*` headers are never consulted. */
+  /** The origin users and OAuth providers reach; the only source for the host's external origin. `X-Forwarded-*` headers are never consulted. The loopback URL for the agent listener. */
   readonly publicUrl: string;
-  /** Whether a request's Host header names this host on its bound address or as `localhost`; blocks DNS rebinding. */
+  /** Whether a request's Host header names this listener on its bound address or as `localhost`, or names the public URL's host; blocks DNS rebinding. */
   namesHost(header: string | undefined): boolean;
+  /** Whether a request's Origin header is the public URL's origin or this listener's own loopback origin. */
+  namesOrigin(header: string | undefined): boolean;
 }
 
-export function hostOrigin(config: HostConfig, port: number): HostOrigin {
-  const { address } = config.bind;
+function listenerOrigin(address: string, port: number, publicUrl: string | undefined): HostOrigin {
   const localUrl = `http://${address.includes(":") ? `[${address}]` : address}:${port}`;
-  const bound = new URL(localUrl).host;
+  const hosts = new Set([new URL(localUrl).host, `localhost:${port}`]);
+  const origins = new Set([localUrl, `http://localhost:${port}`]);
+  if (publicUrl !== undefined) {
+    hosts.add(new URL(publicUrl).host);
+    origins.add(publicUrl);
+  }
   return {
     localUrl,
-    publicUrl: config.publicUrl ?? localUrl,
-    namesHost: (header) => header === bound || header === `localhost:${port}`,
+    publicUrl: publicUrl ?? localUrl,
+    namesHost: (header) => header !== undefined && hosts.has(header),
+    namesOrigin: (header) => header !== undefined && origins.has(header),
   };
+}
+
+/** The client listener: the address and port from `config.bind`, reached by users at the public URL. */
+export function clientOrigin(config: HostConfig, port: number): HostOrigin {
+  return listenerOrigin(config.bind.address, port, config.publicUrl);
+}
+
+/** The agent listener: always `127.0.0.1`, on a free port, reached only by bots and the credential plugin on this machine. */
+export function agentOrigin(port: number): HostOrigin {
+  return listenerOrigin(AGENT_ADDRESS, port, undefined);
 }

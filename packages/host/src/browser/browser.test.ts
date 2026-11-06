@@ -14,6 +14,7 @@ import { parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { defined } from "../testing/defined.ts";
+import { asDevice, clientPost, pairDevice } from "../testing/paired-device.ts";
 import type { SandboxStatus } from "./sandbox.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
@@ -23,6 +24,7 @@ let root: string;
 let cwd: string;
 let fakeDir: string;
 let server: HostServer;
+let device: string;
 let secrets: ReturnType<typeof memorySecrets>;
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 const clients: Client[] = [];
@@ -61,6 +63,7 @@ beforeEach(async () => {
     browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir } },
     sandbox: () => sandbox,
   });
+  device = pairDevice(server);
 });
 
 const closeAll = async () => {
@@ -81,12 +84,7 @@ const calls = (): { argv: string[]; env: Record<string, string> }[] => {
   }
 };
 
-const api = (path: string, body: object) =>
-  fetch(`${server.url}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+const api = (path: string, body: object) => clientPost(server, device, path, body);
 const enable = async (botId: string, enabled = true) =>
   expect((await api("/api/bots/browser", { botId, enabled })).status).toBe(200);
 const newBot = (name = "bot") => createBot(cwd, name).id;
@@ -245,10 +243,9 @@ describe("sandbox unavailable", () => {
   test("the UI is told the browser is unavailable, with the reason, and the switch refuses to turn on", async () => {
     sandbox = NO_SANDBOX;
     const id = newBot();
-    expect(await (await fetch(`${server.url}/api/info`)).json()).toHaveProperty(
-      "browser",
-      NO_SANDBOX,
-    );
+    expect(
+      await (await fetch(`${server.clientUrl}/api/info`, { headers: asDevice(device) })).json(),
+    ).toHaveProperty("browser", NO_SANDBOX);
     const res = await api("/api/bots/browser", { botId: id, enabled: true });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: NO_SANDBOX.reason });
@@ -419,7 +416,7 @@ describe("network block", () => {
     const { client } = await connect(id);
     const r = await client.callTool({
       name: "browser_open",
-      arguments: { url: `${server.url}/api/info` },
+      arguments: { url: `${server.clientUrl}/api/info` },
     });
     expect(r.isError).toBe(true);
     expect(text(r)).toContain("navigation blocked");

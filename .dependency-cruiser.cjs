@@ -16,7 +16,7 @@ const REACT = "node_modules/(@types/)?(react|react-dom)/";
 const TESTS = `(\\.test\\.tsx?$|${HOST}testing/)`;
 /** Folders under packages/host/src whose files are private behind index.ts. */
 const MODULES =
-  "(bots|browser|credentials|handoffs|harness|host-mcp|host-server|integrations|routines)";
+  "(bots|browser|credentials|device-auth|handoffs|harness|host-mcp|host-server|integrations|routines)";
 const PRIVATE = `${HOST}${MODULES}/(?!index\\.ts$)`;
 const HOST_SMOKE = `${HOST}browser/smoke\\.ts$`;
 const HOST_CLI = `${HOST}host\\.ts$`;

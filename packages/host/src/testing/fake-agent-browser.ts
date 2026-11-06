@@ -98,6 +98,8 @@ const pageAt = (url: string): Page =>
 /** The engine action each implemented command runs, as the real engine names it in policy denials; undefined when the policy never sees it. */
 function engineAction(): string | undefined {
   switch (command) {
+    case "set":
+      return args[0];
     case "open":
       return "navigate";
     case "get":
@@ -268,6 +270,10 @@ switch (command) {
   case "auth":
     if (args[0] !== "login") fail("Unknown auth command");
     await authLogin();
+    break;
+  case "set":
+    if (args[0] !== "viewport") fail("Unknown set command");
+    reply({ viewport: { width: Number(args[1]), height: Number(args[2]) } });
     break;
   case "close":
     delete state[session];

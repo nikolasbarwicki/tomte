@@ -3,16 +3,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { LiveMessage } from "@claudebot/contract/events";
 import { z } from "zod";
 
-import type { HostOrigin } from "../platform/config.ts";
 import type { BotBrowser, BrowserRuntimes } from "./runtime.ts";
 import type { Takeover } from "./takeover.ts";
-import { BotRef, guardUiRequest, rejectRequest } from "./ui-guard.ts";
+import { BotRef, readUiBody, rejectRequest } from "./ui-request.ts";
 
 export const LIVE_VIEW_PATH = "/api/browser/live";
 
 export interface LiveViewOptions {
-  /** Where the host is reachable; Host and Origin must name it. */
-  host: HostOrigin;
   isEnabled(botId: string): boolean;
   runtimes: BrowserRuntimes;
   takeover: Takeover;
@@ -219,7 +216,7 @@ export function createLiveView(o: LiveViewOptions): LiveView {
 
   return {
     async handle(req, res) {
-      const body = await guardUiRequest(req, res, o.host);
+      const body = await readUiBody(req, res);
       if (!body) return;
       const ref = BotRef.safeParse(body);
       if (!ref.success) return rejectRequest(res, 400, "botId required");
