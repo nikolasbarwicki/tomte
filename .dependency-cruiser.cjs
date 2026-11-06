@@ -17,6 +17,27 @@ const HOST_CLI = `${HOST}host\\.ts$`;
 module.exports = {
   forbidden: [
     {
+      name: "no-orphans",
+      comment: "Every module must be imported by something or be a known entry point.",
+      severity: "error",
+      from: {
+        orphan: true,
+        pathNot: [
+          // Dotfile configs (e.g. this file) are loaded by their tools, never imported.
+          "(^|/)\\.[^/]+\\.(js|cjs|mjs|ts|json)$",
+          // Tool configs (vite/vitest/playwright/...) are loaded by their CLIs, never imported.
+          "(^|/)[^/]+\\.config\\.(js|cjs|mjs|ts)$",
+          // Ambient declarations are picked up by tsconfig `include`, never imported.
+          "\\.d\\.ts$",
+          // Tests are run by the test runner, never imported.
+          "\\.test\\.tsx?$",
+          // Entry point: spawned as a subprocess by path from browser/login.ts (PLUGIN_SCRIPT).
+          "^packages/host/src/browser/credential-plugin\\.ts$",
+        ],
+      },
+      to: {},
+    },
+    {
       name: "no-cycles",
       comment: "Rule 1: no import cycles, type-only imports included.",
       severity: "error",
