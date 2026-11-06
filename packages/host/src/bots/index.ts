@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { defaultAvatar, type BotAvatar } from "@claudebot/contract/avatars";
-import type { Bot } from "@claudebot/contract/events";
+import { BotAvatar, defaultAvatar } from "@claudebot/contract/avatars";
+import { Bot } from "@claudebot/contract/events";
+import { z } from "zod";
 
 import { userMemoryPath } from "./memory.ts";
 
@@ -23,6 +24,15 @@ export const botFilesPath = (dataRoot: string, id: string) => join(botDir(dataRo
 /** Subfolder of the files area holding browser screenshots and oversized pages; scratch for the current session, hidden from the Files panel. */
 export const BROWSER_FILES_DIR = "browser";
 
+/** `bot.json` as any release wrote it; files from before a field existed lack it. */
+const StoredBot = Bot.extend({
+  sessions: Bot.shape.sessions.optional(),
+  avatar: BotAvatar.optional(),
+  browser: z
+    .object({ enabled: z.boolean(), headed: z.boolean().default(false) })
+    .default({ enabled: false, headed: false }),
+});
+
 function write(dataRoot: string, bot: Bot) {
   mkdirSync(botDir(dataRoot, bot.id), { recursive: true });
   writeFileSync(join(botDir(dataRoot, bot.id), "bot.json"), JSON.stringify(bot, null, 2) + "\n");
@@ -39,12 +49,8 @@ export function getBot(dataRoot: string, id: string): Bot | undefined {
   if (!ID.test(id)) return undefined;
   const file = join(botDir(dataRoot, id), "bot.json");
   if (!existsSync(file)) return undefined;
-  const bot = JSON.parse(readFileSync(file, "utf8")) as Bot;
-  bot.sessions ??= [bot.id];
-  bot.browser ??= { enabled: false, headed: false };
-  bot.browser.headed ??= false;
-  bot.avatar ??= defaultAvatar(bot.id);
-  return bot;
+  const { sessions, avatar, ...bot } = StoredBot.parse(JSON.parse(readFileSync(file, "utf8")));
+  return { ...bot, sessions: sessions ?? [bot.id], avatar: avatar ?? defaultAvatar(bot.id) };
 }
 
 /** Most recently active first. */

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Schedule } from "@claudebot/contract/events";
+import { z } from "zod";
 
 import { createBot } from "../bots/index.ts";
 import { migrate } from "../platform/db.ts";
@@ -175,4 +176,10 @@ test("deleting a running routine stops the run and removes its rows", async () =
   await routines.remove(r.id);
   expect(routines.list(botId)).toEqual([]);
   expect(db.query("SELECT count(*) AS n FROM routine_runs").get()).toEqual({ n: 0 });
+});
+
+test("a stored schedule that does not match its schema throws a ZodError on read", () => {
+  const r = routines.create(botId, { name: "hourly", instruction: "do it", schedule: hourly });
+  db.run("UPDATE routines SET schedule = ? WHERE id = ?", [JSON.stringify({ kind: "cron" }), r.id]);
+  expect(() => store.getRoutine(db, r.id)).toThrow(z.ZodError);
 });

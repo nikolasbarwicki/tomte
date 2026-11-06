@@ -1,12 +1,12 @@
 import type { Database } from "bun:sqlite";
 
-import type {
-  ConnState,
+import {
   IntegrationAuth,
-  IntegrationSkill,
-  IntegrationTool,
   IntegrationTransport,
-  ToolPolicy,
+  type ConnState,
+  type IntegrationSkill,
+  type IntegrationTool,
+  type ToolPolicy,
 } from "@claudebot/contract/events";
 
 export type IntegrationRecord = {
@@ -48,8 +48,8 @@ const record = (r: Row): IntegrationRecord => ({
   id: r.id,
   catalogId: r.catalog_id,
   name: r.name,
-  transport: JSON.parse(r.transport),
-  auth: JSON.parse(r.auth),
+  transport: IntegrationTransport.parse(JSON.parse(r.transport)),
+  auth: IntegrationAuth.parse(JSON.parse(r.auth)),
   enabled: !!r.enabled,
   state: r.state,
   error: r.error,
