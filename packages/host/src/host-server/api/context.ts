@@ -33,7 +33,7 @@ export interface ApiRequest {
   path: string;
   body: Record<string, unknown>;
   /** A string field of the body; "" when missing or not a string. */
-  str(key: string): string;
+  str: (key: string) => string;
 }
 
 export type ApiRoutes = Record<string, (r: ApiRequest) => Promise<void>>;

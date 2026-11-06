@@ -23,9 +23,9 @@ export interface WaitSpec {
 
 export interface HumanWaitsOptions {
   /** Shows or updates the card in the bot's chat. */
-  emit(botId: string, event: WaitCardEvent): void;
+  emit: (botId: string, event: WaitCardEvent) => void;
   /** Sends a host message into the bot's session through the normal send path: queued while the bot is busy, reopening a closed session. */
-  deliver(botId: string, text: string): void;
+  deliver: (botId: string, text: string) => void;
 }
 
 export type WaitCardEvent = Extract<ServerEvent, { type: "wait" | "wait_resolved" }>;

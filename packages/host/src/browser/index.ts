@@ -39,9 +39,9 @@ export interface BrowserOptions extends HumanWaitsOptions {
   /** Where the host is reachable; guards name it and bots are leased URLs on it. */
   host: HostOrigin;
   bot(botId: string): Bot | undefined;
-  filesDir(botId: string): string;
+  filesDir: (botId: string) => string;
   /** True while no human is watching the bot's turn. */
-  unattended(botId: string): boolean;
+  unattended: (botId: string) => boolean;
   /** Whether the shell sandbox can run; checks this platform when omitted. */
   sandbox?: () => SandboxStatus;
   /** Overrides for the browser engine, Chrome and the engine's environment. */
@@ -64,7 +64,7 @@ export interface Browser {
   /** Whether the browser can be switched on: the engine, Chrome and the shell sandbox must all be usable. */
   status(): EngineStatus;
   /** Wait cards still open for a bot, to replay into its chat. */
-  pendingWaits(botId: string): ServerEvent[];
+  pendingWaits: (botId: string) => ServerEvent[];
   /** Ends any takeover of a bot's browser. */
   cancelTakeover(botId: string, reason: string): void;
   restart(botId: string): Promise<void>;

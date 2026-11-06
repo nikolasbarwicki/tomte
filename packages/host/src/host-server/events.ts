@@ -21,7 +21,7 @@ export type HostEvent =
 
 /** The page's server-sent event stream: every connected page gets every event. */
 export interface EventStream {
-  broadcast(e: HostEvent): void;
+  broadcast: (e: HostEvent) => void;
   /** Opens a stream that starts with `snapshot`, then follows every broadcast until the page disconnects. */
   subscribe(req: IncomingMessage, res: ServerResponse, snapshot: HostEvent[]): void;
 }

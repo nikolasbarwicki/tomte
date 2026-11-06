@@ -17,7 +17,7 @@ export interface ThreadEnv {
 }
 
 export interface ThreadHooks {
-  onMemory(scope: MemoryScope, text: string): void;
+  onMemory: (scope: MemoryScope, text: string) => void;
   /** True while a routine turn runs: questions and approvals are then answered without the user. */
   unattended(): boolean;
   /** Shows the user a question or approval card and resolves with their answer. */

@@ -41,7 +41,8 @@ beforeAll(() => {
 
 afterAll(() => {
   for (const k of ENV_KEYS)
-    saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+    if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
   rmSync(root, { recursive: true, force: true });
 });
 

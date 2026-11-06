@@ -21,12 +21,12 @@ export interface BrowserEndpointDeps {
   isEnabled(botId: string): boolean;
   runtimes: BrowserRuntimes;
   /** The bot's files folder. */
-  filesDir(botId: string): string;
+  filesDir: (botId: string) => string;
   egress: EgressProxy;
   takeover: Takeover;
   login: BrowserLogin;
   /** True while the bot runs a routine, with no user present. */
-  unattended(botId: string): boolean;
+  unattended: (botId: string) => boolean;
   /** The host-wide token registry shared with the other host endpoints; a private one when omitted. */
   tokens?: TokenRegistry;
 }

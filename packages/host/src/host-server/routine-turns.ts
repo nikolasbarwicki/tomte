@@ -9,12 +9,12 @@ import { runHeadless, type Executor, type RoutineJob } from "../routines/index.t
 type QueuedRoutine = {
   job: RoutineJob;
   resolve(text: string): void;
-  reject(e: Error): void;
+  reject: (e: Error) => void;
   stop?: (reason: string) => void;
 };
 
 /** A routine turn started in a bot's chat. */
-export type ChatRoutineTurn = { done: Promise<TurnResult | Error>; stop(reason: string): void };
+export type ChatRoutineTurn = { done: Promise<TurnResult | Error>; stop: (reason: string) => void };
 
 export interface RoutineTurnsDeps {
   cwd: string;
@@ -23,7 +23,7 @@ export interface RoutineTurnsDeps {
   db: Database;
   integrations: IntegrationsSource;
   hostServers: HostServersSource;
-  announceBots(): void;
+  announceBots: () => void;
   /** A headless run ended; the bot's chat, if any, may now show it. */
   headlessDone(botId: string): void;
   /** Something queued; start whatever can run. */

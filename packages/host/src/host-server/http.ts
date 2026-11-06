@@ -12,7 +12,7 @@ import { BOTS_ENDPOINT_PATH, type Handoffs } from "../handoffs/index.ts";
 export type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
 
 export interface Route {
-  match(path: string, req: IncomingMessage): boolean;
+  match: (path: string, req: IncomingMessage) => boolean;
   handler: Handler;
   /** Log prefix for a failure; the handler then answers 500. A route without a label handles its own errors. */
   label?: string;

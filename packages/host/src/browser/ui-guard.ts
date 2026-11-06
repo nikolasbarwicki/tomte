@@ -30,14 +30,17 @@ export async function guardUiRequest(
   origin: HostOrigin,
 ): Promise<Record<string, unknown> | undefined> {
   const host = req.headers.host;
-  if (!origin.namesHost(host)) return void rejectRequest(res, 403, "bad host");
+  const reject = (status: number, message: string) => {
+    rejectRequest(res, status, message);
+    return undefined;
+  };
+  if (!origin.namesHost(host)) return reject(403, "bad host");
   // A page on another origin, or a plain form post, must not be able to watch or drive a bot's browser.
-  if (req.headers.origin !== `http://${host}`)
-    return void rejectRequest(res, 403, "same-origin requests only");
-  if (req.method !== "POST") return void rejectRequest(res, 405, "method not allowed");
+  if (req.headers.origin !== `http://${host}`) return reject(403, "same-origin requests only");
+  if (req.method !== "POST") return reject(405, "method not allowed");
   if (!/^application\/json\s*(;|$)/i.test(req.headers["content-type"] ?? ""))
-    return void rejectRequest(res, 415, "content type must be application/json");
+    return reject(415, "content type must be application/json");
   const body = await readJson(req);
-  if (!body) return void rejectRequest(res, 400, "invalid JSON body");
+  if (!body) return reject(400, "invalid JSON body");
   return body;
 }

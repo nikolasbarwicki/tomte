@@ -5,6 +5,7 @@ import {
   type IncomingMessage,
   type OutgoingHttpHeaders,
   type Server,
+  type ServerResponse,
 } from "node:http";
 import { connect, isIP, type AddressInfo, type Socket } from "node:net";
 
@@ -110,7 +111,7 @@ export function createEgressProxy(o: EgressProxyOptions = {}): EgressProxy {
     return addresses[0];
   }
 
-  const server: Server = createServer(async (req: IncomingMessage, res) => {
+  async function forward(req: IncomingMessage, res: ServerResponse) {
     let target: URL;
     try {
       target = new URL(req.url ?? "");
@@ -141,14 +142,9 @@ export function createEgressProxy(o: EgressProxyOptions = {}): EgressProxy {
     upstream.on("error", () => (res.headersSent ? res.destroy() : res.writeHead(502).end()));
     res.on("close", () => upstream.destroy());
     req.pipe(upstream);
-  });
+  }
 
-  server.on("connection", (s) => {
-    sockets.add(s);
-    s.on("close", () => sockets.delete(s));
-  });
-
-  server.on("connect", async (req: IncomingMessage, client: Socket, head: Buffer) => {
+  async function tunnel(req: IncomingMessage, client: Socket, head: Buffer) {
     client.on("error", () => client.destroy());
     const m = /^(?:\[([^\]]+)\]|([^:]+)):(\d+)$/.exec(req.url ?? "");
     if (!m) return void client.end("HTTP/1.1 400 Bad Request\r\n\r\n");
@@ -168,6 +164,15 @@ export function createEgressProxy(o: EgressProxyOptions = {}): EgressProxy {
     });
     client.on("close", () => upstream.destroy());
     upstream.on("close", () => client.destroy());
+  }
+
+  const server: Server = createServer((req, res) => void forward(req, res));
+  server.on("connection", (s) => {
+    sockets.add(s);
+    s.on("close", () => sockets.delete(s));
+  });
+  server.on("connect", (req: IncomingMessage, client: Socket, head: Buffer) => {
+    void tunnel(req, client, head);
   });
 
   return {

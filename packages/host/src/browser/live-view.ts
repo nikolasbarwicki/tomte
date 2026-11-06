@@ -27,6 +27,8 @@ const DEFAULT_RETRY_MS = 1000;
 /** Parses an engine stream message into the shape viewers get, or undefined for anything else. */
 const rec = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+const text = (v: unknown): string =>
+  typeof v === "string" || typeof v === "number" ? String(v) : "";
 
 export function toLiveMessage(raw: unknown): LiveMessage | undefined {
   if (typeof raw !== "string") return undefined;
@@ -55,9 +57,9 @@ export function toLiveMessage(raw: unknown): LiveMessage | undefined {
         ? {
             type: "tabs",
             tabs: m.tabs.map((t) => ({
-              id: String(rec(t).tabId ?? ""),
-              title: String(rec(t).title ?? ""),
-              url: String(rec(t).url ?? ""),
+              id: text(rec(t).tabId),
+              title: text(rec(t).title),
+              url: text(rec(t).url),
               active: rec(t).active === true,
             })),
           }

@@ -33,11 +33,11 @@ import { botsEvent, filesEvent, memoryEvents } from "./views.ts";
 export interface ChatsDeps extends ThreadEnv {
   db: Database;
   handoffs: Pick<Handoffs, "receivedCards" | "startDelivered">;
-  transcript(bot: Bot): Promise<Transcript>;
+  transcript: (bot: Bot) => Promise<Transcript>;
   /** Human-wait cards still open for a bot, replayed into a rebuilt chat. */
-  pendingWaits(botId: string): ServerEvent[];
+  pendingWaits: (botId: string) => ServerEvent[];
   routinesEvent(botId: string): RoutinesEvent;
-  broadcast(e: HostEvent): void;
+  broadcast: (e: HostEvent) => void;
 }
 
 /** The chat the page shows, with what the user can do in it. */
@@ -57,15 +57,15 @@ export interface Chats {
   /** Sends a host message into a bot's session: queued while the bot is busy, and the session reopens if it is closed. */
   deliver(botId: string, text: string): Promise<void>;
   /** Shows a notice to the page and has the open bot narrate it. */
-  notify(source: string, title: string, body?: string): void;
+  notify: (source: string, title: string, body?: string) => void;
   /** Shows an event in a bot's chat if it has one. */
   emitTo(botId: string, e: ServerEvent): void;
   isWorking(botId: string): boolean;
   /** True while no human is watching the bot's turn: a routine turn or a headless run. */
   unattended(botId: string): boolean;
   botsEvent(): BotsEvent;
-  currentBotId(): string | undefined;
-  announceBots(): void;
+  currentBotId: () => string | undefined;
+  announceBots: () => void;
   open(): OpenChat | undefined;
   /** Shows the bot's chat; a chat still running in the background is shown as it is, live. */
   switchTo(bot: Bot): Promise<void>;

@@ -527,7 +527,7 @@ function WaitCard({
               key={a.id}
               size="sm"
               variant={i === 0 ? "default" : "outline"}
-              onClick={() => act("/api/waits/answer", { id: item.id, action: a.id })}
+              onClick={() => void act("/api/waits/answer", { id: item.id, action: a.id })}
             >
               {a.label}
             </Button>
@@ -592,11 +592,14 @@ function ApproveCard({ item }: { item: Extract<Item, { kind: "approve" }> }) {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => act("/api/answer", { id: item.id, value: "deny" })}
+            onClick={() => void act("/api/answer", { id: item.id, value: "deny" })}
           >
             Deny
           </Button>
-          <Button size="sm" onClick={() => act("/api/answer", { id: item.id, value: "allow" })}>
+          <Button
+            size="sm"
+            onClick={() => void act("/api/answer", { id: item.id, value: "allow" })}
+          >
             Allow
           </Button>
         </>

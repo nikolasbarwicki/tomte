@@ -70,7 +70,8 @@ beforeAll(() => {
 
 afterAll(() => {
   for (const k of ENV_KEYS)
-    saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+    if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -128,7 +129,7 @@ const script = (extra: object = {}) =>
             '- heading "Two-step verification" [level=1, ref=e1]\n- textbox "Verification code" [ref=e2]\n- button "Verify" [ref=e3]',
         },
       },
-      logins: { [SIGN_IN]: { username: "alice", password: PASSWORD, then: HOME } },
+      logins: { [SIGN_IN]: { username: "alice", password: PASSWORD, next: HOME } },
       ...extra,
     }),
   );
@@ -409,7 +410,7 @@ describe("browser_login", () => {
 
   test("a separate verification step is reported as needs_another_step, with the takeover instruction", async () => {
     script({
-      logins: { [SIGN_IN]: { username: "alice", password: PASSWORD, then: `${SITE}/otp` } },
+      logins: { [SIGN_IN]: { username: "alice", password: PASSWORD, next: `${SITE}/otp` } },
     });
     const { call } = await setup();
     await addEntry();
@@ -422,7 +423,7 @@ describe("browser_login", () => {
   });
 
   test("a site that shows the form again is reported as failed", async () => {
-    script({ logins: { [SIGN_IN]: { username: "alice", password: "not-the-one", then: HOME } } });
+    script({ logins: { [SIGN_IN]: { username: "alice", password: "not-the-one", next: HOME } } });
     const { call } = await setup();
     await addEntry();
     const feed = events();
@@ -438,7 +439,7 @@ describe("browser_login", () => {
         [SIGN_IN]: {
           username: "alice",
           password: PASSWORD,
-          then: HOME,
+          next: HOME,
           error: "Timed out waiting for password selector",
         },
       },

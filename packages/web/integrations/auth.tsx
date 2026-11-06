@@ -38,18 +38,15 @@ export function SignInButton({
   "onClick" | "children"
 >) {
   const [busy, setBusy] = useState(false);
+  const start = async () => {
+    const tab = window.open("", "_blank");
+    setBusy(true);
+    const error = await signIn(i.id, tab);
+    setBusy(false);
+    if (error) onRefused(error);
+  };
   return (
-    <Button
-      {...props}
-      disabled={busy || props.disabled}
-      onClick={async () => {
-        const tab = window.open("", "_blank");
-        setBusy(true);
-        const error = await signIn(i.id, tab);
-        setBusy(false);
-        if (error) onRefused(error);
-      }}
-    >
+    <Button {...props} disabled={busy || props.disabled} onClick={() => void start()}>
       {busy && <Spinner data-icon="inline-start" />}
       {children}
     </Button>
@@ -77,6 +74,12 @@ export function Alternative({ label, children }: { label: string; children: Reac
 
 function CopyBlock({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    await navigator.clipboard.writeText(value);
+    toast.success("Redirect address copied");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
   return (
     <div className="bg-muted/50 flex items-center gap-1 rounded-lg border py-1 pr-1 pl-2.5">
       <code className="min-w-0 flex-1 truncate font-mono text-xs" title={value}>
@@ -87,12 +90,7 @@ function CopyBlock({ value }: { value: string }) {
         size="icon-xs"
         type="button"
         aria-label="Copy redirect address"
-        onClick={async () => {
-          await navigator.clipboard.writeText(value);
-          toast.success("Redirect address copied");
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        }}
+        onClick={() => void copy()}
       >
         {copied ? <Check /> : <Copy />}
       </Button>
@@ -121,7 +119,7 @@ export function OwnClientForm({
     else setClientSecret("");
   };
   return (
-    <form onSubmit={submit} className="flex flex-col gap-5">
+    <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-5">
       <ol className="flex flex-col">
         {ownClient.steps.map((s, n) => (
           <li key={s} className="relative flex gap-3 pb-4 last:pb-0">
@@ -192,7 +190,7 @@ export function TokenForm({ integration: i }: { integration: Integration }) {
   };
   const id = `${i.id}-token`;
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={(e) => void submit(e)}>
       <FieldGroup className="gap-3">
         <Field data-invalid={!!error || undefined}>
           <FieldLabel htmlFor={id}>{label.tokenLabel ?? "Bearer token"}</FieldLabel>

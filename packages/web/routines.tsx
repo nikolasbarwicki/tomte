@@ -138,7 +138,7 @@ function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   const lastRunId = r.lastRun?.id;
   useEffect(() => {
     if (!open) return;
-    post("/api/routines/runs", { id: r.id }).then(
+    void post("/api/routines/runs", { id: r.id }).then(
       async (res) => res.ok && setRuns(await res.json()),
     );
   }, [open, r.id, lastRunId, r.lastRun?.status]);
@@ -170,7 +170,7 @@ function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
           className="mt-0.5"
           checked={r.active}
           aria-label={r.active ? `Pause ${r.name}` : `Resume ${r.name}`}
-          onCheckedChange={(active) => act("/api/routines/update", { id: r.id, active })}
+          onCheckedChange={(active) => void act("/api/routines/update", { id: r.id, active })}
         />
         <div className="grid min-w-0 flex-1 gap-0.5">
           <div className="flex min-w-0 items-center gap-2">
@@ -193,7 +193,7 @@ function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
                 size="icon-xs"
                 aria-label="Run now"
                 disabled={r.running}
-                onClick={() => act("/api/routines/run", { id: r.id })}
+                onClick={() => void act("/api/routines/run", { id: r.id })}
               />
             }
           >
@@ -212,7 +212,7 @@ function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
               <PencilIcon /> Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={remove}>
+            <DropdownMenuItem variant="destructive" onClick={() => void remove()}>
               <TrashIcon /> Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -301,7 +301,7 @@ function RoutineForm({
   const [minute, setMinute] = useState(initial.kind === "hourly" ? initial.minute : 0);
   const [time, setTime] = useState("time" in initial ? initial.time : "09:00");
   const [day, setDay] = useState(initial.kind === "weekly" ? initial.day : 1);
-  const [at, setAt] = useState(
+  const [at, setAt] = useState(() =>
     localInput(initial.kind === "once" ? initial.at : Date.now() + 60 * 60_000),
   );
   const [expr, setExpr] = useState(
@@ -333,10 +333,11 @@ function RoutineForm({
   const scheduleKey = JSON.stringify(schedule);
 
   useEffect(() => {
-    const t = setTimeout(async () => {
-      const res = await post("/api/routines/preview", { schedule });
+    const refresh = async () => {
+      const res = await post("/api/routines/preview", { schedule: JSON.parse(scheduleKey) });
       setPreview(await res.json());
-    }, 300);
+    };
+    const t = setTimeout(() => void refresh(), 300);
     return () => clearTimeout(t);
   }, [scheduleKey]);
 

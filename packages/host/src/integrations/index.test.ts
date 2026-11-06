@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -321,7 +321,7 @@ test("a bearer token is stored in the secret store, sent as Authorization, and n
       headers: { Authorization: "Bearer sekret" },
     });
   } finally {
-    s.stop(true);
+    await s.stop(true);
   }
 });
 
@@ -339,7 +339,7 @@ test("a rejected token shows failed with the server's error and stores nothing",
     expect(secrets.entries.size).toBe(0);
     expect((await integrations.session()).mcpServers).toEqual({});
   } finally {
-    s.stop(true);
+    await s.stop(true);
   }
 });
 
@@ -363,7 +363,7 @@ test("disconnect deletes the secret and keeps policies; reconnecting restores th
     expect(secrets.entries.size).toBe(0);
     expect(integrations.list().some((i) => i.id === id)).toBe(false);
   } finally {
-    s.stop(true);
+    await s.stop(true);
   }
 });
 
@@ -607,7 +607,7 @@ test("connecting a built-in with a skills repo clones it once into the host fold
     await cloned.disconnect(id);
     expect((await cloned.session()).plugins).toEqual([]);
   } finally {
-    s.stop(true);
+    await s.stop(true);
   }
 });
 
@@ -639,7 +639,7 @@ test("a failed clone is an inline error and the connection still works", async (
     expect(i.skillsError).toBe("git clone failed: offline");
     expect((await cloned.session()).plugins).toEqual([]);
   } finally {
-    s.stop(true);
+    await s.stop(true);
   }
 });
 
@@ -789,7 +789,7 @@ test("OAuth: Connect returns an authorize URL, the right state stores tokens and
     const back = await integrations.finishOAuth(again.state, { code: again.code });
     expect(back.tools.find((t) => t.name === "lookup")!.policy).toBe("off");
   } finally {
-    f.server.stop(true);
+    await f.server.stop(true);
   }
 });
 
@@ -810,7 +810,7 @@ test("OAuth: an unknown state returns InvalidInput and stores nothing", async ()
     expect(integrations.list().find((i) => i.id === id)!.state).toBe("disconnected");
     expect(changes).toBe(before);
   } finally {
-    f.server.stop(true);
+    await f.server.stop(true);
   }
 });
 
@@ -834,7 +834,7 @@ test("OAuth: a sign-in completed after ten minutes is refused, stores nothing, a
       "connected",
     );
   } finally {
-    f.server.stop(true);
+    await f.server.stop(true);
   }
 });
 
@@ -853,7 +853,7 @@ test("OAuth: a state is single-use", async () => {
       InvalidInput,
     );
   } finally {
-    f.server.stop(true);
+    await f.server.stop(true);
   }
 });
 
@@ -877,7 +877,7 @@ test("OAuth: an access token near expiry is refreshed for the session, and a fai
     expect(second).toContain("Bearer at-");
 
     clock += 3600_000;
-    for (const k of [...secrets.entries.keys()]) {
+    for (const k of secrets.entries.keys()) {
       const v = JSON.parse(secrets.entries.get(k)!);
       v.oauth.tokens.refresh_token = "revoked";
       await secrets.set(k, JSON.stringify(v));
@@ -885,7 +885,7 @@ test("OAuth: an access token near expiry is refreshed for the session, and a fai
     expect((await integrations.session()).mcpServers).toEqual({});
     expect(integrations.list().find((i) => i.id === id)!.state).toBe("needs-auth");
   } finally {
-    f.server.stop(true);
+    await f.server.stop(true);
   }
 });
 
@@ -910,7 +910,7 @@ test("OAuth: a token 4 minutes from expiry is refreshed; 10 minutes out is left 
     expect(JSON.stringify(refreshed.mcpServers["oa" as ServerName])).not.toBe(first);
     expect(refreshed.expiresAt).toBe(clock + 3600_000 - 5 * 60_000);
   } finally {
-    f.server.stop(true);
+    await f.server.stop(true);
   }
 });
 
@@ -964,7 +964,7 @@ test("reconcile: an OAuth server rejecting its token with HTTP 401 needs sign-in
       error: null,
     });
   } finally {
-    f.server.stop(true);
+    await f.server.stop(true);
   }
 });
 
@@ -1029,7 +1029,7 @@ for (const kind of ["oauth", "bearer"] as const) {
       await integrations.disconnect(id);
       expect(secrets.entries.size).toBe(0);
     } finally {
-      f.server.stop(true);
+      await f.server.stop(true);
     }
   });
 }
@@ -1055,7 +1055,7 @@ test("own client: wrong credentials show the provider's error and store nothing"
     ).toContain("access_denied");
     expect(secrets.entries.size).toBe(0);
   } finally {
-    f.server.stop(true);
+    await f.server.stop(true);
   }
 });
 
@@ -1106,6 +1106,6 @@ test("own client: built-ins sharing an app label sign in with the client entered
     ]);
     expect((await integrations.finishOAuth(y.state, { code: y.code })).state).toBe("connected");
   } finally {
-    f.server.stop(true);
+    await f.server.stop(true);
   }
 });

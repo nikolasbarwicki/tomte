@@ -85,7 +85,8 @@ export async function startHandoffHost(hostFlags: string[] = []): Promise<Handof
   const config = parseHostConfig(["--data-root", dataRoot, ...hostFlags], {}).config;
   const restoreEnv = () => {
     for (const k of ENV_KEYS)
-      saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
   };
   let lock: DataRootLock;
   try {

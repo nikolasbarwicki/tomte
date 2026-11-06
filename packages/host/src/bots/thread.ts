@@ -177,9 +177,10 @@ export class Thread {
     if (READ_TOOLS.has(name) || WRITE_TOOLS.has(name)) {
       if (path === undefined || this.inRoots(path))
         return { behavior: "allow", updatedInput: input };
+      const shown = typeof path === "string" ? path : JSON.stringify(path);
       if (READ_TOOLS.has(name))
-        return this.o.delegate.approve(name, input, `read outside workspace: ${path}`);
-      return this.o.delegate.approve(name, input, `write outside workspace: ${path}`);
+        return this.o.delegate.approve(name, input, `read outside workspace: ${shown}`);
+      return this.o.delegate.approve(name, input, `write outside workspace: ${shown}`);
     }
     if (name === "Bash") return this.o.delegate.approve(name, input, "shell command");
     return this.o.delegate.approve(name, input, "tool requires approval");

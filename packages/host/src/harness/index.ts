@@ -29,7 +29,7 @@ export interface HostServerLease {
   instructions?: string;
   /** How the CLI must confine the bot shell while this lease is held; absent for an unconfined bot. */
   isolation?: IsolationProfile;
-  release(): void;
+  release: () => void;
 }
 
 /** Leases the host servers a bot may use; the lease is empty when the bot has none. */

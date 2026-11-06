@@ -6,7 +6,7 @@ import type {
   Routine,
 } from "@claudebot/contract/events";
 import { ArrowUpIcon, ChevronDownIcon, MessageSquarePlusIcon, PanelRightIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
@@ -77,11 +76,8 @@ export function ChatView({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [tab, setTab] = useState<PanelTab>("memory");
   const panelOpen = wide ? pinned : sheetOpen;
-  const setPanelOpen = (open: boolean) => {
-    if (!wide) return setSheetOpen(open);
-    setPinned(open);
-    localStorage.setItem(PANEL_KEY, open ? "open" : "closed");
-  };
+  useEffect(() => localStorage.setItem(PANEL_KEY, pinned ? "open" : "closed"), [pinned]);
+  const setPanelOpen = (open: boolean) => (wide ? setPinned(open) : setSheetOpen(open));
   const showBrowser = () => {
     setTab("browser");
     setPanelOpen(true);
@@ -93,9 +89,20 @@ export function ChatView({
       i.kind === "wait" && i.waitKind === "takeover" && i.resolved === undefined ? [i.id] : [],
     )
     .at(-1);
-  useEffect(() => {
+  const [shownTakeoverId, setShownTakeoverId] = useState<string>();
+  if (takeoverId !== shownTakeoverId) {
+    setShownTakeoverId(takeoverId);
     if (takeoverId) showBrowser();
-  }, [takeoverId]);
+  }
+
+  const newSession = async () => {
+    const ok = await confirmAction({
+      title: `Start a new session for ${bot.name}?`,
+      description: "The bot forgets this conversation. Memory, files and routines are kept.",
+      action: "New session",
+    });
+    if (ok) await act("/api/session/new", {});
+  };
 
   const panel = (
     <BotPanel
@@ -127,15 +134,7 @@ export function ChatView({
                   size="icon-sm"
                   aria-label="New session"
                   disabled={busy}
-                  onClick={async () => {
-                    const ok = await confirmAction({
-                      title: `Start a new session for ${bot.name}?`,
-                      description:
-                        "The bot forgets this conversation. Memory, files and routines are kept.",
-                      action: "New session",
-                    });
-                    if (ok) await act("/api/session/new", {});
-                  }}
+                  onClick={() => void newSession()}
                 />
               }
             >
@@ -245,6 +244,9 @@ function SessionSetting({
   apply: (value: string) => Promise<boolean>;
 }) {
   const [value, setValue] = useState<string>();
+  const choose = async (v: string) => {
+    if (await apply(v)) setValue(v);
+  };
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -270,12 +272,7 @@ function SessionSetting({
       <DropdownMenuContent align="start" side="top" className="w-36">
         <DropdownMenuGroup>
           <DropdownMenuLabel>{label}</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={value ?? ""}
-            onValueChange={async (v: string) => {
-              if (await apply(v)) setValue(v);
-            }}
-          >
+          <DropdownMenuRadioGroup value={value ?? ""} onValueChange={(v: string) => void choose(v)}>
             {options.map((o) => (
               <DropdownMenuRadioItem key={o} value={o} closeOnClick className="capitalize">
                 {o}
@@ -310,11 +307,12 @@ function Composer({
   const backdrop = useRef<HTMLDivElement>(null);
 
   // The draft is now this composer's own text; leave the caret after it so the user can edit or send.
-  useEffect(() => {
+  const takeDraft = useEffectEvent(() => {
     if (draft === undefined) return;
     textarea.current?.setSelectionRange(draft.length, draft.length);
     onDraftTaken();
-  }, []);
+  });
+  useEffect(() => takeDraft(), []);
 
   // A bot is mentioned only if it was picked from the menu and its `@Name` is still in the text; names are not unique, so the id
   // comes from the pick, and a hand-typed `@Name` stays plain text.

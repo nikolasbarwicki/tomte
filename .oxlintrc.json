@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "import", "unicorn", "promise"],
+  "categories": { "correctness": "error" },
+  "rules": {
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts"],
+      "rules": {
+        // bun-types declare `expect(p).rejects.*` matchers as returning void, yet they return a promise that must be awaited.
+        "typescript/await-thenable": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["**/dist/**", "**/*.gen.ts", ".scratch/**"]
+}

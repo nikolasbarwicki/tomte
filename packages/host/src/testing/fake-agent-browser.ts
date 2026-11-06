@@ -4,7 +4,7 @@
 //
 // FAKE_AGENT_BROWSER_DIR holds everything the fake reads and writes:
 //   script.json  (optional) { pages: { [url]: { title?, snapshot, text?, selectors?: { [css]: snapshot } } }, onAction?: { ["click @e1"]: nextUrl }, fail?: { [command]: message }, delayMs?: { [command]: number },
-//                logins?: { [signInUrl]: { username, password, then: nextUrl, error?: message } } }
+//                logins?: { [signInUrl]: { username, password, next: nextUrl, error?: message } } }
 //   calls.jsonl  one line per invocation: { argv, env: { AGENT_BROWSER_ENCRYPTION_KEY, AGENT_BROWSER_PLUGINS } }
 //   state.json   the current page per session; a session listed here has an open browser
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -27,8 +27,8 @@ interface Script {
   streamPort?: number;
   /** `open` of a URL that lands on another one, like a server redirect. */
   redirects?: Record<string, string>;
-  /** What `auth login` does on a sign-in page: with the right credential the session moves to `then`; with another the page stays. `error` makes the engine fail after filling. */
-  logins?: Record<string, { username: string; password: string; then: string; error?: string }>;
+  /** What `auth login` does on a sign-in page: with the right credential the session moves to `next`; with another the page stays. `error` makes the engine fail after filling. */
+  logins?: Record<string, { username: string; password: string; next: string; error?: string }>;
 }
 
 const dir = process.env.FAKE_AGENT_BROWSER_DIR;
@@ -150,7 +150,7 @@ async function authLogin() {
     stdout: "pipe",
     stderr: "ignore",
   });
-  child.stdin.write(
+  await child.stdin.write(
     JSON.stringify({
       protocol: "agent-browser.plugin.v1",
       type: "credential.resolve",
@@ -158,7 +158,7 @@ async function authLogin() {
       request: { profileName: name, itemRef: flags["--item"], url },
     }),
   );
-  child.stdin.end();
+  await child.stdin.end();
   const answer = JSON.parse((await new Response(child.stdout).text()) || "{}") as {
     success?: boolean;
     credential?: { username: string; password: string };
@@ -171,7 +171,7 @@ async function authLogin() {
     answer.credential!.username === expected.username &&
     answer.credential!.password === expected.password
   ) {
-    state[session] = expected.then;
+    state[session] = expected.next;
     writeFileSync(join(dir!, "state.json"), JSON.stringify(state));
   }
   reply({ loggedIn: true, name });

@@ -67,10 +67,15 @@ export async function runBrowserSmoke(config: HostConfig) {
     return;
   }
   const cli = resolveCli(config.dataRoot);
-  if (!cli) return void console.log("browser-smoke: skipped (no claude binary resolved)");
+  if (!cli) {
+    console.log("browser-smoke: skipped (no claude binary resolved)");
+    return;
+  }
   const ip = lanIp();
-  if (!ip)
-    return void console.log("browser-smoke: skipped (no LAN IPv4 address for the test site)");
+  if (!ip) {
+    console.log("browser-smoke: skipped (no LAN IPv4 address for the test site)");
+    return;
+  }
 
   const password = `pw-${randomBytes(12).toString("hex")}`;
   const before = processes();
@@ -98,7 +103,7 @@ export async function runBrowserSmoke(config: HostConfig) {
   try {
     await scenarios(server, site, bot.id, db, secrets, workspace);
   } finally {
-    site.server.stop(true);
+    await site.server.stop(true);
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -130,7 +135,8 @@ function startSite(host: string, password: string): Site {
     async fetch(req) {
       const { pathname } = new URL(req.url);
       if (pathname === "/form" && req.method === "POST") {
-        seen.formName = String((await req.formData()).get("who") ?? "");
+        const who = (await req.formData()).get("who");
+        seen.formName = typeof who === "string" ? who : "";
         return page("Message sent", `<p>Thanks, ${seen.formName.replace(/[<>&]/g, "")}.</p>`);
       }
       if (pathname === "/form")

@@ -5,7 +5,7 @@ import {
   Navigate,
   useNavigate,
 } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 
 import { post } from "./api.ts";
 import { ChatView } from "./chat.tsx";
@@ -41,14 +41,18 @@ const botRoute = createRoute({
     const shown = !!bot && s.openBotId === botId;
 
     // Deliberately not keyed on `openBotId`: when the host moves to another bot, the shell follows it rather than pulling it back.
+    const hasBot = !!bot;
+    const openBot = useEffectEvent((id: string) => s.openBot(id));
     useEffect(() => {
-      if (bot) s.openBot(botId);
-    }, [botId, !!bot]);
+      if (hasBot) openBot(botId);
+    }, [botId, hasBot]);
 
     // A finished turn counts as seen once this chat is actually on screen.
     useEffect(() => {
       if (!shown || bot.status !== "unseen") return;
-      const markSeen = () => document.visibilityState === "visible" && post("/api/seen", { botId });
+      const markSeen = () => {
+        if (document.visibilityState === "visible") void post("/api/seen", { botId });
+      };
       markSeen();
       document.addEventListener("visibilitychange", markSeen);
       return () => document.removeEventListener("visibilitychange", markSeen);

@@ -136,7 +136,7 @@ export function Credentials({
                         <Button
                           variant="ghost"
                           size="xs"
-                          onClick={() => act("/api/credentials/revoke", { botId, id: e.id })}
+                          onClick={() => void act("/api/credentials/revoke", { botId, id: e.id })}
                         >
                           Revoke
                         </Button>
@@ -190,7 +190,7 @@ function CredentialCard({
                 <Pencil />
                 Edit
               </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onClick={remove}>
+              <DropdownMenuItem variant="destructive" onClick={() => void remove()}>
                 <Trash2 />
                 Delete
               </DropdownMenuItem>
@@ -212,7 +212,7 @@ function CredentialCard({
                 <Button
                   variant="ghost"
                   size="xs"
-                  onClick={() => act("/api/credentials/revoke", { botId: g.botId, id: c.id })}
+                  onClick={() => void act("/api/credentials/revoke", { botId: g.botId, id: c.id })}
                 >
                   Revoke
                 </Button>
@@ -249,7 +249,7 @@ function CredentialForm({ entry, onDone }: { entry?: CredentialEntry; onDone: ()
     onDone();
   };
   return (
-    <form onSubmit={submit} className="flex flex-col gap-6">
+    <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-6">
       <FieldGroup className="gap-4">
         <Field>
           <FieldLabel htmlFor="cred-label">Label</FieldLabel>

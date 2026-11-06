@@ -89,10 +89,12 @@ export function Shell() {
   // The event handler outlives renders; it reads these instead of stale closures.
   const openBotIdRef = useRef(openBotId);
   const routeBotIdRef = useRef(routeBotId);
-  routeBotIdRef.current = routeBotId;
+  useEffect(() => {
+    routeBotIdRef.current = routeBotId;
+  }, [routeBotId]);
 
   useEffect(() => {
-    post("/api/info", {}).then(async (r) => setInfo(await r.json()));
+    void post("/api/info", {}).then(async (r) => setInfo(await r.json()));
     const es = new EventSource("/api/events");
     es.onmessage = (m) => {
       const e = JSON.parse(m.data) as StreamEvent;
