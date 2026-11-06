@@ -20,6 +20,8 @@
     "prepare": "if git rev-parse --git-dir >/dev/null 2>&1; then lefthook install; fi"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
     "@swc/core": "^1.16.22",
     "dependency-cruiser": "^18.7.2",
     "knip": "^6.44.1",
