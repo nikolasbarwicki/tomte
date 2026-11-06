@@ -2,6 +2,7 @@
   "name": "claudebot",
   "private": true,
   "type": "module",
+  "packageManager": "bun@1.4.2",
   "workspaces": [
     "packages/*"
   ],
@@ -20,6 +21,6 @@
     "typescript": "^7.0.2"
   },
   "engines": {
-    "bun": ">=1.4"
+    "bun": ">=1.4.2"
   }
 }
