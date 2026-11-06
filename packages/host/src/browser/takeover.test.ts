@@ -659,7 +659,8 @@ describe("takeover input", () => {
     logged.mockRestore();
     log.mockRestore();
     expect(everything).not.toContain("hunter2");
-    expect(everything).not.toContain("777");
+    // A whole token: a bare "777" substring collides with the random UUIDs and timestamps in the feed.
+    expect(everything).not.toMatch(/\b777\b/);
     expect(received.some((e) => e.type === "user" || e.type === "wait")).toBe(false);
     expect(messages()).toEqual([]);
   });
