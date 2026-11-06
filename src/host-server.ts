@@ -31,17 +31,18 @@ import { BROWSER_UI_PATHS, createBrowserUiRoutes } from "./browser/ui-routes.ts"
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./browser/runtime.ts";
 import { Thread, type TurnResult } from "./thread.ts";
 import { BROWSER_FILES_DIR, botContext, botFilesPath, botMemoryPath, createBot, currentSession, getBot, listBots, newSession, setBrowserEnabled, setBrowserHeaded, touchBot } from "./bots.ts";
-import { isFace, isStroke } from "../web/avatars.ts";
+import { isFace, isStroke } from "./contract/avatars.ts";
 import { readMemory, userMemoryPath } from "./memory.ts";
 import { watchHerdr } from "./herdr.ts";
 import { deleteFile, listFiles, resolveInside, reveal, watchFiles } from "./files.ts";
 import { credentialApi, createCredentials } from "./credentials.ts";
 import { getActivity, markSeen, recordMessage } from "./activity-store.ts";
-import { Conflict, NotFound, RoutineInput, createRoutines, headlessDelegate, runHeadless, type Executor, type RoutineJob } from "./routines.ts";
+import { Conflict, RoutineInput, createRoutines, headlessDelegate, runHeadless, type Executor, type RoutineJob } from "./routines.ts";
 import { nextOccurrences } from "./schedule.ts";
-import { InvalidInput, NameTaken, createIntegrations } from "./integrations.ts";
+import { NameTaken, createIntegrations } from "./integrations.ts";
+import { InvalidInput, NotFound } from "./platform/errors.ts";
 import type { SecretStore } from "./secrets.ts";
-import type { Bot, BotStatus, BotsEvent, CredentialsEvent, FilesEvent, LastMessage, IntegrationsEvent, MemoryEvent, Notice, RoutinesEvent, RunTrigger, ServerEvent } from "../web/events.ts";
+import type { Bot, BotStatus, BotsEvent, CredentialsEvent, FilesEvent, LastMessage, IntegrationsEvent, MemoryEvent, Notice, RoutinesEvent, RunTrigger, ServerEvent } from "./contract/events.ts";
 
 export interface HostServerOptions {
   /** The workspace directory; bots and their files live under it. */

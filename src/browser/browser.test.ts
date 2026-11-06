@@ -193,7 +193,7 @@ describe("sandbox unavailable", () => {
   test("the UI is told the browser is unavailable, with the reason, and the switch refuses to turn on", async () => {
     sandbox = NO_SANDBOX;
     const id = newBot();
-    expect((await (await fetch(`${server.url}/api/info`)).json()).browser).toEqual(NO_SANDBOX);
+    expect(await (await fetch(`${server.url}/api/info`)).json()).toHaveProperty("browser", NO_SANDBOX);
     const res = await api("/api/bots/browser", { botId: id, enabled: true });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: NO_SANDBOX.reason });

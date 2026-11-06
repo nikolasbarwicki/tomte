@@ -9,7 +9,7 @@ import { createBot } from "../bots.ts";
 import { migrate } from "../db.ts";
 import { createHostServer, type HostServer } from "../host-server.ts";
 import { memorySecrets } from "../secrets.ts";
-import type { CredentialEntry, ServerEvent } from "../../web/events.ts";
+import type { CredentialEntry, ServerEvent } from "../contract/events.ts";
 import { classifyAfterLogin, CREDENTIAL_EXCHANGE_PATH, LoginNonces, NONCE_TTL_MS } from "./login.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "fixtures", "fake-agent-browser.ts");

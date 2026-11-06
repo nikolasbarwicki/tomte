@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Schedule } from "../web/events.ts";
+import type { Schedule } from "./contract/events.ts";
 
 /** How far back a missed occurrence may lie and still be caught up after downtime. */
 export const WINDOW_MS = 12 * 60 * 60_000;

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { BotStatus, BotSummary, HostInfo, Notice } from "./events.ts";
+import type { BotStatus, BotSummary, HostInfo, Notice } from "../src/contract/events.ts";
 import { shortTime } from "./format.ts";
 import { BotAvatar } from "./bot-avatar.tsx";
 

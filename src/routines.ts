@@ -10,10 +10,10 @@ import { Thread, type HostDelegate } from "./thread.ts";
 import { WINDOW_MS, hasOccurrence, latestOccurrence, nextOccurrence, parseSchedule } from "./schedule.ts";
 import * as store from "./routines-store.ts";
 import type { RoutineRecord } from "./routines-store.ts";
-import type { Bot, Routine, RoutineRun, RunTrigger } from "../web/events.ts";
+import type { Bot, Routine, RoutineRun, RunTrigger } from "./contract/events.ts";
+import { NotFound } from "./platform/errors.ts";
 
 export class Conflict extends Error {}
-export class NotFound extends Error {}
 
 /** HTTP-boundary schema for a routine's editable fields. */
 export const RoutineInput = z.object({

@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { Routine, RoutineRun, RunStatus } from "./events.ts";
+import type { Routine, RoutineRun, RunStatus } from "../src/contract/events.ts";
 import { act, errorOf, post } from "./api.ts";
 import { confirmAction } from "./confirm.tsx";
 import { dateTime } from "./format.ts";

@@ -12,7 +12,7 @@ import { resolveCli } from "./cli.ts";
 import { migrate } from "./db.ts";
 import { createHostServer, type HostServer } from "./host-server.ts";
 import { credentialSecretName, memorySecrets, type SecretStore } from "./secrets.ts";
-import type { ServerEvent } from "../web/events.ts";
+import type { ServerEvent } from "./contract/events.ts";
 
 /**
  * Real-engine smoke: the real host server, egress proxy, agent-browser engine, Chrome for Testing and Claude CLI,

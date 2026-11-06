@@ -17,7 +17,7 @@ import type {
   Notice,
   RoutinesEvent,
   ServerEvent,
-} from "./events.ts";
+} from "../src/contract/events.ts";
 import { act, post } from "./api.ts";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { needsAttention } from "./integrations/model.ts";

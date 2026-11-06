@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { LiveMessage } from "../../web/events.ts";
+import type { LiveMessage } from "../contract/events.ts";
 import type { BotBrowser, BrowserRuntimes } from "./runtime.ts";
 import type { Takeover } from "./takeover.ts";
 import { guardUiRequest, rejectRequest } from "./ui-guard.ts";

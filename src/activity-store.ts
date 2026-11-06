@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { LastMessage } from "../web/events.ts";
+import type { LastMessage } from "./contract/events.ts";
 
 const PREVIEW_CHARS = 200;
 

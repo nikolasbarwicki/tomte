@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { WINDOW_MS, hasOccurrence, latestOccurrence, nextOccurrences, parseSchedule } from "./schedule.ts";
-import type { Schedule } from "../web/events.ts";
+import type { Schedule } from "./contract/events.ts";
 
 const at = (iso: string) => Date.parse(iso);
 const hourly: Schedule = { kind: "cron", expr: "0 * * * *", tz: "UTC" };

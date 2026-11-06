@@ -8,7 +8,8 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { migrate } from "./db.ts";
-import { InvalidInput, NameTaken, createIntegrations, withOfflineAccess, type Integrations, type ServerName } from "./integrations.ts";
+import { NameTaken, createIntegrations, withOfflineAccess, type Integrations, type ServerName } from "./integrations.ts";
+import { InvalidInput } from "./platform/errors.ts";
 import { CATALOG, type CatalogEntry } from "./integrations-catalog.ts";
 import * as store from "./integrations-store.ts";
 import { memorySecrets } from "./secrets.ts";
@@ -453,7 +454,7 @@ function oauthFixture(own?: { id: string; secret: string }) {
         return j({ issuer: origin, authorization_endpoint: `${origin}/authorize`, token_endpoint: `${origin}/token`, ...(!own && { registration_endpoint: `${origin}/register` }), response_types_supported: ["code"], code_challenge_methods_supported: ["S256"], grant_types_supported: ["authorization_code", "refresh_token"], token_endpoint_auth_methods_supported: own ? ["client_secret_post"] : ["none"] });
       if (u.pathname === "/register") {
         registrations++;
-        const meta = await req.json();
+        const meta = (await req.json()) as object;
         return j({ ...meta, client_id: `client-${++n}` }, 201);
       }
       if (u.pathname === "/token") {

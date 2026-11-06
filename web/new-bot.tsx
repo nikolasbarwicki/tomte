@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { FACE_NAMES, STROKE_NAMES, STROKES, randomAvatar } from "./avatars.ts";
+import { FACE_NAMES, STROKE_NAMES, STROKES } from "../src/contract/avatars.ts";
+import { randomAvatar } from "./avatars.ts";
 import { BotAvatar } from "./bot-avatar.tsx";
 import { errorOf, post } from "./api.ts";
 

@@ -9,13 +9,13 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { auth as mcpAuth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { McpServerConfig, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
-import { NotFound } from "./routines.ts";
+import { InvalidInput, NotFound } from "./platform/errors.ts";
 import { secretName, type SecretStore } from "./secrets.ts";
 import { CATALOG, type CatalogEntry } from "./integrations-catalog.ts";
 import { buildPlugin, gitClone, scanSkills, type GitClone } from "./integration-skills.ts";
 import * as store from "./integrations-store.ts";
 import type { DiscoveredTool, IntegrationRecord } from "./integrations-store.ts";
-import type { CatalogInfo, Integration, IntegrationAuth, IntegrationTransport, OwnClient, ToolPolicy } from "../web/events.ts";
+import type { CatalogInfo, Integration, IntegrationAuth, IntegrationTransport, OwnClient, ToolPolicy } from "./contract/events.ts";
 
 export type { ToolPolicy };
 export type ServerName = string & { readonly __brand: "ServerName" };
@@ -48,8 +48,6 @@ export type ServerStatus = {
   tools?: { name: string; description?: string; annotations?: { readOnly?: boolean; destructive?: boolean } }[];
 };
 
-/** A user-correctable input problem; maps to HTTP 400. */
-export class InvalidInput extends Error {}
 /** A name already taken; maps to HTTP 409. */
 export class NameTaken extends Error {}
 

@@ -14,7 +14,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { act, errorOf, post } from "./api.ts";
 import { confirmAction } from "./confirm.tsx";
-import type { LiveMessage } from "./events.ts";
+import type { LiveMessage } from "../src/contract/events.ts";
 
 type Tab = Extract<LiveMessage, { type: "tabs" }>["tabs"][number];
 interface Live {

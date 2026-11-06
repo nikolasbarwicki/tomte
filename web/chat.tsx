@@ -19,7 +19,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
-import type { BotSummary, ContextEvent, FilesEvent, MemoryScope, Routine } from "./events.ts";
+import type { BotSummary, ContextEvent, FilesEvent, MemoryScope, Routine } from "../src/contract/events.ts";
 import { act } from "./api.ts";
 import { botTheme } from "./avatars.ts";
 import { BotAvatar } from "./bot-avatar.tsx";

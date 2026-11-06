@@ -1,7 +1,7 @@
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Check, ChevronDown, Copy, ExternalLink } from "lucide-react";
-import type { Integration, OwnClient } from "../events.ts";
+import type { Integration, OwnClient } from "../../src/contract/events.ts";
 import { errorOf, post } from "../api.ts";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";

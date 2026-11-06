@@ -7,7 +7,7 @@ import { createBot } from "./bots.ts";
 import { migrate } from "./db.ts";
 import { Conflict, createRoutines, type Executor } from "./routines.ts";
 import * as store from "./routines-store.ts";
-import type { Schedule } from "../web/events.ts";
+import type { Schedule } from "./contract/events.ts";
 
 const at = (iso: string) => Date.parse(iso);
 const hourly: Schedule = { kind: "cron", expr: "0 * * * *", tz: "UTC" };

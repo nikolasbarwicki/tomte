@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { CatalogCategory, Integration, IntegrationTool } from "../events.ts";
+import type { CatalogCategory, Integration, IntegrationTool } from "../../src/contract/events.ts";
 import { byCategory, health, listSections, needsAttention, toolGroups } from "./model.ts";
 
 const tool = (name: string, kind: Partial<Pick<IntegrationTool, "readOnly" | "destructive">> = {}): IntegrationTool => ({

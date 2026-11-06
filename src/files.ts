@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, rmSync, watch, type FSWatcher } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { BotFile } from "../web/events.ts";
+import type { BotFile } from "./contract/events.ts";
 
 const IGNORED = new Set([".DS_Store"]);
 

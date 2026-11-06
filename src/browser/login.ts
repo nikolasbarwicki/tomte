@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import type { Credentials } from "../credentials.ts";
 import { credentialSecretName, type SecretStore } from "../secrets.ts";
-import type { CredentialEntry } from "../../web/events.ts";
+import type { CredentialEntry } from "../contract/events.ts";
 import { EngineError } from "./engine-cli.ts";
 import type { HumanWaits, WaitingForUser } from "./human-waits.ts";
 import type { PageState } from "./page-state.ts";

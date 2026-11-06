@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import type { IntegrationTransport } from "../events.ts";
+import type { IntegrationTransport } from "../../src/contract/events.ts";
 import { errorOf, post } from "../api.ts";
 import { Button } from "@/components/ui/button";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";

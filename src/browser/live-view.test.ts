@@ -9,7 +9,7 @@ import { createBot } from "../bots.ts";
 import { migrate } from "../db.ts";
 import { createHostServer, type HostServer } from "../host-server.ts";
 import { memorySecrets } from "../secrets.ts";
-import type { LiveMessage } from "../../web/events.ts";
+import type { LiveMessage } from "../contract/events.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "fixtures", "fake-agent-browser.ts");
 const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH"] as const;

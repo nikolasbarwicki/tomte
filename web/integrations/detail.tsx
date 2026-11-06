@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ArrowRight, ChevronLeft, ExternalLink, Info, Search } from "lucide-react";
-import type { Integration, IntegrationTool, ToolPolicy } from "../events.ts";
+import type { Integration, IntegrationTool, ToolPolicy } from "../../src/contract/events.ts";
 import { confirmAction } from "../confirm.tsx";
 import { dateTime } from "../format.ts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
