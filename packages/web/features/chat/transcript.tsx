@@ -1,4 +1,4 @@
-import type { BotSummary } from "@claudebot/contract/events";
+import type { BotSummary, HandoffStatus } from "@claudebot/contract/events";
 import { Link } from "@tanstack/react-router";
 import {
   AlarmClockIcon,
@@ -521,7 +521,7 @@ function ApproveCard({ item }: { item: Extract<Item, { kind: "approve" }> }) {
   );
 }
 
-const HANDOFF_STATUS: Record<string, string> = {
+const HANDOFF_STATUS: Partial<Record<HandoffStatus, string>> = {
   completed: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
   failed: "bg-destructive/10 text-destructive",
   canceled: "bg-destructive/10 text-destructive",

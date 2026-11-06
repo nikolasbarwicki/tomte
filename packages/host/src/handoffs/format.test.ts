@@ -8,8 +8,13 @@ test("a handoff tag missing attributes still reads back, with empty strings for 
     { id: "h1", from: "", status: "submitted", text: "brief", resumed: false },
   ]);
   expect(parseHandoffTags('<handoff-update from="Grace">\ndone\n</handoff-update>')).toEqual([
-    { id: "", from: "Grace", status: "", text: "done", resumed: false },
+    { id: "", from: "Grace", status: "working", text: "done", resumed: false },
   ]);
+  expect(
+    parseHandoffTags(
+      '<handoff-update id="h1" from="Grace" status="rejected">\nno\n</handoff-update>',
+    ),
+  ).toEqual([{ id: "h1", from: "Grace", status: "working", text: "no", resumed: false }]);
 });
 
 test("a mention tag missing attributes still reads back, with empty strings for what is absent", () => {

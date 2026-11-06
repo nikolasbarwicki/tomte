@@ -23,7 +23,7 @@ test("busy turns on for user, update, routine and received handoffs, and off for
     direction,
     bot: "x",
     title: "t",
-    status: "s",
+    status: "submitted",
     text: "",
   });
   const busyAfter = (e: HostEvent) => applyEvent(initialHostState, e).chat.busy;
