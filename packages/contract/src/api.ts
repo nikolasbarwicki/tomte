@@ -29,3 +29,36 @@ export type RoutinePreview = z.infer<typeof RoutinePreview>;
 /** The `/api/integrations/connect-oauth` response: where the user signs in. */
 export const OAuthStart = z.object({ authorizeUrl: z.string() });
 export type OAuthStart = z.infer<typeof OAuthStart>;
+
+/** The `/api/pair` request: a pairing code from `host pair` and the name the new device will show. */
+export const PairingRequest = z.object({
+  code: z.string().min(1),
+  name: z.string().trim().min(1).max(100),
+});
+export type PairingRequest = z.infer<typeof PairingRequest>;
+
+/** The `/api/pair` response: the new device and its device token, which is shown only here. */
+export const PairingResponse = z.object({ deviceId: z.string(), token: z.string() });
+export type PairingResponse = z.infer<typeof PairingResponse>;
+
+/** A paired device in the `/api/devices/list` response. `current` marks the device that made the request. */
+export const DeviceEntry = z.object({
+  id: z.string(),
+  name: z.string(),
+  createdAt: z.number(),
+  lastSeenAt: z.number().nullable(),
+  current: z.boolean(),
+});
+export type DeviceEntry = z.infer<typeof DeviceEntry>;
+
+/** The `/api/devices/list` response: every paired device, oldest first. */
+export const DeviceList = z.array(DeviceEntry);
+export type DeviceList = z.infer<typeof DeviceList>;
+
+/** The `/api/devices/revoke` request. */
+export const RevokeDeviceRequest = z.object({ id: z.string().min(1) });
+export type RevokeDeviceRequest = z.infer<typeof RevokeDeviceRequest>;
+
+/** The `/api/devices/pairing-code` response: a new single-use code, in groups of four, which is shown only here. */
+export const PairingCodeResponse = z.object({ code: z.string() });
+export type PairingCodeResponse = z.infer<typeof PairingCodeResponse>;

@@ -120,12 +120,43 @@ CREATE TABLE IF NOT EXISTS handoff_messages (
 CREATE INDEX IF NOT EXISTS handoff_messages_by_handoff ON handoff_messages(handoff_id, created_at);
 `;
 
+const SCHEMA_V7 = `
+CREATE TABLE IF NOT EXISTS devices (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  token_digest BLOB NOT NULL,          -- SHA-256 of the device token; the token itself is never stored
+  created_at INTEGER NOT NULL,
+  last_seen_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS pairing_codes (
+  code_digest BLOB PRIMARY KEY,        -- SHA-256 of the normalized code
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER
+);
+`;
+
+const SCHEMA_V8 = `
+CREATE TABLE IF NOT EXISTS pairing_failures (
+  id INTEGER PRIMARY KEY CHECK (id = 1),  -- one row: failed exchanges since a pairing code was last created
+  failures INTEGER NOT NULL
+);
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
   db.run("PRAGMA foreign_keys = ON");
   const { user_version } = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!;
-  const migrations = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6];
+  const migrations = [
+    SCHEMA_V1,
+    SCHEMA_V2,
+    SCHEMA_V3,
+    SCHEMA_V4,
+    SCHEMA_V5,
+    SCHEMA_V6,
+    SCHEMA_V7,
+    SCHEMA_V8,
+  ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;
     db.transaction(() => {

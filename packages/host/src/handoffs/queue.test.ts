@@ -24,7 +24,10 @@ type PageEvent = { type: string; [k: string]: unknown };
 /** What a page that connects now is replayed. */
 async function pageEvents(): Promise<PageEvent[]> {
   const ctl = new AbortController();
-  const res = await fetch(`${host.server.url}/api/events`, { signal: ctl.signal });
+  const res = await fetch(`${host.clientUrl}/api/events`, {
+    signal: ctl.signal,
+    headers: host.authHeaders,
+  });
   const reader = res.body!.getReader();
   let text = "";
   const deadline = Date.now() + 400;

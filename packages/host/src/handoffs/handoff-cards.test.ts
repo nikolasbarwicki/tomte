@@ -50,7 +50,10 @@ type Card = {
 /** What a page connecting now would be sent for the open bot's transcript. */
 async function pageEvents(): Promise<{ type: string; [k: string]: unknown }[]> {
   const ctl = new AbortController();
-  const res = await fetch(`${host.server.url}/api/events`, { signal: ctl.signal });
+  const res = await fetch(`${host.clientUrl}/api/events`, {
+    signal: ctl.signal,
+    headers: host.authHeaders,
+  });
   const reader = res.body!.getReader();
   let text = "";
   const deadline = Date.now() + 400;

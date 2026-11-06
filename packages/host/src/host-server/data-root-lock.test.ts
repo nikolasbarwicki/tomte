@@ -25,7 +25,8 @@ const start = async (dataRoot: string) => {
   return host;
 };
 const serves = async (host: HandoffHost) =>
-  (await fetch(`${host.server.url}/api/info`).catch(() => undefined))?.status === 200;
+  (await fetch(`${host.clientUrl}/api/info`, { headers: host.authHeaders }).catch(() => undefined))
+    ?.status === 200;
 const lockedBy = (e: unknown) => (e instanceof DataRootLocked ? e : undefined);
 
 test("a second host on a running host's data root refuses to start naming its pid while the first keeps serving", async () => {

@@ -2,7 +2,7 @@ import { HostInfo } from "@claudebot/contract/api";
 import { HostEvent } from "@claudebot/contract/events";
 import { toast } from "sonner";
 
-import { parseJson, post, readJson } from "./api.ts";
+import { parseJson, post, probeSession, readJson } from "./api.ts";
 import type { HostStore } from "./store.ts";
 
 /** Loads the host's info, then mirrors its event stream into `store`. Returns the cleanup that closes the stream. */
@@ -25,6 +25,10 @@ export function connectHostStream(
       return;
     }
     store.dispatch(e);
+  };
+  // EventSource cannot see the status: a 401 closes it for good, so ask whether the device was revoked.
+  es.onerror = () => {
+    if (es.readyState === EventSource.CLOSED) void probeSession();
   };
   return () => es.close();
 }

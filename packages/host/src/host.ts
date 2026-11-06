@@ -21,8 +21,10 @@ import {
   type HostDelegate,
 } from "./bots/index.ts";
 import { installManagedEngine } from "./browser/index.ts";
+import { createDeviceAuth } from "./device-auth/index.ts";
 import { authCommand, installManagedCli, resolveCli, type ResolvedCli } from "./harness/index.ts";
 import { InvalidConfig, parseHostConfig } from "./platform/config.ts";
+import { openDb } from "./platform/db.ts";
 import { ensureWorkspace } from "./platform/workspace.ts";
 
 const parsed = (() => {
@@ -255,6 +257,10 @@ try {
       break;
     case "install-browser":
       console.log(`installed ${await installManagedEngine(config.dataRoot, a1)}`);
+      break;
+    case "pair":
+      // Database only: no data root lock, so it runs next to a running host.
+      console.log(createDeviceAuth({ db: openDb(config.dataRoot) }).createPairingCode());
       break;
     case "browser-smoke":
       await (await import("./browser/smoke.ts")).runBrowserSmoke(config);

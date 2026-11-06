@@ -36,8 +36,8 @@ export interface BrowserOptions extends HumanWaitsOptions {
   credentials: Credentials;
   /** The host-wide token registry shared with the bots endpoint. */
   tokens: TokenRegistry;
-  /** Where the host is reachable; guards name it and bots are leased URLs on it. */
-  host: HostOrigin;
+  /** The agent listener: bots are leased URLs on it, and the browser endpoint and credential exchange check requests against it. */
+  agent: HostOrigin;
   bot(botId: string): Bot | undefined;
   filesDir: (botId: string) => string;
   /** True while no human is watching the bot's turn. */
@@ -98,14 +98,14 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
     secrets: o.secrets,
     waits,
     botName: (botId) => o.bot(botId)?.name ?? "A bot",
-    exchangeUrl: () => `${o.host.localUrl}${CREDENTIAL_EXCHANGE_PATH}`,
+    exchangeUrl: () => `${o.agent.localUrl}${CREDENTIAL_EXCHANGE_PATH}`,
   });
   const endpoint = createBrowserEndpoint({
     tokens: o.tokens,
     takeover,
     login,
     unattended: o.unattended,
-    host: o.host,
+    host: o.agent,
     isEnabled: (botId) => enabled(botId) && sandboxOf().status === "available",
     runtimes,
     filesDir: o.filesDir,
@@ -113,15 +113,19 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
   });
   const liveView = createLiveView({
     ...o.liveView,
-    host: o.host,
     isEnabled: enabled,
     runtimes,
     takeover,
   });
-  const ui = createBrowserUiRoutes({ host: o.host, isEnabled: enabled, takeover, waits, liveView });
+  const ui = createBrowserUiRoutes({
+    isEnabled: enabled,
+    takeover,
+    waits,
+    liveView,
+  });
   return {
     endpoint,
-    handleCredentialExchange: (req, res) => login.handle(req, res, o.host),
+    handleCredentialExchange: (req, res) => login.handle(req, res, o.agent),
     handleLiveView: (req, res) => liveView.handle(req, res),
     handleUi: ui,
     status() {

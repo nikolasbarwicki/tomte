@@ -19,10 +19,11 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { createBot, getBot } from "../bots/index.ts";
 import { createCredentials } from "../credentials/index.ts";
 import { createHostServer, type HostServer } from "../host-server/index.ts";
-import { hostOrigin, parseHostConfig } from "../platform/config.ts";
+import { agentOrigin, parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { defined } from "../testing/defined.ts";
+import { clientPost, pairDevice } from "../testing/paired-device.ts";
 import { removeBotBrowser } from "./cleanup.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
 import { createBrowserEndpoint } from "./endpoint.ts";
@@ -290,13 +291,46 @@ describe("headed", () => {
     await browser.call(["open", "https://a.test"]);
     headed = true;
     await browser.call(["snapshot"]);
-    const [c1, c2] = calls();
-    const first = defined(c1, "first call");
-    const second = defined(c2, "second call");
+    const [c1, c2] = [
+      calls().find((c) => c.argv.includes("open")),
+      calls().find((c) => c.argv.includes("snapshot")),
+    ];
+    const first = defined(c1, "open call");
+    const second = defined(c2, "snapshot call");
     expect(first.argv).not.toContain("--headed");
     expect(second.argv).toContain("--headed");
     for (const c of [first, second])
       expect(c.argv[c.argv.indexOf("--idle-timeout") + 1]).toBe(String(15 * 60_000));
+  });
+});
+
+describe("viewport", () => {
+  const pins = () =>
+    calls()
+      .filter((c) => c.argv.includes("viewport"))
+      .map((c) => c.argv.slice(c.argv.indexOf("viewport")).join(" "));
+
+  test("a started browser is pinned to 1280x720 once, and again after it restarts", async () => {
+    let clock = 1_000_000;
+    const rt = runtimes({ now: () => clock, idleMs: 600_000 });
+    const browser = rt.forBot(BOT);
+    expect(pins()).toEqual([]);
+    await browser.call(["open", "https://a.test"]);
+    await browser.call(["snapshot"]);
+    expect(pins()).toEqual(["viewport 1280 720"]);
+
+    clock += 700_000;
+    await rt.sweep();
+    await browser.call(["open", "https://a.test"]);
+    expect(pins()).toEqual(["viewport 1280 720", "viewport 1280 720"]);
+  });
+
+  test("a pin the engine refuses is retried with the next call and never fails the bot's call", async () => {
+    script({ fail: { set: "engine busy" } });
+    const browser = runtimes().forBot(BOT);
+    await browser.call(["open", "https://a.test"]);
+    await browser.call(["snapshot"]);
+    expect(pins()).toHaveLength(2);
   });
 });
 
@@ -345,7 +379,7 @@ describe("sign out and bot deletion", () => {
       deliver: (_botId, text) => void delivered.push(text),
     });
     const endpoint = createBrowserEndpoint({
-      host: hostOrigin(parseHostConfig([], {}).config, 1),
+      host: agentOrigin(1),
       isEnabled: () => true,
       runtimes: rt,
       filesDir: () => root,
@@ -382,6 +416,7 @@ describe("sign out and bot deletion", () => {
 
 describe("host routes and tool results", () => {
   let server: HostServer;
+  let device: string;
   let cwd: string;
   const clients: Client[] = [];
 
@@ -398,14 +433,10 @@ describe("host routes and tool results", () => {
         laneWaitMs: 100,
       },
     });
+    device = pairDevice(server);
   });
 
-  const api = (path: string, body: object) =>
-    fetch(`${server.url}${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
+  const api = (path: string, body: object) => clientPost(server, device, path, body);
   async function enabledBot() {
     const bot = createBot(cwd, "bot");
     expect((await api("/api/bots/browser", { botId: bot.id, enabled: true })).status).toBe(200);

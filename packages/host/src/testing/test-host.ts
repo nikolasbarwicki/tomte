@@ -26,6 +26,7 @@ import { migrate, openDb } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
 import { defined } from "./defined.ts";
+import { asDevice, pairDevice } from "./paired-device.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "fake-agent-browser.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "fake-claude.ts");
@@ -61,10 +62,20 @@ export interface HandoffHost {
   /** While held, a message the fake CLI receives keeps its turn running. */
   hold(): void;
   release(): void;
-  /** POST to a host UI route, as the web page does. */
+  /** The client listener's URL: the web UI and `/api/*`. Follows `restart()`. */
+  readonly clientUrl: string;
+  /** The agent listener's URL: the browser and bots endpoints. Follows `restart()`. */
+  readonly agentUrl: string;
+  /** The device token of a device paired with this host; it survives `restart()`. */
+  readonly deviceToken: string;
+  /** Request headers that authenticate as that device, for `fetch` calls to the client listener. */
+  readonly authHeaders: { authorization: string };
+  /** POST to a host UI route on the client listener, as the web page does, from the paired device. */
   ui(path: string, body: object): Promise<Response>;
   /** Waits until `check` holds, then asserts it. */
   until(check: () => boolean, ms?: number): Promise<void>;
+  /** Moves the clock that pairing codes expire by forward; nothing sleeps. It survives `restart()`. */
+  advanceClock(ms: number): void;
   /** Closes the host and starts a new one on the same database and data root; `server` is replaced. */
   restart(): Promise<void>;
   stop(): Promise<void>;
@@ -102,6 +113,7 @@ export async function startHandoffHost(hostFlags: string[] = []): Promise<Handof
     ? openDb(config.dataRoot)
     : migrate(new Database(":memory:"));
   const secrets = memorySecrets();
+  let clock = Date.now();
   const startServer = () =>
     createHostServer({
       config,
@@ -110,8 +122,10 @@ export async function startHandoffHost(hostFlags: string[] = []): Promise<Handof
       secrets,
       browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir } },
       sandbox: () => ({ status: "available" }),
+      now: () => clock,
     });
   let server = await startServer();
+  const deviceToken = pairDevice(server);
   const clients: Client[] = [];
   const lines = (file: string) =>
     existsSync(file)
@@ -126,6 +140,14 @@ export async function startHandoffHost(hostFlags: string[] = []): Promise<Handof
     get server() {
       return server;
     },
+    get clientUrl() {
+      return server.clientUrl;
+    },
+    get agentUrl() {
+      return server.agentUrl;
+    },
+    deviceToken,
+    authHeaders: asDevice(deviceToken),
     cwd,
     dataRoot: config.dataRoot,
     createBot: (name, purpose) => createBot(config.dataRoot, name, purpose).id,
@@ -155,10 +177,17 @@ export async function startHandoffHost(hostFlags: string[] = []): Promise<Handof
       writeFileSync(join(claudeDir, "remember.json"), JSON.stringify({ scope, line })),
     hold: () => writeFileSync(join(claudeDir, "hold"), ""),
     release: () => rmSync(join(claudeDir, "hold"), { force: true }),
+    advanceClock: (ms) => {
+      clock += ms;
+    },
     ui: (path, body) =>
-      fetch(`${server.url}${path}`, {
+      fetch(`${server.clientUrl}${path}`, {
         method: "POST",
-        headers: { "content-type": "application/json", origin: server.url },
+        headers: {
+          "content-type": "application/json",
+          origin: server.clientUrl,
+          ...asDevice(deviceToken),
+        },
         body: JSON.stringify(body),
       }),
     async until(check, ms = 4000) {

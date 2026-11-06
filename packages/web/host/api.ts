@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { sessionStore } from "./session.ts";
 import { hostStore } from "./store.ts";
 
 /** A payload from the host that does not match its contract schema; `message` names where it came from. */
@@ -27,12 +28,21 @@ export async function readJson<T>(res: Response, schema: z.ZodType<T>): Promise<
   return parseJson(await res.text(), schema, res.url || "response");
 }
 
-export const post = (path: string, body: unknown) =>
-  fetch(path, {
+/** Posts JSON to the host. A 401 means this browser has no valid device token, so the page falls back to the login. */
+export async function post(path: string, body: unknown): Promise<Response> {
+  const res = await fetch(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+  if (res.status === 401) sessionStore.set("unpaired");
+  return res;
+}
+
+/** Asks the host whether this browser is paired; a 401 flips the page to the login through `post`. */
+export async function probeSession(): Promise<void> {
+  if ((await post("/api/info", {})).ok) sessionStore.set("paired");
+}
 
 const ErrorBody = z.object({ error: z.string() });
 

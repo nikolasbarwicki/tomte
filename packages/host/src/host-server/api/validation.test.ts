@@ -9,9 +9,9 @@ beforeAll(async () => {
 afterAll(() => host.stop());
 
 const raw = (path: string, body: string) =>
-  fetch(`${host.server.url}${path}`, {
+  fetch(`${host.clientUrl}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", origin: host.server.url },
+    headers: { "content-type": "application/json", origin: host.clientUrl, ...host.authHeaders },
     body,
   });
 

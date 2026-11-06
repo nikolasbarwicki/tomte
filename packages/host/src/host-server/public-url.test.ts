@@ -13,9 +13,14 @@ const FORWARDED = {
 
 /** The OAuth redirect URLs the integrations screen shows, as the web page would fetch them. */
 async function redirectUrls(headers: Record<string, string> = {}): Promise<string[]> {
-  const res = await fetch(`${host.server.url}/api/integrations/list`, {
+  const res = await fetch(`${host.clientUrl}/api/integrations/list`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...headers },
+    headers: {
+      "content-type": "application/json",
+      origin: host.clientUrl,
+      ...host.authHeaders,
+      ...headers,
+    },
     body: "{}",
   });
   const list = (await res.json()) as { redirectUrl: string }[];
@@ -34,7 +39,7 @@ describe("the OAuth redirect URL", () => {
   test("defaults to the loopback URL of the bound port, whatever the request claims", async () => {
     host = await startHandoffHost();
     expect(new Set(await redirectUrls(FORWARDED))).toEqual(
-      new Set([`${host.server.url}/oauth/callback`]),
+      new Set([`${host.clientUrl}/oauth/callback`]),
     );
   });
 
@@ -42,7 +47,7 @@ describe("the OAuth redirect URL", () => {
     host = await startHandoffHost(["--public-url", "https://claudebot.example.com"]);
     const bot = host.createBot("alice");
     const act = await host.actAs(bot);
-    expect(act.url).toBe(`${host.server.url}/mcp/bots`);
+    expect(act.url).toBe(`${host.agentUrl}/mcp/bots`);
     expect((await act.call("list_bots")).isError).toBe(false);
   });
 });

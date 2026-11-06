@@ -177,20 +177,22 @@ async function scenarios(
   secrets: SecretStore,
   workspace: string,
 ) {
+  const paired =
+    server.devices.pair(server.devices.createPairingCode(), "browser smoke") ??
+    fail("could not pair a device with the smoke host");
+  const auth = { authorization: `Bearer ${paired.token}` };
   const ui = (path: string, body: object) =>
-    fetch(`${server.url}${path}`, {
+    fetch(`${server.clientUrl}${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: server.url },
+      headers: { "content-type": "application/json", origin: server.clientUrl, ...auth },
       body: JSON.stringify(body),
     });
 
   const received: HostEvent[] = [];
   const abort = new AbortController();
   void (async () => {
-    const res = await fetch(`${server.url}/api/events`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
+    const res = await fetch(`${server.clientUrl}/api/events`, {
+      headers: auth,
       signal: abort.signal,
     });
     const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();

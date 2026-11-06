@@ -33,7 +33,10 @@ async function started() {
 async function filesListOf(botId: string): Promise<string[]> {
   expect((await host.ui("/api/open", { botId })).status).toBe(200);
   const abort = new AbortController();
-  const res = await fetch(`${host.server.url}/api/events`, { signal: abort.signal });
+  const res = await fetch(`${host.clientUrl}/api/events`, {
+    signal: abort.signal,
+    headers: host.authHeaders,
+  });
   const reader = res.body!.getReader();
   const dec = new TextDecoder();
   let buf = "";

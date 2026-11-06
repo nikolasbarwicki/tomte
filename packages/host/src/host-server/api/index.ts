@@ -8,6 +8,7 @@ import { botRoutes } from "./bots.ts";
 import { chatRoutes } from "./chat.ts";
 import type { ApiContext, ApiRequest } from "./context.ts";
 import { credentialApi } from "./credentials.ts";
+import { deviceApi } from "./devices.ts";
 import { fileRoutes } from "./files.ts";
 import { integrationApi } from "./integrations.ts";
 import { routineApi } from "./routines.ts";
@@ -20,6 +21,7 @@ export function createApi(ctx: ApiContext): Handler {
   async function api(req: IncomingMessage, res: ServerResponse, path: string) {
     if (path === "/api/events") return ctx.events.subscribe(req, res, ctx.snapshot());
     const b = await readJsonObject(req);
+    if (path.startsWith("/api/devices/")) return deviceApi(ctx, req, res, path, b);
     if (path.startsWith("/api/routines/")) return routineApi(ctx, res, path, b);
     if (path.startsWith("/api/integrations/")) return integrationApi(ctx, res, path, b);
     if (path.startsWith("/api/credentials/")) {

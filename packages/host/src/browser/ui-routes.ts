@@ -2,12 +2,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { z } from "zod";
 
-import type { HostOrigin } from "../platform/config.ts";
 import type { HumanWaits } from "./human-waits.ts";
 import { toEngineInput } from "./input.ts";
 import type { LiveView } from "./live-view.ts";
 import type { Takeover } from "./takeover.ts";
-import { BotRef, guardUiRequest, rejectRequest } from "./ui-guard.ts";
+import { BotRef, readUiBody, rejectRequest } from "./ui-request.ts";
 
 const CONTROL_PATH = "/api/browser/control";
 const INPUT_PATH = "/api/browser/input";
@@ -22,7 +21,6 @@ const ControlAction = z.object({ action: z.enum(["take", "hand_back"]) });
 const WaitAnswer = z.object({ id: z.string(), action: z.string() });
 
 export interface BrowserUiRoutesOptions {
-  host: HostOrigin;
   isEnabled(botId: string): boolean;
   takeover: Takeover;
   waits: HumanWaits;
@@ -33,8 +31,8 @@ const ok = (res: ServerResponse) =>
   void res.writeHead(200, { "content-type": "application/json" }).end("{}");
 
 /**
- * The UI's browser routes that act: take control or hand back, send input, answer a wait card. They share the
- * live view's checks (own Host and Origin, JSON). Input bodies are never logged, echoed or stored.
+ * The UI's browser routes that act: take control or hand back, send input, answer a wait card. They take POST with
+ * a JSON body, like the live view. Input bodies are never logged, echoed or stored.
  */
 export function createBrowserUiRoutes(o: BrowserUiRoutesOptions) {
   return async function handle(
@@ -42,7 +40,7 @@ export function createBrowserUiRoutes(o: BrowserUiRoutesOptions) {
     res: ServerResponse,
     path: string,
   ): Promise<void> {
-    const body = await guardUiRequest(req, res, o.host);
+    const body = await readUiBody(req, res);
     if (!body) return;
 
     if (path === WAIT_ANSWER_PATH) {

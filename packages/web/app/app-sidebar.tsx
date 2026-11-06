@@ -5,6 +5,7 @@ import {
   BellIcon,
   FolderIcon,
   KeyRoundIcon,
+  LaptopIcon,
   MoonIcon,
   PlugIcon,
   PlusIcon,
@@ -174,6 +175,16 @@ export function AppSidebar({
             >
               <KeyRoundIcon />
               <span>Credentials</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={!!matchRoute({ to: "/devices" })}
+              render={<Link to="/devices" />}
+              onClick={reveal}
+            >
+              <LaptopIcon />
+              <span>Devices</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <Updates notices={notices} />

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { hostOrigin, InvalidConfig, parseHostConfig, type HostSystem } from "./config.ts";
+import {
+  agentOrigin,
+  clientOrigin,
+  InvalidConfig,
+  parseHostConfig,
+  type HostSystem,
+} from "./config.ts";
 
 const parse = (
   argv: readonly string[] = [],
@@ -51,8 +57,8 @@ describe("defaults", () => {
 
   test("the public URL defaults to the loopback URL of the bound port", () => {
     const { config } = parse();
-    expect(hostOrigin(config, 41234).publicUrl).toBe("http://127.0.0.1:41234");
-    expect(hostOrigin(config, 41234).localUrl).toBe("http://127.0.0.1:41234");
+    expect(clientOrigin(config, 41234).publicUrl).toBe("http://127.0.0.1:41234");
+    expect(clientOrigin(config, 41234).localUrl).toBe("http://127.0.0.1:41234");
   });
 });
 
@@ -209,7 +215,7 @@ describe("loopback only", () => {
   });
 
   test("an IPv6 loopback address is bracketed in the local URL and named by the Host header in that form", () => {
-    const origin = hostOrigin(parse(["--host", "::1"]).config, 5173);
+    const origin = clientOrigin(parse(["--host", "::1"]).config, 5173);
     expect(origin.localUrl).toBe("http://[::1]:5173");
     expect(origin.namesHost("[::1]:5173")).toBe(true);
   });
@@ -262,8 +268,20 @@ describe("invalid input", () => {
   });
 });
 
+describe("the agent listener's origin", () => {
+  test("is always loopback and never the public URL", () => {
+    const { config } = parse(["--public-url", "https://claudebot.example.com"]);
+    expect(clientOrigin(config, 5173).publicUrl).toBe("https://claudebot.example.com");
+    const origin = agentOrigin(6000);
+    expect(origin.localUrl).toBe("http://127.0.0.1:6000");
+    expect(origin.publicUrl).toBe("http://127.0.0.1:6000");
+    expect(origin.namesHost("127.0.0.1:6000")).toBe(true);
+    expect(origin.namesHost("127.0.0.1:5173")).toBe(false);
+  });
+});
+
 describe("which Host headers name the host", () => {
-  const origin = hostOrigin(parse().config, 5173);
+  const origin = clientOrigin(parse().config, 5173);
 
   test.each([
     ["127.0.0.1:5173", true],

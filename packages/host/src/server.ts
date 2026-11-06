@@ -52,9 +52,14 @@ const server = await createHostServer({
 });
 const opened = server.currentBotId() ? getBot(config.dataRoot, server.currentBotId()!) : undefined;
 console.log(
-  `claudebot UI: ${server.url}  workspace=${ensureWorkspace(config.dataRoot)}  data=${config.dataRoot}  bot=${opened ? `${opened.name} (${opened.id})` : "none"}`,
+  `claudebot UI: ${server.clientUrl}  workspace=${ensureWorkspace(config.dataRoot)}  data=${config.dataRoot}  bot=${opened ? `${opened.name} (${opened.id})` : "none"}`,
 );
-if (server.publicUrl !== server.url) console.log(`public URL: ${server.publicUrl}`);
+if (server.publicUrl !== server.clientUrl) console.log(`public URL: ${server.publicUrl}`);
+const shellWord = (s: string) =>
+  /^[\w./@%+=:,-]+$/.test(s) ? s : `'${s.replaceAll("'", "'\\''")}'`;
+console.log(
+  `pair a browser: bun run host pair --data-root ${shellWord(config.dataRoot)}  (prints a code, valid once for 10 minutes; enter it at ${server.publicUrl})`,
+);
 
 const shutdown = async () => {
   const id = server.currentBotId();

@@ -21,6 +21,7 @@ import { parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { defined } from "../testing/defined.ts";
+import { clientPost, pairDevice } from "../testing/paired-device.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "..", "testing", "fake-claude.ts");
@@ -37,6 +38,7 @@ let cwd: string;
 let fakeDir: string;
 let claudeDir: string;
 let server: HostServer;
+let device: string;
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 const closers: (() => unknown)[] = [];
 
@@ -79,6 +81,7 @@ async function startServer(script: object = {}, laneWaitMs?: number) {
     secrets: memorySecrets(),
     browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir }, laneWaitMs },
   });
+  device = pairDevice(server);
 }
 
 const until = async (check: () => boolean, ms = 4000) => {
@@ -86,12 +89,7 @@ const until = async (check: () => boolean, ms = 4000) => {
   expect(check()).toBe(true);
 };
 
-const ui = (path: string, body: object) =>
-  fetch(`${server.url}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: server.url },
-    body: JSON.stringify(body),
-  });
+const ui = (path: string, body: object) => clientPost(server, device, path, body);
 const messages = () =>
   existsSync(join(claudeDir, "messages.jsonl"))
     ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8")

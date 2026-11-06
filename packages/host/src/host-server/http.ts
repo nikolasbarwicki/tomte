@@ -8,6 +8,7 @@ import {
   type Browser,
 } from "../browser/index.ts";
 import { BOTS_ENDPOINT_PATH, type Handoffs } from "../handoffs/index.ts";
+import { PAIR_PATH } from "./boundary.ts";
 
 export type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
 
@@ -28,19 +29,10 @@ function safe(handler: Handler, label: string): Handler {
     });
 }
 
-/** Every route the host serves besides the web app, in match order. `oauthCallback` and `api` answer their own failures. */
-export function hostRoutes(o: {
-  browser: Browser;
-  handoffs: Handoffs;
-  oauthCallback: Handler;
-  api: Handler;
-}): Route[] {
+/** What the agent listener serves: the browser endpoint, the bots endpoint and the credential exchange. */
+export function agentRoutes(o: { browser: Browser; handoffs: Handoffs }): Route[] {
   const { browser, handoffs } = o;
   return [
-    {
-      match: (p, req) => p === "/oauth/callback" && req.method === "GET",
-      handler: o.oauthCallback,
-    },
     {
       match: (p) => p === BROWSER_ENDPOINT_PATH,
       handler: (req, res) => browser.endpoint.handle(req, res),
@@ -56,6 +48,27 @@ export function hostRoutes(o: {
       handler: (req, res) => browser.handleCredentialExchange(req, res),
       label: "[browser] credential exchange failed:",
     },
+  ];
+}
+
+/** What the client listener serves besides the web app, in match order. `oauthCallback` and `api` answer their own failures. */
+export function clientRoutes(o: {
+  browser: Browser;
+  oauthCallback: Handler;
+  pair: Handler;
+  api: Handler;
+}): Route[] {
+  const { browser } = o;
+  return [
+    {
+      match: (p, req) => p === "/oauth/callback" && req.method === "GET",
+      handler: o.oauthCallback,
+    },
+    {
+      match: (p, req) => p === PAIR_PATH && req.method === "POST",
+      handler: o.pair,
+      label: "[host] pairing failed:",
+    },
     {
       match: (p) => p === LIVE_VIEW_PATH,
       handler: (req, res) => browser.handleLiveView(req, res),
@@ -65,6 +78,11 @@ export function hostRoutes(o: {
       match: (p) => BROWSER_UI_PATHS.has(p),
       handler: (req, res, url) => browser.handleUi(req, res, url.pathname),
       label: "[browser] ui route failed:",
+    },
+    {
+      // Under /api/, so the generic API would answer it; the exchange belongs to the agent listener alone.
+      match: (p) => p === CREDENTIAL_EXCHANGE_PATH,
+      handler: async (_req, res) => void res.writeHead(404).end(),
     },
     { match: (p) => p.startsWith("/api/"), handler: o.api },
   ];
