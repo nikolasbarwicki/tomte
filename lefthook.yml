@@ -1,0 +1,22 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: oxfmt
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc,css,md,yml,yaml}"
+      run: bunx oxfmt --check --no-error-on-unmatched-pattern {staged_files}
+      fail_text: Unformatted files. Run `bun run fmt`, re-stage, commit again.
+    - name: oxlint
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs}"
+      run: bunx oxlint {staged_files}
+    - name: gitleaks
+      run: |
+        command -v gitleaks >/dev/null 2>&1 || {
+          echo "gitleaks is not installed. Install it (macOS: brew install gitleaks) and retry." >&2
+          exit 1
+        }
+        gitleaks git --staged --redact -v --no-banner
+
+pre-push:
+  jobs:
+    - name: check
+      run: bun run check
