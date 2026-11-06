@@ -12,9 +12,8 @@ import {
   getBot,
   touchBot,
   type HostDelegate,
+  type ThreadEnv,
 } from "../bots/index.ts";
-import type { HostServersSource, ResolvedCli } from "../harness/index.ts";
-import type { IntegrationsSource } from "../integrations/index.ts";
 import { NotFound } from "../platform/errors.ts";
 import {
   WINDOW_MS,
@@ -45,6 +44,16 @@ export const RoutineInput = z.object({
   catchUp: z.boolean().optional(),
 });
 export type RoutineInput = z.output<typeof RoutineInput>;
+
+/** HTTP-boundary schema for a routine edit: any subset of the editable fields, each exactly as `RoutineInput` has it. */
+export const RoutinePatch = z.object({
+  name: RoutineInput.shape.name.exactOptional(),
+  instruction: RoutineInput.shape.instruction.exactOptional(),
+  schedule: RoutineInput.shape.schedule.exactOptional(),
+  active: z.boolean().exactOptional(),
+  catchUp: z.boolean().exactOptional(),
+});
+export type RoutinePatch = z.output<typeof RoutinePatch>;
 
 export type RoutineJob = { bot: Bot; routine: RoutineRecord; prompt: string };
 
@@ -78,12 +87,7 @@ export const headlessDelegate: HostDelegate = {
 
 /** Runs a routine turn in the bot's own session without the UI, for a bot that is not open. */
 export function runHeadless(
-  cwd: string,
-  dataRoot: string,
-  cli: ResolvedCli,
-  integrations: IntegrationsSource,
-  hostServers: HostServersSource,
-  approveAll: boolean,
+  { cwd, dataRoot, cli, integrations, hostServers, approveAll }: ThreadEnv,
   { bot, routine, prompt }: RoutineJob,
 ): ReturnType<Executor> {
   let thread: Thread | undefined;
@@ -361,7 +365,7 @@ export function createRoutines(deps: {
       return view(r);
     },
 
-    update(id: string, patch: Partial<RoutineInput>): Routine {
+    update(id: string, patch: RoutinePatch): Routine {
       const old = require(id);
       const t = now();
       const r: RoutineRecord = {

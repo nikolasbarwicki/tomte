@@ -8,15 +8,17 @@
   },
   "packageRules": [
     {
-      "description": "Group minor and patch updates into one PR",
-      "matchUpdateTypes": ["minor", "patch"],
-      "groupName": "minor and patch updates"
-    },
-    {
-      "description": "Auto-merge devDependency minor/patch updates once required CI checks pass",
+      "description": "Group devDependency minor/patch updates into one PR and auto-merge it once required CI checks pass",
       "matchDepTypes": ["devDependencies"],
       "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "dev dependencies (minor and patch)",
       "automerge": true
+    },
+    {
+      "description": "Group all other minor/patch updates into a separate PR that is reviewed by hand, so it never blocks the dev group's auto-merge",
+      "matchDepTypes": ["!devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "dependencies (minor and patch)"
     }
   ]
 }

@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { HostOrigin } from "../platform/config.ts";
 import type { BotBrowser, BrowserRuntimes } from "./runtime.ts";
 import type { Takeover } from "./takeover.ts";
-import { guardUiRequest, rejectRequest } from "./ui-guard.ts";
+import { BotRef, guardUiRequest, rejectRequest } from "./ui-guard.ts";
 
 export const LIVE_VIEW_PATH = "/api/browser/live";
 
@@ -221,8 +221,9 @@ export function createLiveView(o: LiveViewOptions): LiveView {
     async handle(req, res) {
       const body = await guardUiRequest(req, res, o.host);
       if (!body) return;
-      const botId = typeof body.botId === "string" ? body.botId : "";
-      if (!botId) return rejectRequest(res, 400, "botId required");
+      const ref = BotRef.safeParse(body);
+      if (!ref.success) return rejectRequest(res, 400, "botId required");
+      const { botId } = ref.data;
       if (!o.isEnabled(botId))
         return rejectRequest(res, 403, "the browser is switched off for this bot");
 

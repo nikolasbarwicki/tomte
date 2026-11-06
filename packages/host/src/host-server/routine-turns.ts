@@ -1,8 +1,6 @@
 import type { Database } from "bun:sqlite";
 
-import { recordMessage, type TurnResult } from "../bots/index.ts";
-import type { HostServersSource, ResolvedCli } from "../harness/index.ts";
-import type { IntegrationsSource } from "../integrations/index.ts";
+import { recordMessage, type ThreadEnv, type TurnResult } from "../bots/index.ts";
 import { runHeadless, type Executor, type RoutineJob } from "../routines/index.ts";
 
 /** A routine turn waiting for its bot; it runs in the bot's chat once that is idle, or headless if the bot has no chat. */
@@ -16,14 +14,8 @@ type QueuedRoutine = {
 /** A routine turn started in a bot's chat. */
 type ChatRoutineTurn = { done: Promise<TurnResult | Error>; stop: (reason: string) => void };
 
-export interface RoutineTurnsDeps {
-  cwd: string;
-  dataRoot: string;
-  cli: ResolvedCli;
+export interface RoutineTurnsDeps extends ThreadEnv {
   db: Database;
-  integrations: IntegrationsSource;
-  hostServers: HostServersSource;
-  approveAll: boolean;
   announceBots: () => void;
   /** A headless run ended; the bot's chat, if any, may now show it. */
   headlessDone(botId: string): void;
@@ -43,21 +35,13 @@ export interface RoutineTurns {
 }
 
 export function createRoutineTurns(deps: RoutineTurnsDeps): RoutineTurns {
-  const { cwd, dataRoot, cli, db } = deps;
+  const { db } = deps;
   let routineQueue: QueuedRoutine[] = [];
   const headlessRuns = new Map<string, string>();
 
   function startHeadless(item: QueuedRoutine) {
     const { bot, routine } = item.job;
-    const h = runHeadless(
-      cwd,
-      dataRoot,
-      cli,
-      deps.integrations,
-      deps.hostServers,
-      deps.approveAll,
-      item.job,
-    );
+    const h = runHeadless(deps, item.job);
     item.stop = h.stop;
     headlessRuns.set(bot.id, routine.name);
     deps.announceBots();

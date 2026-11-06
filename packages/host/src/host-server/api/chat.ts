@@ -1,4 +1,4 @@
-import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk";
+import { EffortLevel } from "@claudebot/contract/api";
 import { z } from "zod";
 
 import { getBot } from "../../bots/index.ts";
@@ -10,10 +10,9 @@ const Send = z.object({ text: z.string(), mentions: z.array(z.string()).default(
 const Id = z.object({ id: z.string() });
 const Answer = Id.extend({ value: z.string() });
 const Model = z.object({ model: z.string() });
-const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const satisfies readonly EffortLevel[];
-const Effort = z.object({ effort: z.enum(EFFORTS) });
+const Effort = z.object({ effort: EffortLevel });
 const Notify = z.object({
-  source: z.string().default("external"),
+  source: z.string().optional(),
   title: z.string().min(1, "title required"),
   body: z.string().default(""),
 });

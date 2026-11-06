@@ -20,13 +20,14 @@ import {
   touchBot,
   watchFiles,
   type Thread,
+  type ThreadEnv,
   type TurnResult,
 } from "../bots/index.ts";
 import type { Handoffs, Mention } from "../handoffs/index.ts";
 import type { Executor } from "../routines/index.ts";
 import { createNotices } from "./notices.ts";
 import { createRoutineTurns } from "./routine-turns.ts";
-import { openBotThread, type ThreadEnv } from "./threads.ts";
+import { openBotThread } from "./threads.ts";
 import type { Transcript } from "./transcript.ts";
 import { botsEvent, filesEvent, memoryEvents } from "./views.ts";
 

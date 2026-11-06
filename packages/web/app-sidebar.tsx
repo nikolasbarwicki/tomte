@@ -1,4 +1,5 @@
-import type { BotStatus, BotSummary, HostInfo, Notice } from "@claudebot/contract/events";
+import type { HostInfo } from "@claudebot/contract/api";
+import type { BotStatus, BotSummary, Notice } from "@claudebot/contract/events";
 import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
   BellIcon,

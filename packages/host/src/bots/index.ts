@@ -3,12 +3,12 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from "node:path";
 
 import { BotAvatar, defaultAvatar } from "@claudebot/contract/avatars";
-import { Bot } from "@claudebot/contract/events";
+import { Bot, BotBrowserSettings } from "@claudebot/contract/events";
 import { z } from "zod";
 
 import { userMemoryPath } from "./memory.ts";
 
-export { Thread, type HostDelegate, type TurnResult } from "./thread.ts";
+export { Thread, type HostDelegate, type ThreadEnv, type TurnResult } from "./thread.ts";
 export { readMemory, userMemoryPath } from "./memory.ts";
 export { getActivity, markSeen, recordMessage } from "./activity-store.ts";
 export { deleteFile, listFiles, resolveInside, reveal, watchFiles } from "./files.ts";
@@ -28,9 +28,10 @@ export const BROWSER_FILES_DIR = "browser";
 const StoredBot = Bot.extend({
   sessions: Bot.shape.sessions.optional(),
   avatar: BotAvatar.optional(),
-  browser: z
-    .object({ enabled: z.boolean(), headed: z.boolean().default(false) })
-    .default({ enabled: false, headed: false }),
+  browser: BotBrowserSettings.extend({ headed: z.boolean().default(false) }).default({
+    enabled: false,
+    headed: false,
+  }),
 });
 
 function write(dataRoot: string, bot: Bot) {

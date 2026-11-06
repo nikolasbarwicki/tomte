@@ -1,3 +1,4 @@
+import { EffortLevel } from "@claudebot/contract/api";
 import type {
   BotSummary,
   ContextEvent,
@@ -240,7 +241,7 @@ function SessionSetting({
   apply,
 }: {
   label: string;
-  options: string[];
+  options: readonly string[];
   apply: (value: string) => Promise<boolean>;
 }) {
   const [value, setValue] = useState<string>();
@@ -286,7 +287,6 @@ function SessionSetting({
 }
 
 const MODELS = ["opus", "sonnet", "haiku"];
-const EFFORTS = ["low", "medium", "high", "max"];
 
 function Composer({
   bot,
@@ -486,7 +486,7 @@ function Composer({
               />
               <SessionSetting
                 label="Effort"
-                options={EFFORTS}
+                options={EffortLevel.options}
                 apply={(effort) => act("/api/effort", { effort })}
               />
               <p className="ml-auto hidden items-center gap-1 text-xs font-normal whitespace-nowrap @xl:flex">

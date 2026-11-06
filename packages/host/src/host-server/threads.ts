@@ -1,22 +1,8 @@
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import type { Bot, MemoryScope, ServerEvent } from "@claudebot/contract/events";
 
-import { Thread, botContext } from "../bots/index.ts";
-import type { HostServersSource, ResolvedCli } from "../harness/index.ts";
-import type { IntegrationsSource } from "../integrations/index.ts";
+import { Thread, botContext, type ThreadEnv } from "../bots/index.ts";
 import { headlessDelegate } from "../routines/index.ts";
-
-export interface ThreadEnv {
-  /** The workspace directory the Claude CLI runs in. */
-  cwd: string;
-  /** Where bots, their memory and the user memory live. */
-  dataRoot: string;
-  cli: ResolvedCli;
-  integrations: IntegrationsSource;
-  hostServers: HostServersSource;
-  /** Approve every tool call instead of asking the user; off when `HostConfig.askApproval` is set. */
-  approveAll: boolean;
-}
 
 export interface ThreadHooks {
   onMemory: (scope: MemoryScope, text: string) => void;

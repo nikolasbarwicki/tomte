@@ -45,8 +45,8 @@ export async function integrationApi(
       }
       case "/api/integrations/connect-oauth": {
         const a = Id.extend({
-          clientId: z.string().optional(),
-          clientSecret: z.string().optional(),
+          clientId: z.string().exactOptional(),
+          clientSecret: z.string().exactOptional(),
         }).parse(b);
         const own =
           a.clientId === undefined && a.clientSecret === undefined
@@ -83,8 +83,6 @@ export async function integrationApi(
     }
     res.writeHead(404).end();
   } catch (e) {
-    if (e instanceof z.ZodError)
-      return json(res, { error: e.issues.map((i) => i.message).join("; ") }, 400);
     if (e instanceof InvalidInput) return json(res, { error: e.message }, 400);
     if (e instanceof NameTaken) return json(res, { error: e.message }, 409);
     if (e instanceof NotFound) return json(res, { error: e.message }, 404);

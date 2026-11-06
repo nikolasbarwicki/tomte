@@ -10,7 +10,7 @@
     "ui": "bun packages/host/src/server.ts",
     "dev": "bun --watch packages/host/src/server.ts --port 5173 --vite",
     "typecheck": "bun --filter '*' typecheck",
-    "test": "bun test",
+    "test": "bun test && bun scripts/check-coverage.ts",
     "depcheck": "depcruise packages",
     "check": "bun run fmt:check && bun run lint && bun run knip && bun run typecheck && bun run depcheck && bun run test",
     "fmt": "oxfmt",

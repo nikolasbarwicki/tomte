@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 
 import type { HostOrigin } from "../platform/config.ts";
+import { InvalidBody, readJsonObject } from "../platform/json-body.ts";
 
 export function rejectRequest(res: ServerResponse, status: number, message: string) {
   res
@@ -10,19 +11,8 @@ export function rejectRequest(res: ServerResponse, status: number, message: stri
     .end(JSON.stringify({ error: message }));
 }
 
-const JsonObject = z.record(z.string(), z.unknown());
-
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown> | undefined> {
-  let s = "";
-  for await (const chunk of req) s += chunk;
-  if (!s) return {};
-  try {
-    const parsed = JsonObject.safeParse(JSON.parse(s));
-    return parsed.success ? parsed.data : undefined;
-  } catch {
-    return undefined;
-  }
-}
+/** The body every per-bot browser UI route starts from. */
+export const BotRef = z.object({ botId: z.string().min(1) });
 
 /**
  * The checks every browser UI route shares: the Host names this server, the Origin is this server's own, the
@@ -45,7 +35,10 @@ export async function guardUiRequest(
   if (req.method !== "POST") return reject(405, "method not allowed");
   if (!/^application\/json\s*(;|$)/i.test(req.headers["content-type"] ?? ""))
     return reject(415, "content type must be application/json");
-  const body = await readJson(req);
-  if (!body) return reject(400, "invalid JSON body");
-  return body;
+  try {
+    return await readJsonObject(req);
+  } catch (e) {
+    if (e instanceof InvalidBody) return reject(400, "invalid JSON body");
+    throw e;
+  }
 }

@@ -21,6 +21,7 @@ import {
   cmdExeSpawner,
   loginShellPath,
   type HostServerLease,
+  type HostServersSource,
   type ResolvedCli,
 } from "../harness/index.ts";
 import type { IntegrationsSource } from "../integrations/index.ts";
@@ -38,6 +39,19 @@ export interface HostDelegate {
     input: Record<string, unknown>,
     reason: string,
   ): Promise<PermissionResult>;
+}
+
+/** What every bot thread the host opens shares, whether in a chat or in a headless routine run. */
+export interface ThreadEnv {
+  /** The workspace directory the Claude CLI runs in. */
+  cwd: string;
+  /** Where bots, their memory and the user memory live. */
+  dataRoot: string;
+  cli: ResolvedCli;
+  integrations: IntegrationsSource;
+  hostServers: HostServersSource;
+  /** Approve every tool call instead of asking the user; off when `HostConfig.askApproval` is set. */
+  approveAll: boolean;
 }
 
 export interface ThreadOptions {
