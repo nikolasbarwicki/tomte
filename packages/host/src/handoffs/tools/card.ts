@@ -1,3 +1,5 @@
+import type { HandoffStatus } from "@claudebot/contract/events";
+
 import type { Handoff, HandoffStore } from "../store.ts";
 import type { BotsToolContext, HandoffCard } from "./context.ts";
 
@@ -37,7 +39,7 @@ export function sentCardsFromTool(
     ];
   const h = input.handoff_id ? deps.handoffs.get(input.handoff_id) : undefined;
   if (!h) return [];
-  const card = (other: string, status: string, text: string): HandoffCard[] => [
+  const card = (other: string, status: HandoffStatus, text: string): HandoffCard[] => [
     {
       type: "handoff",
       direction: "sent",

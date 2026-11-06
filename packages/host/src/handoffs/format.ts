@@ -1,4 +1,4 @@
-import type { HandoffStatus } from "./store.ts";
+import { HandoffStatus } from "@claudebot/contract/events";
 
 /** The fixed line after a brief: the tools that continue or finish the handoff. */
 const HANDOFF_TOOLS_LINE =
@@ -62,12 +62,12 @@ export type ReceivedHandoff = {
   id: string;
   from: string;
   title?: string;
-  status: string;
+  status: HandoffStatus;
   text: string;
   resumed?: boolean;
 };
 
-/** Every handoff tag in a delivered text (several may be joined into one turn), in order. Understands whatever status a later ticket formats. */
+/** Every handoff tag in a delivered text (several may be joined into one turn), in order. A missing or unknown status (old or hand-edited transcripts) reads as `submitted` on a brief and `working` on an update. */
 export function parseHandoffTags(text: string): ReceivedHandoff[] {
   return [...text.matchAll(/<(handoff|handoff-update) ([^>]*)>\n([\s\S]*?)\n<\/\1>/g)].map(
     ([, kind, attrs = "", body = ""]) => {
@@ -77,14 +77,14 @@ export function parseHandoffTags(text: string): ReceivedHandoff[] {
             id: a.id ?? "",
             from: a.requester ?? "",
             ...(a.title !== undefined && { title: a.title }),
-            status: a.status ?? "submitted",
+            status: HandoffStatus.catch("submitted").parse(a.status),
             text: body,
             resumed: a.resumed === "true",
           }
         : {
             id: a.id ?? "",
             from: a.from ?? "",
-            status: a.status ?? "",
+            status: HandoffStatus.catch("working").parse(a.status),
             text: body,
             resumed: a.resumed === "true",
           };

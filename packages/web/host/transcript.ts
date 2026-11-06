@@ -1,4 +1,4 @@
-import type { ServerEvent, WaitAction } from "@claudebot/contract/events";
+import type { HandoffStatus, ServerEvent, WaitAction } from "@claudebot/contract/events";
 
 import { kTokens } from "@/lib/format.ts";
 
@@ -32,7 +32,7 @@ export type Item =
       bot: string;
       botId?: string | undefined;
       title: string;
-      status: string;
+      status: HandoffStatus;
       text: string;
     };
 

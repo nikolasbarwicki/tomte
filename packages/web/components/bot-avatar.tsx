@@ -1,5 +1,6 @@
-import { FACES, STROKES, type BotAvatar as Avatar } from "@claudebot/contract/avatars";
+import { type BotAvatar as Avatar } from "@claudebot/contract/avatars";
 
+import { FACES, STROKES } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
 /** A bot's one-line face. While `working`, the line keeps drawing and erasing itself. */

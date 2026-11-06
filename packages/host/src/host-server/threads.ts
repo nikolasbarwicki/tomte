@@ -1,8 +1,7 @@
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import type { Bot, MemoryScope, ServerEvent } from "@claudebot/contract/events";
 
-import { Thread, botContext, type ThreadEnv } from "../bots/index.ts";
-import { headlessDelegate } from "../routines/index.ts";
+import { headlessDelegate, openThread, type Thread, type ThreadEnv } from "../bots/index.ts";
 
 export interface ThreadHooks {
   onMemory: (scope: MemoryScope, text: string) => void;
@@ -14,20 +13,14 @@ export interface ThreadHooks {
 
 /** Opens a bot's Claude Code thread in the host. */
 export function openBotThread(
-  { cwd, dataRoot, cli, integrations, hostServers, approveAll }: ThreadEnv,
+  env: ThreadEnv,
   bot: Bot,
   resume: boolean,
   hooks: ThreadHooks,
 ): Thread {
-  return new Thread({
-    cli,
-    cwd,
-    ...botContext(dataRoot, bot),
+  return openThread(env, bot, {
     resume,
     idleMs: 10 * 60_000,
-    approveAll,
-    integrations,
-    hostServers: () => hostServers(bot.id),
     log: (l) => console.error(l),
     onMemory: hooks.onMemory,
     delegate: {

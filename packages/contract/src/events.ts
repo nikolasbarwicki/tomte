@@ -30,6 +30,17 @@ export type ContextEvent = z.infer<typeof ContextEvent>;
 export const RunTrigger = z.enum(["schedule", "manual"]);
 export type RunTrigger = z.infer<typeof RunTrigger>;
 
+/** A2A task states. `completed`, `failed` and `canceled` are final; A2A `rejected` is folded into `failed`. */
+export const HandoffStatus = z.enum([
+  "submitted",
+  "working",
+  "input-required",
+  "completed",
+  "failed",
+  "canceled",
+]);
+export type HandoffStatus = z.infer<typeof HandoffStatus>;
+
 export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("user"), text: z.string(), mentions: Mentions.exactOptional() }),
   /** A user message sent while the bot was busy; it waits as pending until `dequeued`, then shows as `user` if it ran. */
@@ -78,7 +89,7 @@ export const ServerEvent = z.discriminatedUnion("type", [
     bot: z.string(),
     botId: z.string().exactOptional(),
     title: z.string(),
-    status: z.string(),
+    status: HandoffStatus,
     text: z.string(),
   }),
   z.object({

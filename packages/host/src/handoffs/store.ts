@@ -1,14 +1,8 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 
-/** A2A task states. `completed`, `failed` and `canceled` are final; A2A `rejected` is folded into `failed`. */
-export type HandoffStatus =
-  | "submitted"
-  | "working"
-  | "input-required"
-  | "completed"
-  | "failed"
-  | "canceled";
+import type { HandoffStatus } from "@claudebot/contract/events";
+
 type MessageKind = "brief" | "message" | "result" | "failure" | "cancel";
 
 export const FINAL_STATUSES: readonly HandoffStatus[] = ["completed", "failed", "canceled"];
