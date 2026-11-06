@@ -130,3 +130,26 @@
     @apply font-sans;
     }
 }
+
+/* A working bot's face draws itself, holds, then erases along the same line. Offsets stop just past the ends so the round caps never leave a dot. */
+@keyframes bot-avatar-draw {
+  0% { stroke-dashoffset: 1.02; }
+  45%, 60% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -1.02; }
+}
+
+@keyframes bot-avatar-breathe {
+  50% { opacity: 0.35; }
+}
+
+.bot-avatar-working path {
+  stroke-dasharray: 1 1.04;
+  animation: bot-avatar-draw 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bot-avatar-working path {
+    stroke-dasharray: none;
+    animation: bot-avatar-breathe 2s ease-in-out infinite;
+  }
+}

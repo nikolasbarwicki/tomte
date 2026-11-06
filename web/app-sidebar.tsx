@@ -24,23 +24,17 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import type { BotStatus, BotSummary, HostInfo, Notice } from "./events.ts";
 import { shortTime } from "./format.ts";
+import { BotAvatar } from "./bot-avatar.tsx";
 
 const STATUS_LABEL: Record<BotStatus, string> = { idle: "Idle", working: "Working", unseen: "New reply" };
 
-export function StatusDot({ status, className }: { status: BotStatus; className?: string }) {
+/** The bot's face; it animates while the bot works and carries a dot for an unseen reply. */
+function StatusAvatar({ bot, className }: { bot: BotSummary; className?: string }) {
   return (
-    <span
-      role="img"
-      aria-label={STATUS_LABEL[status]}
-      title={STATUS_LABEL[status]}
-      className={cn(
-        "inline-block size-2 shrink-0 rounded-full",
-        status === "idle" && "border border-muted-foreground/40",
-        status === "working" && "animate-pulse bg-primary",
-        status === "unseen" && "bg-blue-500",
-        className,
-      )}
-    />
+    <span role="img" aria-label={STATUS_LABEL[bot.status]} title={STATUS_LABEL[bot.status]} className={cn("relative shrink-0", className)}>
+      <BotAvatar avatar={bot.avatar} working={bot.status === "working"} className="size-8!" />
+      {bot.status === "unseen" && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-blue-500 ring-2 ring-sidebar" />}
+    </span>
   );
 }
 
@@ -100,7 +94,7 @@ export function AppSidebar({
                     title={b.purpose || undefined}
                     className="h-auto items-start gap-2.5 py-2"
                   >
-                    <StatusDot status={b.status} className="mt-1.5" />
+                    <StatusAvatar bot={b} />
                     <span className="grid min-w-0 flex-1 gap-0.5">
                       <span className="flex min-w-0 items-baseline gap-2">
                         <span className={cn("truncate", b.status === "unseen" && "font-semibold")}>{b.name}</span>

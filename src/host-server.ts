@@ -31,6 +31,7 @@ import { BROWSER_UI_PATHS, createBrowserUiRoutes } from "./browser/ui-routes.ts"
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./browser/runtime.ts";
 import { Thread, type TurnResult } from "./thread.ts";
 import { BROWSER_FILES_DIR, botContext, botFilesPath, botMemoryPath, createBot, currentSession, getBot, listBots, newSession, setBrowserEnabled, setBrowserHeaded, touchBot } from "./bots.ts";
+import { isFace, isStroke } from "../web/avatars.ts";
 import { readMemory, userMemoryPath } from "./memory.ts";
 import { watchHerdr } from "./herdr.ts";
 import { deleteFile, listFiles, resolveInside, reveal, watchFiles } from "./files.ts";
@@ -632,7 +633,10 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       }
       case "/api/bots/new": {
         if (!str("name").trim()) return json(res, { error: "name required" }, 400);
-        const bot = createBot(cwd, str("name"), str("purpose"));
+        const face = str("face");
+        const stroke = str("stroke");
+        if (!isFace(face) || !isStroke(stroke)) return json(res, { error: "unknown avatar face or stroke color" }, 400);
+        const bot = createBot(cwd, str("name"), str("purpose"), undefined, { face, stroke });
         await switchTo(bot);
         return json(res, bot);
       }

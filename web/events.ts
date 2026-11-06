@@ -1,3 +1,5 @@
+import type { BotAvatar } from "./avatars.ts";
+
 export type ServerEvent =
   | { type: "user"; text: string; mentions?: { id: string; name: string }[] }
   | { type: "text_start" }
@@ -37,7 +39,7 @@ export type ContextEvent = { type: "context"; tokens: number; max: number; perce
 export type BotBrowserSettings = { enabled: boolean; headed: boolean };
 
 /** A specialized agent: a chain of Claude Code sessions (`sessions`, newest last) plus its own memory. */
-export type Bot = { id: string; name: string; purpose: string; createdAt: number; lastActive: number; sessions: string[]; browser: BotBrowserSettings };
+export type Bot = { id: string; name: string; purpose: string; avatar: BotAvatar; createdAt: number; lastActive: number; sessions: string[]; browser: BotBrowserSettings };
 
 /** Newest message in a bot's chat transcript. */
 export type LastMessage = { from: "user" | "bot"; text: string; at: number };
