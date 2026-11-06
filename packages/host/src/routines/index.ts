@@ -89,7 +89,8 @@ export function runHeadless(
   let stopped: string | undefined;
   const done = (async () => {
     const ctx = botContext(dataRoot, bot);
-    const resume = !!(await getSessionInfo(ctx.sessionId, { dir: cwd }));
+    const resume =
+      ctx.sessionId !== undefined && !!(await getSessionInfo(ctx.sessionId, { dir: cwd }));
     if (stopped) throw new Error(stopped);
     thread = new Thread({
       cli,
@@ -239,7 +240,7 @@ export function createRoutines(deps: {
       trigger,
       scheduledFor,
       status: bot ? "running" : "failed",
-      sessionId: bot ? currentSession(bot) : null,
+      sessionId: bot ? (currentSession(bot) ?? null) : null,
       output: null,
       error: bot ? null : "bot no longer exists",
       startedAt,
@@ -362,7 +363,13 @@ export function createRoutines(deps: {
     update(id: string, patch: Partial<RoutineInput>): Routine {
       const old = require(id);
       const t = now();
-      const r: RoutineRecord = { ...old, ...patch, updatedAt: t };
+      const r: RoutineRecord = {
+        ...old,
+        ...patch,
+        active: patch.active ?? old.active,
+        catchUp: patch.catchUp ?? old.catchUp,
+        updatedAt: t,
+      };
       // Occurrences before an edit or while paused are not "missed": move the claim baseline to now.
       const rescheduled =
         patch.schedule !== undefined &&

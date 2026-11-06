@@ -78,12 +78,12 @@ export function createHumanWaits(o: HumanWaitsOptions): HumanWaits {
   return {
     request(botId, spec) {
       const id = randomUUID();
-      const card = {
-        type: "wait" as const,
+      const card: Pending["card"] = {
+        type: "wait",
         id,
         kind: spec.kind,
         title: spec.title,
-        detail: spec.detail,
+        ...(spec.detail !== undefined && { detail: spec.detail }),
         actions: spec.actions,
       };
       waits.set(id, { botId, spec, card });

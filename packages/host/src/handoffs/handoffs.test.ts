@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
+import { defined } from "../testing/defined.ts";
 import { startHandoffHost, parse, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
@@ -160,7 +161,7 @@ describe("bot sessions", () => {
     expect((await host.ui("/api/send", { text: "hello" })).status).toBe(200);
     await host.until(() => host.launches().length === 1);
 
-    const [launch] = host.launches();
+    const launch = defined(host.launches()[0], "launch");
     expect(launch.appendSystemPrompt).toContain("## Other bots");
     expect(launch.appendSystemPrompt).toContain(
       "goal, context, constraints, deliverable, and done when",
@@ -172,7 +173,7 @@ describe("bot sessions", () => {
       ["bots", "list_bots", {}],
       ["browser", "browser_open", { url: "https://example.com" }],
     ] as const) {
-      const s = launch.mcpServers[name];
+      const s = defined(launch.mcpServers[name], name);
       const client = new Client({ name: "test", version: "1.0.0" });
       await client.connect(
         new StreamableHTTPClientTransport(new URL(s.url), { requestInit: { headers: s.headers } }),

@@ -10,7 +10,7 @@ export interface TakeoverOptions {
   /** Sends a host message into the bot's session (queued while it is busy). */
   deliver(botId: string, text: string): void;
   /** Control ends after this long without input. Default 30 minutes. */
-  inactivityMs?: number;
+  inactivityMs?: number | undefined;
 }
 
 interface Control {

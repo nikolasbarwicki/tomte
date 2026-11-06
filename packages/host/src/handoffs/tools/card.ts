@@ -29,10 +29,10 @@ export function sentCardsFromTool(
         type: "handoff",
         direction: "sent",
         bot: name(input.to),
-        botId: input.to,
-        title: input.title,
+        ...(input.to !== undefined && { botId: input.to }),
+        title: input.title ?? "",
         status: "submitted",
-        text: input.brief,
+        text: input.brief ?? "",
       },
     ];
   const h = input.handoff_id ? deps.handoffs.get(input.handoff_id) : undefined;
@@ -56,18 +56,20 @@ export function sentCardsFromTool(
         deps.handoffs
           .messages(h.id)
           .filter((m) => m.kind === "result")
-          .at(-1)?.text ?? input.result,
+          .at(-1)?.text ??
+          input.result ??
+          "",
       );
     case "mcp__bots__fail_handoff":
-      return card(h.requesterId, "failed", input.reason);
+      return card(h.requesterId, "failed", input.reason ?? "");
     case "mcp__bots__cancel_handoff":
-      return card(h.assigneeId, "canceled", input.reason);
+      return card(h.assigneeId, "canceled", input.reason ?? "");
     case "mcp__bots__handoff_message": {
       const asAssignee = ownerId === h.assigneeId;
       return card(
         asAssignee ? h.requesterId : h.assigneeId,
         asAssignee ? "input-required" : "working",
-        input.text,
+        input.text ?? "",
       );
     }
     default:

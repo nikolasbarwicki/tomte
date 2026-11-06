@@ -46,7 +46,7 @@ export type SessionIntegrations = {
   /** Policy of an integration tool by its `mcp__<server>__<tool>` name; undefined when no integration owns it. */
   policyOf(toolName: string): ToolPolicy | undefined;
   /** Epoch ms after which this configuration must be rebuilt. */
-  expiresAt?: number;
+  expiresAt?: number | undefined;
 };
 
 /** What a thread needs from the integrations module. */
@@ -83,7 +83,7 @@ const EXPIRY_MARGIN_MS = 5 * 60_000;
 type OAuthSecret = {
   client?: OAuthClientInformationMixed;
   tokens?: OAuthTokens;
-  expiresAt?: number;
+  expiresAt?: number | undefined;
 };
 type Secret = { token?: string; env?: Record<string, string>; oauth?: OAuthSecret };
 
@@ -272,12 +272,13 @@ export function createIntegrations(deps: {
   const info = (c: CatalogEntry): CatalogInfo => ({
     category: c.category,
     tagline: c.tagline,
-    icon: c.icon,
+    ...(c.icon !== undefined && { icon: c.icon }),
     examples: c.examples,
-    skillsRepo: c.skillsRepo,
+    ...(c.skillsRepo !== undefined && { skillsRepo: c.skillsRepo }),
   });
   const view = (r: IntegrationRecord): Integration => {
     const entry = catalog.find((c) => c.id === r.catalogId);
+    const skillsError = skillsErrors.get(r.id);
     return {
       ...r,
       catalog: entry ? info(entry) : null,
@@ -285,7 +286,7 @@ export function createIntegrations(deps: {
       label: entry?.label ?? r.name,
       tools: store.tools(db, r.id),
       skills: store.skills(db, r.id),
-      skillsError: skillsErrors.get(r.id),
+      ...(skillsError !== undefined && { skillsError }),
     };
   };
 
@@ -382,7 +383,9 @@ export function createIntegrations(deps: {
   const pending = new Map<string, { id: string; provider: OAuthState; at: number }>();
 
   /** The bearer credential to present: a stored token, or an OAuth access token refreshed when it is about to expire. */
-  async function readToken(id: string): Promise<{ token?: string; expiresAt?: number }> {
+  async function readToken(
+    id: string,
+  ): Promise<{ token?: string; expiresAt?: number | undefined }> {
     const s = await readSecret(id);
     if (s.token) return { token: s.token };
     const o = s.oauth;
@@ -483,7 +486,7 @@ export function createIntegrations(deps: {
     try {
       result = await mcpAuth(provider, {
         serverUrl: remoteUrl(r.transport),
-        scope: ownClient?.scope,
+        ...(ownClient?.scope !== undefined && { scope: ownClient.scope }),
       });
     } catch (e) {
       throw new InvalidInput(`could not start sign-in: ${(e as Error).message}`);

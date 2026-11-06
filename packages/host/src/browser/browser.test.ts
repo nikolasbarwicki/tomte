@@ -13,6 +13,7 @@ import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
+import { defined } from "../testing/defined.ts";
 import type { SandboxStatus } from "./sandbox.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
@@ -93,7 +94,7 @@ const newBot = (name = "bot") => createBot(cwd, name).id;
 /** What a harness does: lease the endpoint for a bot session, then connect an MCP client with its token. */
 async function connect(botId: string) {
   const lease = server.browser.lease(botId);
-  const [s] = lease.servers;
+  const s = defined(lease.servers[0], "server");
   const client = new Client({ name: "test", version: "1.0.0" });
   await client.connect(
     new StreamableHTTPClientTransport(new URL(s.url), {
@@ -115,7 +116,8 @@ const post = (url: string, headers: Record<string, string>) =>
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
   });
 
-const text = (r: unknown) => (r as { content: { text: string }[] }).content[0].text;
+const text = (r: unknown) =>
+  defined((r as { content: { text: string }[] }).content[0], "content").text;
 
 describe("switch", () => {
   test("a bot with the switch off gets no browser server", async () => {
@@ -286,7 +288,9 @@ describe("tools", () => {
     expect(text(r)).toContain("Example Domain");
     expect(text(r)).toContain('link "Learn more" [ref=r1.e2]');
 
-    const [open, snapshot] = calls();
+    const [first, second] = calls();
+    const open = defined(first, "open call");
+    const snapshot = defined(second, "snapshot call");
     const session = `claudebot-${id}`;
     for (const c of [open, snapshot]) {
       expect(c.argv).toContain("--json");
@@ -401,9 +405,9 @@ describe("runtime lifecycle", () => {
     const closes = calls()
       .slice(before)
       .filter((c) => c.argv.includes("close"));
-    expect(closes.map((c) => c.argv[c.argv.indexOf("--session") + 1]).sort()).toEqual(
-      [`claudebot-${a}`, `claudebot-${b}`].sort(),
-    );
+    expect(
+      closes.map((c) => defined(c.argv[c.argv.indexOf("--session") + 1], "session")).sort(),
+    ).toEqual([`claudebot-${a}`, `claudebot-${b}`].sort());
   });
 });
 

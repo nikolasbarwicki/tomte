@@ -35,7 +35,7 @@ export interface BrowserRuntimeOptions {
   /** Whether a bot's browser shows its window; read at every engine launch. */
   headed?: (botId: string) => boolean;
   /** How long a second call waits for the bot's lane before failing. Default 30 s. */
-  laneWaitMs?: number;
+  laneWaitMs?: number | undefined;
   /** A browser unused this long is closed, keeping saved logins. Default 10 minutes. */
   idleMs?: number;
   /** Time the engine gets to close the browser before its processes are killed. Default 10 s. */
@@ -92,7 +92,7 @@ interface BotState {
   restarts: number;
   notices: string[];
   /** Daemon and Chrome pids at the last call; a change means the browser went away and came back. */
-  fingerprint?: string;
+  fingerprint?: string | undefined;
   restoreWarned: boolean;
   /** The user holds the browser; bot calls are refused. */
   held: boolean;

@@ -25,6 +25,7 @@ import { acquireDataRootLock, type DataRootLock } from "../platform/data-root-lo
 import { migrate, openDb } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
+import { defined } from "./defined.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "fake-agent-browser.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "fake-claude.ts");
@@ -130,7 +131,7 @@ export async function startHandoffHost(hostFlags: string[] = []): Promise<Handof
     createBot: (name, purpose) => createBot(config.dataRoot, name, purpose).id,
     async actAs(botId) {
       const lease = server.bots.lease(botId);
-      const [s] = lease.servers;
+      const s = defined(lease.servers[0], "server");
       const client = new Client({ name: "test", version: "1.0.0" });
       await client.connect(
         new StreamableHTTPClientTransport(new URL(s.url), {

@@ -135,7 +135,7 @@ async function phaseResume(cwd: string, sessionId: string) {
 function runPhase(phase: string, cwd: string, sessionId: string) {
   const r = spawnSync(
     process.execPath,
-    [...process.execArgv, process.argv[1], phase, cwd, sessionId],
+    [...process.execArgv, ...process.argv.slice(1, 2), phase, cwd, sessionId],
     { stdio: "inherit", env: { ...process.env, CLAUDEBOT_DATA_ROOT: config.dataRoot } },
   );
   if (r.status !== 0) {
@@ -176,7 +176,8 @@ async function chat(botArg?: string) {
         : { behavior: "deny", message: "user declined" };
     },
   };
-  const resume = !!(await getSessionInfo(currentSession(bot), { dir: cwd }));
+  const current = currentSession(bot);
+  const resume = current !== undefined && !!(await getSessionInfo(current, { dir: cwd }));
   const open = (resume: boolean) =>
     new Thread({
       cli,
@@ -234,12 +235,14 @@ const [cmd, a1, a2] = parsed.positionals;
 try {
   switch (cmd) {
     case "create":
+      if (!a1 || !a2) throw new Error("usage: create <cwd> <sessionId>");
       await phaseCreate(a1, a2);
       break;
     case "chat":
       await chat(a1);
       break;
     case "resume":
+      if (!a1 || !a2) throw new Error("usage: resume <cwd> <sessionId>");
       await phaseResume(a1, a2);
       break;
     case "install-cli":

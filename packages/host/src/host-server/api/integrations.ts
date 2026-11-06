@@ -13,17 +13,17 @@ const CustomIntegration = z.discriminatedUnion("transport", [
     name: z.string().trim(),
     url: z.string().trim(),
     transport: z.enum(["http", "sse"]),
-    token: z.string().optional(),
-    oauth: z.boolean().optional(),
-    skillsDir: z.string().optional(),
+    token: z.string().exactOptional(),
+    oauth: z.boolean().exactOptional(),
+    skillsDir: z.string().exactOptional(),
   }),
   z.object({
     name: z.string().trim(),
     transport: z.literal("stdio"),
     command: z.string(),
-    args: z.array(z.string()).optional(),
-    env: z.record(z.string(), z.string()).optional(),
-    skillsDir: z.string().optional(),
+    args: z.array(z.string()).exactOptional(),
+    env: z.record(z.string(), z.string()).exactOptional(),
+    skillsDir: z.string().exactOptional(),
   }),
 ]);
 
@@ -109,9 +109,11 @@ export async function oauthCallback(
   q: URLSearchParams,
 ) {
   try {
+    const code = q.get("code");
+    const error = q.get("error");
     const i = await integrations.finishOAuth(q.get("state") ?? "", {
-      code: q.get("code") ?? undefined,
-      error: q.get("error") ?? undefined,
+      ...(code !== null && { code }),
+      ...(error !== null && { error }),
     });
     if (i.state !== "connected") return page(res, 400, `Could not connect ${i.label}: ${i.error}`);
     page(res, 200, "Connected. You can close this tab.");

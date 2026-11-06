@@ -220,6 +220,7 @@ export function createBrowserLogin(deps: BrowserLoginDeps): BrowserLogin {
           reason: `several stored credentials are called "${label}"; ask the user to rename one`,
         };
       const [entry] = matches;
+      if (!entry) throw new Error("unreachable: exactly one credential matched");
       if (!deps.credentials.hasGrant(botId, entry.id)) {
         if (asking.has(`${botId}\n${entry.id}`))
           return {

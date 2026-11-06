@@ -68,9 +68,14 @@ import { kTokens } from "./format.ts";
 import { bindMentions } from "./mentions.ts";
 
 export type Item =
-  | { kind: "user"; text: string; mentions?: { id: string; name: string }[] }
+  | { kind: "user"; text: string; mentions?: { id: string; name: string }[] | undefined }
   /** A message sent while the bot was busy; shown below the live thread until it runs or is cancelled. */
-  | { kind: "queued"; id: string; text: string; mentions?: { id: string; name: string }[] }
+  | {
+      kind: "queued";
+      id: string;
+      text: string;
+      mentions?: { id: string; name: string }[] | undefined;
+    }
   | { kind: "assistant" | "error" | "info" | "update"; text: string }
   | { kind: "tool"; name: string; input: string }
   | { kind: "ask"; id: string; question: string; answer?: string }
@@ -80,7 +85,7 @@ export type Item =
       id: string;
       waitKind: string;
       title: string;
-      detail?: string;
+      detail?: string | undefined;
       actions: WaitAction[];
       resolved?: string;
     }
@@ -90,7 +95,7 @@ export type Item =
       kind: "handoff";
       direction: "sent" | "received";
       bot: string;
-      botId?: string;
+      botId?: string | undefined;
       title: string;
       status: string;
       text: string;
@@ -382,7 +387,7 @@ function UserMessage({
   queuedId,
 }: {
   text: string;
-  mentions?: { id: string; name: string }[];
+  mentions?: { id: string; name: string }[] | undefined;
   bots: BotSummary[];
   queuedId?: string;
 }) {

@@ -289,7 +289,7 @@ function RoutineForm({
   onDone,
 }: {
   botId: string;
-  routine?: Routine;
+  routine?: Routine | undefined;
   onDone: () => void;
 }) {
   const initial: Preset = routine

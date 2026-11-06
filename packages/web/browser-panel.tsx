@@ -34,7 +34,7 @@ import { confirmAction } from "./confirm.tsx";
 type Tab = Extract<LiveMessage, { type: "tabs" }>["tabs"][number];
 interface Live {
   live: boolean;
-  frame?: string;
+  frame?: string | undefined;
   /** Size of the page in the frame, which input coordinates refer to. */
   size?: { width: number; height: number };
   url?: string;

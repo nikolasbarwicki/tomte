@@ -225,7 +225,13 @@ function CredentialCard({
   );
 }
 
-function CredentialForm({ entry, onDone }: { entry?: CredentialEntry; onDone: () => void }) {
+function CredentialForm({
+  entry,
+  onDone,
+}: {
+  entry?: CredentialEntry | undefined;
+  onDone: () => void;
+}) {
   const [label, setLabel] = useState(entry?.label ?? "");
   const [signInUrl, setSignInUrl] = useState(entry?.signInUrl ?? "");
   const [username, setUsername] = useState(entry?.username ?? "");

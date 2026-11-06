@@ -50,12 +50,19 @@ export const STROKE_NAMES = Object.keys(STROKES) as Stroke[];
 export const isFace = (s: string): s is Face => Object.hasOwn(FACES, s);
 export const isStroke = (s: string): s is Stroke => Object.hasOwn(STROKES, s);
 
+/** The name at `i` wrapped into range; the name lists are non-empty constants, so a miss is a programming error. */
+export function nameAt<T extends string>(names: readonly T[], i: number): T {
+  const name = names[i % names.length];
+  if (name === undefined) throw new RangeError("nameAt: empty name list");
+  return name;
+}
+
 /** A stable avatar derived from the bot id, for bots created before avatars existed. */
 export function defaultAvatar(id: string): BotAvatar {
   let h = 0;
   for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return {
-    face: FACE_NAMES[h % FACE_NAMES.length],
-    stroke: STROKE_NAMES[(h >>> 8) % STROKE_NAMES.length],
+    face: nameAt(FACE_NAMES, h),
+    stroke: nameAt(STROKE_NAMES, h >>> 8),
   };
 }

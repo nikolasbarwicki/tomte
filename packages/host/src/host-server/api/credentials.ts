@@ -22,7 +22,7 @@ export async function credentialApi(
         };
       case "/api/credentials/update": {
         const { id, ...f } = Id.extend(CredentialFields.shape)
-          .extend({ password: z.string().optional() })
+          .extend({ password: z.string().exactOptional() })
           .parse(b);
         return { status: 200, body: await creds.update(id, f) };
       }

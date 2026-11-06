@@ -41,7 +41,7 @@ function outline(content: string): string {
     const snap = /^(\s*)- heading "(.*?)"(?:.*?level=(\d))?/.exec(line);
     const md = /^(#{1,6})\s+(.+)$/.exec(line);
     if (snap) lines.push(`${"  ".repeat(Math.max(0, Number(snap[3] ?? 1) - 1))}${snap[2]}`);
-    else if (md) lines.push(`${"  ".repeat(md[1].length - 1)}${md[2]}`);
+    else if (md) lines.push(`${"  ".repeat((md[1]?.length ?? 1) - 1)}${md[2]}`);
   }
   const text = lines.join("\n");
   return text.length > OUTLINE_CHARS

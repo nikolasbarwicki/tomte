@@ -84,7 +84,7 @@ export async function installManagedCli(dataRoot: string, version = "latest"): P
     version: string;
     dist: { tarball: string; integrity: string };
   };
-  const [algo, expected] = [
+  const [algo = "", expected] = [
     meta.dist.integrity.split("-")[0],
     meta.dist.integrity.slice(meta.dist.integrity.indexOf("-") + 1),
   ];

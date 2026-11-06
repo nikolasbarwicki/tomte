@@ -24,9 +24,9 @@ export interface EngineLaunch {
   /** The host egress proxy URL; every launch goes through it and Chrome may not bypass it for loopback. */
   proxy: string;
   /** Extra environment for the engine process (tests, host-chosen settings). */
-  env?: Record<string, string>;
+  env?: Record<string, string> | undefined;
   /** Show the browser window. Only takes effect when the engine launches the browser. */
-  headed?: boolean;
+  headed?: boolean | undefined;
 }
 
 /** The engine shuts its own daemon down after this much inactivity; a backstop behind the host's idle close. */

@@ -22,6 +22,7 @@ import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { hostOrigin, parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
+import { defined } from "../testing/defined.ts";
 import { removeBotBrowser } from "./cleanup.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
 import { createBrowserEndpoint } from "./endpoint.ts";
@@ -289,7 +290,9 @@ describe("headed", () => {
     await browser.call(["open", "https://a.test"]);
     headed = true;
     await browser.call(["snapshot"]);
-    const [first, second] = calls();
+    const [c1, c2] = calls();
+    const first = defined(c1, "first call");
+    const second = defined(c2, "second call");
     expect(first.argv).not.toContain("--headed");
     expect(second.argv).toContain("--headed");
     for (const c of [first, second])
@@ -357,7 +360,7 @@ describe("sign out and bot deletion", () => {
       }),
       unattended: () => false,
     });
-    const token = endpoint.lease(BOT).servers[0].token;
+    const token = defined(endpoint.lease(BOT).servers[0], "server").token;
     const rejected = () => fetch(`http://127.0.0.1:1/x`).catch(() => undefined);
     await rt.forBot(BOT).call(["open", "https://a.test"]);
     saveState();
@@ -372,7 +375,7 @@ describe("sign out and bot deletion", () => {
     expect(closedSessions()).toEqual([sessionName(BOT)]);
     expect(existsSync(statePath())).toBe(false);
     expect(credentials.hasGrant(BOT, entry.id)).toBe(false);
-    expect(endpoint.lease(BOT).servers[0].token).not.toBe(token);
+    expect(defined(endpoint.lease(BOT).servers[0], "server").token).not.toBe(token);
     expect(await rejected()).toBeUndefined();
   });
 });
@@ -406,7 +409,7 @@ describe("host routes and tool results", () => {
   async function enabledBot() {
     const bot = createBot(cwd, "bot");
     expect((await api("/api/bots/browser", { botId: bot.id, enabled: true })).status).toBe(200);
-    const [s] = server.browser.lease(bot.id).servers;
+    const s = defined(server.browser.lease(bot.id).servers[0], "server");
     const client = new Client({ name: "test", version: "1.0.0" });
     await client.connect(
       new StreamableHTTPClientTransport(new URL(s.url), {
