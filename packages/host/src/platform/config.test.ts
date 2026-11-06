@@ -64,6 +64,7 @@ describe("flags and environment", () => {
       CLAUDEBOT_PORT: "8080",
       CLAUDEBOT_PUBLIC_URL: "https://claudebot.example.com",
       CLAUDEBOT_HERDR: "1",
+      CLAUDEBOT_ASK_APPROVAL: "1",
       CLAUDEBOT_VITE: "true",
       CLAUDEBOT_DATA_ROOT: "/srv/claudebot",
     });
@@ -73,6 +74,7 @@ describe("flags and environment", () => {
       publicUrl: "https://claudebot.example.com",
       herdr: true,
       vite: true,
+      askApproval: true,
       dataRoot: "/srv/claudebot",
     });
   });
@@ -240,8 +242,17 @@ describe("invalid input", () => {
     expect(() => parse(argv)).toThrow(message);
   });
 
-  test("rejects a boolean environment variable that is not 1, true, 0 or false", () => {
-    expect(() => parse([], { CLAUDEBOT_HERDR: "yes" })).toThrow("CLAUDEBOT_HERDR");
+  test.each([["CLAUDEBOT_HERDR"], ["CLAUDEBOT_VITE"], ["CLAUDEBOT_ASK_APPROVAL"]])(
+    "rejects %s set to a value that is not 1, true, 0 or false",
+    (name) => {
+      expect(() => parse([], { [name]: "yes" })).toThrow(InvalidConfig);
+      expect(() => parse([], { [name]: "yes" })).toThrow(name);
+    },
+  );
+
+  test("tool approval is off unless CLAUDEBOT_ASK_APPROVAL turns it on", () => {
+    expect(parse().config.askApproval).toBe(false);
+    expect(parse([], { CLAUDEBOT_ASK_APPROVAL: "true" }).config.askApproval).toBe(true);
   });
 
   test("the error for a public URL does not echo a password", () => {

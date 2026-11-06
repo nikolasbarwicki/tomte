@@ -83,6 +83,7 @@ export function runHeadless(
   cli: ResolvedCli,
   integrations: IntegrationsSource,
   hostServers: HostServersSource,
+  approveAll: boolean,
   { bot, routine, prompt }: RoutineJob,
 ): ReturnType<Executor> {
   let thread: Thread | undefined;
@@ -97,7 +98,7 @@ export function runHeadless(
       cwd,
       ...ctx,
       resume,
-      approveAll: process.env.CLAUDEBOT_ASK_APPROVAL !== "1",
+      approveAll,
       integrations,
       hostServers: () => hostServers(bot.id),
       delegate: headlessDelegate,
