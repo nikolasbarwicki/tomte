@@ -17,3 +17,5 @@
 - **Assignee**: the bot a handoff is given to; it does the work in its own session.
 - **Brief**: the self-contained instructions in a handoff (goal, context, constraints, deliverable, done criteria); the assignee sees nothing else of the requester's conversation.
 - **Agent card**: a bot's public description for other bots (id, name, purpose, status), as listed by `list_bots`.
+- **Contract**: the types and data `src/` shares with `web/` (server events, avatars), kept in `src/contract/`; it imports nothing else local.
+- **Composition root**: `src/host-server/index.ts`, the one place that constructs the features, passes each its collaborators, and starts and stops them.

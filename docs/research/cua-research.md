@@ -228,11 +228,11 @@ flowchart LR
 ```
 
 **Reuse from the browser feature:**
-- `HostServersSource` / `HostServerLease` in `src/harness.ts`: the computer endpoint is one more server in the lease.
+- `HostServersSource` / `HostServerLease` in `src/harness/index.ts`: the computer endpoint is one more server in the lease.
 - Per-session bearer tokens, Host/Origin checks, same-origin guard (`src/browser/ui-guard.ts`).
 - `src/browser/human-waits.ts` and `takeover.ts`: "Needs you" card, I'm done / Skip, 30-minute auto-skip.
 - `src/browser/lane.ts` (one call at a time) and the routines rule (no takeover unattended).
-- The `LiveMessage` frame shape (`web/events.ts`) the UI already renders.
+- The `LiveMessage` frame shape (`src/contract/events.ts`) the UI already renders.
 - The install-command pattern: pinned version plus SHA-256 in claudebot's source.
 
 **Bot tools:**

@@ -17,7 +17,7 @@ The current claudebot screen is `web/integrations.tsx`: a responsive grid of `In
   - `Disconnect` (when connected) deletes the stored secret and keeps tool settings.
   - `Remove` (custom servers only) deletes the tool settings.
 
-The catalog (`src/integrations-catalog.ts`) has 5 entries: Gmail, Linear, GitHub, PostHog, Cloudflare.
+The catalog (`src/integrations/catalog.ts`) has 5 entries: Gmail, Linear, GitHub, PostHog, Cloudflare.
 
 ## 1. What's in the screenshots
 
@@ -224,7 +224,7 @@ No server API changes are needed for the list/detail split. Every existing actio
 
 ### 4.6 Out of scope for this rebuild
 
-- Multi-account per service. Both competitors have it. Here it collides with `integrations.name UNIQUE` as the MCP server name (`src/db.ts`) and needs a naming scheme like `gmail_work`. Decide separately.
+- Multi-account per service. Both competitors have it. Here it collides with `integrations.name UNIQUE` as the MCP server name (`src/platform/db.ts`) and needs a naming scheme like `gmail_work`. Decide separately.
 - Category chips, Recommended, Share/Copy link.
 - Per-bot integration access. It's not on the roadmap. If wanted, reuse the Credentials screen's per-bot grant pattern rather than invent one; this needs `session()` to take a bot id.
 
@@ -242,4 +242,4 @@ The screen now lives in `web/integrations/`: `screen.tsx` switches between `list
 2. Account identity ships later. No "Signed in" placeholder.
 3. Try it shipped: `CatalogEntry.examples` fill the open (or most recent) bot's composer without sending.
 4. Paused shows only for a connected integration. A paused integration that has failed or lost its sign-in still shows that state.
-5. Logos are Simple Icons paths (CC0) in `src/integration-icons.ts`, referenced by `CatalogEntry.icon`. The unused `CatalogEntry.note` was removed.
+5. Logos are Simple Icons paths (CC0) in `src/integrations/icons.ts`, referenced by `CatalogEntry.icon`. The unused `CatalogEntry.note` was removed.

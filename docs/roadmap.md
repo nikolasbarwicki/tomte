@@ -27,7 +27,7 @@ Items 1 and 2 come first because they extend the safety advantage into unattende
 
 ## 1. Approvals that park an unattended run
 
-**Problem.** In `src/thread.ts`, `canUseTool` sends `ask`-policy integration tools to `delegate.approve` before it checks `approveAll`. `headlessDelegate.approve` in `src/routines.ts` always denies. `ask` is the default policy (`src/integrations.ts`), so a scheduled run cannot use any tool the user left at its default. A routine that must send an email fails.
+**Problem.** In `src/bots/thread.ts`, `canUseTool` sends `ask`-policy integration tools to `delegate.approve` before it checks `approveAll`. `headlessDelegate.approve` in `src/routines/index.ts` always denies. `ask` is the default policy (`src/integrations/index.ts`), so a scheduled run cannot use any tool the user left at its default. A routine that must send an email fails.
 
 **Competitors.** Rerun: coworkers stop before consequential actions, any teammate can answer, the run resumes where it stopped, and rules can answer on the user's behalf. Rakazo: Never ask / Auto / Ask modes with Allow and Block lists that grow from approval cards; a blocked action is refused without a card.
 
@@ -45,7 +45,7 @@ Items 1 and 2 come first because they extend the safety advantage into unattende
 
 ## 2. Event triggers
 
-**Problem.** `RunTrigger` is `schedule | manual` (`web/events.ts`). Rerun, Rakazo and MausBot list webhooks and app-event triggers.
+**Problem.** `RunTrigger` is `schedule | manual` (`src/contract/events.ts`). Rerun, Rakazo and MausBot list webhooks and app-event triggers.
 
 Research and plan: [`research/webhook-research.md`](research/webhook-research.md).
 
@@ -56,7 +56,7 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 
 **Decisions needed.**
 - The host binds to `127.0.0.1`. A webhook needs a tunnel or relay. Pick one before building (documented tunnel recipe vs. a hosted relay). Tied to item 5.
-- Dedupe and replay: a webhook fired twice must not run twice. `fire()` cannot be reused for this: `claimOccurrence` in `src/routines-store.ts` dedupes on the schedule timestamp (`last_scheduled_for`), and a webhook has none. Needs its own key, for example a per-request id or a hash of the payload with a short window, stored with the run, and a decision on what a sender that cannot supply an id gets.
+- Dedupe and replay: a webhook fired twice must not run twice. `fire()` cannot be reused for this: `claimOccurrence` in `src/routines/store.ts` dedupes on the schedule timestamp (`last_scheduled_for`), and a webhook has none. Needs its own key, for example a per-request id or a hash of the payload with a short window, stored with the run, and a decision on what a sender that cannot supply an id gets.
 
 **Done when.** `curl` on the routine's URL starts a headless run with the payload visible to the bot, and a write inside it parks for approval.
 
@@ -75,7 +75,7 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 
 ## 4. Second harness and model choice
 
-**Problem.** Claude Code is the only harness. `Harness` in `src/harness.ts` is the seam; the handoff endpoint is already harness-neutral. Every competitor offers several providers; OpenBot also moves a bot to a backup provider on a plan limit.
+**Problem.** Claude Code is the only harness. `Harness` in `src/harness/index.ts` is the seam; the handoff endpoint is already harness-neutral. Every competitor offers several providers; OpenBot also moves a bot to a backup provider on a plan limit.
 
 **Plan.**
 - Implement a Codex harness behind the existing `Harness` interface.
@@ -111,11 +111,11 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 - The transcript shows queued messages dimmed below the working marker, with a Cancel button. A reconnecting page and `reload()` both replay or carry them.
 - Mentions resolve at send time; the entry stores the resolved text for the bot and the typed text for the page.
 
-**Open.** "Steer", which pushes into the live SDK `Inbox` in `src/thread.ts` mid-turn, and "pause". Both need SDK behaviour checked first.
+**Open.** "Steer", which pushes into the live SDK `Inbox` in `src/bots/thread.ts` mid-turn, and "pause". Both need SDK behaviour checked first.
 
 ### 6b. Bot templates
 
-**Problem.** The create form (`NewBot` in `web/main.tsx`) takes a name and a free-text purpose. `createBot` in `src/bots.ts` stores only these; `memory.md` starts empty. A new user faces a blank box.
+**Problem.** The create form (`NewBot` in `web/main.tsx`) takes a name and a free-text purpose. `createBot` in `src/bots/index.ts` stores only these; `memory.md` starts empty. A new user faces a blank box.
 
 **Plan.**
 - A static template list in the web bundle: name, purpose, memory seed, suggested integrations. Start with Inbox Manager, Coding Agent, Researcher.
@@ -153,10 +153,10 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 
 ### 6e. Bigger catalog (shipped; Composio spike open)
 
-**Problem.** `CatalogEntry` in `src/integrations-catalog.ts` is data-only, so each new service is an entry, not code. The list was short; it now has 30 entries, and the open work is the Composio spike below. Google service setup for a public release: [`research/google-oauth-research.md`](research/google-oauth-research.md).
+**Problem.** `CatalogEntry` in `src/integrations/catalog.ts` is data-only, so each new service is an entry, not code. The list was short; it now has 30 entries, and the open work is the Composio spike below. Google service setup for a public release: [`research/google-oauth-research.md`](research/google-oauth-research.md).
 
 **Plan.**
-- **Shipped.** 30 catalog entries in `src/integrations-catalog.ts` (commit `5c61276`), plus 4 services (Figma, Trello, Obsidian, Paper) as custom-server recipes in [`custom-integrations.md`](custom-integrations.md). Spec: [`.scratch/integrations-catalog/spec.md`](../.scratch/integrations-catalog/spec.md). Live sign-in checks: [`.scratch/integrations-catalog/live-checklist.md`](../.scratch/integrations-catalog/live-checklist.md). Per-service research: [`research/integrations/`](research/integrations/).
+- **Shipped.** 30 catalog entries in `src/integrations/catalog.ts` (commit `5c61276`), plus 4 services (Figma, Trello, Obsidian, Paper) as custom-server recipes in [`custom-integrations.md`](custom-integrations.md). Spec: [`.scratch/integrations-catalog/spec.md`](../.scratch/integrations-catalog/spec.md). Live sign-in checks: [`.scratch/integrations-catalog/live-checklist.md`](../.scratch/integrations-catalog/live-checklist.md). Per-service research: [`research/integrations/`](research/integrations/).
 - Spike Composio's MCP endpoint against the existing OAuth and bearer flows. If it fits, one entry covers thousands of apps; if its auth model needs a new code path, drop it. Unverified until tried.
 
 **Done when.** Each new entry connects from the UI and one read and one write tool works from a bot, the write asking for approval.
