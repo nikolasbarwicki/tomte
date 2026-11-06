@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { userMemoryPath, type MemoryPaths } from "./memory.ts";
+import { defaultAvatar, type BotAvatar } from "../web/avatars.ts";
 import type { Bot } from "../web/events.ts";
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -34,6 +35,7 @@ export function getBot(cwd: string, id: string): Bot | undefined {
   bot.sessions ??= [bot.id];
   bot.browser ??= { enabled: false, headed: false };
   bot.browser.headed ??= false;
+  bot.avatar ??= defaultAvatar(bot.id);
   return bot;
 }
 
@@ -47,9 +49,9 @@ export function listBots(cwd: string): Bot[] {
 }
 
 /** The bot's id doubles as its first Claude Code session id. */
-export function createBot(cwd: string, name: string, purpose = "", id: string = randomUUID()): Bot {
+export function createBot(cwd: string, name: string, purpose = "", id: string = randomUUID(), avatar: BotAvatar = defaultAvatar(id)): Bot {
   const now = Date.now();
-  const bot: Bot = { id, name: name.trim(), purpose: purpose.trim(), createdAt: now, lastActive: now, sessions: [id], browser: { enabled: false, headed: false } };
+  const bot: Bot = { id, name: name.trim(), purpose: purpose.trim(), avatar, createdAt: now, lastActive: now, sessions: [id], browser: { enabled: false, headed: false } };
   save(cwd, bot);
   return bot;
 }

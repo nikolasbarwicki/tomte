@@ -15,7 +15,7 @@ import { CATALOG, type CatalogEntry } from "./integrations-catalog.ts";
 import { buildPlugin, gitClone, scanSkills, type GitClone } from "./integration-skills.ts";
 import * as store from "./integrations-store.ts";
 import type { DiscoveredTool, IntegrationRecord } from "./integrations-store.ts";
-import type { Integration, IntegrationAuth, IntegrationTransport, ToolPolicy } from "../web/events.ts";
+import type { CatalogInfo, Integration, IntegrationAuth, IntegrationTransport, OwnClient, ToolPolicy } from "../web/events.ts";
 
 export type { ToolPolicy };
 export type ServerName = string & { readonly __brand: "ServerName" };
@@ -63,6 +63,14 @@ const EXPIRY_MARGIN_MS = 5 * 60_000;
 type OAuthSecret = { client?: OAuthClientInformationMixed; tokens?: OAuthTokens; expiresAt?: number };
 type Secret = { token?: string; env?: Record<string, string>; oauth?: OAuthSecret };
 
+/** Google issues a refresh token only when asked for offline access, and re-issues one only on a fresh consent. */
+export function withOfflineAccess(u: URL): URL {
+  if (u.host !== "accounts.google.com") return u;
+  u.searchParams.set("access_type", "offline");
+  u.searchParams.set("prompt", "consent");
+  return u;
+}
+
 /** Holds one sign-in's state in memory; `persist` runs after every token save, and is absent while a sign-in is pending. */
 class OAuthState implements OAuthClientProvider {
   authorizeUrl?: URL;
@@ -89,7 +97,7 @@ class OAuthState implements OAuthClientProvider {
     await this.persist?.(this.secret);
   }
   redirectToAuthorization(u: URL) {
-    this.authorizeUrl = u;
+    this.authorizeUrl = withOfflineAccess(u);
   }
   saveCodeVerifier(v: string) {
     this.verifier = v;
@@ -193,10 +201,37 @@ export function createIntegrations(deps: {
   const clonesDir = join(deps.hostDir, "skills");
   const skillsErrors = new Map<string, string>();
 
+  const info = (c: CatalogEntry): CatalogInfo => ({ category: c.category, tagline: c.tagline, icon: c.icon, examples: c.examples, skillsRepo: c.skillsRepo });
   const view = (r: IntegrationRecord): Integration => {
     const entry = catalog.find((c) => c.id === r.catalogId);
-    return { ...r, redirectUrl: deps.oauthRedirectUrl, label: entry?.label ?? r.name, note: entry?.note, tools: store.tools(db, r.id), skills: store.skills(db, r.id), skillsError: skillsErrors.get(r.id) };
+    return { ...r, catalog: entry ? info(entry) : null, redirectUrl: deps.oauthRedirectUrl, label: entry?.label ?? r.name, tools: store.tools(db, r.id), skills: store.skills(db, r.id), skillsError: skillsErrors.get(r.id) };
   };
+
+  /** A built-in gets its row on its first connect, under this id, so the screen keeps showing the same item. A name a custom server took hides the entry. */
+  const catalogRowId = (c: CatalogEntry) => `catalog:${c.id}`;
+  const unadded = () => catalog.filter((c) => !store.catalogRowExists(db, c.id) && !store.nameTaken(db, c.id));
+  const browse = (c: CatalogEntry): Integration => ({
+    id: catalogRowId(c), catalogId: c.id, catalog: info(c), label: c.label, name: c.id, transport: { type: "http", url: c.url }, auth: c.auth, redirectUrl: deps.oauthRedirectUrl,
+    enabled: true, state: "disconnected", error: null, tools: [], skills: [], createdAt: 0, updatedAt: 0,
+  });
+
+  /** The row id to connect: a browsed built-in's id inserts its row first. */
+  function added(id: string): string {
+    const c = unadded().find((x) => catalogRowId(x) === id);
+    if (!c) return id;
+    const at = now();
+    store.insert(db, {
+      id, catalogId: c.id, name: c.id, transport: { type: "http", url: c.url }, auth: c.auth,
+      enabled: true, state: "disconnected", error: null, createdAt: at, updatedAt: at,
+    });
+    return id;
+  }
+
+  /** A stored row or a browsed built-in, read without inserting anything. */
+  function peek(id: string): Pick<Integration, "id" | "auth" | "transport"> {
+    const c = unadded().find((x) => catalogRowId(x) === id);
+    return c ? browse(c) : need(id);
+  }
 
   const cloneDir = (r: IntegrationRecord) => join(clonesDir, r.name);
   const skillsSource = (r: IntegrationRecord) => r.transport.skillsDir ?? (catalog.find((c) => c.id === r.catalogId)?.skillsRepo ? cloneDir(r) : undefined);
@@ -222,16 +257,6 @@ export function createIntegrations(deps: {
     } catch (e) {
       skillsErrors.set(r.id, (e as Error).message);
     }
-  }
-
-  /** Every built-in has a card from the first run; a name a custom server already took is skipped. */
-  for (const c of catalog) {
-    if (store.catalogRowExists(db, c.id) || store.nameTaken(db, c.id)) continue;
-    const at = now();
-    store.insert(db, {
-      id: randomUUID(), catalogId: c.id, name: c.id, transport: { type: "http", url: c.url }, auth: c.auth,
-      enabled: true, state: "disconnected", error: null, createdAt: at, updatedAt: at,
-    });
   }
 
   for (const r of store.list(db)) syncSkills(r);
@@ -303,16 +328,25 @@ export function createIntegrations(deps: {
     return view(need(id));
   }
 
-  const probe = (id: string) => connect(id);
+  const probe = (id: string) => connect(added(id));
 
-  /** Registers (or reuses) a client, then returns the provider's authorize URL. Nothing is stored until sign-in completes. */
-  async function connectOAuth(id: string, own?: { clientId: string; clientSecret: string }): Promise<{ authorizeUrl: string }> {
-    const r = need(id);
+  /** Built-ins whose own clients carry the same `appLabel` (the Google services) sign in with one client the user entered once. */
+  async function sharedClient(id: string, ownClient: OwnClient): Promise<OAuthClientInformationMixed | undefined> {
+    for (const r of store.list(db)) {
+      if (r.id === id || ownClientOf(r.auth)?.appLabel !== ownClient.appLabel) continue;
+      const client = (await readSecret(r.id)).oauth?.client;
+      if (client) return client;
+    }
+  }
+
+  /** Registers (or reuses) a client, then returns the provider's authorize URL. A browsed built-in gets its row here; no secret is stored until sign-in completes. */
+  async function connectOAuth(rawId: string, own?: { clientId: string; clientSecret: string }): Promise<{ authorizeUrl: string }> {
+    const r = peek(rawId);
     const ownClient = ownClientOf(r.auth);
     if (r.auth.kind !== "oauth" && !ownClient) throw new InvalidInput("this integration does not sign in with OAuth");
     for (const [state, p] of pending) if (now() - p.at > SIGN_IN_TTL_MS) pending.delete(state);
     const state = randomBytes(24).toString("base64url");
-    let client = (await readSecret(id)).oauth?.client;
+    let client = (await readSecret(r.id)).oauth?.client;
     if (ownClient) {
       const clientId = own?.clientId.trim();
       const clientSecret = own?.clientSecret.trim();
@@ -320,8 +354,10 @@ export function createIntegrations(deps: {
         if (!clientId || !clientSecret) throw new InvalidInput("enter both the client ID and the client secret");
         client = { client_id: clientId, client_secret: clientSecret };
       }
+      client ??= await sharedClient(r.id, ownClient);
       if (!client) throw new InvalidInput(`enter the client ID and secret of your ${ownClient.appLabel}`);
     }
+    const id = added(rawId);
     const provider = new OAuthState(deps.oauthRedirectUrl, state, client ? { client } : {}, now);
     let result;
     try {
@@ -372,7 +408,7 @@ export function createIntegrations(deps: {
   };
 
   return {
-    list: (): Integration[] => store.list(db).map(view),
+    list: (): Integration[] => [...store.list(db).map(view), ...unadded().map(browse)],
 
     async addCustom(
       input: { name: string; token?: string; skillsDir?: string } & ({ url: string; transport: "http" | "sse"; oauth?: boolean } | { transport: "stdio"; command: string; args?: string[]; env?: Record<string, string> }),
@@ -410,11 +446,11 @@ export function createIntegrations(deps: {
     connectOAuth,
     finishOAuth,
 
-    async setBearer(id: string, token: string) {
-      const r = need(id);
-      if (!takesToken(r.auth)) throw new InvalidInput("this integration does not take a token");
+    async setBearer(rawId: string, token: string) {
       const t = token.trim();
       if (!t) throw new InvalidInput("token required");
+      if (!takesToken(peek(rawId).auth)) throw new InvalidInput("this integration does not take a token");
+      const id = added(rawId);
       return connect(id, t);
     },
 

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { createServer as createVite } from "vite";
 import { z } from "zod";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { getSessionInfo, getSessionMessages, type PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import type { ResolvedCli } from "./cli.ts";
 import { engineStatus, type EngineStatus } from "./browser-engine.ts";
@@ -30,6 +31,7 @@ import { BROWSER_UI_PATHS, createBrowserUiRoutes } from "./browser/ui-routes.ts"
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./browser/runtime.ts";
 import { Thread, type TurnResult } from "./thread.ts";
 import { BROWSER_FILES_DIR, botContext, botFilesPath, botMemoryPath, createBot, currentSession, getBot, listBots, newSession, setBrowserEnabled, setBrowserHeaded, touchBot } from "./bots.ts";
+import { isFace, isStroke } from "../web/avatars.ts";
 import { readMemory, userMemoryPath } from "./memory.ts";
 import { watchHerdr } from "./herdr.ts";
 import { deleteFile, listFiles, resolveInside, reveal, watchFiles } from "./files.ts";
@@ -309,7 +311,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     for (const chat of chats.values()) {
       if (!chat.inbox.length || chat.busy || headlessRuns.has(chat.bot.id)) continue;
       const texts = chat.inbox.splice(0);
-      for (const card of texts.flatMap(receivedCards)) emit(chat, card);
+      for (const card of texts.flatMap((t) => receivedCards(t, chat.bot.id))) emit(chat, card);
       void turn(chat, texts.join("\n\n"));
     }
     if (current) await narrate(current);
@@ -394,16 +396,20 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     );
   }
 
-  /** Handoff cards for the tags in a text delivered to a bot. A brief carries its title; an update's title comes from the handoff. */
-  const receivedCards = (text: string): ServerEvent[] =>
-    parseHandoffTags(text).map((t) => ({
-      type: "handoff",
-      direction: "received",
-      bot: t.from,
-      title: t.title ?? handoffStore.get(t.id)?.title ?? "",
-      status: t.resumed && t.title !== undefined ? (handoffStore.get(t.id)?.status ?? t.status) : t.status,
-      text: t.text,
-    }));
+  /** Handoff cards for the tags in a text delivered to `ownerId`. A brief carries its title; an update's title comes from the handoff. */
+  const receivedCards = (text: string, ownerId: string): ServerEvent[] =>
+    parseHandoffTags(text).map((t) => {
+      const h = handoffStore.get(t.id);
+      return {
+        type: "handoff",
+        direction: "received",
+        bot: t.from,
+        botId: h && (h.requesterId === ownerId ? h.assigneeId : h.requesterId),
+        title: t.title ?? h?.title ?? "",
+        status: t.resumed && t.title !== undefined ? (h?.status ?? t.status) : t.status,
+        text: t.text,
+      };
+    });
 
   /** Runs one turn in a chat, shown or not; failures are shown there and returned. */
   async function turn(chat: Chat, text: string): Promise<TurnResult | Error> {
@@ -493,7 +499,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         for (const text of texts) {
           const routine = text.match(ROUTINE_TAG);
           if (routine) out.push({ type: "routine", name: routine[1], trigger: routine[2] as RunTrigger });
-          else if (/^<handoff(-update)? /.test(text)) out.push(...receivedCards(text));
+          else if (/^<handoff(-update)? /.test(text)) out.push(...receivedCards(text, ownerId));
           else if (!text.startsWith("<") || text.startsWith("<mention ")) {
             const { text: typed, mentions } = parseMentions(text);
             out.push(mentions.length ? { type: "user", text: typed, mentions } : { type: "user", text });
@@ -631,7 +637,10 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       }
       case "/api/bots/new": {
         if (!str("name").trim()) return json(res, { error: "name required" }, 400);
-        const bot = createBot(cwd, str("name"), str("purpose"));
+        const face = str("face");
+        const stroke = str("stroke");
+        if (!isFace(face) || !isStroke(stroke)) return json(res, { error: "unknown avatar face or stroke color" }, 400);
+        const bot = createBot(cwd, str("name"), str("purpose"), undefined, { face, stroke });
         await switchTo(bot);
         return json(res, bot);
       }
@@ -868,10 +877,12 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     }
   }
 
+  const webRoot = fileURLToPath(new URL("../web", import.meta.url));
   const vite = o.vite
     ? await createVite({
-        root: fileURLToPath(new URL("../web", import.meta.url)),
-        plugins: [react()],
+        root: webRoot,
+        plugins: [react(), tailwindcss()],
+        resolve: { alias: { "@": webRoot } },
         server: { middlewareMode: true, hmr: { server: http } },
         appType: "spa",
       })

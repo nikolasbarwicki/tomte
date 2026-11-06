@@ -1,3 +1,5 @@
+import type { BotAvatar } from "./avatars.ts";
+
 export type ServerEvent =
   | { type: "user"; text: string; mentions?: { id: string; name: string }[] }
   | { type: "text_start" }
@@ -18,8 +20,8 @@ export type ServerEvent =
   | { type: "session" }
   /** A routine's turn starts in this chat; its prompt stays hidden like other host messages. */
   | { type: "routine"; name: string; trigger: RunTrigger }
-  /** A handoff shown as a card. `received`: another bot's brief or update arrived; `sent`: this bot's own handoff tool call. `bot` is the other party. */
-  | { type: "handoff"; direction: "sent" | "received"; bot: string; title: string; status: string; text: string }
+  /** A handoff shown as a card. `received`: another bot's brief or update arrived; `sent`: this bot's own handoff tool call. `bot` is the other party's name, `botId` its id when the handoff is still known. */
+  | { type: "handoff"; direction: "sent" | "received"; bot: string; botId?: string; title: string; status: string; text: string }
   | { type: "compacted"; trigger: "manual" | "auto"; preTokens: number }
   | ContextEvent
   | Notice;
@@ -37,7 +39,7 @@ export type ContextEvent = { type: "context"; tokens: number; max: number; perce
 export type BotBrowserSettings = { enabled: boolean; headed: boolean };
 
 /** A specialized agent: a chain of Claude Code sessions (`sessions`, newest last) plus its own memory. */
-export type Bot = { id: string; name: string; purpose: string; createdAt: number; lastActive: number; sessions: string[]; browser: BotBrowserSettings };
+export type Bot = { id: string; name: string; purpose: string; avatar: BotAvatar; createdAt: number; lastActive: number; sessions: string[]; browser: BotBrowserSettings };
 
 /** Newest message in a bot's chat transcript. */
 export type LastMessage = { from: "user" | "bot"; text: string; at: number };
@@ -46,6 +48,11 @@ export type BotStatus = "idle" | "working" | "unseen";
 export type BotSummary = Bot & { last: LastMessage | null; status: BotStatus };
 /** Every bot for the sidebar, most recently active first; lives outside chat history. */
 export type BotsEvent = { type: "bots"; bots: BotSummary[] };
+
+/** Whether bots can get a browser on this host, and why not. */
+export type BrowserAvailability = { status: "available"; path: string; source: string } | { status: "unavailable"; reason: string };
+/** The `/api/info` response: where the host runs and how it reaches Claude. */
+export type HostInfo = { cwd: string; cli: string; auth: string; browser: BrowserAvailability };
 
 /** `user`: facts/preferences about the user, shared by all bots. `bot`: how one bot should operate. */
 export type MemoryScope = "user" | "bot";
@@ -94,8 +101,25 @@ export type IntegrationTool = {
   name: string; description: string; readOnly: boolean; destructive: boolean; policy: ToolPolicy; lastSeen: number;
 };
 export type IntegrationSkill = { name: string; description: string; enabled: boolean };
+/** A brand mark: one path on a 24×24 viewBox, drawn white on `color`. */
+export type BrandIcon = { color: string; path: string };
+/** Where a built-in sits on the Integrations list, in display order. */
+export const CATALOG_CATEGORIES = ["Engineering", "Cloud and data", "Productivity", "Communication", "Sales and payments", "Design", "Web"] as const;
+export type CatalogCategory = (typeof CATALOG_CATEGORIES)[number];
+/** What a built-in catalog entry adds to its integration's screen. */
+export type CatalogInfo = {
+  category: CatalogCategory;
+  /** One line on what the service gives bots. */
+  tagline: string;
+  /** Absent when Simple Icons carries no mark for the service; the screen shows its initial instead. */
+  icon?: BrandIcon;
+  /** Prompts a bot can run once the service is connected. */
+  examples: string[];
+  /** Git repository cloned for the skills this service brings. */
+  skillsRepo?: string;
+};
 export type Integration = {
-  id: string; catalogId: string | null; label: string; note?: string; name: string; transport: IntegrationTransport; auth: IntegrationAuth; redirectUrl: string;
+  id: string; catalogId: string | null; catalog: CatalogInfo | null; label: string; name: string; transport: IntegrationTransport; auth: IntegrationAuth; redirectUrl: string;
   enabled: boolean; state: ConnState; error: string | null; tools: IntegrationTool[]; skills: IntegrationSkill[]; skillsError?: string; createdAt: number; updatedAt: number;
 };
 /** Every integration for the Integrations screen; global, lives outside chat history. */
