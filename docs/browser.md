@@ -9,17 +9,19 @@ Screenshots and pages too large for one result are saved in the `browser/` folde
 ## Install the engine
 
 ```sh
-bun src/host.ts install-browser
+bun packages/host/src/host.ts install-browser
 ```
 
 This does two things:
 
-1. Downloads the **pinned** `agent-browser` engine release (v0.41.2) for your platform from GitHub, checks it against a **SHA-256 pinned in claudebot's source**, and marks it current under `~/.cache/claudebot/agent-browser/` (override the root with `CLAUDEBOT_BROWSER_ROOT`).
+1. Downloads the **pinned** `agent-browser` engine release (v0.41.2) for your platform from GitHub, checks it against a **SHA-256 pinned in claudebot's source**, and marks it current under `agent-browser/` in the data root (set the data root with `--data-root` or `CLAUDEBOT_DATA_ROOT`).
 2. Runs the engine's own installer to fetch **Chrome for Testing**.
 
 Chrome for Testing is **not pinned and not checksum-verified by claudebot**. The engine's installer fetches whatever is the current Stable release at install time, and Chrome lands in `~/.agent-browser/browsers`. Only the engine binary is pinned. Two machines installed at different times can have different Chrome versions, and nothing auto-updates either one.
 
 Your own Chrome is never used. If Chrome for Testing is missing, the browser is unavailable rather than falling back.
+
+The engine keeps its state and sockets in `~/.agent-browser` of the user running claudebot, not in the data root. Agent-browser 0.41.2 has no state-directory option, and its socket paths are limited to 103 bytes, which a data-root location would exceed on macOS.
 
 Engine lookup order: `AGENT_BROWSER_PATH`, the managed install, then `agent-browser` on `PATH`.
 
@@ -29,8 +31,8 @@ Open the bot's side panel (the panel button at the top right of the chat) and go
 
 | Reason | Fix |
 | --- | --- |
-| Browser engine not installed | Run `bun src/host.ts install-browser`. |
-| Chrome for Testing is not installed | Run `bun src/host.ts install-browser`. |
+| Browser engine not installed | Run `bun packages/host/src/host.ts install-browser`. |
+| Chrome for Testing is not installed | Run `bun packages/host/src/host.ts install-browser`. |
 | No `agent-browser` build for this OS/CPU | Not supported on this machine. |
 | The shell sandbox is unavailable | macOS needs `/usr/bin/sandbox-exec`. Linux needs `bwrap` and `socat` installed (on Ubuntu, an AppArmor user-namespace restriction can also stop `bwrap`; fix the restriction, do not run unsandboxed). Windows has no sandbox, so no browser. |
 

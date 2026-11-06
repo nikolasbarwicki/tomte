@@ -1,0 +1,12 @@
+{
+  "name": "@claudebot/contract",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./events": "./src/events.ts",
+    "./avatars": "./src/avatars.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

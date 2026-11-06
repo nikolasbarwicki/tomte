@@ -1,5 +1,5 @@
 {
   "files": [],
-  "compilerOptions": { "paths": { "@/*": ["./web/*"] } },
-  "references": [{ "path": "./tsconfig.server.json" }, { "path": "./tsconfig.web.json" }]
+  "compilerOptions": { "paths": { "@/*": ["./packages/web/*"] } },
+  "references": [{ "path": "./packages/contract" }, { "path": "./packages/host" }, { "path": "./packages/web" }]
 }
