@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+
 import type { BrowserToolContext } from "./context.ts";
 import { pageTool, snapshotOutcome } from "./page.ts";
 import { errorResult, guarded, ToolError } from "./result.ts";
@@ -29,7 +30,11 @@ export function registerNavigationTools(mcp: McpServer, ctx: BrowserToolContext)
           const started = Date.now();
           const blocked = () => {
             const hosts = egress.blockedSince(started);
-            return hosts.length ? new ToolError(`navigation blocked: ${hosts.join(", ")} is a local or internal address, which your browser cannot reach`) : undefined;
+            return hosts.length
+              ? new ToolError(
+                  `navigation blocked: ${hosts.join(", ")} is a local or internal address, which your browser cannot reach`,
+                )
+              : undefined;
           };
           let opened: { title?: string };
           try {
@@ -48,17 +53,32 @@ export function registerNavigationTools(mcp: McpServer, ctx: BrowserToolContext)
   mcp.registerTool(
     "browser_snapshot",
     {
-      description: "Read the current page as an accessibility snapshot. Refs in it (like r3.e5) are valid until the next snapshot.",
+      description:
+        "Read the current page as an accessibility snapshot. Refs in it (like r3.e5) are valid until the next snapshot.",
       inputSchema: {
-        interactive_only: z.boolean().optional().describe("Only list elements you can interact with"),
-        selector: z.string().min(1).max(500).optional().describe("CSS selector to scope the snapshot to"),
+        interactive_only: z
+          .boolean()
+          .optional()
+          .describe("Only list elements you can interact with"),
+        selector: z
+          .string()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe("CSS selector to scope the snapshot to"),
       },
     },
     ({ interactive_only, selector }) =>
       guarded(async () => {
         if (selector?.startsWith("-")) return errorResult("selector must not start with '-'");
-        const command = ["snapshot", ...(interactive_only ? ["-i"] : []), ...(selector ? ["-s", selector] : [])];
-        return pageTool(ctx, "browser_snapshot", { interactive_only, selector }, () => snapshotOutcome(ctx, "Snapshot of the current page.", command));
+        const command = [
+          "snapshot",
+          ...(interactive_only ? ["-i"] : []),
+          ...(selector ? ["-s", selector] : []),
+        ];
+        return pageTool(ctx, "browser_snapshot", { interactive_only, selector }, () =>
+          snapshotOutcome(ctx, "Snapshot of the current page.", command),
+        );
       }),
   );
 }

@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
+
 import type { SpawnOptions, SpawnedProcess } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
 
 const isWin = process.platform === "win32";
 /** Where the managed Claude CLI is installed: `claude-cli/` in the data root. */
@@ -17,12 +19,17 @@ export type ResolvedCli = {
 };
 
 export function isMusl(): boolean {
-  return process.platform === "linux" && !existsSync("/lib/ld-linux-x86-64.so.2") && !existsSync("/lib/ld-linux-aarch64.so.1");
+  return (
+    process.platform === "linux" &&
+    !existsSync("/lib/ld-linux-x86-64.so.2") &&
+    !existsSync("/lib/ld-linux-aarch64.so.1")
+  );
 }
 
 function platformPackage(): string {
   const arch = process.arch === "arm64" ? "arm64" : "x64";
-  const os = process.platform === "win32" ? "win32" : process.platform === "darwin" ? "darwin" : "linux";
+  const os =
+    process.platform === "win32" ? "win32" : process.platform === "darwin" ? "darwin" : "linux";
   return `@anthropic-ai/claude-code-${os}-${arch}${isMusl() ? "-musl" : ""}`;
 }
 
@@ -47,12 +54,16 @@ function onPath(): string | undefined {
 /** npm on Windows installs claude.cmd; the SDK spawns non-.js paths without a shell, which fails with EINVAL. */
 function unwrapNpmShim(p: string): string | undefined {
   const pkg = join(dirname(p), "node_modules", "@anthropic-ai", "claude-code");
-  for (const c of [join(pkg, "bin", "claude.exe"), join(pkg, "cli.js")]) if (existsSync(c)) return c;
+  for (const c of [join(pkg, "bin", "claude.exe"), join(pkg, "cli.js")])
+    if (existsSync(c)) return c;
   return undefined;
 }
 
 export function resolveCli(dataRoot: string): ResolvedCli | undefined {
-  const pick = (path: string | undefined, source: ResolvedCli["source"]): ResolvedCli | undefined => {
+  const pick = (
+    path: string | undefined,
+    source: ResolvedCli["source"],
+  ): ResolvedCli | undefined => {
     if (!path || !existsSync(path)) return undefined;
     if (isWin && /\.(cmd|bat|ps1)$/i.test(path)) {
       const real = unwrapNpmShim(path);
@@ -60,17 +71,29 @@ export function resolveCli(dataRoot: string): ResolvedCli | undefined {
     }
     return { path, source, needsShell: false };
   };
-  return pick(process.env.CLAUDE_PATH, "CLAUDE_PATH") ?? pick(managedBinary(dataRoot), "managed") ?? pick(onPath(), "PATH");
+  return (
+    pick(process.env.CLAUDE_PATH, "CLAUDE_PATH") ??
+    pick(managedBinary(dataRoot), "managed") ??
+    pick(onPath(), "PATH")
+  );
 }
+
+/** The fields of an npm registry version document the install reads. */
+const NpmVersion = z.object({
+  version: z.string(),
+  dist: z.object({ tarball: z.string(), integrity: z.string() }),
+});
 
 /** Download Anthropic's platform package from npm, verify dist.integrity, extract it into the data root. */
 export async function installManagedCli(dataRoot: string, version = "latest"): Promise<string> {
   const name = platformPackage();
-  const meta = (await (await fetch(`https://registry.npmjs.org/${name}/${version}`)).json()) as {
-    version: string;
-    dist: { tarball: string; integrity: string };
-  };
-  const [algo, expected] = [meta.dist.integrity.split("-")[0], meta.dist.integrity.slice(meta.dist.integrity.indexOf("-") + 1)];
+  const meta = NpmVersion.parse(
+    await (await fetch(`https://registry.npmjs.org/${name}/${version}`)).json(),
+  );
+  const [algo = "", expected] = [
+    meta.dist.integrity.split("-")[0],
+    meta.dist.integrity.slice(meta.dist.integrity.indexOf("-") + 1),
+  ];
   const bytes = Buffer.from(await (await fetch(meta.dist.tarball)).arrayBuffer());
   const actual = createHash(algo).update(bytes).digest("base64");
   if (actual !== expected) throw new Error(`integrity mismatch for ${name}@${meta.version}`);
@@ -100,14 +123,19 @@ function findBinary(dir: string): string | undefined {
 
 /** Fallback only: run a .cmd wrapper through cmd.exe and kill the whole tree on kill(). */
 export function cmdExeSpawner(opts: SpawnOptions): SpawnedProcess {
-  const child: ChildProcess = spawn("cmd.exe", ["/d", "/s", "/c", `"${[opts.command, ...opts.args].map((a) => `"${a}"`).join(" ")}"`], {
-    cwd: opts.cwd,
-    env: opts.env as NodeJS.ProcessEnv,
-    stdio: ["pipe", "pipe", "inherit"],
-    windowsVerbatimArguments: true,
-  });
+  const child: ChildProcess = spawn(
+    "cmd.exe",
+    ["/d", "/s", "/c", `"${[opts.command, ...opts.args].map((a) => `"${a}"`).join(" ")}"`],
+    {
+      cwd: opts.cwd,
+      env: opts.env as NodeJS.ProcessEnv,
+      stdio: ["pipe", "pipe", "inherit"],
+      windowsVerbatimArguments: true,
+    },
+  );
   const killTree = () => {
-    if (child.pid && child.exitCode === null) spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"]);
+    if (child.pid && child.exitCode === null)
+      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"]);
     return true;
   };
   opts.signal?.addEventListener("abort", killTree);

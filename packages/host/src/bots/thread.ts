@@ -1,5 +1,6 @@
-import { resolve, relative, isAbsolute } from "node:path";
 import { randomUUID } from "node:crypto";
+import { resolve, relative, isAbsolute } from "node:path";
+
 import {
   createSdkMcpServer,
   query,
@@ -12,26 +13,51 @@ import {
   type SDKResultMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import type { MemoryScope } from "@claudebot/contract/events";
 import { z } from "zod";
-import { claudeHarness, cmdExeSpawner, loginShellPath, type HostServerLease, type ResolvedCli } from "../harness/index.ts";
+
+import {
+  claudeHarness,
+  cmdExeSpawner,
+  loginShellPath,
+  type HostServerLease,
+  type HostServersSource,
+  type ResolvedCli,
+} from "../harness/index.ts";
 import type { IntegrationsSource } from "../integrations/index.ts";
 import { appendMemory, readMemory, writeMemory, type MemoryPaths } from "./memory.ts";
-import type { MemoryScope } from "@claudebot/contract/events";
 
-export const APP = "claudebot";
-export const VERSION = "0.1.0";
+const APP = "claudebot";
+const VERSION = "0.1.0";
 
 /** Decisions the host (its UI/user) owns. */
 export interface HostDelegate {
   askUser(question: string): Promise<string>;
   /** Bash, or file writes outside the thread's roots. */
-  approve(toolName: string, input: Record<string, unknown>, reason: string): Promise<PermissionResult>;
+  approve(
+    toolName: string,
+    input: Record<string, unknown>,
+    reason: string,
+  ): Promise<PermissionResult>;
+}
+
+/** What every bot thread the host opens shares, whether in a chat or in a headless routine run. */
+export interface ThreadEnv {
+  /** The workspace directory the Claude CLI runs in. */
+  cwd: string;
+  /** Where bots, their memory and the user memory live. */
+  dataRoot: string;
+  cli: ResolvedCli;
+  integrations: IntegrationsSource;
+  hostServers: HostServersSource;
+  /** Approve every tool call instead of asking the user; off when `HostConfig.askApproval` is set. */
+  approveAll: boolean;
 }
 
 export interface ThreadOptions {
   cli: ResolvedCli;
   cwd: string;
-  sessionId?: string;
+  sessionId?: string | undefined;
   /** True when this session id already has a transcript on disk. */
   resume?: boolean;
   additionalDirectories?: string[];
@@ -58,9 +84,9 @@ const HOST_INSTRUCTIONS = [
   "",
   "## Memory",
   "Two memory files are loaded into this prompt whenever the session opens:",
-  "- user memory (scope \"user\"): shared by every bot. Durable facts about the user: who they are, their background, environment, and general preferences that apply to any task.",
-  "- bot memory (scope \"bot\"): only this bot. How this bot should operate: directions, workflow, rules, output format, tone, priorities and boundaries for its job.",
-  "When the user tells you how to do your work (do/don't, always/never, format, process, style, which tools or sources to use), save it right away with mcp__host__remember scope \"bot\"; do not ask first. When they reveal a durable fact or general preference about themselves, save it with scope \"user\". If unsure whether a preference is general or specific to this bot's job, use \"bot\".",
+  '- user memory (scope "user"): shared by every bot. Durable facts about the user: who they are, their background, environment, and general preferences that apply to any task.',
+  '- bot memory (scope "bot"): only this bot. How this bot should operate: directions, workflow, rules, output format, tone, priorities and boundaries for its job.',
+  'When the user tells you how to do your work (do/don\'t, always/never, format, process, style, which tools or sources to use), save it right away with mcp__host__remember scope "bot"; do not ask first. When they reveal a durable fact or general preference about themselves, save it with scope "user". If unsure whether a preference is general or specific to this bot\'s job, use "bot".',
   "Write each entry as one concise, self-contained line. Do not save one-off task details or anything already in memory. When a direction changes or contradicts an existing entry, call mcp__host__rewrite_memory with the complete corrected file for that scope instead of appending.",
   "Mention briefly what you saved.",
   "",
@@ -70,7 +96,7 @@ const HOST_INSTRUCTIONS = [
   "- `herdr agent list` — all agents with pane_id, agent, agent_status (idle/working/blocked/done/unknown) and cwd.",
   "- `herdr agent get <pane>` — one agent's details.",
   "- `herdr agent read <pane>` or `herdr pane read <pane> --source recent --lines 80` — what the agent's terminal currently shows; use this to see what it did or what it is asking.",
-  "- `herdr agent prompt <pane> \"<text>\"` — send the agent a message; add `--wait` to block until it settles. Fails with agent_blocked if it is waiting on a dialog.",
+  '- `herdr agent prompt <pane> "<text>"` — send the agent a message; add `--wait` to block until it settles. Fails with agent_blocked if it is waiting on a dialog.',
   "- `herdr agent send-keys <pane> <keys…>` — answer an approval/question dialog, e.g. `enter`, `esc`, `up`, `down`, `ctrl+c`.",
   "- `herdr agent wait <pane> --until done --until idle --until blocked` — wait for it to settle.",
   "Reading (list/get/read) is safe: do it freely when the user asks about the other agents or an update needs context.",
@@ -83,7 +109,7 @@ const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 /** Push-based async iterable feeding later turns into the same live query. */
 class Inbox implements AsyncIterable<SDKUserMessage> {
   private queue: SDKUserMessage[] = [];
-  private wake?: () => void;
+  private wake?: (() => void) | undefined;
   private done = false;
   push(m: SDKUserMessage) {
     this.queue.push(m);
@@ -112,12 +138,20 @@ export interface TurnResult {
 export class Thread {
   readonly sessionId: string;
   private started: boolean;
-  private live?: { q: Query; inbox: Inbox; it: AsyncIterator<SDKMessage>; expiresAt?: number; lease?: HostServerLease };
+  private live?:
+    | {
+        q: Query;
+        inbox: Inbox;
+        it: AsyncIterator<SDKMessage>;
+        expiresAt?: number | undefined;
+        lease?: HostServerLease | undefined;
+      }
+    | undefined;
   private idleTimer?: NodeJS.Timeout;
   private busy = false;
   /** Set when `close()` lands while `send()` is still opening the query, which `close()` alone cannot reach. */
   private closedMidSend = false;
-  private model?: string;
+  private model?: string | undefined;
   private effort?: EffortLevel;
   private readonly roots: string[];
   private readonly log: (l: string) => void;
@@ -140,7 +174,12 @@ export class Thread {
   }
 
   private canUseTool: CanUseTool = async (name, input) => {
-    if (name.startsWith("mcp__host__") || name.startsWith("mcp__browser__") || name.startsWith("mcp__bots__")) return { behavior: "allow", updatedInput: input };
+    if (
+      name.startsWith("mcp__host__") ||
+      name.startsWith("mcp__browser__") ||
+      name.startsWith("mcp__bots__")
+    )
+      return { behavior: "allow", updatedInput: input };
     switch (this.o.integrations?.decide(name)) {
       case "allow":
         return { behavior: "allow", updatedInput: input };
@@ -152,9 +191,12 @@ export class Thread {
     if (this.o.approveAll) return { behavior: "allow", updatedInput: input };
     const path = input.file_path ?? input.notebook_path ?? input.path;
     if (READ_TOOLS.has(name) || WRITE_TOOLS.has(name)) {
-      if (path === undefined || this.inRoots(path)) return { behavior: "allow", updatedInput: input };
-      if (READ_TOOLS.has(name)) return this.o.delegate.approve(name, input, `read outside workspace: ${path}`);
-      return this.o.delegate.approve(name, input, `write outside workspace: ${path}`);
+      if (path === undefined || this.inRoots(path))
+        return { behavior: "allow", updatedInput: input };
+      const shown = typeof path === "string" ? path : JSON.stringify(path);
+      if (READ_TOOLS.has(name))
+        return this.o.delegate.approve(name, input, `read outside workspace: ${shown}`);
+      return this.o.delegate.approve(name, input, `write outside workspace: ${shown}`);
     }
     if (name === "Bash") return this.o.delegate.approve(name, input, "shell command");
     return this.o.delegate.approve(name, input, "tool requires approval");
@@ -163,21 +205,33 @@ export class Thread {
   private hostServer() {
     const { delegate, memory, onMemory } = this.o;
     const log = this.log;
-    const scope = z.enum(["user", "bot"]).describe('"user": about the user, shared by all bots; "bot": how this bot should operate');
+    const scope = z
+      .enum(["user", "bot"])
+      .describe('"user": about the user, shared by all bots; "bot": how this bot should operate');
     return createSdkMcpServer({
       name: "host",
       version: VERSION,
       tools: [
-        tool("ask_user", "Ask the human user a question and wait for their answer.", { question: z.string() }, async ({ question }) => {
-          log(`[host] ask_user invoked in-process: ${JSON.stringify(question)}`);
-          const answer = await delegate.askUser(question);
-          return { content: [{ type: "text", text: answer }] };
-        }),
-        tool("remember", "Append one line to user or bot memory.", { scope, line: z.string() }, async ({ scope, line }) => {
-          appendMemory(memory[scope], line);
-          onMemory?.(scope, readMemory(memory[scope]));
-          return { content: [{ type: "text", text: `saved to ${scope} memory` }] };
-        }),
+        tool(
+          "ask_user",
+          "Ask the human user a question and wait for their answer.",
+          { question: z.string() },
+          async ({ question }) => {
+            log(`[host] ask_user invoked in-process: ${JSON.stringify(question)}`);
+            const answer = await delegate.askUser(question);
+            return { content: [{ type: "text", text: answer }] };
+          },
+        ),
+        tool(
+          "remember",
+          "Append one line to user or bot memory.",
+          { scope, line: z.string() },
+          async ({ scope, line }) => {
+            appendMemory(memory[scope], line);
+            onMemory?.(scope, readMemory(memory[scope]));
+            return { content: [{ type: "text", text: `saved to ${scope} memory` }] };
+          },
+        ),
         tool(
           "rewrite_memory",
           "Replace the whole user or bot memory file, to revise or drop entries. Pass the complete new content, one entry per line.",
@@ -215,7 +269,12 @@ export class Thread {
       (this.o.persona ? `\n\n${this.o.persona}` : "") +
       section("User memory (about the user)", this.o.memory.user) +
       section("Bot memory (how you operate)", this.o.memory.bot);
-    const launch = claudeHarness.launch({ hostServers: lease?.servers ?? [], integrations: session, systemPromptAppend: append, isolation: lease?.isolation ?? {} });
+    const launch = claudeHarness.launch({
+      hostServers: lease?.servers ?? [],
+      integrations: session,
+      systemPromptAppend: append,
+      isolation: lease?.isolation ?? {},
+    });
     try {
       const q = query({
         prompt: inbox,
@@ -223,14 +282,16 @@ export class Thread {
           pathToClaudeCodeExecutable: this.o.cli.path,
           ...(this.o.cli.needsShell ? { spawnClaudeCodeProcess: cmdExeSpawner } : {}),
           cwd: this.o.cwd,
-          additionalDirectories: this.o.additionalDirectories,
+          ...(this.o.additionalDirectories !== undefined && {
+            additionalDirectories: this.o.additionalDirectories,
+          }),
           ...(this.started ? { resume: this.sessionId } : { sessionId: this.sessionId }),
           persistSession: true,
           includePartialMessages: true,
           canUseTool: this.canUseTool,
           mcpServers: { host: this.hostServer() },
           ...launch.options,
-          model: this.model,
+          ...(this.model !== undefined && { model: this.model }),
           env: this.env(),
           stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
         },
@@ -276,7 +337,11 @@ export class Thread {
       if (!this.live) await this.open();
       if (this.closedMidSend) throw new Error("thread closed while opening");
       const { inbox, it } = this.live!;
-      inbox.push({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null });
+      inbox.push({
+        type: "user",
+        message: { role: "user", content: text },
+        parent_tool_use_id: null,
+      });
       let out = "";
       const toolsUsed: string[] = [];
       while (true) {
@@ -303,7 +368,8 @@ export class Thread {
       throw e;
     } finally {
       this.busy = false;
-      if (this.live && this.o.idleMs) this.idleTimer = setTimeout(() => this.close("idle"), this.o.idleMs).unref();
+      if (this.live && this.o.idleMs)
+        this.idleTimer = setTimeout(() => this.close("idle"), this.o.idleMs).unref();
     }
   }
 

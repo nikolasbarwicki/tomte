@@ -1,12 +1,18 @@
 import type { Database } from "bun:sqlite";
+
 import { redeliverOpenHandoffs, removeBotHandoffs } from "./cleanup.ts";
-import { BOTS_ENDPOINT_PATH, createBotsEndpoint, type BotsEndpoint, type BotsEndpointDeps } from "./endpoint.ts";
+import {
+  BOTS_ENDPOINT_PATH,
+  createBotsEndpoint,
+  type BotsEndpoint,
+  type BotsEndpointDeps,
+} from "./endpoint.ts";
 import { handoffIdsIn, parseHandoffTags } from "./format.ts";
 import { createHandoffStore } from "./store.ts";
 import { sentCardsFromTool } from "./tools/card.ts";
 import type { HandoffCard } from "./tools/context.ts";
 
-export { BOTS_ENDPOINT_PATH, type BotsEndpoint, type HandoffCard };
+export { BOTS_ENDPOINT_PATH, type BotsEndpoint };
 export { parseMentions, withMentions, type Mention } from "./format.ts";
 
 export type HandoffsOptions = Omit<BotsEndpointDeps, "handoffs"> & { db: Database };
@@ -38,13 +44,14 @@ export function createHandoffs({ db, ...deps }: HandoffsOptions): Handoffs {
           type: "handoff",
           direction: "received",
           bot: t.from,
-          botId: h && (h.requesterId === ownerId ? h.assigneeId : h.requesterId),
+          ...(h && { botId: h.requesterId === ownerId ? h.assigneeId : h.requesterId }),
           title: t.title ?? h?.title ?? "",
           status: t.resumed && t.title !== undefined ? (h?.status ?? t.status) : t.status,
           text: t.text,
         };
       }),
-    sentCards: (tool, input, ownerId) => sentCardsFromTool(tool, input, ownerId, { handoffs, botName: deps.botName }),
+    sentCards: (tool, input, ownerId) =>
+      sentCardsFromTool(tool, input, ownerId, { handoffs, botName: deps.botName }),
     startDelivered(text) {
       for (const id of handoffIdsIn(text)) handoffs.start(id);
     },

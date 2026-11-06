@@ -2,9 +2,9 @@ import type { Notice } from "@claudebot/contract/events";
 
 export interface Notices {
   /** Shows a notice to the page and queues it for the open bot to narrate. */
-  notify(source: string, title: string, body?: string): void;
+  notify: (source: string, title: string, body?: string) => void;
   /** Recent notices, replayed on connect but kept out of the chat transcript. */
-  recent(): Notice[];
+  recent: () => Notice[];
   /** Takes the notices not yet narrated, as the update line to show and the prompt for one turn; undefined when there are none. */
   takeUnspoken(): { update: string; prompt: string } | undefined;
 }
@@ -26,7 +26,9 @@ export function createNotices(o: { broadcast(n: Notice): void; wake(): void }): 
       if (!unspoken.length) return undefined;
       const batch = unspoken;
       unspoken = [];
-      const lines = batch.map((n) => `- [${n.source}] ${n.title}${n.body ? ` — ${n.body}` : ""}`).join("\n");
+      const lines = batch
+        .map((n) => `- [${n.source}] ${n.title}${n.body ? ` — ${n.body}` : ""}`)
+        .join("\n");
       return {
         update: batch.map((n) => n.title).join(" · "),
         prompt:

@@ -1,5 +1,7 @@
 import type { ServerResponse } from "node:http";
+
 import { z } from "zod";
+
 import { NameTaken, type Integrations } from "../../integrations/index.ts";
 import { InvalidInput, NotFound } from "../../platform/errors.ts";
 import { json } from "../http.ts";
@@ -7,11 +9,30 @@ import type { ApiContext } from "./context.ts";
 
 const Id = z.object({ id: z.string() });
 const CustomIntegration = z.discriminatedUnion("transport", [
-  z.object({ name: z.string().trim(), url: z.string().trim(), transport: z.enum(["http", "sse"]), token: z.string().optional(), oauth: z.boolean().optional(), skillsDir: z.string().optional() }),
-  z.object({ name: z.string().trim(), transport: z.literal("stdio"), command: z.string(), args: z.array(z.string()).optional(), env: z.record(z.string(), z.string()).optional(), skillsDir: z.string().optional() }),
+  z.object({
+    name: z.string().trim(),
+    url: z.string().trim(),
+    transport: z.enum(["http", "sse"]),
+    token: z.string().exactOptional(),
+    oauth: z.boolean().exactOptional(),
+    skillsDir: z.string().exactOptional(),
+  }),
+  z.object({
+    name: z.string().trim(),
+    transport: z.literal("stdio"),
+    command: z.string(),
+    args: z.array(z.string()).exactOptional(),
+    env: z.record(z.string(), z.string()).exactOptional(),
+    skillsDir: z.string().exactOptional(),
+  }),
 ]);
 
-export async function integrationApi({ integrations }: ApiContext, res: ServerResponse, path: string, b: Record<string, unknown>) {
+export async function integrationApi(
+  { integrations }: ApiContext,
+  res: ServerResponse,
+  path: string,
+  b: Record<string, unknown>,
+) {
   try {
     switch (path) {
       case "/api/integrations/list":
@@ -23,8 +44,14 @@ export async function integrationApi({ integrations }: ApiContext, res: ServerRe
         return json(res, await integrations.setBearer(id, token));
       }
       case "/api/integrations/connect-oauth": {
-        const a = Id.extend({ clientId: z.string().optional(), clientSecret: z.string().optional() }).parse(b);
-        const own = a.clientId === undefined && a.clientSecret === undefined ? undefined : { clientId: a.clientId ?? "", clientSecret: a.clientSecret ?? "" };
+        const a = Id.extend({
+          clientId: z.string().exactOptional(),
+          clientSecret: z.string().exactOptional(),
+        }).parse(b);
+        const own =
+          a.clientId === undefined && a.clientSecret === undefined
+            ? undefined
+            : { clientId: a.clientId ?? "", clientSecret: a.clientSecret ?? "" };
         return json(res, await integrations.connectOAuth(a.id, own));
       }
       case "/api/integrations/disconnect":
@@ -56,7 +83,6 @@ export async function integrationApi({ integrations }: ApiContext, res: ServerRe
     }
     res.writeHead(404).end();
   } catch (e) {
-    if (e instanceof z.ZodError) return json(res, { error: e.issues.map((i) => i.message).join("; ") }, 400);
     if (e instanceof InvalidInput) return json(res, { error: e.message }, 400);
     if (e instanceof NameTaken) return json(res, { error: e.message }, 409);
     if (e instanceof NotFound) return json(res, { error: e.message }, 404);
@@ -67,13 +93,26 @@ export async function integrationApi({ integrations }: ApiContext, res: ServerRe
 const htmlEscape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 function page(res: ServerResponse, status: number, message: string) {
-  res.writeHead(status, { "content-type": "text/html; charset=utf-8" }).end(`<!doctype html><meta charset="utf-8"><title>Claudebot</title><body style="font:16px system-ui;max-width:32rem;margin:4rem auto"><p>${htmlEscape(message)}</p>`);
+  res
+    .writeHead(status, { "content-type": "text/html; charset=utf-8" })
+    .end(
+      `<!doctype html><meta charset="utf-8"><title>Claudebot</title><body style="font:16px system-ui;max-width:32rem;margin:4rem auto"><p>${htmlEscape(message)}</p>`,
+    );
 }
 
 /** The provider sends the browser back here after sign-in. */
-export async function oauthCallback(integrations: Integrations, res: ServerResponse, q: URLSearchParams) {
+export async function oauthCallback(
+  integrations: Integrations,
+  res: ServerResponse,
+  q: URLSearchParams,
+) {
   try {
-    const i = await integrations.finishOAuth(q.get("state") ?? "", { code: q.get("code") ?? undefined, error: q.get("error") ?? undefined });
+    const code = q.get("code");
+    const error = q.get("error");
+    const i = await integrations.finishOAuth(q.get("state") ?? "", {
+      ...(code !== null && { code }),
+      ...(error !== null && { error }),
+    });
     if (i.state !== "connected") return page(res, 400, `Could not connect ${i.label}: ${i.error}`);
     page(res, 200, "Connected. You can close this tab.");
   } catch (e) {

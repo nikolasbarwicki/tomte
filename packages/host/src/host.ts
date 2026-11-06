@@ -1,14 +1,27 @@
 import { spawnSync } from "node:child_process";
-import { createInterface } from "node:readline";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { randomUUID } from "node:crypto";
-import { authCommand, installManagedCli, resolveCli, type ResolvedCli } from "./harness/index.ts";
-import { installManagedEngine } from "./browser/index.ts";
-import { Thread, botContext, botFilesPath, createBot, currentSession, getBot, newSession, touchBot, type HostDelegate } from "./bots/index.ts";
+import { createInterface } from "node:readline";
+
 import { getSessionInfo } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+
+import {
+  Thread,
+  botContext,
+  botFilesPath,
+  createBot,
+  currentSession,
+  getBot,
+  newSession,
+  touchBot,
+  type HostDelegate,
+} from "./bots/index.ts";
+import { installManagedEngine } from "./browser/index.ts";
+import { authCommand, installManagedCli, resolveCli, type ResolvedCli } from "./harness/index.ts";
 import { InvalidConfig, parseHostConfig } from "./platform/config.ts";
 import { ensureWorkspace } from "./platform/workspace.ts";
 
@@ -25,10 +38,14 @@ const { config } = parsed;
 
 const log = (l: string) => console.error(l);
 
+const PackageVersion = z.object({ version: z.string() });
+
 function sdkVersion(): string {
   const require = createRequire(import.meta.url);
   const entry = require.resolve("@anthropic-ai/claude-agent-sdk");
-  return JSON.parse(readFileSync(join(dirname(entry), "package.json"), "utf8")).version;
+  return PackageVersion.parse(
+    JSON.parse(readFileSync(join(dirname(entry), "package.json"), "utf8")),
+  ).version;
 }
 
 /** Non-interactive host policy for this script: answers come from the host, never CLI stdin. */
@@ -49,14 +66,21 @@ function preflight(): ResolvedCli {
   const cli = resolveCli(config.dataRoot);
   const hasKey = !!process.env.ANTHROPIC_API_KEY;
   if (!cli && !hasKey) {
-    log("refusing to start: no ANTHROPIC_API_KEY in the environment and no claude binary (CLAUDE_PATH, managed copy, PATH)");
+    log(
+      "refusing to start: no ANTHROPIC_API_KEY in the environment and no claude binary (CLAUDE_PATH, managed copy, PATH)",
+    );
     process.exit(2);
   }
   if (!cli) {
-    log("refusing to start: no claude binary resolved; set CLAUDE_PATH or run `host.ts install-cli`");
+    log(
+      "refusing to start: no claude binary resolved; set CLAUDE_PATH or run `host.ts install-cli`",
+    );
     process.exit(2);
   }
-  if (!hasKey) log("[host] warning: ANTHROPIC_API_KEY not set; the CLI will use its own stored login (not valid for third-party products)");
+  if (!hasKey)
+    log(
+      "[host] warning: ANTHROPIC_API_KEY not set; the CLI will use its own stored login (not valid for third-party products)",
+    );
   return cli;
 }
 
@@ -87,7 +111,15 @@ async function phaseCreate(cwd: string, sessionId: string) {
 async function phaseResume(cwd: string, sessionId: string) {
   const cli = preflight();
   banner(cli, sessionId);
-  const t = new Thread({ cli, cwd, ...testBot(cwd, sessionId), resume: true, idleMs: 5 * 60_000, delegate: delegate("notes.txt"), log });
+  const t = new Thread({
+    cli,
+    cwd,
+    ...testBot(cwd, sessionId),
+    resume: true,
+    idleMs: 5 * 60_000,
+    delegate: delegate("notes.txt"),
+    log,
+  });
   const r1 = await t.send("what file did you create?");
   console.log(`answer=${r1.text}`);
   if (!/hello\.txt/.test(r1.text)) throw new Error("resumed answer did not name hello.txt");
@@ -100,18 +132,22 @@ async function phaseResume(cwd: string, sessionId: string) {
   );
   t.close();
   if (!r2.toolsUsed.includes("mcp__host__ask_user")) throw new Error("model did not call ask_user");
-  if (!existsSync(join(botFilesPath(acceptanceRoot(cwd), sessionId), "notes.txt"))) throw new Error("file named by the host answer was not created");
+  if (!existsSync(join(botFilesPath(acceptanceRoot(cwd), sessionId), "notes.txt")))
+    throw new Error("file named by the host answer was not created");
   console.log(`ask_user ok: tools=${r2.toolsUsed.join(",")}`);
 }
 
 function runPhase(phase: string, cwd: string, sessionId: string) {
-  const r = spawnSync(process.execPath, [...process.execArgv, process.argv[1], phase, cwd, sessionId], { stdio: "inherit", env: { ...process.env, CLAUDEBOT_DATA_ROOT: config.dataRoot } });
+  const r = spawnSync(
+    process.execPath,
+    [...process.execArgv, ...process.argv.slice(1, 2), phase, cwd, sessionId],
+    { stdio: "inherit", env: { ...process.env, CLAUDEBOT_DATA_ROOT: config.dataRoot } },
+  );
   if (r.status !== 0) {
     log(`phase ${phase} failed with exit ${r.status}`);
     process.exit(1);
   }
 }
-
 
 async function chat(botArg?: string) {
   const cli = preflight();
@@ -136,15 +172,32 @@ async function chat(botArg?: string) {
   const ui: HostDelegate = {
     askUser: async (q) => (await ask(`\n[claude asks] ${q}\n> `)) ?? "(no answer)",
     approve: async (tool, input, reason) => {
-      const a = (await ask(`\n[approve ${tool}? ${reason}] ${JSON.stringify(input).slice(0, 300)}\n(y/N) `)) ?? "";
-      return /^y/i.test(a) ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: "user declined" };
+      const a =
+        (await ask(
+          `\n[approve ${tool}? ${reason}] ${JSON.stringify(input).slice(0, 300)}\n(y/N) `,
+        )) ?? "";
+      return /^y/i.test(a)
+        ? { behavior: "allow", updatedInput: input }
+        : { behavior: "deny", message: "user declined" };
     },
   };
-  const resume = !!(await getSessionInfo(currentSession(bot), { dir: cwd }));
-  const open = (resume: boolean) => new Thread({ cli, cwd, ...botContext(config.dataRoot, bot), resume, idleMs: 10 * 60_000, delegate: ui, log: () => {} });
+  const current = currentSession(bot);
+  const resume = current !== undefined && !!(await getSessionInfo(current, { dir: cwd }));
+  const open = (resume: boolean) =>
+    new Thread({
+      cli,
+      cwd,
+      ...botContext(config.dataRoot, bot),
+      resume,
+      idleMs: 10 * 60_000,
+      delegate: ui,
+      log: () => {},
+    });
   let t = open(resume);
   banner(cli, t.sessionId);
-  console.log(`bot=${bot.name}\ncwd=${cwd}\ncommands: /model <name>  /effort <low|medium|high|max>  /new  /quit`);
+  console.log(
+    `bot=${bot.name}\ncwd=${cwd}\ncommands: /model <name>  /effort <low|medium|high|max>  /new  /quit`,
+  );
   while (true) {
     const raw = await ask("\nyou> ");
     if (raw === null || raw.trim() === "/quit") break;
@@ -163,10 +216,15 @@ async function chat(botArg?: string) {
         touchBot(config.dataRoot, bot);
         process.stdout.write("claude> ");
         await t.send(line, (m) => {
-          if (m.type === "stream_event" && m.event.type === "content_block_delta" && m.event.delta.type === "text_delta")
+          if (
+            m.type === "stream_event" &&
+            m.event.type === "content_block_delta" &&
+            m.event.delta.type === "text_delta"
+          )
             process.stdout.write(m.event.delta.text);
           if (m.type === "assistant")
-            for (const b of m.message.content) if (b.type === "tool_use") process.stdout.write(`\n  [tool ${b.name}]\n`);
+            for (const b of m.message.content)
+              if (b.type === "tool_use") process.stdout.write(`\n  [tool ${b.name}]\n`);
         });
         process.stdout.write("\n");
       }
@@ -182,12 +240,14 @@ const [cmd, a1, a2] = parsed.positionals;
 try {
   switch (cmd) {
     case "create":
+      if (!a1 || !a2) throw new Error("usage: create <cwd> <sessionId>");
       await phaseCreate(a1, a2);
       break;
     case "chat":
       await chat(a1);
       break;
     case "resume":
+      if (!a1 || !a2) throw new Error("usage: resume <cwd> <sessionId>");
       await phaseResume(a1, a2);
       break;
     case "install-cli":

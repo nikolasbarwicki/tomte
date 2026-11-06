@@ -1,11 +1,14 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
-import { userMemoryPath } from "./memory.ts";
-import { defaultAvatar, type BotAvatar } from "@claudebot/contract/avatars";
-import type { Bot } from "@claudebot/contract/events";
 
-export { Thread, type HostDelegate, type TurnResult } from "./thread.ts";
+import { BotAvatar, defaultAvatar } from "@claudebot/contract/avatars";
+import { Bot, BotBrowserSettings } from "@claudebot/contract/events";
+import { z } from "zod";
+
+import { userMemoryPath } from "./memory.ts";
+
+export { Thread, type HostDelegate, type ThreadEnv, type TurnResult } from "./thread.ts";
 export { readMemory, userMemoryPath } from "./memory.ts";
 export { getActivity, markSeen, recordMessage } from "./activity-store.ts";
 export { deleteFile, listFiles, resolveInside, reveal, watchFiles } from "./files.ts";
@@ -14,11 +17,22 @@ const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const botsDir = (dataRoot: string) => join(dataRoot, "bots");
 const botDir = (dataRoot: string, id: string) => join(botsDir(dataRoot), id);
-export const botMemoryPath = (dataRoot: string, id: string) => join(botDir(dataRoot, id), "memory.md");
+export const botMemoryPath = (dataRoot: string, id: string) =>
+  join(botDir(dataRoot, id), "memory.md");
 /** Everything the bot produces for the user lives here. */
 export const botFilesPath = (dataRoot: string, id: string) => join(botDir(dataRoot, id), "files");
 /** Subfolder of the files area holding browser screenshots and oversized pages; scratch for the current session, hidden from the Files panel. */
 export const BROWSER_FILES_DIR = "browser";
+
+/** `bot.json` as any release wrote it; files from before a field existed lack it. */
+const StoredBot = Bot.extend({
+  sessions: Bot.shape.sessions.min(1).optional(),
+  avatar: BotAvatar.optional(),
+  browser: BotBrowserSettings.extend({ headed: z.boolean().default(false) }).default({
+    enabled: false,
+    headed: false,
+  }),
+});
 
 function write(dataRoot: string, bot: Bot) {
   mkdirSync(botDir(dataRoot, bot.id), { recursive: true });
@@ -36,12 +50,8 @@ export function getBot(dataRoot: string, id: string): Bot | undefined {
   if (!ID.test(id)) return undefined;
   const file = join(botDir(dataRoot, id), "bot.json");
   if (!existsSync(file)) return undefined;
-  const bot = JSON.parse(readFileSync(file, "utf8")) as Bot;
-  bot.sessions ??= [bot.id];
-  bot.browser ??= { enabled: false, headed: false };
-  bot.browser.headed ??= false;
-  bot.avatar ??= defaultAvatar(bot.id);
-  return bot;
+  const { sessions, avatar, ...bot } = StoredBot.parse(JSON.parse(readFileSync(file, "utf8")));
+  return { ...bot, sessions: sessions ?? [bot.id], avatar: avatar ?? defaultAvatar(bot.id) };
 }
 
 /** Most recently active first. */
@@ -54,9 +64,24 @@ export function listBots(dataRoot: string): Bot[] {
 }
 
 /** The bot's id doubles as its first Claude Code session id. */
-export function createBot(dataRoot: string, name: string, purpose = "", id: string = randomUUID(), avatar: BotAvatar = defaultAvatar(id)): Bot {
+export function createBot(
+  dataRoot: string,
+  name: string,
+  purpose = "",
+  id: string = randomUUID(),
+  avatar: BotAvatar = defaultAvatar(id),
+): Bot {
   const now = Date.now();
-  const bot: Bot = { id, name: name.trim(), purpose: purpose.trim(), avatar, createdAt: now, lastActive: now, sessions: [id], browser: { enabled: false, headed: false } };
+  const bot: Bot = {
+    id,
+    name: name.trim(),
+    purpose: purpose.trim(),
+    avatar,
+    createdAt: now,
+    lastActive: now,
+    sessions: [id],
+    browser: { enabled: false, headed: false },
+  };
   save(dataRoot, bot);
   return bot;
 }
@@ -101,7 +126,9 @@ export function botContext(dataRoot: string, bot: Bot) {
   const persona = [
     `# This bot`,
     `You are "${bot.name}", one of several specialized bots the user runs; each bot is a single long-running conversation dedicated to its own job.`,
-    bot.purpose ? `Your job: ${bot.purpose}` : "No job description was given; infer it from the conversation and bot memory.",
+    bot.purpose
+      ? `Your job: ${bot.purpose}`
+      : "No job description was given; infer it from the conversation and bot memory.",
     "",
     `## Your files`,
     `Your own files folder is ${files}. The user browses it in the app's sidebar.`,

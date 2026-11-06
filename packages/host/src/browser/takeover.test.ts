@@ -1,20 +1,44 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  spyOn,
+  test,
+} from "bun:test";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBot } from "../bots/index.ts";
-import { migrate } from "../platform/db.ts";
-import { createHostServer, type HostServer } from "../host-server/index.ts";
-import { memorySecrets } from "../platform/secrets.ts";
+
 import type { LiveMessage, ServerEvent } from "@claudebot/contract/events";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
+import { createBot } from "../bots/index.ts";
+import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { parseHostConfig } from "../platform/config.ts";
+import { migrate } from "../platform/db.ts";
+import { memorySecrets } from "../platform/secrets.ts";
+import { defined } from "../testing/defined.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "..", "testing", "fake-claude.ts");
-const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH", "FAKE_CLAUDE_DIR"] as const;
+const ENV_KEYS = [
+  "AGENT_BROWSER_PATH",
+  "AGENT_BROWSER_EXECUTABLE_PATH",
+  "FAKE_CLAUDE_DIR",
+] as const;
 
 let root: string;
 let cwd: string;
@@ -36,7 +60,9 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  for (const k of ENV_KEYS) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+  for (const k of ENV_KEYS)
+    if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -44,7 +70,8 @@ async function startServer(takeoverInactivityMs?: number) {
   engineInput.length = 0;
   engineStream = Bun.serve({
     port: 0,
-    fetch: (req, s) => (s.upgrade(req, { data: undefined }) ? undefined : new Response("no", { status: 400 })),
+    fetch: (req, s) =>
+      s.upgrade(req, { data: undefined }) ? undefined : new Response("no", { status: 400 }),
     websocket: {
       open: (ws) => void sockets.add(ws),
       close: (ws) => void sockets.delete(ws),
@@ -59,7 +86,7 @@ async function startServer(takeoverInactivityMs?: number) {
     secrets: memorySecrets(),
     browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir } },
     liveView: { retryMs: 50 },
-    takeoverInactivityMs,
+    ...(takeoverInactivityMs !== undefined && { takeoverInactivityMs }),
   });
 }
 
@@ -85,8 +112,11 @@ const until = async (check: () => boolean, ms = 4000) => {
   expect(check()).toBe(true);
 };
 
-const ui = (path: string, body: object, headers: Record<string, string> = { "content-type": "application/json", origin: server.url }) =>
-  fetch(`${server.url}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+const ui = (
+  path: string,
+  body: object,
+  headers: Record<string, string> = { "content-type": "application/json", origin: server.url },
+) => fetch(`${server.url}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
 
 /** Everything the chat page receives on /api/events, as it arrives. */
 function events() {
@@ -94,7 +124,12 @@ function events() {
   const abort = new AbortController();
   closers.push(() => abort.abort());
   void (async () => {
-    const res = await fetch(`${server.url}/api/events`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}", signal: abort.signal });
+    const res = await fetch(`${server.url}/api/events`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+      signal: abort.signal,
+    });
     const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = "";
     for (;;) {
@@ -114,7 +149,12 @@ function watchHolder(botId: string) {
   const abort = new AbortController();
   closers.push(() => abort.abort());
   void (async () => {
-    const res = await fetch(`${server.url}/api/browser/live`, { method: "POST", headers: { "content-type": "application/json", origin: server.url }, body: JSON.stringify({ botId }), signal: abort.signal });
+    const res = await fetch(`${server.url}/api/browser/live`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: server.url },
+      body: JSON.stringify({ botId }),
+      signal: abort.signal,
+    });
     const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = "";
     for (;;) {
@@ -135,21 +175,43 @@ async function setup() {
   const botId = createBot(cwd, "bot").id;
   expect((await ui("/api/bots/browser", { botId, enabled: true })).status).toBe(200);
   expect((await ui("/api/open", { botId })).status).toBe(200);
-  const s = server.browser.lease(botId).servers[0];
+  const s = defined(server.browser.lease(botId).servers[0], "server");
   const client = new Client({ name: "test", version: "1.0.0" });
-  await client.connect(new StreamableHTTPClientTransport(new URL(s.url), { requestInit: { headers: { Authorization: `Bearer ${s.token}` } } }));
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(s.url), {
+      requestInit: { headers: { Authorization: `Bearer ${s.token}` } },
+    }),
+  );
   closers.push(() => client.close());
   const call = (name: string, args: Record<string, unknown> = {}) =>
-    client.callTool({ name, arguments: args }).then((r) => ({ isError: r.isError === true, text: (r.content as { text: string }[]).map((c) => c.text).join("\n") }));
+    client.callTool({ name, arguments: args }).then((r) => ({
+      isError: r.isError === true,
+      text: (r.content as { text: string }[]).map((c) => c.text).join("\n"),
+    }));
   const holder = watchHolder(botId);
   await call("browser_open", { url: "https://example.com" });
   await until(() => sockets.size === 1);
   return { botId, call, holder };
 }
 
-const messages = () => (existsSync(join(claudeDir, "messages.jsonl")) ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => (JSON.parse(l) as { text: string }).text) : []);
-const waitCard = (received: ServerEvent[]) => received.find((e) => e.type === "wait") as Extract<ServerEvent, { type: "wait" }> | undefined;
-const request = async (call: Awaited<ReturnType<typeof setup>>["call"], reason = "solve the CAPTCHA") => JSON.parse((await call("browser_request_takeover", { reason })).text) as { status: string; id: string };
+const messages = () =>
+  existsSync(join(claudeDir, "messages.jsonl"))
+    ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => (JSON.parse(l) as { text: string }).text)
+    : [];
+const waitCard = (received: ServerEvent[]) =>
+  received.find((e) => e.type === "wait") as Extract<ServerEvent, { type: "wait" }> | undefined;
+const request = async (
+  call: Awaited<ReturnType<typeof setup>>["call"],
+  reason = "solve the CAPTCHA",
+) =>
+  JSON.parse((await call("browser_request_takeover", { reason })).text) as {
+    status: string;
+    id: string;
+  };
 
 describe("human wait: takeover request", () => {
   test("returns waiting_for_user at once, and the card shows in the feed and replays after a reconnect", async () => {
@@ -162,7 +224,12 @@ describe("human wait: takeover request", () => {
     expect(wait.status).toBe("waiting_for_user");
 
     await until(() => !!waitCard(before));
-    expect(waitCard(before)).toMatchObject({ id: wait.id, kind: "takeover", detail: "solve the CAPTCHA", actions: [{ label: "I'm done" }, { label: "Skip" }] });
+    expect(waitCard(before)).toMatchObject({
+      id: wait.id,
+      kind: "takeover",
+      detail: "solve the CAPTCHA",
+      actions: [{ label: "I'm done" }, { label: "Skip" }],
+    });
 
     const reconnected = events();
     await until(() => !!waitCard(reconnected));
@@ -186,7 +253,7 @@ describe("human wait: takeover request", () => {
     expect((await ui("/api/waits/answer", { id: wait.id, action: "done" })).status).toBe(404);
   });
 
-  test("\"Skip\" tells the bot the user did not handle it", async () => {
+  test('"Skip" tells the bot the user did not handle it', async () => {
     await startServer();
     const { call } = await setup();
     const wait = await request(call, "enter the 2FA code");
@@ -218,8 +285,24 @@ describe("human wait: takeover request", () => {
     const { call } = await setup();
     const wait = await request(call);
     expect((await ui("/api/waits/answer", { id: wait.id, action: "allow" })).status).toBe(404);
-    expect((await ui("/api/waits/answer", { id: wait.id, action: "done" }, { "content-type": "application/json", origin: "https://evil.example" })).status).toBe(403);
-    expect((await ui("/api/waits/answer", { id: wait.id, action: "done" }, { "content-type": "text/plain", origin: server.url })).status).toBe(415);
+    expect(
+      (
+        await ui(
+          "/api/waits/answer",
+          { id: wait.id, action: "done" },
+          { "content-type": "application/json", origin: "https://evil.example" },
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await ui(
+          "/api/waits/answer",
+          { id: wait.id, action: "done" },
+          { "content-type": "text/plain", origin: server.url },
+        )
+      ).status,
+    ).toBe(415);
     await Bun.sleep(100);
     expect(messages()).toEqual([]);
   });
@@ -245,7 +328,12 @@ describe("human wait: takeover request", () => {
     await startServer();
     const { botId, call } = await setup();
     writeFileSync(join(claudeDir, "hold"), "");
-    const created = await ui("/api/routines/create", { botId, name: "nightly", instruction: "check", schedule: { kind: "cron", expr: "0 3 * * *", tz: "UTC" } });
+    const created = await ui("/api/routines/create", {
+      botId,
+      name: "nightly",
+      instruction: "check",
+      schedule: { kind: "cron", expr: "0 3 * * *", tz: "UTC" },
+    });
     const routine = (await created.json()) as { id: string };
     await ui("/api/routines/run", { id: routine.id });
     await until(() => messages().length === 1);
@@ -288,7 +376,10 @@ describe("user takeover", () => {
   test("taking control stops new calls, waits for the running one, then grants", async () => {
     await startServer();
     const { botId, call, holder } = await setup();
-    writeFileSync(join(fakeDir, "script.json"), JSON.stringify({ streamPort: engineStream!.port, delayMs: { snapshot: 700 } }));
+    writeFileSync(
+      join(fakeDir, "script.json"),
+      JSON.stringify({ streamPort: engineStream!.port, delayMs: { snapshot: 700 } }),
+    );
     await until(() => holder.length > 0);
 
     const running = call("browser_snapshot");
@@ -296,13 +387,33 @@ describe("user takeover", () => {
     const taking = ui("/api/browser/control", { botId, action: "take" });
     await until(() => holder.at(-1) === "draining");
     // Not granted yet: input is refused, and a new call is refused outright.
-    expect((await ui("/api/browser/input", { botId, kind: "mouse", eventType: "mouseMoved", x: 1, y: 1 })).status).toBe(409);
+    expect(
+      (
+        await ui("/api/browser/input", {
+          botId,
+          kind: "mouse",
+          eventType: "mouseMoved",
+          x: 1,
+          y: 1,
+        })
+      ).status,
+    ).toBe(409);
     expect((await call("browser_get_text")).text).toBe("user has control");
 
     expect((await running).isError).toBe(false);
     expect((await taking).status).toBe(200);
     await until(() => holder.at(-1) === "user");
-    expect((await ui("/api/browser/input", { botId, kind: "mouse", eventType: "mouseMoved", x: 1, y: 1 })).status).toBe(200);
+    expect(
+      (
+        await ui("/api/browser/input", {
+          botId,
+          kind: "mouse",
+          eventType: "mouseMoved",
+          x: 1,
+          y: 1,
+        })
+      ).status,
+    ).toBe(200);
   });
 
   test("taking control of a browser that is not running is refused", async () => {
@@ -314,7 +425,7 @@ describe("user takeover", () => {
 
   test("control ends after the inactivity period and counts as Skip for a requested takeover", async () => {
     await startServer(250);
-    const { botId, call, holder } = await setup();
+    const { call, holder } = await setup();
     const received = events();
     const wait = await request(call, "enter the code");
     await until(() => holder.at(-1) === "user");
@@ -333,7 +444,17 @@ describe("user takeover", () => {
     await ui("/api/browser/control", { botId, action: "take" });
     for (let i = 0; i < 6; i++) {
       await Bun.sleep(150);
-      expect((await ui("/api/browser/input", { botId, kind: "mouse", eventType: "mouseMoved", x: i, y: i })).status).toBe(200);
+      expect(
+        (
+          await ui("/api/browser/input", {
+            botId,
+            kind: "mouse",
+            eventType: "mouseMoved",
+            x: i,
+            y: i,
+          })
+        ).status,
+      ).toBe(200);
     }
     expect(holder.at(-1)).toBe("user");
     await until(() => holder.at(-1) === "bot");
@@ -344,7 +465,15 @@ describe("takeover input", () => {
   test("is refused unless the user holds control, and nothing reaches the engine", async () => {
     await startServer();
     const { botId } = await setup();
-    const res = await ui("/api/browser/input", { botId, kind: "mouse", eventType: "mousePressed", x: 5, y: 5, button: "left", clickCount: 1 });
+    const res = await ui("/api/browser/input", {
+      botId,
+      kind: "mouse",
+      eventType: "mousePressed",
+      x: 5,
+      y: 5,
+      button: "left",
+      clickCount: 1,
+    });
     expect(res.status).toBe(409);
     await Bun.sleep(100);
     expect(engineInput).toEqual([]);
@@ -354,7 +483,17 @@ describe("takeover input", () => {
     await startServer();
     const { botId, call } = await setup();
     await request(call);
-    expect((await ui("/api/browser/input", { botId, kind: "mouse", eventType: "mouseMoved", x: 5, y: 5 })).status).toBe(200);
+    expect(
+      (
+        await ui("/api/browser/input", {
+          botId,
+          kind: "mouse",
+          eventType: "mouseMoved",
+          x: 5,
+          y: 5,
+        })
+      ).status,
+    ).toBe(200);
     await until(() => engineInput.length === 1);
   });
 
@@ -362,14 +501,59 @@ describe("takeover input", () => {
     await startServer();
     const { botId } = await setup();
     await ui("/api/browser/control", { botId, action: "take" });
-    const send = (e: object) => ui("/api/browser/input", { botId, ...e, extra: "ignored", injected: { type: "command", action: "evaluate" } });
-    expect((await send({ kind: "mouse", eventType: "mousePressed", x: 10, y: 20, button: "left", clickCount: 1 })).status).toBe(200);
-    expect((await send({ kind: "keyboard", eventType: "keyDown", key: "a", code: "KeyA", text: "a", windowsVirtualKeyCode: 65 })).status).toBe(200);
-    expect((await send({ kind: "touch", eventType: "touchStart", touchPoints: [{ x: 1, y: 2 }] })).status).toBe(200);
+    const send = (e: object) =>
+      ui("/api/browser/input", {
+        botId,
+        ...e,
+        extra: "ignored",
+        injected: { type: "command", action: "evaluate" },
+      });
+    expect(
+      (
+        await send({
+          kind: "mouse",
+          eventType: "mousePressed",
+          x: 10,
+          y: 20,
+          button: "left",
+          clickCount: 1,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await send({
+          kind: "keyboard",
+          eventType: "keyDown",
+          key: "a",
+          code: "KeyA",
+          text: "a",
+          windowsVirtualKeyCode: 65,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (await send({ kind: "touch", eventType: "touchStart", touchPoints: [{ x: 1, y: 2 }] }))
+        .status,
+    ).toBe(200);
     await until(() => engineInput.length === 3);
     expect(engineInput.map((m) => JSON.parse(m))).toEqual([
-      { type: "input_mouse", eventType: "mousePressed", x: 10, y: 20, button: "left", clickCount: 1 },
-      { type: "input_keyboard", eventType: "keyDown", key: "a", code: "KeyA", text: "a", windowsVirtualKeyCode: 65 },
+      {
+        type: "input_mouse",
+        eventType: "mousePressed",
+        x: 10,
+        y: 20,
+        button: "left",
+        clickCount: 1,
+      },
+      {
+        type: "input_keyboard",
+        eventType: "keyDown",
+        key: "a",
+        code: "KeyA",
+        text: "a",
+        windowsVirtualKeyCode: 65,
+      },
       { type: "input_touch", eventType: "touchStart", touchPoints: [{ x: 1, y: 2 }] },
     ]);
   });
@@ -378,7 +562,12 @@ describe("takeover input", () => {
     await startServer();
     const { botId } = await setup();
     await ui("/api/browser/control", { botId, action: "take" });
-    for (const bad of [{ kind: "mouse", eventType: "evaluate", x: 1, y: 1 }, { kind: "mouse", eventType: "mouseMoved", x: "1", y: 1 }, { kind: "drag" }, {}]) {
+    for (const bad of [
+      { kind: "mouse", eventType: "evaluate", x: 1, y: 1 },
+      { kind: "mouse", eventType: "mouseMoved", x: "1", y: 1 },
+      { kind: "drag" },
+      {},
+    ]) {
       expect((await ui("/api/browser/input", { botId, ...bad })).status).toBe(400);
     }
     expect(engineInput).toEqual([]);
@@ -389,11 +578,33 @@ describe("takeover input", () => {
     const { botId } = await setup();
     await ui("/api/browser/control", { botId, action: "take" });
     const event = { botId, kind: "mouse", eventType: "mouseMoved", x: 1, y: 1 };
-    expect((await ui("/api/browser/input", event, { "content-type": "application/json" })).status).toBe(403);
-    expect((await ui("/api/browser/input", event, { "content-type": "application/json", origin: "https://evil.example" })).status).toBe(403);
-    expect((await ui("/api/browser/input", event, { "content-type": "text/plain", origin: server.url })).status).toBe(415);
-    expect((await ui("/api/browser/control", { botId, action: "hand_back" }, { "content-type": "application/json", origin: "https://evil.example" })).status).toBe(403);
-    expect((await fetch(`${server.url}/api/browser/input`, { headers: { origin: server.url } })).status).toBe(405);
+    expect(
+      (await ui("/api/browser/input", event, { "content-type": "application/json" })).status,
+    ).toBe(403);
+    expect(
+      (
+        await ui("/api/browser/input", event, {
+          "content-type": "application/json",
+          origin: "https://evil.example",
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await ui("/api/browser/input", event, { "content-type": "text/plain", origin: server.url }))
+        .status,
+    ).toBe(415);
+    expect(
+      (
+        await ui(
+          "/api/browser/control",
+          { botId, action: "hand_back" },
+          { "content-type": "application/json", origin: "https://evil.example" },
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (await fetch(`${server.url}/api/browser/input`, { headers: { origin: server.url } })).status,
+    ).toBe(405);
     expect(engineInput).toEqual([]);
   });
 
@@ -401,7 +612,17 @@ describe("takeover input", () => {
     await startServer();
     const botId = createBot(cwd, "off").id;
     expect((await ui("/api/browser/control", { botId, action: "take" })).status).toBe(403);
-    expect((await ui("/api/browser/input", { botId, kind: "mouse", eventType: "mouseMoved", x: 1, y: 1 })).status).toBe(403);
+    expect(
+      (
+        await ui("/api/browser/input", {
+          botId,
+          kind: "mouse",
+          eventType: "mouseMoved",
+          x: 1,
+          y: 1,
+        })
+      ).status,
+    ).toBe(403);
   });
 
   test("events are never logged, put in the chat feed, or recorded", async () => {
@@ -411,18 +632,35 @@ describe("takeover input", () => {
     const log = spyOn(console, "log");
     await ui("/api/browser/control", { botId, action: "take" });
     const typed = "hunter2-typed-secret";
-    for (const ch of typed) await ui("/api/browser/input", { botId, kind: "keyboard", eventType: "keyDown", key: ch, text: ch });
-    await ui("/api/browser/input", { botId, kind: "mouse", eventType: "mousePressed", x: 777, y: 888, button: "left", clickCount: 1 });
+    for (const ch of typed)
+      await ui("/api/browser/input", {
+        botId,
+        kind: "keyboard",
+        eventType: "keyDown",
+        key: ch,
+        text: ch,
+      });
+    await ui("/api/browser/input", {
+      botId,
+      kind: "mouse",
+      eventType: "mousePressed",
+      x: 777,
+      y: 888,
+      button: "left",
+      clickCount: 1,
+    });
     await ui("/api/browser/input", { botId, kind: "mouse", eventType: "bogus", x: 777, y: 888 });
     await until(() => engineInput.length === typed.length + 1);
 
     const received = events();
     await Bun.sleep(300);
-    const everything = JSON.stringify(received) + JSON.stringify(logged.mock.calls) + JSON.stringify(log.mock.calls);
+    const everything =
+      JSON.stringify(received) + JSON.stringify(logged.mock.calls) + JSON.stringify(log.mock.calls);
     logged.mockRestore();
     log.mockRestore();
     expect(everything).not.toContain("hunter2");
-    expect(everything).not.toContain("777");
+    // A whole token: a bare "777" substring collides with the random UUIDs and timestamps in the feed.
+    expect(everything).not.toMatch(/\b777\b/);
     expect(received.some((e) => e.type === "user" || e.type === "wait")).toBe(false);
     expect(messages()).toEqual([]);
   });

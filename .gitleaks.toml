@@ -1,0 +1,10 @@
+title = "claudebot gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Fake password fixture in login.test.ts (path before the packages/ move, in history)"
+condition = "AND"
+paths = ['''(^|/)src/browser/login\.test\.ts$''']
+regexes = ['''Zq7-correct-horse-battery''']

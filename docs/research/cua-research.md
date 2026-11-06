@@ -10,23 +10,25 @@ Researched 2026-11-05/06. Status: research only, no decision yet; next step is t
 ## 0. Headline: the brief's premise is out of date
 
 The brief asks about the Computer SDK, Agent SDK, computer-server and Cua Cloud. All four are gone or no longer maintained:
+
 - **Cua Cloud and Fleets ended on 18 Oct 2026.** `on="cloud"` now fails with "Cua Cloud has ended…". Source: https://cua.ai/docs/cua-sdk/guides/cua-cloud-ended
 - **Deprecated and unmaintained** (last releases): `cua-computer` 0.5.19, `cua-computer-server` 0.3.46, `cua-agent` 0.10.1 (all on PyPI) and `cuabot` 1.0.14 (npm). The docs say of cuabot: "known security issues… Do not run it." Sources: https://cua.ai/docs/cua-sdk/guides/cua-cloud-ended and https://github.com/trycua/cua (README, "Deprecated packages")
 - These replace them: **Cua Driver** (Rust; MCP and CLI; drives native apps), **cua SDK + `cua` CLI** (Rust core with Python, TS and Rust bindings; sandboxes), **cua-spacesd** (in-guest daemon on port 3211, gRPC) and **Cua Spaces** (desktop app). Source: https://github.com/trycua/cua
 
 ## 1. What Cua is
 
-| Component | What it is | License | Source |
-|---|---|---|---|
-| Cua Driver (`cua-driver`) | Background computer-use driver for macOS, Windows and Linux. Speaks MCP over stdio. Also has a CLI (`cua-driver call <tool>`) and an SDK (`cua_driver` for Python, `@trycua/cua-driver` for TS, via UniFFI, in-process). | MIT (the optional `cua-perception` extension is AGPL) | https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/README.md |
-| cua SDK + `cua` CLI | Sandboxes (containers, VMs, microVMs) locally, in your own AWS/GCP/Hetzner/Modal account, or on E2B/Daytona. Packages: Python `pip install cua`, TS `@trycua/cua`, Rust `cua-sdk`. Swift and Kotlin bindings are not yet released. | MIT | https://github.com/trycua/cua |
-| cua-spacesd | Daemon inside the guest on port 3211: gRPC/gRPC-Web, `/mcp` (Streamable HTTP), `/viewer/`, `/files`, and media over H.264/Opus (QUIC on 3212). It replaces computer-server (port 8000) and is **not wire-compatible** with it. | FSL-1.1-MIT (becomes MIT 2 years after each release; no competing hosted service) | https://raw.githubusercontent.com/trycua/cua/main/libs/cua-spacesd/README.md |
-| Cua Spaces | macOS app (Tauri on Linux/Windows) that gives agents full desktops. Has multiplayer cursors, "teleport" of signed-in apps, and a Keyvault. Free for individuals. Pro is $18/mo ($180/yr); Teams is $30/seat/mo. | FSL-1.1-MIT | https://github.com/trycua/cua, https://cua.ai/pricing |
-| Lume | CLI, local HTTP API (`lume serve`, port 7777) and MCP for macOS and Linux VMs on Apple Silicon, using Virtualization.framework. | MIT | https://cua.ai/docs/lume/quickstart, https://cua.ai/docs/lume/reference/http-api.md |
-| Lumier | Docker-compatible interface for Lume VMs. | MIT | https://github.com/trycua/cua |
-| Cua Bench, CUA-S1 | Benchmarks and RL tooling; small specialized "System 1" models. Not relevant to claudebot. | MIT (code) | https://github.com/trycua/cua |
+| Component                 | What it is                                                                                                                                                                                                                         | License                                                                           | Source                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Cua Driver (`cua-driver`) | Background computer-use driver for macOS, Windows and Linux. Speaks MCP over stdio. Also has a CLI (`cua-driver call <tool>`) and an SDK (`cua_driver` for Python, `@trycua/cua-driver` for TS, via UniFFI, in-process).           | MIT (the optional `cua-perception` extension is AGPL)                             | https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/README.md         |
+| cua SDK + `cua` CLI       | Sandboxes (containers, VMs, microVMs) locally, in your own AWS/GCP/Hetzner/Modal account, or on E2B/Daytona. Packages: Python `pip install cua`, TS `@trycua/cua`, Rust `cua-sdk`. Swift and Kotlin bindings are not yet released. | MIT                                                                               | https://github.com/trycua/cua                                                       |
+| cua-spacesd               | Daemon inside the guest on port 3211: gRPC/gRPC-Web, `/mcp` (Streamable HTTP), `/viewer/`, `/files`, and media over H.264/Opus (QUIC on 3212). It replaces computer-server (port 8000) and is **not wire-compatible** with it.     | FSL-1.1-MIT (becomes MIT 2 years after each release; no competing hosted service) | https://raw.githubusercontent.com/trycua/cua/main/libs/cua-spacesd/README.md        |
+| Cua Spaces                | macOS app (Tauri on Linux/Windows) that gives agents full desktops. Has multiplayer cursors, "teleport" of signed-in apps, and a Keyvault. Free for individuals. Pro is $18/mo ($180/yr); Teams is $30/seat/mo.                    | FSL-1.1-MIT                                                                       | https://github.com/trycua/cua, https://cua.ai/pricing                               |
+| Lume                      | CLI, local HTTP API (`lume serve`, port 7777) and MCP for macOS and Linux VMs on Apple Silicon, using Virtualization.framework.                                                                                                    | MIT                                                                               | https://cua.ai/docs/lume/quickstart, https://cua.ai/docs/lume/reference/http-api.md |
+| Lumier                    | Docker-compatible interface for Lume VMs.                                                                                                                                                                                          | MIT                                                                               | https://github.com/trycua/cua                                                       |
+| Cua Bench, CUA-S1         | Benchmarks and RL tooling; small specialized "System 1" models. Not relevant to claudebot.                                                                                                                                         | MIT (code)                                                                        | https://github.com/trycua/cua                                                       |
 
 **Activity and maturity** (GitHub API, 2026-11-05):
+
 - 31,794 stars, 2,363 forks, ~1,400 open issues. Primary language is Rust. Last push was 2026-11-05. Source: https://github.com/trycua/cua (via `gh api repos/trycua/cua`)
 - Release cadence is very high and all versions are still 0.x:
   - cua-spaces ships stable or beta releases almost daily (v0.20.0 on 2026-11-03, v0.21.0-beta.7 on 11-05).
@@ -38,17 +40,17 @@ The brief asks about the Computer SDK, Agent SDK, computer-server and Cua Cloud.
 
 ## 2. Sandbox / VM options
 
-| Option | Details | Source |
-|---|---|---|
-| macOS VM (Lume) | Needs an Apple Silicon Mac on macOS 13+, **8 GB free memory and ~50 GB free disk**. `lume create macos-tahoe --ipsw latest --unattended tahoe` creates user `lume`/`lume` with SSH on. A macOS Space needs about 50 GB. | https://cua.ai/docs/lume/quickstart, https://cua.ai/docs/spaces/guides/troubleshoot.md |
-| macOS 2-VM limit | "Apple allows two macOS VMs at a time on one Mac" (error `vm_limit`). | https://cua.ai/docs/spaces/guides/troubleshoot.md |
-| macOS image | `ghcr.io/trycua/macos:15` (Sequoia). It **still ships legacy cua-computer-server, not cua-spacesd**. Exec, screenshots and view go over SSH and VNC instead. | https://cua.ai/docs/cua-sdk/reference/os-image-catalog.md |
-| Linux container | `ghcr.io/trycua/linux:24.04`: XFCE on Xvfb, cua-spacesd on 3211, HTML5 viewer at `/viewer/`. Runs on Docker or Podman, using gVisor if installed, else runc. With `kind="vm"` it runs under QEMU. On a Mac with no container engine, cua boots one shared Linux VM (up to 75% of RAM, capped at 32 GiB, and 4 CPUs by default; it stops after 120 s idle). | https://cua.ai/docs/cua-sdk/guides/local-runtimes, https://cua.ai/docs/cua-sdk/reference/os-image-catalog.md |
-| Windows | `Image.windows()` is amd64. It runs under **slow TCG emulation on Apple Silicon**. Windows 11 ARM works on QEMU but needs swtpm, AAVMF firmware and a manual NetKVM driver install. No Windows license is included. | https://cua.ai/docs/cua-sdk/guides/local-runtimes, https://cua.ai/docs/cua-sdk/reference/os-image-catalog.md |
-| Windows Sandbox | Not found in current docs. [UNVERIFIED] Older Cua releases supported it; current docs list QEMU and Hyper-V runtimes (https://cua.ai/docs/llms.txt, "Runtimes and configuration"). | |
-| Cua Cloud | **Ended 2026-10-18.** No hosted pricing. "Your own cloud" bills you directly at the cloud provider. | https://cua.ai/docs/cua-sdk/guides/cua-cloud-ended |
-| Resource sizing | The default profile is 2 vCPU / 4 GiB. `rollout` is 1 vCPU / 1 GiB with no desktop. `--ready-timeout` defaults to 600 s plus up to 120 s for spacesd. Pools hand out a ready sandbox in about 0.1 s. Forks restore memory in about 1 s or less. | https://cua.ai/docs/cua-cli/reference/cli/sandboxes.md |
-| Startup time | A cold macOS VM start is slow on first use: "first macOS Space unpacks a large image and can run out of time". Exact cold-boot seconds are [UNVERIFIED]. | https://cua.ai/docs/spaces/guides/troubleshoot.md |
+| Option           | Details                                                                                                                                                                                                                                                                                                                                                    | Source                                                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| macOS VM (Lume)  | Needs an Apple Silicon Mac on macOS 13+, **8 GB free memory and ~50 GB free disk**. `lume create macos-tahoe --ipsw latest --unattended tahoe` creates user `lume`/`lume` with SSH on. A macOS Space needs about 50 GB.                                                                                                                                    | https://cua.ai/docs/lume/quickstart, https://cua.ai/docs/spaces/guides/troubleshoot.md                       |
+| macOS 2-VM limit | "Apple allows two macOS VMs at a time on one Mac" (error `vm_limit`).                                                                                                                                                                                                                                                                                      | https://cua.ai/docs/spaces/guides/troubleshoot.md                                                            |
+| macOS image      | `ghcr.io/trycua/macos:15` (Sequoia). It **still ships legacy cua-computer-server, not cua-spacesd**. Exec, screenshots and view go over SSH and VNC instead.                                                                                                                                                                                               | https://cua.ai/docs/cua-sdk/reference/os-image-catalog.md                                                    |
+| Linux container  | `ghcr.io/trycua/linux:24.04`: XFCE on Xvfb, cua-spacesd on 3211, HTML5 viewer at `/viewer/`. Runs on Docker or Podman, using gVisor if installed, else runc. With `kind="vm"` it runs under QEMU. On a Mac with no container engine, cua boots one shared Linux VM (up to 75% of RAM, capped at 32 GiB, and 4 CPUs by default; it stops after 120 s idle). | https://cua.ai/docs/cua-sdk/guides/local-runtimes, https://cua.ai/docs/cua-sdk/reference/os-image-catalog.md |
+| Windows          | `Image.windows()` is amd64. It runs under **slow TCG emulation on Apple Silicon**. Windows 11 ARM works on QEMU but needs swtpm, AAVMF firmware and a manual NetKVM driver install. No Windows license is included.                                                                                                                                        | https://cua.ai/docs/cua-sdk/guides/local-runtimes, https://cua.ai/docs/cua-sdk/reference/os-image-catalog.md |
+| Windows Sandbox  | Not found in current docs. [UNVERIFIED] Older Cua releases supported it; current docs list QEMU and Hyper-V runtimes (https://cua.ai/docs/llms.txt, "Runtimes and configuration").                                                                                                                                                                         |                                                                                                              |
+| Cua Cloud        | **Ended 2026-10-18.** No hosted pricing. "Your own cloud" bills you directly at the cloud provider.                                                                                                                                                                                                                                                        | https://cua.ai/docs/cua-sdk/guides/cua-cloud-ended                                                           |
+| Resource sizing  | The default profile is 2 vCPU / 4 GiB. `rollout` is 1 vCPU / 1 GiB with no desktop. `--ready-timeout` defaults to 600 s plus up to 120 s for spacesd. Pools hand out a ready sandbox in about 0.1 s. Forks restore memory in about 1 s or less.                                                                                                            | https://cua.ai/docs/cua-cli/reference/cli/sandboxes.md                                                       |
+| Startup time     | A cold macOS VM start is slow on first use: "first macOS Space unpacks a large image and can run out of time". Exact cold-boot seconds are [UNVERIFIED].                                                                                                                                                                                                   | https://cua.ai/docs/spaces/guides/troubleshoot.md                                                            |
 
 ## 3. Interfaces (TypeScript and non-Python use)
 
@@ -190,15 +192,15 @@ Build it only if bots' failing tasks involve desktop apps, files, or sites that 
 
 Browser limits come from `docs/browser.md`.
 
-| Task | Bot browser today | With computer use |
-| --- | --- | --- |
-| Desktop apps (LibreOffice, GIMP, Inkscape, Thunderbird, any Linux GUI) | No | Yes. Cua's own demo drives LibreOffice Calc and Inkscape. |
-| Download a file, then open or edit it | No downloads | Yes, inside the bot's desktop |
-| Upload a file to a website | No uploads | Yes, through the normal file picker |
-| Workflows across apps (export a CSV from a site, chart it in a spreadsheet, email the result) | Web only | Yes |
-| Sites that reject automated Chrome (Google sign-in) or fingerprint browsers | Fails, even under takeover | Maybe: the desktop runs an ordinary browser not under automation control. [INFERENCE], needs testing. |
-| Canvas-drawn pages, games, remote-desktop apps | Text snapshot is useless | Works from pixels |
-| Installing and running tools inside its desktop | Not possible | Possible later with an in-desktop shell tool (not in first scope) |
+| Task                                                                                          | Bot browser today          | With computer use                                                                                     |
+| --------------------------------------------------------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Desktop apps (LibreOffice, GIMP, Inkscape, Thunderbird, any Linux GUI)                        | No                         | Yes. Cua's own demo drives LibreOffice Calc and Inkscape.                                             |
+| Download a file, then open or edit it                                                         | No downloads               | Yes, inside the bot's desktop                                                                         |
+| Upload a file to a website                                                                    | No uploads                 | Yes, through the normal file picker                                                                   |
+| Workflows across apps (export a CSV from a site, chart it in a spreadsheet, email the result) | Web only                   | Yes                                                                                                   |
+| Sites that reject automated Chrome (Google sign-in) or fingerprint browsers                   | Fails, even under takeover | Maybe: the desktop runs an ordinary browser not under automation control. [INFERENCE], needs testing. |
+| Canvas-drawn pages, games, remote-desktop apps                                                | Text snapshot is useless   | Works from pixels                                                                                     |
+| Installing and running tools inside its desktop                                               | Not possible               | Possible later with an in-desktop shell tool (not in first scope)                                     |
 
 ### User-facing features
 
@@ -228,6 +230,7 @@ flowchart LR
 ```
 
 **Reuse from the browser feature:**
+
 - `HostServersSource` / `HostServerLease` in `src/harness/index.ts`: the computer endpoint is one more server in the lease.
 - Per-session bearer tokens, Host/Origin checks, same-origin guard (`src/browser/ui-guard.ts`).
 - `src/browser/human-waits.ts` and `takeover.ts`: "Needs you" card, I'm done / Skip, 30-minute auto-skip.
@@ -236,6 +239,7 @@ flowchart LR
 - The install-command pattern: pinned version plus SHA-256 in claudebot's source.
 
 **Bot tools:**
+
 - `computer_screenshot`, `computer_click(x,y,button)`, `computer_double_click`, `computer_drag`, `computer_move`.
 - `computer_type`, `computer_key`, `computer_scroll`, `computer_wait`.
 - `computer_request_takeover`, `computer_restart`.
@@ -243,6 +247,7 @@ flowchart LR
 - No shell or file tools at first: the bot already has a sandboxed host shell.
 
 **Host → sandbox transport**, in order of preference:
+
 1. `@trycua/cua` in-process (Bun loading of the native addon is [UNVERIFIED]).
 2. The `cua` CLI, mirroring ADR 0001's "drive the engine through its supported CLI".
 3. Host as MCP client of the guest `/mcp`, re-exposing only whitelisted tools.
@@ -252,6 +257,7 @@ flowchart LR
 ## 13. Initial scope
 
 **In:**
+
 - Per-bot **Computer** switch, off by default.
 - One Linux desktop container per bot (`ghcr.io/trycua/linux:24.04`, gVisor where available), started on first call.
 - 10-minute idle stop keeping the disk; leftover containers removed after a crash.
@@ -274,13 +280,13 @@ Each answer can change the design:
 
 ## 15. Pros and cons
 
-| | Pros | Cons |
-| --- | --- | --- |
-| What bots can do | Desktop apps, file downloads/uploads, any GUI. Maybe sites that reject automated Chrome (untested). | Overlaps the browser for most web tasks. Pixel clicks are slower and less reliable than ref clicks. |
-| Fit with claudebot | Reuses ADR 0001's design, takeover, human waits and lease almost unchanged. Harness-neutral for free. | A second engine to install, pin, clean up after crashes and keep secure. |
-| Cua | Open source (MIT; FSL-1.1-MIT for spacesd/viewer), native binaries, no Python, sandboxes, built-in viewer with shared control, ~31.8k stars. | 0.x, heavy churn and recent breaking rewrites, ~1,400 open issues, telemetry on by default (can be disabled). macOS side lags Linux. |
-| Cost | Local, no cloud bill. | ~2 vCPU / 4 GiB per sandbox; on a Mac without Docker, Cua's shared Linux VM can take up to 75% of RAM. ~1.4k tokens per screenshot. |
-| Safety | Container isolation; host keeps the token and enforces policy. | Anything on screen can attempt prompt injection, with no structured page text to wrap as untrusted. Container network open unless locked down. |
+|                    | Pros                                                                                                                                         | Cons                                                                                                                                           |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| What bots can do   | Desktop apps, file downloads/uploads, any GUI. Maybe sites that reject automated Chrome (untested).                                          | Overlaps the browser for most web tasks. Pixel clicks are slower and less reliable than ref clicks.                                            |
+| Fit with claudebot | Reuses ADR 0001's design, takeover, human waits and lease almost unchanged. Harness-neutral for free.                                        | A second engine to install, pin, clean up after crashes and keep secure.                                                                       |
+| Cua                | Open source (MIT; FSL-1.1-MIT for spacesd/viewer), native binaries, no Python, sandboxes, built-in viewer with shared control, ~31.8k stars. | 0.x, heavy churn and recent breaking rewrites, ~1,400 open issues, telemetry on by default (can be disabled). macOS side lags Linux.           |
+| Cost               | Local, no cloud bill.                                                                                                                        | ~2 vCPU / 4 GiB per sandbox; on a Mac without Docker, Cua's shared Linux VM can take up to 75% of RAM. ~1.4k tokens per screenshot.            |
+| Safety             | Container isolation; host keeps the token and enforces policy.                                                                               | Anything on screen can attempt prompt injection, with no structured page text to wrap as untrusted. Container network open unless locked down. |
 
 ## 16. Recommendations
 

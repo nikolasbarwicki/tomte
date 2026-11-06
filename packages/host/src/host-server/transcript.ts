@@ -1,15 +1,43 @@
 import type { Database } from "bun:sqlite";
+
 import { getSessionInfo, getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
+import {
+  RunTrigger,
+  type Bot,
+  type LastMessage,
+  type ServerEvent,
+} from "@claudebot/contract/events";
+import { z } from "zod";
+
 import { currentSession, listBots, markSeen, getActivity, recordMessage } from "../bots/index.ts";
 import { parseMentions, type Handoffs } from "../handoffs/index.ts";
-import type { Bot, LastMessage, RunTrigger, ServerEvent } from "@claudebot/contract/events";
 
 export type Transcript = { history: ServerEvent[]; hasSession: boolean };
 
 const ROUTINE_TAG = /^<scheduled-routine name="([^"]*)" trigger="(schedule|manual)"/;
 
+/** A tool call's input as the session file holds it; handoff cards read only its text fields. */
+const ToolInput = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((input) =>
+    Object.fromEntries(
+      Object.entries(input).filter((e): e is [string, string] => typeof e[1] === "string"),
+    ),
+  );
+
 /** Rebuilds UI transcripts from Claude Code's own session files. */
-export function createTranscripts({ cwd, dataRoot, db, handoffs }: { cwd: string; dataRoot: string; db: Database; handoffs: Pick<Handoffs, "receivedCards" | "sentCards"> }) {
+export function createTranscripts({
+  cwd,
+  dataRoot,
+  db,
+  handoffs,
+}: {
+  cwd: string;
+  dataRoot: string;
+  db: Database;
+  handoffs: Pick<Handoffs, "receivedCards" | "sentCards">;
+}) {
   /** Rebuild the UI transcript of a bot's session from Claude Code's own session file. */
   async function replay(sessionId: string, ownerId: string): Promise<ServerEvent[]> {
     const out: ServerEvent[] = [];
@@ -18,20 +46,33 @@ export function createTranscripts({ cwd, dataRoot, db, handoffs }: { cwd: string
       const content = msg && typeof msg === "object" && "content" in msg ? msg.content : undefined;
       if (m.parent_tool_use_id) continue;
       if (m.type === "user") {
-        const texts = typeof content === "string" ? [content] : Array.isArray(content) ? content.flatMap((b) => (b.type === "text" ? [b.text] : [])) : [];
+        const texts =
+          typeof content === "string"
+            ? [content]
+            : Array.isArray(content)
+              ? content.flatMap((b) => (b.type === "text" ? [b.text] : []))
+              : [];
         for (const text of texts) {
           const routine = text.match(ROUTINE_TAG);
-          if (routine) out.push({ type: "routine", name: routine[1], trigger: routine[2] as RunTrigger });
-          else if (/^<handoff(-update)? /.test(text)) out.push(...handoffs.receivedCards(text, ownerId));
+          if (routine)
+            out.push({ type: "routine", name: routine[1], trigger: RunTrigger.parse(routine[2]) });
+          else if (/^<handoff(-update)? /.test(text))
+            out.push(...handoffs.receivedCards(text, ownerId));
           else if (!text.startsWith("<") || text.startsWith("<mention ")) {
             const { text: typed, mentions } = parseMentions(text);
-            out.push(mentions.length ? { type: "user", text: typed, mentions } : { type: "user", text });
+            out.push(
+              mentions.length ? { type: "user", text: typed, mentions } : { type: "user", text },
+            );
           }
         }
       } else if (m.type === "assistant" && Array.isArray(content)) {
         for (const b of content) {
           if (b.type === "text") out.push({ type: "text_start" }, { type: "delta", text: b.text });
-          if (b.type === "tool_use") out.push({ type: "tool", name: b.name, input: JSON.stringify(b.input) }, ...handoffs.sentCards(b.name, b.input as Record<string, string>, ownerId));
+          if (b.type === "tool_use")
+            out.push(
+              { type: "tool", name: b.name, input: JSON.stringify(b.input) },
+              ...handoffs.sentCards(b.name, ToolInput.parse(b.input), ownerId),
+            );
         }
       }
     }
@@ -44,7 +85,10 @@ export function createTranscripts({ cwd, dataRoot, db, handoffs }: { cwd: string
     async transcript(bot: Bot): Promise<Transcript> {
       // getSessionInfo has no summary for a session whose first message is a host tag (<handoff>, <scheduled-routine>), so fall back to its messages.
       const current = currentSession(bot);
-      const hasSession = !!(await getSessionInfo(current, { dir: cwd })) || (await getSessionMessages(current, { dir: cwd })).length > 0;
+      const hasSession =
+        current !== undefined &&
+        (!!(await getSessionInfo(current, { dir: cwd })) ||
+          (await getSessionMessages(current, { dir: cwd })).length > 0);
       const history: ServerEvent[] = [];
       for (const [i, id] of bot.sessions.entries()) {
         if (i > 0) history.push({ type: "session" });

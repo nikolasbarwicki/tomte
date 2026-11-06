@@ -1,18 +1,25 @@
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
-import { BROWSER_ENDPOINT_PATH, BROWSER_UI_PATHS, CREDENTIAL_EXCHANGE_PATH, LIVE_VIEW_PATH, type Browser } from "../browser/index.ts";
+
+import {
+  BROWSER_ENDPOINT_PATH,
+  BROWSER_UI_PATHS,
+  CREDENTIAL_EXCHANGE_PATH,
+  LIVE_VIEW_PATH,
+  type Browser,
+} from "../browser/index.ts";
 import { BOTS_ENDPOINT_PATH, type Handoffs } from "../handoffs/index.ts";
 
 export type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
 
 export interface Route {
-  match(path: string, req: IncomingMessage): boolean;
+  match: (path: string, req: IncomingMessage) => boolean;
   handler: Handler;
   /** Log prefix for a failure; the handler then answers 500. A route without a label handles its own errors. */
   label?: string;
 }
 
 /** Logs a failed handler under `label` and ends the response, with 500 when nothing was sent yet. */
-export function safe(handler: Handler, label: string): Handler {
+function safe(handler: Handler, label: string): Handler {
   return (req, res, url) =>
     handler(req, res, url).catch((e) => {
       console.error(`${label} ${(e as Error).message}`);
@@ -22,22 +29,53 @@ export function safe(handler: Handler, label: string): Handler {
 }
 
 /** Every route the host serves besides the web app, in match order. `oauthCallback` and `api` answer their own failures. */
-export function hostRoutes(o: { browser: Browser; handoffs: Handoffs; oauthCallback: Handler; api: Handler }): Route[] {
+export function hostRoutes(o: {
+  browser: Browser;
+  handoffs: Handoffs;
+  oauthCallback: Handler;
+  api: Handler;
+}): Route[] {
   const { browser, handoffs } = o;
   return [
-    { match: (p, req) => p === "/oauth/callback" && req.method === "GET", handler: o.oauthCallback },
-    { match: (p) => p === BROWSER_ENDPOINT_PATH, handler: (req, res) => browser.endpoint.handle(req, res), label: "[browser] endpoint failed:" },
-    { match: (p) => p === BOTS_ENDPOINT_PATH, handler: (req, res) => handoffs.endpoint.handle(req, res), label: "[bots] endpoint failed:" },
-    { match: (p) => p === CREDENTIAL_EXCHANGE_PATH, handler: (req, res) => browser.handleCredentialExchange(req, res), label: "[browser] credential exchange failed:" },
-    { match: (p) => p === LIVE_VIEW_PATH, handler: (req, res) => browser.handleLiveView(req, res), label: "[browser] live view failed:" },
-    { match: (p) => BROWSER_UI_PATHS.has(p), handler: (req, res, url) => browser.handleUi(req, res, url.pathname), label: "[browser] ui route failed:" },
+    {
+      match: (p, req) => p === "/oauth/callback" && req.method === "GET",
+      handler: o.oauthCallback,
+    },
+    {
+      match: (p) => p === BROWSER_ENDPOINT_PATH,
+      handler: (req, res) => browser.endpoint.handle(req, res),
+      label: "[browser] endpoint failed:",
+    },
+    {
+      match: (p) => p === BOTS_ENDPOINT_PATH,
+      handler: (req, res) => handoffs.endpoint.handle(req, res),
+      label: "[bots] endpoint failed:",
+    },
+    {
+      match: (p) => p === CREDENTIAL_EXCHANGE_PATH,
+      handler: (req, res) => browser.handleCredentialExchange(req, res),
+      label: "[browser] credential exchange failed:",
+    },
+    {
+      match: (p) => p === LIVE_VIEW_PATH,
+      handler: (req, res) => browser.handleLiveView(req, res),
+      label: "[browser] live view failed:",
+    },
+    {
+      match: (p) => BROWSER_UI_PATHS.has(p),
+      handler: (req, res, url) => browser.handleUi(req, res, url.pathname),
+      label: "[browser] ui route failed:",
+    },
     { match: (p) => p.startsWith("/api/"), handler: o.api },
   ];
 }
 
 /** Serves the first matching route, `fallback` when none matches. */
 export function createRequestListener(routes: Route[], fallback: RequestListener): RequestListener {
-  const table = routes.map((r) => ({ match: r.match, handler: r.label ? safe(r.handler, r.label) : r.handler }));
+  const table = routes.map((r) => ({
+    match: r.match,
+    handler: r.label ? safe(r.handler, r.label) : r.handler,
+  }));
   return (req, res) => {
     const url = new URL(req.url ?? "/", "http://x");
     const route = table.find((r) => r.match(url.pathname, req));
@@ -48,10 +86,4 @@ export function createRequestListener(routes: Route[], fallback: RequestListener
 
 export function json(res: ServerResponse, v: unknown, status = 200) {
   res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(v));
-}
-
-export async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
-  let s = "";
-  for await (const chunk of req) s += chunk;
-  return s ? JSON.parse(s) : {};
 }

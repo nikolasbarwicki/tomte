@@ -1,5 +1,11 @@
 import type { Database } from "bun:sqlite";
-import type { RoutineRun, RunStatus, RunTrigger, Schedule } from "@claudebot/contract/events";
+
+import {
+  Schedule,
+  type RoutineRun,
+  type RunStatus,
+  type RunTrigger,
+} from "@claudebot/contract/events";
 
 /** A routine as stored; `Routine` adds the fields derived at read time. */
 export type RoutineRecord = {
@@ -46,7 +52,7 @@ const toRoutine = (r: RoutineRow): RoutineRecord => ({
   botId: r.bot_id,
   name: r.name,
   instruction: r.instruction,
-  schedule: JSON.parse(r.schedule) as Schedule,
+  schedule: Schedule.parse(JSON.parse(r.schedule)),
   active: !!r.active,
   catchUp: !!r.catch_up,
   lastScheduledFor: r.last_scheduled_for,
@@ -73,7 +79,10 @@ export function getRoutine(db: Database, id: string): RoutineRecord | undefined 
 }
 
 export function listRoutines(db: Database, botId: string): RoutineRecord[] {
-  return db.query<RoutineRow, [string]>("SELECT * FROM routines WHERE bot_id = ? ORDER BY created_at").all(botId).map(toRoutine);
+  return db
+    .query<RoutineRow, [string]>("SELECT * FROM routines WHERE bot_id = ? ORDER BY created_at")
+    .all(botId)
+    .map(toRoutine);
 }
 
 export function listActiveRoutines(db: Database): RoutineRecord[] {
@@ -84,7 +93,18 @@ export function insertRoutine(db: Database, r: RoutineRecord) {
   db.query(
     `INSERT INTO routines (id, bot_id, name, instruction, schedule, active, catch_up, last_scheduled_for, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(r.id, r.botId, r.name, r.instruction, JSON.stringify(r.schedule), +r.active, +r.catchUp, r.lastScheduledFor, r.createdAt, r.updatedAt);
+  ).run(
+    r.id,
+    r.botId,
+    r.name,
+    r.instruction,
+    JSON.stringify(r.schedule),
+    +r.active,
+    +r.catchUp,
+    r.lastScheduledFor,
+    r.createdAt,
+    r.updatedAt,
+  );
 }
 
 /** Overwrites the editable fields and `last_scheduled_for` of an existing routine. */
@@ -92,7 +112,16 @@ export function saveRoutine(db: Database, r: RoutineRecord) {
   db.query(
     `UPDATE routines SET name = ?, instruction = ?, schedule = ?, active = ?, catch_up = ?, last_scheduled_for = ?, updated_at = ?
      WHERE id = ?`,
-  ).run(r.name, r.instruction, JSON.stringify(r.schedule), +r.active, +r.catchUp, r.lastScheduledFor, r.updatedAt, r.id);
+  ).run(
+    r.name,
+    r.instruction,
+    JSON.stringify(r.schedule),
+    +r.active,
+    +r.catchUp,
+    r.lastScheduledFor,
+    r.updatedAt,
+    r.id,
+  );
 }
 
 export function deleteRoutine(db: Database, id: string) {
@@ -103,7 +132,9 @@ export function deleteRoutine(db: Database, id: string) {
 export function claimOccurrence(db: Database, id: string, t: number): boolean {
   return (
     db
-      .query("UPDATE routines SET last_scheduled_for = ? WHERE id = ? AND (last_scheduled_for IS NULL OR last_scheduled_for < ?)")
+      .query(
+        "UPDATE routines SET last_scheduled_for = ? WHERE id = ? AND (last_scheduled_for IS NULL OR last_scheduled_for < ?)",
+      )
       .run(t, id, t).changes > 0
   );
 }
@@ -116,28 +147,47 @@ export function insertRun(db: Database, r: RoutineRun) {
   db.query(
     `INSERT INTO routine_runs (id, routine_id, trigger, scheduled_for, status, session_id, output, error, started_at, finished_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(r.id, r.routineId, r.trigger, r.scheduledFor, r.status, r.sessionId, r.output, r.error, r.startedAt, r.finishedAt);
+  ).run(
+    r.id,
+    r.routineId,
+    r.trigger,
+    r.scheduledFor,
+    r.status,
+    r.sessionId,
+    r.output,
+    r.error,
+    r.startedAt,
+    r.finishedAt,
+  );
 }
 
-export function finishRun(db: Database, id: string, status: Exclude<RunStatus, "running">, fields: { output?: string; error?: string; finishedAt: number }) {
-  db.query("UPDATE routine_runs SET status = ?, output = ?, error = ?, finished_at = ? WHERE id = ?").run(
-    status,
-    fields.output ?? null,
-    fields.error ?? null,
-    fields.finishedAt,
-    id,
-  );
+export function finishRun(
+  db: Database,
+  id: string,
+  status: Exclude<RunStatus, "running">,
+  fields: { output?: string; error?: string; finishedAt: number },
+) {
+  db.query(
+    "UPDATE routine_runs SET status = ?, output = ?, error = ?, finished_at = ? WHERE id = ?",
+  ).run(status, fields.output ?? null, fields.error ?? null, fields.finishedAt, id);
 }
 
 export function lastRun(db: Database, routineId: string): RoutineRun | null {
   const r = db
-    .query<RunRow, [string]>("SELECT * FROM routine_runs WHERE routine_id = ? ORDER BY started_at DESC, rowid DESC LIMIT 1")
+    .query<RunRow, [string]>(
+      "SELECT * FROM routine_runs WHERE routine_id = ? ORDER BY started_at DESC, rowid DESC LIMIT 1",
+    )
     .get(routineId);
   return r ? toRun(r) : null;
 }
 
 /** Newest first; `before` pages by `started_at`. */
-export function listRuns(db: Database, routineId: string, before: number, limit: number): RoutineRun[] {
+export function listRuns(
+  db: Database,
+  routineId: string,
+  before: number,
+  limit: number,
+): RoutineRun[] {
   return db
     .query<RunRow, [string, number, number]>(
       "SELECT * FROM routine_runs WHERE routine_id = ? AND started_at < ? ORDER BY started_at DESC, rowid DESC LIMIT ?",

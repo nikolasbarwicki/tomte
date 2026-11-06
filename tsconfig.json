@@ -1,5 +1,9 @@
 {
   "files": [],
   "compilerOptions": { "paths": { "@/*": ["./packages/web/*"] } },
-  "references": [{ "path": "./packages/contract" }, { "path": "./packages/host" }, { "path": "./packages/web" }]
+  "references": [
+    { "path": "./packages/contract" },
+    { "path": "./packages/host" },
+    { "path": "./packages/web" }
+  ]
 }

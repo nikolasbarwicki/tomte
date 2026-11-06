@@ -1,7 +1,8 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
@@ -14,7 +15,8 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await host.stop();
-  savedConfig === undefined ? delete process.env.CLAUDE_CONFIG_DIR : (process.env.CLAUDE_CONFIG_DIR = savedConfig);
+  if (savedConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = savedConfig;
   rmSync(claudeConfig, { recursive: true, force: true });
 });
 
@@ -31,12 +33,17 @@ async function pageEvents(): Promise<PageEvent[]> {
     if (r?.value) text += new TextDecoder().decode(r.value);
   }
   ctl.abort();
-  return text.split("\n\n").filter((l) => l.startsWith("data: ")).map((l) => JSON.parse(l.slice(6)));
+  return text
+    .split("\n\n")
+    .filter((l) => l.startsWith("data: "))
+    .map((l) => JSON.parse(l.slice(6)));
 }
-const chatEvents = async () => (await pageEvents()).filter((e) => ["user", "queued", "dequeued"].includes(e.type));
+const chatEvents = async () =>
+  (await pageEvents()).filter((e) => ["user", "queued", "dequeued"].includes(e.type));
 const open = (id: string) => host.ui("/api/open", { id, botId: id });
 /** Sends a message from the page; the reply names the queued entry when the bot was busy. */
-const send = async (text: string) => (await (await host.ui("/api/send", { text })).json()) as { ok: true; queued?: string };
+const send = async (text: string) =>
+  (await (await host.ui("/api/send", { text })).json()) as { ok: true; queued?: string };
 
 /** Opens a bot and leaves its first turn running. */
 async function busyBot() {
@@ -70,7 +77,11 @@ describe("message queue", () => {
     const ran = await chatEvents();
     expect(ran.filter((e) => e.type === "queued")).toHaveLength(2);
     expect(ran.filter((e) => e.type === "dequeued").map((e) => e.id)).toHaveLength(2);
-    expect(ran.filter((e) => e.type === "user").map((e) => e.text)).toEqual(["first", "second", "third"]);
+    expect(ran.filter((e) => e.type === "user").map((e) => e.text)).toEqual([
+      "first",
+      "second",
+      "third",
+    ]);
   });
 
   test("a cancelled message never reaches the bot, and cancelling it twice is refused", async () => {
@@ -101,7 +112,10 @@ describe("message queue", () => {
     const a = await busyBot();
     const w = host.createBot("Writer");
     await host.ui("/api/send", { text: "draft this", mentions: [w] });
-    expect((await chatEvents()).find((e) => e.type === "queued")).toMatchObject({ text: "draft this", mentions: [{ id: w, name: "Writer" }] });
+    expect((await chatEvents()).find((e) => e.type === "queued")).toMatchObject({
+      text: "draft this",
+      mentions: [{ id: w, name: "Writer" }],
+    });
 
     host.release();
     await host.until(() => host.messagesOf(a).length === 2);

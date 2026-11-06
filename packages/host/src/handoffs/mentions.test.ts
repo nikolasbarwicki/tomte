@@ -1,7 +1,9 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
+import { defined } from "../testing/defined.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
@@ -14,7 +16,8 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await host.stop();
-  savedConfig === undefined ? delete process.env.CLAUDE_CONFIG_DIR : (process.env.CLAUDE_CONFIG_DIR = savedConfig);
+  if (savedConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = savedConfig;
   rmSync(claudeConfig, { recursive: true, force: true });
 });
 
@@ -29,7 +32,10 @@ async function pageEvents(): Promise<{ type: string; [k: string]: unknown }[]> {
     if (r?.value) text += new TextDecoder().decode(r.value);
   }
   ctl.abort();
-  return text.split("\n\n").filter((l) => l.startsWith("data: ")).map((l) => JSON.parse(l.slice(6)));
+  return text
+    .split("\n\n")
+    .filter((l) => l.startsWith("data: "))
+    .map((l) => JSON.parse(l.slice(6)));
 }
 const open = (id: string) => host.ui("/api/open", { id, botId: id });
 
@@ -41,9 +47,20 @@ describe("mentions", () => {
     await open(a);
     expect((await host.ui("/api/send", { text: "draft this", mentions: [w, e] })).status).toBe(200);
     await host.until(() => host.messagesOf(a).length === 1);
-    expect(host.messagesOf(a)[0]).toBe(`draft this\n<mention name="Writer" id="${w}"/>\n<mention name="Editor" id="${e}"/>`);
+    expect(host.messagesOf(a)[0]).toBe(
+      `draft this\n<mention name="Writer" id="${w}"/>\n<mention name="Editor" id="${e}"/>`,
+    );
     const user = (await pageEvents()).filter((x) => x.type === "user");
-    expect(user).toEqual([{ type: "user", text: "draft this", mentions: [{ id: w, name: "Writer" }, { id: e, name: "Editor" }] }]);
+    expect(user).toEqual([
+      {
+        type: "user",
+        text: "draft this",
+        mentions: [
+          { id: w, name: "Writer" },
+          { id: e, name: "Editor" },
+        ],
+      },
+    ]);
   });
 
   test("an unknown bot or the open bot is refused and nothing is delivered", async () => {
@@ -63,7 +80,16 @@ describe("mentions", () => {
     const dir = join(claudeConfig, "projects", host.cwd.replace(/[^a-zA-Z0-9]/g, "-"));
     mkdirSync(dir, { recursive: true });
     const msgs = [`draft this\n<mention name="Writer" id="${w}"/>`, "ping @Writer"];
-    const lines = msgs.map((t, i) => ({ uuid: `m${i}`, parentUuid: i ? `m${i - 1}` : null, sessionId: a, timestamp: new Date().toISOString(), cwd: host.cwd, isSidechain: false, type: "user", message: { role: "user", content: t } }));
+    const lines = msgs.map((t, i) => ({
+      uuid: `m${i}`,
+      parentUuid: i ? `m${i - 1}` : null,
+      sessionId: a,
+      timestamp: new Date().toISOString(),
+      cwd: host.cwd,
+      isSidechain: false,
+      type: "user",
+      message: { role: "user", content: t },
+    }));
     writeFileSync(join(dir, `${a}.jsonl`), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
     await open(a);
     expect((await pageEvents()).filter((x) => x.type === "user")).toEqual([
@@ -78,6 +104,6 @@ describe("mentions", () => {
     await open(a);
     await host.ui("/api/send", { text: "hi" });
     await host.until(() => host.launches().length > 0);
-    expect(host.launches()[0].appendSystemPrompt).toContain("<mention");
+    expect(defined(host.launches()[0], "launch").appendSystemPrompt).toContain("<mention");
   });
 });

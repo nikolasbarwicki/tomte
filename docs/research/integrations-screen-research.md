@@ -71,30 +71,30 @@ The catalog (`src/integrations/catalog.ts`) has 5 entries: Gmail, Linear, GitHub
 
 ## 2. UX/UI patterns
 
-| Pattern | A | B | Notes |
-|---|---|---|---|
-| Separate catalog and detail | ✓ page → page | ✓ modal → modal | Both keep configuration off the list. |
-| Row anatomy | icon · name · capability line · action | icon · name · action | A's capability line does most of the work when picking. |
-| Connected state in list | `✓ Connected` text replaces button | green text in "Installed" | Both are binary. Neither shows a broken or expired state. |
-| Connected summary | sidebar "Your apps" | stacked avatars + "10 connected ›" | Both put "what I have" one click away. |
-| Grouping | category sections with counts | chips + sections + Recommended | B's duplicates rows across sections. |
-| Search | apps only | apps and skills | Unified search matters once skills exist. |
-| Custom/BYO server | `+ Add custom` next to search | not shown | |
-| Scope statement | "Every agent on this computer can use…" | description line | A says who gets access. B says only what the app does. |
-| Account identity | "Signed in" (no identity) | email shown | B is better. A leaves "which account?" unanswered. |
-| Multi-account | `+ Add account` | `+ Add Another Account` | Both have it. |
-| Composition | "skills" in disconnect copy | "1 connector, 73 skills" | B shows what an install brings. |
-| Example prompts | gradient hero with runnable prompts | none | Teaches value after connecting. |
-| Provenance metadata | Developer, Version, Privacy, Terms | Developer, Availability | Matters for trust in third-party MCP. |
-| Destructive action | Danger zone + consequence copy | `Uninstall` next to `Share` | A is safer. |
-| Sharing | Copy link | Share | Multi-user or deep-link feature. |
-| Permissions / tool control | none visible | none visible | Neither shows per-tool control. |
+| Pattern                     | A                                       | B                                  | Notes                                                     |
+| --------------------------- | --------------------------------------- | ---------------------------------- | --------------------------------------------------------- |
+| Separate catalog and detail | ✓ page → page                           | ✓ modal → modal                    | Both keep configuration off the list.                     |
+| Row anatomy                 | icon · name · capability line · action  | icon · name · action               | A's capability line does most of the work when picking.   |
+| Connected state in list     | `✓ Connected` text replaces button      | green text in "Installed"          | Both are binary. Neither shows a broken or expired state. |
+| Connected summary           | sidebar "Your apps"                     | stacked avatars + "10 connected ›" | Both put "what I have" one click away.                    |
+| Grouping                    | category sections with counts           | chips + sections + Recommended     | B's duplicates rows across sections.                      |
+| Search                      | apps only                               | apps and skills                    | Unified search matters once skills exist.                 |
+| Custom/BYO server           | `+ Add custom` next to search           | not shown                          |                                                           |
+| Scope statement             | "Every agent on this computer can use…" | description line                   | A says who gets access. B says only what the app does.    |
+| Account identity            | "Signed in" (no identity)               | email shown                        | B is better. A leaves "which account?" unanswered.        |
+| Multi-account               | `+ Add account`                         | `+ Add Another Account`            | Both have it.                                             |
+| Composition                 | "skills" in disconnect copy             | "1 connector, 73 skills"           | B shows what an install brings.                           |
+| Example prompts             | gradient hero with runnable prompts     | none                               | Teaches value after connecting.                           |
+| Provenance metadata         | Developer, Version, Privacy, Terms      | Developer, Availability            | Matters for trust in third-party MCP.                     |
+| Destructive action          | Danger zone + consequence copy          | `Uninstall` next to `Share`        | A is safer.                                               |
+| Sharing                     | Copy link                               | Share                              | Multi-user or deep-link feature.                          |
+| Permissions / tool control  | none visible                            | none visible                       | Neither shows per-tool control.                           |
 
 ## 3. Opinion
 
 **A's information architecture is better; B's catalog has the better shortcuts.** A's full-page catalog with capability lines and the Connection / Information / Danger zone detail is calm, scannable, and safe. From B, take three things: account identity, the composition line ("N tools, M skills"), and unified search over apps and skills.
 
-**Neither product shows what an agent may *do* with a connection.** Both reduce an integration to connected or not connected. Claudebot's per-tool `off/ask/auto` policy is the strongest item on the roadmap (`docs/roadmap.md`: "Ahead of every competitor on safety"). The current UI hides it inside a crowded card. The rebuild should make permissions a headline section of the detail page.
+**Neither product shows what an agent may _do_ with a connection.** Both reduce an integration to connected or not connected. Claudebot's per-tool `off/ask/auto` policy is the strongest item on the roadmap (`docs/roadmap.md`: "Ahead of every competitor on safety"). The current UI hides it inside a crowded card. The rebuild should make permissions a headline section of the detail page.
 
 **Neither shows failure.** Both screens assume connecting works once and stays working. Claudebot has four `ConnState`s (`disconnected`, `connected`, `needs-auth`, `failed`) plus `enabled`, and the sidebar already counts integrations needing attention. Expired tokens are a real event here: Gmail in Testing mode expires refresh tokens after seven days (`GMAIL_OAUTH` steps). The list must show broken states as clearly as healthy ones.
 
@@ -213,12 +213,12 @@ Danger zone
 
 ### 4.5 Data changes this implies
 
-| Field | Where | Why |
-|---|---|---|
-| `tagline` | `CatalogEntry` | capability line in list and header |
-| `icon` | `CatalogEntry` | row and header logo |
-| `examples?: string[]` | `CatalogEntry` | Try it |
-| account label | integration record, filled after connect | account identity; optional, later |
+| Field                 | Where                                    | Why                                |
+| --------------------- | ---------------------------------------- | ---------------------------------- |
+| `tagline`             | `CatalogEntry`                           | capability line in list and header |
+| `icon`                | `CatalogEntry`                           | row and header logo                |
+| `examples?: string[]` | `CatalogEntry`                           | Try it                             |
+| account label         | integration record, filled after connect | account identity; optional, later  |
 
 No server API changes are needed for the list/detail split. Every existing action (`set-enabled`, `set-policy`, `reset-policies`, `set-skill-enabled`, `connect-oauth`, `set-bearer`, `probe`, `disconnect`, `remove`) moves into the detail view unchanged. The probe action keeps its state-dependent label: `Refresh tools` when connected, `Retry` when failed, `Reconnect` otherwise. Put it in the Connection section header.
 

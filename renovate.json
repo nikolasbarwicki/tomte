@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on monday"],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  },
+  "packageRules": [
+    {
+      "description": "Group devDependency minor/patch updates into one PR and auto-merge it once required CI checks pass",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "dev dependencies (minor and patch)",
+      "automerge": true
+    },
+    {
+      "description": "Group all other minor/patch updates into a separate PR that is reviewed by hand, so it never blocks the dev group's auto-merge",
+      "matchDepTypes": ["!devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "dependencies (minor and patch)"
+    }
+  ]
+}

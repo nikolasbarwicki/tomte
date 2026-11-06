@@ -1,7 +1,8 @@
-import { beforeEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { migrate } from "../../platform/db.ts";
+import { beforeEach, expect, test } from "bun:test";
+
 import { createCredentials, type Credentials } from "../../credentials/index.ts";
+import { migrate } from "../../platform/db.ts";
 import { credentialSecretName, memorySecrets } from "../../platform/secrets.ts";
 import { credentialApi } from "./credentials.ts";
 
@@ -18,8 +19,14 @@ beforeEach(() => {
   creds = createCredentials({ db, secrets, onChange: () => changes++ });
 });
 
-const call = (path: string, body: Record<string, unknown>) => credentialApi(creds, `/api/credentials/${path}`, body);
-const fields = { label: "GitHub", signInUrl: "https://github.com/login", username: "me", password: PASSWORD };
+const call = (path: string, body: Record<string, unknown>) =>
+  credentialApi(creds, `/api/credentials/${path}`, body);
+const fields = {
+  label: "GitHub",
+  signInUrl: "https://github.com/login",
+  username: "me",
+  password: PASSWORD,
+};
 const addOk = async () => (await call("add", fields))!.body as { id: string };
 
 test("add stores metadata with a derived origin and the password only in the secret store", async () => {
@@ -37,7 +44,9 @@ test("no route response contains the password", async () => {
   const { id } = await addOk();
   const out = [
     JSON.stringify((await call("list", {}))!.body),
-    JSON.stringify((await call("update", { ...fields, id, label: "GH", password: "new-secret-pw" }))!.body),
+    JSON.stringify(
+      (await call("update", { ...fields, id, label: "GH", password: "new-secret-pw" }))!.body,
+    ),
     JSON.stringify(creds.list()),
   ].join("");
   expect(out).not.toContain(PASSWORD);
@@ -46,7 +55,13 @@ test("no route response contains the password", async () => {
 });
 
 test("sign-in URL must be https; http is allowed only for localhost", async () => {
-  for (const signInUrl of ["http://example.com/login", "ftp://x.com", "not a url", "javascript:alert(1)", "https://u:p@example.com"]) {
+  for (const signInUrl of [
+    "http://example.com/login",
+    "ftp://x.com",
+    "not a url",
+    "javascript:alert(1)",
+    "https://u:p@example.com",
+  ]) {
     expect((await call("add", { ...fields, signInUrl }))!.status).toBe(400);
   }
   const ok = (await call("add", { ...fields, signInUrl: "http://localhost:3000/login" }))!;
@@ -57,17 +72,30 @@ test("sign-in URL must be https; http is allowed only for localhost", async () =
 
 test("add requires a password and leaves nothing behind on rejection", async () => {
   expect((await call("add", { ...fields, password: "" }))!.status).toBe(400);
-  expect((await call("add", { ...fields, signInUrl: "http://x.com", password: PASSWORD }))!.status).toBe(400);
+  expect(
+    (await call("add", { ...fields, signInUrl: "http://x.com", password: PASSWORD }))!.status,
+  ).toBe(400);
   expect(creds.list()).toEqual([]);
   expect(secrets.entries.size).toBe(0);
 });
 
 test("update without a password keeps the stored one; with one replaces it; origin follows the URL", async () => {
   const { id } = await addOk();
-  const keep = (await call("update", { id, label: "GH", signInUrl: "https://gitlab.com/users/sign_in", username: "you" }))!;
+  const keep = (await call("update", {
+    id,
+    label: "GH",
+    signInUrl: "https://gitlab.com/users/sign_in",
+    username: "you",
+  }))!;
   expect(keep.body).toMatchObject({ label: "GH", origin: "https://gitlab.com", username: "you" });
   expect(secrets.entries.get(credentialSecretName(id))).toBe(PASSWORD);
-  await call("update", { id, label: "GH", signInUrl: "https://gitlab.com/", username: "you", password: "p2" });
+  await call("update", {
+    id,
+    label: "GH",
+    signInUrl: "https://gitlab.com/",
+    username: "you",
+    password: "p2",
+  });
   expect(secrets.entries.get(credentialSecretName(id))).toBe("p2");
   expect((await call("update", { ...fields, id: "nope" }))!.status).toBe(404);
 });

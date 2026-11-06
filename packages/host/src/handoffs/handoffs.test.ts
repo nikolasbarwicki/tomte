@@ -1,13 +1,17 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
+import { defined } from "../testing/defined.ts";
 import { startHandoffHost, parse, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
 beforeEach(async () => void (host = await startHandoffHost()));
 afterEach(() => host.stop());
 
-const BRIEF = "Goal: find the cheapest flight. Context: none. Constraints: none. Deliverable: a price. Done when: you have it.";
+const BRIEF =
+  "Goal: find the cheapest flight. Context: none. Constraints: none. Deliverable: a price. Done when: you have it.";
 
 async function pair() {
   const a = host.createBot("Alice", "plans trips");
@@ -19,9 +23,16 @@ describe("list_bots", () => {
   test("lists every other bot with id, name, purpose and status, never the caller", async () => {
     const { a, b, alice } = await pair();
     const c = host.createBot("Cy", "writes");
-    const bots = parse<{ id: string; name: string; description: string; status: string }[]>(await alice.call("list_bots"));
+    const bots = parse<{ id: string; name: string; description: string; status: string }[]>(
+      await alice.call("list_bots"),
+    );
     expect(bots.map((x) => x.id).sort()).toEqual([b, c].sort());
-    expect(bots.find((x) => x.id === b)).toEqual({ id: b, name: "Bob", description: "searches flights", status: "idle" });
+    expect(bots.find((x) => x.id === b)).toEqual({
+      id: b,
+      name: "Bob",
+      description: "searches flights",
+      status: "idle",
+    });
     expect(bots.some((x) => x.id === a)).toBe(false);
   });
 
@@ -72,7 +83,9 @@ describe("hand off and complete", () => {
 
   test("complete_handoff delivers the result to the requester", async () => {
     const { a, b, alice, bob } = await pair();
-    const { handoff_id } = parse<{ handoff_id: string }>(await alice.call("hand_off", { to: b, title: "Flights", brief: BRIEF }));
+    const { handoff_id } = parse<{ handoff_id: string }>(
+      await alice.call("hand_off", { to: b, title: "Flights", brief: BRIEF }),
+    );
     await host.until(() => host.messagesOf(b).length === 1);
 
     const done = await bob.call("complete_handoff", { handoff_id, result: "EUR 120 via Lisbon" });
@@ -85,7 +98,11 @@ describe("hand off and complete", () => {
 
   test("hand_off to an unknown bot is refused and nothing is delivered", async () => {
     const { alice } = await pair();
-    const r = await alice.call("hand_off", { to: "00000000-0000-4000-8000-000000000000", title: "t", brief: BRIEF });
+    const r = await alice.call("hand_off", {
+      to: "00000000-0000-4000-8000-000000000000",
+      title: "t",
+      brief: BRIEF,
+    });
     expect(r.isError).toBe(true);
   });
 });
@@ -94,11 +111,20 @@ describe("endpoint hardening", () => {
   const post = (url: string, headers: Record<string, string>) =>
     fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...headers },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        ...headers,
+      },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
     });
   const handOff = (to: string) =>
-    JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "hand_off", arguments: { to, title: "t", brief: BRIEF } } });
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "hand_off", arguments: { to, title: "t", brief: BRIEF } },
+    });
 
   test("refuses no token, a wrong token, a revoked token, an Origin header and a wrong Host", async () => {
     const { b, alice } = await pair();
@@ -111,7 +137,15 @@ describe("endpoint hardening", () => {
 
     alice.revoke();
     expect((await post(alice.url, auth)).status).toBe(401);
-    const refused = await fetch(alice.url, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${alice.token}` }, body: handOff(b) });
+    const refused = await fetch(alice.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${alice.token}`,
+      },
+      body: handOff(b),
+    });
     expect(refused.status).toBe(401);
     await Bun.sleep(200);
     expect(host.messagesOf(b)).toEqual([]);
@@ -127,16 +161,23 @@ describe("bot sessions", () => {
     expect((await host.ui("/api/send", { text: "hello" })).status).toBe(200);
     await host.until(() => host.launches().length === 1);
 
-    const [launch] = host.launches();
+    const launch = defined(host.launches()[0], "launch");
     expect(launch.appendSystemPrompt).toContain("## Other bots");
-    expect(launch.appendSystemPrompt).toContain("goal, context, constraints, deliverable, and done when");
+    expect(launch.appendSystemPrompt).toContain(
+      "goal, context, constraints, deliverable, and done when",
+    );
     expect(launch.appendSystemPrompt).toContain("## Browser");
     expect(Object.keys(launch.mcpServers).sort()).toEqual(["bots", "browser"]);
 
-    for (const [name, tool, args] of [["bots", "list_bots", {}], ["browser", "browser_open", { url: "https://example.com" }]] as const) {
-      const s = launch.mcpServers[name];
+    for (const [name, tool, args] of [
+      ["bots", "list_bots", {}],
+      ["browser", "browser_open", { url: "https://example.com" }],
+    ] as const) {
+      const s = defined(launch.mcpServers[name], name);
       const client = new Client({ name: "test", version: "1.0.0" });
-      await client.connect(new StreamableHTTPClientTransport(new URL(s.url), { requestInit: { headers: s.headers } }));
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(s.url), { requestInit: { headers: s.headers } }),
+      );
       expect((await client.callTool({ name: tool, arguments: args })).isError).toBeFalsy();
       await client.close();
     }

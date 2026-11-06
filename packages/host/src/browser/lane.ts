@@ -1,6 +1,6 @@
 import { EngineError } from "./engine-cli.ts";
 
-export const LANE_BUSY_MESSAGE = "previous browser call still running";
+const LANE_BUSY_MESSAGE = "previous browser call still running";
 
 /** Runs one job at a time, in arrival order. A job that cannot start within `waitMs` is refused. */
 export class Lane {

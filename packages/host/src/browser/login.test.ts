@@ -1,21 +1,52 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  spyOn,
+  test,
+} from "bun:test";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBot } from "../bots/index.ts";
-import { migrate } from "../platform/db.ts";
-import { createHostServer, type HostServer } from "../host-server/index.ts";
-import { memorySecrets } from "../platform/secrets.ts";
+
 import type { CredentialEntry, ServerEvent } from "@claudebot/contract/events";
-import { classifyAfterLogin, CREDENTIAL_EXCHANGE_PATH, LoginNonces, NONCE_TTL_MS } from "./login.ts";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
+import { createBot } from "../bots/index.ts";
+import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { parseHostConfig } from "../platform/config.ts";
+import { migrate } from "../platform/db.ts";
+import { memorySecrets } from "../platform/secrets.ts";
+import { defined } from "../testing/defined.ts";
+import {
+  classifyAfterLogin,
+  CREDENTIAL_EXCHANGE_PATH,
+  LoginNonces,
+  NONCE_TTL_MS,
+} from "./login.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "..", "testing", "fake-claude.ts");
-const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH", "FAKE_CLAUDE_DIR"] as const;
+const ENV_KEYS = [
+  "AGENT_BROWSER_PATH",
+  "AGENT_BROWSER_EXECUTABLE_PATH",
+  "FAKE_CLAUDE_DIR",
+] as const;
 
 const PASSWORD = "Zq7-correct-horse-battery";
 const SITE = "http://localhost:3999";
@@ -39,7 +70,9 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  for (const k of ENV_KEYS) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+  for (const k of ENV_KEYS)
+    if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -70,26 +103,55 @@ const until = async (check: () => boolean, ms = 4000) => {
   expect(check()).toBe(true);
 };
 
-const ui = (path: string, body: object) => fetch(`${server.url}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: server.url }, body: JSON.stringify(body) });
+const ui = (path: string, body: object) =>
+  fetch(`${server.url}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: server.url },
+    body: JSON.stringify(body),
+  });
 
 const script = (extra: object = {}) =>
   writeFileSync(
     join(fakeDir, "script.json"),
     JSON.stringify({
       pages: {
-        [SIGN_IN]: { title: "Sign in", snapshot: '- heading "Sign in" [level=1, ref=e1]\n- textbox "Username" [ref=e2]\n- textbox "Password" [ref=e3]\n- button "Sign in" [ref=e4]' },
-        [HOME]: { title: "Home", snapshot: '- heading "Welcome" [level=1, ref=e1]\n- link "Sign out" [ref=e2]' },
-        [`${SITE}/otp`]: { title: "Verify", snapshot: '- heading "Two-step verification" [level=1, ref=e1]\n- textbox "Verification code" [ref=e2]\n- button "Verify" [ref=e3]' },
+        [SIGN_IN]: {
+          title: "Sign in",
+          snapshot:
+            '- heading "Sign in" [level=1, ref=e1]\n- textbox "Username" [ref=e2]\n- textbox "Password" [ref=e3]\n- button "Sign in" [ref=e4]',
+        },
+        [HOME]: {
+          title: "Home",
+          snapshot: '- heading "Welcome" [level=1, ref=e1]\n- link "Sign out" [ref=e2]',
+        },
+        [`${SITE}/otp`]: {
+          title: "Verify",
+          snapshot:
+            '- heading "Two-step verification" [level=1, ref=e1]\n- textbox "Verification code" [ref=e2]\n- button "Verify" [ref=e3]',
+        },
       },
-      logins: { [SIGN_IN]: { username: "alice", password: PASSWORD, then: HOME } },
+      logins: { [SIGN_IN]: { username: "alice", password: PASSWORD, next: HOME } },
       ...extra,
     }),
   );
 
 const engineCalls = (): { argv: string[]; env: Record<string, string | undefined> }[] =>
-  existsSync(join(fakeDir, "calls.jsonl")) ? readFileSync(join(fakeDir, "calls.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
+  existsSync(join(fakeDir, "calls.jsonl"))
+    ? readFileSync(join(fakeDir, "calls.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => JSON.parse(l))
+    : [];
 const loginCalls = () => engineCalls().filter((c) => c.argv.includes("auth"));
-const messages = () => (existsSync(join(claudeDir, "messages.jsonl")) ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => (JSON.parse(l) as { text: string }).text) : []);
+const messages = () =>
+  existsSync(join(claudeDir, "messages.jsonl"))
+    ? readFileSync(join(claudeDir, "messages.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => (JSON.parse(l) as { text: string }).text)
+    : [];
 
 /** Everything the chat page receives on /api/events, as it arrives. */
 function events() {
@@ -98,7 +160,12 @@ function events() {
   const abort = new AbortController();
   closers.push(() => abort.abort());
   void (async () => {
-    const res = await fetch(`${server.url}/api/events`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}", signal: abort.signal });
+    const res = await fetch(`${server.url}/api/events`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+      signal: abort.signal,
+    });
     const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = "";
     for (;;) {
@@ -115,8 +182,16 @@ function events() {
   return { received, raw };
 }
 
-async function addEntry(f: { label?: string; signInUrl?: string; username?: string; password?: string } = {}) {
-  const r = await ui("/api/credentials/add", { label: "Example", signInUrl: SIGN_IN, username: "alice", password: PASSWORD, ...f });
+async function addEntry(
+  f: { label?: string; signInUrl?: string; username?: string; password?: string } = {},
+) {
+  const r = await ui("/api/credentials/add", {
+    label: "Example",
+    signInUrl: SIGN_IN,
+    username: "alice",
+    password: PASSWORD,
+    ...f,
+  });
   expect(r.status).toBe(200);
   return (await r.json()) as CredentialEntry;
 }
@@ -125,21 +200,36 @@ async function setup() {
   const botId = createBot(cwd, "bot").id;
   expect((await ui("/api/bots/browser", { botId, enabled: true })).status).toBe(200);
   expect((await ui("/api/open", { botId })).status).toBe(200);
-  const s = server.browser.lease(botId).servers[0];
+  const s = defined(server.browser.lease(botId).servers[0], "server");
   const client = new Client({ name: "test", version: "1.0.0" });
-  await client.connect(new StreamableHTTPClientTransport(new URL(s.url), { requestInit: { headers: { Authorization: `Bearer ${s.token}` } } }));
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(s.url), {
+      requestInit: { headers: { Authorization: `Bearer ${s.token}` } },
+    }),
+  );
   closers.push(() => client.close());
   const call = (name: string, args: Record<string, unknown> = {}) =>
-    client.callTool({ name, arguments: args }).then((r) => ({ isError: r.isError === true, text: (r.content as { text: string }[]).map((c) => c.text).join("\n") }));
+    client.callTool({ name, arguments: args }).then((r) => ({
+      isError: r.isError === true,
+      text: (r.content as { text: string }[]).map((c) => c.text).join("\n"),
+    }));
   return { botId, call };
 }
 
 const answer = (id: string, action: string) => ui("/api/waits/answer", { id, action });
-const waitCard = (received: ServerEvent[]) => received.find((e) => e.type === "wait") as Extract<ServerEvent, { type: "wait" }> | undefined;
+const waitCard = (received: ServerEvent[]) =>
+  received.find((e) => e.type === "wait") as Extract<ServerEvent, { type: "wait" }> | undefined;
 
 /** Asks for a sign-in, answers the approval card with Allow, and waits for the resume message. */
-async function allow(call: Awaited<ReturnType<typeof setup>>["call"], received: ServerEvent[], entry = "Example") {
-  const wait = JSON.parse((await call("browser_login", { entry })).text) as { status: string; id: string };
+async function allow(
+  call: Awaited<ReturnType<typeof setup>>["call"],
+  received: ServerEvent[],
+  entry = "Example",
+) {
+  const wait = JSON.parse((await call("browser_login", { entry })).text) as {
+    status: string;
+    id: string;
+  };
   expect(wait.status).toBe("waiting_for_user");
   await until(() => !!waitCard(received));
   const before = messages().length;
@@ -153,7 +243,11 @@ describe("browser_credentials", () => {
     script();
     const { call } = await setup();
     await addEntry();
-    await addEntry({ label: "Other", signInUrl: "https://other.example/signin", username: "bob-the-user" });
+    await addEntry({
+      label: "Other",
+      signInUrl: "https://other.example/signin",
+      username: "bob-the-user",
+    });
     const r = await call("browser_credentials");
     expect(JSON.parse(r.text)).toEqual([
       { label: "Example", site: SITE },
@@ -178,14 +272,20 @@ describe("browser_login approval", () => {
     expect(wait.status).toBe("waiting_for_user");
     expect(wait.instruction).toContain("End your turn");
     await until(() => !!waitCard(feed.received));
-    expect(waitCard(feed.received)).toMatchObject({ id: wait.id, kind: "approval", actions: [{ label: "Allow" }, { label: "Deny" }] });
+    expect(waitCard(feed.received)).toMatchObject({
+      id: wait.id,
+      kind: "approval",
+      actions: [{ label: "Allow" }, { label: "Deny" }],
+    });
     expect(engineCalls()).toEqual([]);
 
     expect((await answer(wait.id, "allow")).status).toBe(200);
     await until(() => messages().length === 1);
     expect(messages()[0]).toContain('allowed sign-in with "Example"');
     expect(messages()[0]).toContain("browser_login");
-    const grants = ((await (await ui("/api/credentials/list", {})).json()) as CredentialEntry[]).find((e) => e.id === entry.id)!.grants;
+    const grants = (
+      (await (await ui("/api/credentials/list", {})).json()) as CredentialEntry[]
+    ).find((e) => e.id === entry.id)!.grants;
     expect(grants.map((g) => g.botId)).toEqual([botId]);
   });
 
@@ -207,12 +307,18 @@ describe("browser_login approval", () => {
     const { call } = await setup();
     const entry = await addEntry();
     const feed = events();
-    const wait = JSON.parse((await call("browser_login", { entry: "Example" })).text) as { id: string };
+    const wait = JSON.parse((await call("browser_login", { entry: "Example" })).text) as {
+      id: string;
+    };
     await until(() => !!waitCard(feed.received));
     await answer(wait.id, "deny");
     await until(() => messages().length === 1);
     expect(messages()[0]).toContain("denied");
-    expect(((await (await ui("/api/credentials/list", {})).json()) as CredentialEntry[]).find((e) => e.id === entry.id)!.grants).toEqual([]);
+    expect(
+      ((await (await ui("/api/credentials/list", {})).json()) as CredentialEntry[]).find(
+        (e) => e.id === entry.id,
+      )!.grants,
+    ).toEqual([]);
     expect(engineCalls()).toEqual([]);
   });
 
@@ -222,10 +328,14 @@ describe("browser_login approval", () => {
     const entry = await addEntry();
     const feed = events();
     await allow(call, feed.received);
-    expect(JSON.parse((await call("browser_login", { entry: "Example" })).text).status).toBe("signed_in");
+    expect(JSON.parse((await call("browser_login", { entry: "Example" })).text).status).toBe(
+      "signed_in",
+    );
 
     expect((await ui("/api/credentials/revoke", { id: entry.id, botId })).status).toBe(200);
-    const next = JSON.parse((await call("browser_login", { entry: "Example" })).text) as { status: string };
+    const next = JSON.parse((await call("browser_login", { entry: "Example" })).text) as {
+      status: string;
+    };
     expect(next.status).toBe("waiting_for_user");
     expect(loginCalls()).toHaveLength(1);
   });
@@ -236,7 +346,9 @@ describe("browser_login approval", () => {
     await addEntry({ label: "Twin" });
     await addEntry({ label: "twin" });
     expect((await call("browser_login", { entry: "Nope" })).text).toContain("no stored credential");
-    expect((await call("browser_login", { entry: "Twin" })).text).toContain("several stored credentials");
+    expect((await call("browser_login", { entry: "Twin" })).text).toContain(
+      "several stored credentials",
+    );
   });
 });
 
@@ -252,16 +364,34 @@ describe("browser_login", () => {
     expect(r.isError).toBe(false);
     expect(JSON.parse(r.text)).toMatchObject({ status: "signed_in", site: SITE });
 
-    const [login] = loginCalls();
-    expect(login.argv).toEqual(expect.arrayContaining(["auth", "login", entry.id, "--credential-provider", "claudebot", "--no-navigate", "--url", SIGN_IN]));
-    const nonce = login.argv[login.argv.indexOf("--item") + 1];
+    const login = defined(loginCalls()[0], "login call");
+    expect(login.argv).toEqual(
+      expect.arrayContaining([
+        "auth",
+        "login",
+        entry.id,
+        "--credential-provider",
+        "claudebot",
+        "--no-navigate",
+        "--url",
+        SIGN_IN,
+      ]),
+    );
+    const nonce = defined(login.argv[login.argv.indexOf("--item") + 1], "nonce");
     expect(nonce.length).toBeGreaterThanOrEqual(32);
-    const plugins = JSON.parse(login.env.AGENT_BROWSER_PLUGINS!) as { name: string; args: string[] }[];
-    expect(plugins[0].name).toBe("claudebot");
-    expect(plugins[0].args[1]).toBe(`${server.url}${CREDENTIAL_EXCHANGE_PATH}`);
+    const plugins = JSON.parse(login.env.AGENT_BROWSER_PLUGINS!) as {
+      name: string;
+      args: string[];
+    }[];
+    const plugin = defined(plugins[0], "plugin");
+    expect(plugin.name).toBe("claudebot");
+    expect(plugin.args[1]).toBe(`${server.url}${CREDENTIAL_EXCHANGE_PATH}`);
     expect(login.env.AGENT_BROWSER_PLUGINS).not.toContain(nonce);
 
-    const state = JSON.parse(readFileSync(join(fakeDir, "state.json"), "utf8")) as Record<string, string>;
+    const state = JSON.parse(readFileSync(join(fakeDir, "state.json"), "utf8")) as Record<
+      string,
+      string
+    >;
     expect(Object.values(state)).toEqual([HOME]);
   });
 
@@ -281,7 +411,9 @@ describe("browser_login", () => {
   });
 
   test("a separate verification step is reported as needs_another_step, with the takeover instruction", async () => {
-    script({ logins: { [SIGN_IN]: { username: "alice", password: PASSWORD, then: `${SITE}/otp` } } });
+    script({
+      logins: { [SIGN_IN]: { username: "alice", password: PASSWORD, next: `${SITE}/otp` } },
+    });
     const { call } = await setup();
     await addEntry();
     const feed = events();
@@ -293,7 +425,7 @@ describe("browser_login", () => {
   });
 
   test("a site that shows the form again is reported as failed", async () => {
-    script({ logins: { [SIGN_IN]: { username: "alice", password: "not-the-one", then: HOME } } });
+    script({ logins: { [SIGN_IN]: { username: "alice", password: "not-the-one", next: HOME } } });
     const { call } = await setup();
     await addEntry();
     const feed = events();
@@ -304,17 +436,34 @@ describe("browser_login", () => {
   });
 
   test("an engine failure on a page with leftover fields is a step the credential cannot complete", async () => {
-    script({ logins: { [SIGN_IN]: { username: "alice", password: PASSWORD, then: HOME, error: "Timed out waiting for password selector" } }, pages: { [SIGN_IN]: { snapshot: '- textbox "Username" [ref=e1]\n- button "Next" [ref=e2]' } } });
+    script({
+      logins: {
+        [SIGN_IN]: {
+          username: "alice",
+          password: PASSWORD,
+          next: HOME,
+          error: "Timed out waiting for password selector",
+        },
+      },
+      pages: { [SIGN_IN]: { snapshot: '- textbox "Username" [ref=e1]\n- button "Next" [ref=e2]' } },
+    });
     const { call } = await setup();
     await addEntry();
     const feed = events();
     await allow(call, feed.received);
-    expect(JSON.parse((await call("browser_login", { entry: "Example" })).text).status).toBe("needs_another_step");
+    expect(JSON.parse((await call("browser_login", { entry: "Example" })).text).status).toBe(
+      "needs_another_step",
+    );
   });
 
   test("a sign-in page that lands on another origin is refused before anything is filled", async () => {
     const evil = "http://localhost:4000/login";
-    script({ redirects: { [SIGN_IN]: evil }, pages: { [evil]: { snapshot: '- textbox "Username" [ref=e1]\n- textbox "Password" [ref=e2]' } } });
+    script({
+      redirects: { [SIGN_IN]: evil },
+      pages: {
+        [evil]: { snapshot: '- textbox "Username" [ref=e1]\n- textbox "Password" [ref=e2]' },
+      },
+    });
     const { call } = await setup();
     await addEntry();
     const feed = events();
@@ -323,7 +472,10 @@ describe("browser_login", () => {
     expect(r.isError).toBe(true);
     expect(JSON.parse(r.text).status).toBe("failed");
     expect(r.text).toContain("does not match");
-    const state = JSON.parse(readFileSync(join(fakeDir, "state.json"), "utf8")) as Record<string, string>;
+    const state = JSON.parse(readFileSync(join(fakeDir, "state.json"), "utf8")) as Record<
+      string,
+      string
+    >;
     expect(Object.values(state)).toEqual([evil]);
   });
 
@@ -333,7 +485,12 @@ describe("browser_login", () => {
     await addEntry();
     writeFileSync(join(claudeDir, "hold"), "");
     closers.push(() => rmSync(join(claudeDir, "hold"), { force: true }));
-    const created = await ui("/api/routines/create", { botId, name: "nightly", instruction: "check", schedule: { kind: "cron", expr: "0 3 * * *", tz: "UTC" } });
+    const created = await ui("/api/routines/create", {
+      botId,
+      name: "nightly",
+      instruction: "check",
+      schedule: { kind: "cron", expr: "0 3 * * *", tz: "UTC" },
+    });
     const routine = (await created.json()) as { id: string };
     await ui("/api/routines/run", { id: routine.id });
     await until(() => messages().length === 1);
@@ -346,7 +503,12 @@ describe("browser_login", () => {
 
 describe("the password stays in the keychain", () => {
   test("it appears in no tool result, event, log line, engine argument, or file under the data directory", async () => {
-    const logs = [spyOn(console, "log"), spyOn(console, "error"), spyOn(console, "warn"), spyOn(console, "info")];
+    const logs = [
+      spyOn(console, "log"),
+      spyOn(console, "error"),
+      spyOn(console, "warn"),
+      spyOn(console, "info"),
+    ];
     script();
     const { call } = await setup();
     await addEntry();
@@ -358,15 +520,25 @@ describe("the password stays in the keychain", () => {
       return r;
     };
     await tracked("browser_credentials");
-    const wait = JSON.parse((await tracked("browser_login", { entry: "Example" })).text) as { id: string };
+    const wait = JSON.parse((await tracked("browser_login", { entry: "Example" })).text) as {
+      id: string;
+    };
     await until(() => !!waitCard(feed.received));
     await answer(wait.id, "allow");
     await until(() => messages().length === 1);
-    expect(JSON.parse((await tracked("browser_login", { entry: "Example" })).text).status).toBe("signed_in");
+    expect(JSON.parse((await tracked("browser_login", { entry: "Example" })).text).status).toBe(
+      "signed_in",
+    );
     await tracked("browser_snapshot");
     await Bun.sleep(100);
 
-    const everything = [...results, ...feed.raw, ...messages(), ...logs.flatMap((l) => l.mock.calls.map((c) => c.map(String).join(" "))), JSON.stringify(engineCalls())];
+    const everything = [
+      ...results,
+      ...feed.raw,
+      ...messages(),
+      ...logs.flatMap((l) => l.mock.calls.map((c) => c.map(String).join(" "))),
+      JSON.stringify(engineCalls()),
+    ];
     for (const text of everything) expect(text).not.toContain(PASSWORD);
 
     const scan = (dir: string): string[] =>
@@ -374,14 +546,19 @@ describe("the password stays in the keychain", () => {
         const path = join(dir, name);
         return statSync(path).isDirectory() ? scan(path) : [path];
       });
-    for (const file of scan(cwd).filter((f) => f !== join(fakeDir, "script.json"))) expect(readFileSync(file).includes(PASSWORD), file).toBe(false);
+    for (const file of scan(cwd).filter((f) => f !== join(fakeDir, "script.json")))
+      expect(readFileSync(file).includes(PASSWORD), file).toBe(false);
     logs.forEach((l) => l.mockRestore());
   });
 });
 
 describe("the credential exchange", () => {
   const exchange = (body: object, headers: Record<string, string> = {}) =>
-    fetch(`${server.url}${CREDENTIAL_EXCHANGE_PATH}`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+    fetch(`${server.url}${CREDENTIAL_EXCHANGE_PATH}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
 
   test("a nonce that was already used gets nothing, and so does a guess", async () => {
     script();
@@ -390,7 +567,7 @@ describe("the credential exchange", () => {
     const feed = events();
     await allow(call, feed.received);
     await call("browser_login", { entry: "Example" });
-    const [login] = loginCalls();
+    const login = defined(loginCalls()[0], "login call");
     const nonce = login.argv[login.argv.indexOf("--item") + 1];
 
     const replay = await exchange({ nonce, url: SIGN_IN });
@@ -400,11 +577,17 @@ describe("the credential exchange", () => {
   });
 
   test("refuses a browser page: a request carrying an Origin header", async () => {
-    expect((await exchange({ nonce: "x", url: SIGN_IN }, { origin: "https://evil.example" })).status).toBe(403);
+    expect(
+      (await exchange({ nonce: "x", url: SIGN_IN }, { origin: "https://evil.example" })).status,
+    ).toBe(403);
   });
 
   test("refuses a request for another Host", async () => {
-    const res = await fetch(`${server.url}${CREDENTIAL_EXCHANGE_PATH}`, { method: "POST", headers: { host: "rebind.example" }, body: "{}" }).catch(() => undefined);
+    const res = await fetch(`${server.url}${CREDENTIAL_EXCHANGE_PATH}`, {
+      method: "POST",
+      headers: { host: "rebind.example" },
+      body: "{}",
+    }).catch(() => undefined);
     expect(res === undefined || res.status === 403).toBe(true);
   });
 });
@@ -432,7 +615,12 @@ describe("login nonces", () => {
 
   test("a wrong scheme, host or port gets nothing, and burns the nonce", () => {
     const nonces = new LoginNonces();
-    for (const url of ["https://localhost:3999/login", "http://localhost.evil.example:3999/login", "http://localhost:4000/login", "not a url"]) {
+    for (const url of [
+      "https://localhost:3999/login",
+      "http://localhost.evil.example:3999/login",
+      "http://localhost:4000/login",
+      "not a url",
+    ]) {
       const n = nonces.issue("bot", entry);
       expect(nonces.redeem(n, url)).toBeUndefined();
       expect(nonces.redeem(n, SIGN_IN)).toBeUndefined();
@@ -449,9 +637,13 @@ describe("login nonces", () => {
 
 describe("what a sign-in left behind", () => {
   test("verification, form and no-field pages", () => {
-    expect(classifyAfterLogin('- textbox "Verification code" [ref=e1]', false)).toBe("needs_another_step");
+    expect(classifyAfterLogin('- textbox "Verification code" [ref=e1]', false)).toBe(
+      "needs_another_step",
+    );
     expect(classifyAfterLogin('- textbox "Password" [ref=e1]', false)).toBe("failed");
-    expect(classifyAfterLogin('- heading "Welcome" [ref=e1]\n- textbox "Search" [ref=e2]', false)).toBe("signed_in");
+    expect(
+      classifyAfterLogin('- heading "Welcome" [ref=e1]\n- textbox "Search" [ref=e2]', false),
+    ).toBe("signed_in");
     expect(classifyAfterLogin('- textbox "Username" [ref=e1]', true)).toBe("needs_another_step");
     expect(classifyAfterLogin("(no interactive elements)", true)).toBe("failed");
   });

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      // omp hook installed by symlink (see header of the file), never imported.
+      "entry": ["integrations/omp/*.ts"],
+      // @swc/core: dependency-cruiser loads it by name via `parser: "swc"` in .dependency-cruiser.cjs.
+      // @oh-my-pi/pi-coding-agent: type-only import resolved by omp at hook load time; not installed in this repo.
+      "ignoreDependencies": ["@swc/core", "@oh-my-pi/pi-coding-agent"],
+    },
+    "packages/host": {
+      "entry": [
+        "src/host.ts",
+        "src/server.ts",
+        // Spawned as subprocesses by tests via path strings (fake Claude, MCP stdio server, lock holder, fake agent-browser).
+        "src/testing/*.ts",
+      ],
+      "project": ["src/**/*.ts"],
+    },
+    "packages/web": {
+      "vite": { "config": ["vite.config.ts"] },
+      // Linked from index.html (/tailwind.css), which knip doesn't follow for stylesheets; the plugin config makes it an entry.
+      "tailwind": { "config": ["tailwind.css"] },
+      "project": ["**/*.{ts,tsx,css}"],
+    },
+    "packages/contract": {
+      "project": ["src/**/*.ts"],
+    },
+  },
+  "ignoreIssues": {
+    // components/ui is vendored shadcn: files keep every export the registry ships so later `shadcn add` diffs stay clean.
+    "packages/web/components/ui/**": ["exports", "types"],
+  },
+}

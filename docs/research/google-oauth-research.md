@@ -31,11 +31,11 @@ Gmail setup today asks each user to:
 
 ### Scopes **[V]**
 
-| Scope | Class |
-|---|---|
+| Scope            | Class      |
+| ---------------- | ---------- |
 | `gmail.readonly` | restricted |
-| `gmail.compose` | restricted |
-| `gmail.send` | sensitive |
+| `gmail.compose`  | restricted |
+| `gmail.send`     | sensitive  |
 
 ### Unverified apps (`support.google.com/cloud/answer/7454865`) **[V]**
 
@@ -67,13 +67,13 @@ Gmail setup today asks each user to:
 
 Method: shallow clones of each public repo, searched for `gmail.googleapis`, `gmailmcp`, `auth/gmail`, `GOOGLE_CLIENT`, `composio`, `pipedream`, `.env.example` and docs.
 
-| Product | Repo / license | Gmail path | Own verified Google client? | Where mail and tokens go |
-|---|---|---|---|---|
-| Rerun | `rerun-build/rerun`, AGPL-3.0 | Composio. Cloud uses its own Composio project and auth configs. Self-host: seeded `authConfigId`s are empty, you create a Composio auth config per toolkit (`apps/docs/self-host/services.mdx`). | No. Only Supabase Google sign-in. | Rerun cloud, Composio |
-| Rakazo | `elie222/rakazo`, Apache-2.0 | Composio or Pipedream Connect via an operator key. Any remote MCP server with a user-supplied OAuth client (`apps/web/e2e/mcp-oauth.spec.ts` uses a Gmail MCP URL). | No. | Self-hosted server holds encrypted credentials; Composio or Pipedream hold provider tokens |
-| MausBot | `milind-soni/OpenMausBot`, Apache-2.0 | Managed Composio broker, a Cloudflare Worker (`cloudflare/composio-broker`) holding a shared Composio key. Per-install token (SHA-256 in D1), proxies MCP traffic, issues short-lived connect links. BYO Composio project key as an override. | No. Docs: managed auth "asks the provider only for Composio's default permissions". | Desktop, Maus Worker, Composio |
-| OpenBot | `nightly-labs/openbot`, PolyForm Noncommercial 1.0.0 | Google's Gmail MCP server added by hand, with a per-server "sign-in app" (admin-registered OAuth client ID/secret/scope, loopback callback `http://127.0.0.1:28417/mcp-auth`). Or a Composio listing with the user's own MCP URL and key. No Gmail entry in its catalog. | None found in public source. Privacy policy has a "Google User Data" section, likely prepared for verification **[I]**. | Local machine, then the chosen AI provider. Composio if used. |
-| Turnstone | closed-source Mac app | Not researched. No public repo checked. | n/a | n/a |
+| Product   | Repo / license                                       | Gmail path                                                                                                                                                                                                                                                               | Own verified Google client?                                                                                             | Where mail and tokens go                                                                   |
+| --------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Rerun     | `rerun-build/rerun`, AGPL-3.0                        | Composio. Cloud uses its own Composio project and auth configs. Self-host: seeded `authConfigId`s are empty, you create a Composio auth config per toolkit (`apps/docs/self-host/services.mdx`).                                                                         | No. Only Supabase Google sign-in.                                                                                       | Rerun cloud, Composio                                                                      |
+| Rakazo    | `elie222/rakazo`, Apache-2.0                         | Composio or Pipedream Connect via an operator key. Any remote MCP server with a user-supplied OAuth client (`apps/web/e2e/mcp-oauth.spec.ts` uses a Gmail MCP URL).                                                                                                      | No.                                                                                                                     | Self-hosted server holds encrypted credentials; Composio or Pipedream hold provider tokens |
+| MausBot   | `milind-soni/OpenMausBot`, Apache-2.0                | Managed Composio broker, a Cloudflare Worker (`cloudflare/composio-broker`) holding a shared Composio key. Per-install token (SHA-256 in D1), proxies MCP traffic, issues short-lived connect links. BYO Composio project key as an override.                            | No. Docs: managed auth "asks the provider only for Composio's default permissions".                                     | Desktop, Maus Worker, Composio                                                             |
+| OpenBot   | `nightly-labs/openbot`, PolyForm Noncommercial 1.0.0 | Google's Gmail MCP server added by hand, with a per-server "sign-in app" (admin-registered OAuth client ID/secret/scope, loopback callback `http://127.0.0.1:28417/mcp-auth`). Or a Composio listing with the user's own MCP URL and key. No Gmail entry in its catalog. | None found in public source. Privacy policy has a "Google User Data" section, likely prepared for verification **[I]**. | Local machine, then the chosen AI provider. Composio if used.                              |
+| Turnstone | closed-source Mac app                                | Not researched. No public repo checked.                                                                                                                                                                                                                                  | n/a                                                                                                                     | n/a                                                                                        |
 
 Composio's own account of managed auth (`composio.dev/content/ship-gmail-integration-in-minutes`) **[U]**:
 
@@ -92,13 +92,13 @@ Composio's own account of managed auth (`composio.dev/content/ship-gmail-integra
 
 ## 5. Options for a public release
 
-| | Option | Verdict |
-|---|---|---|
-| A | Bring-your-own OAuth client (today). Keep as the advanced path. | Keep. Matches OpenBot and Rakazo's MCP path. Does not remove the friction. |
-| B | Claudebot-owned verified OAuth client. | Defer. Needs brand verification, restricted-scope review, annual assessment, Limited Use review, and a legal entity and domain **[I]**. Ask Google about the model-provider transfer first. |
-| C | Broker (Composio, or Pipedream). One-click, no Google verification on claudebot's side. | Best near-term path. Opt-in, disclose the data path (mail goes to Composio, then the model provider). Do not make it the default. How a Composio session endpoint fits the catalog's `bearer` entry shape is **untested** **[I]**. |
-| D | IMAP with an app password. | Not seen in any competitor. Avoids Google OAuth verification. Mail still goes to the model provider. Not evaluated beyond that **[I]**. |
-| E | Closed beta on the 100-user unverified cap. | Fallback only. Users still see the warning. |
+|     | Option                                                                                  | Verdict                                                                                                                                                                                                                            |
+| --- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A   | Bring-your-own OAuth client (today). Keep as the advanced path.                         | Keep. Matches OpenBot and Rakazo's MCP path. Does not remove the friction.                                                                                                                                                         |
+| B   | Claudebot-owned verified OAuth client.                                                  | Defer. Needs brand verification, restricted-scope review, annual assessment, Limited Use review, and a legal entity and domain **[I]**. Ask Google about the model-provider transfer first.                                        |
+| C   | Broker (Composio, or Pipedream). One-click, no Google verification on claudebot's side. | Best near-term path. Opt-in, disclose the data path (mail goes to Composio, then the model provider). Do not make it the default. How a Composio session endpoint fits the catalog's `bearer` entry shape is **untested** **[I]**. |
+| D   | IMAP with an app password.                                                              | Not seen in any competitor. Avoids Google OAuth verification. Mail still goes to the model provider. Not evaluated beyond that **[I]**.                                                                                            |
+| E   | Closed beta on the 100-user unverified cap.                                             | Fallback only. Users still see the warning.                                                                                                                                                                                        |
 
 ## 6. Recommended direction (not yet decided)
 

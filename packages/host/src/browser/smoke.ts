@@ -1,20 +1,22 @@
-import type { Server } from "bun";
 import { Database } from "bun:sqlite";
 import { spawnSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
-import { engineStatus } from "./engine.ts";
+import { HostEvent, type ServerEvent } from "@claudebot/contract/events";
+import type { Server } from "bun";
+
 import { createBot } from "../bots/index.ts";
 import { resolveCli } from "../harness/index.ts";
-import { migrate } from "../platform/db.ts";
-import { ensureWorkspace } from "../platform/workspace.ts";
 import { createHostServer, type HostServer } from "../host-server/index.ts";
-import { credentialSecretName, memorySecrets, type SecretStore } from "../platform/secrets.ts";
-import type { ServerEvent } from "@claudebot/contract/events";
 import type { HostConfig } from "../platform/config.ts";
+import { migrate } from "../platform/db.ts";
+import { credentialSecretName, memorySecrets, type SecretStore } from "../platform/secrets.ts";
+import { ensureWorkspace } from "../platform/workspace.ts";
+import { engineStatus } from "./engine.ts";
 
 /**
  * Real-engine smoke: the real host server, egress proxy, agent-browser engine, Chrome for Testing and Claude CLI,
@@ -34,7 +36,8 @@ const check = (ok: boolean, m: string) => {
 /** The egress proxy blocks loopback, so the test site has to be reachable on this machine's LAN address. */
 function lanIp(): string | undefined {
   for (const list of Object.values(networkInterfaces()))
-    for (const a of list ?? []) if (a.family === "IPv4" && !a.internal && !a.address.startsWith("169.254.")) return a.address;
+    for (const a of list ?? [])
+      if (a.family === "IPv4" && !a.internal && !a.address.startsWith("169.254.")) return a.address;
   return undefined;
 }
 
@@ -51,7 +54,9 @@ function processes(): Set<string> {
   const mine = out
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => /agent-browser|Chrome for Testing/.test(l) && !/browser-smoke|\.omp\/|ps -axo/.test(l));
+    .filter(
+      (l) => /agent-browser|Chrome for Testing/.test(l) && !/browser-smoke|\.omp\/|ps -axo/.test(l),
+    );
   return new Set(mine);
 }
 
@@ -62,16 +67,24 @@ export async function runBrowserSmoke(config: HostConfig) {
     return;
   }
   const cli = resolveCli(config.dataRoot);
-  if (!cli) return void console.log("browser-smoke: skipped (no claude binary resolved)");
+  if (!cli) {
+    console.log("browser-smoke: skipped (no claude binary resolved)");
+    return;
+  }
   const ip = lanIp();
-  if (!ip) return void console.log("browser-smoke: skipped (no LAN IPv4 address for the test site)");
+  if (!ip) {
+    console.log("browser-smoke: skipped (no LAN IPv4 address for the test site)");
+    return;
+  }
 
   const password = `pw-${randomBytes(12).toString("hex")}`;
   const before = processes();
   const root = realpathSync(mkdtempSync(join(tmpdir(), "claudebot-browser-smoke-")));
   const dataRoot = join(root, ".host");
   const workspace = ensureWorkspace(dataRoot);
-  log(`[smoke] data root=${dataRoot} workspace=${workspace} engine=${status.path} site=http://${ip}`);
+  log(
+    `[smoke] data root=${dataRoot} workspace=${workspace} engine=${status.path} site=http://${ip}`,
+  );
 
   const site = startSite(ip, password);
   const secrets = memorySecrets();
@@ -79,12 +92,18 @@ export async function runBrowserSmoke(config: HostConfig) {
   const bot = createBot(dataRoot, "smoke", "Browser smoke test");
   // The smoke's state lives in a throwaway data root, so the engine installed in the configured one is pointed at directly.
   process.env.AGENT_BROWSER_PATH = status.path;
-  const server = await createHostServer({ config: { ...config, dataRoot }, cli, db, secrets, botId: bot.id });
+  const server = await createHostServer({
+    config: { ...config, dataRoot },
+    cli,
+    db,
+    secrets,
+    botId: bot.id,
+  });
 
   try {
     await scenarios(server, site, bot.id, db, secrets, workspace);
   } finally {
-    site.server.stop(true);
+    await site.server.stop(true);
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -92,23 +111,39 @@ export async function runBrowserSmoke(config: HostConfig) {
   step("no engine or Chrome for Testing process survives host shutdown");
   await Bun.sleep(1500);
   const leaked = [...processes()].filter((p) => !before.has(p));
-  check(leaked.length === 0, `no leftover agent-browser/Chrome for Testing processes${leaked.length ? `: ${leaked.join(" | ")}` : ""}`);
+  check(
+    leaked.length === 0,
+    `no leftover agent-browser/Chrome for Testing processes${leaked.length ? `: ${leaked.join(" | ")}` : ""}`,
+  );
   console.log("\nbrowser-smoke: ok");
 }
 
 function startSite(host: string, password: string): Site {
-  const seen = { formName: undefined as string | undefined, loginOk: 0, loginBad: 0, captchaViews: 0 };
-  const page = (title: string, body: string) => new Response(`<!doctype html><title>${title}</title><h1>${title}</h1>${body}`, { headers: { "content-type": "text/html" } });
+  const seen = {
+    formName: undefined as string | undefined,
+    loginOk: 0,
+    loginBad: 0,
+    captchaViews: 0,
+  };
+  const page = (title: string, body: string) =>
+    new Response(`<!doctype html><title>${title}</title><h1>${title}</h1>${body}`, {
+      headers: { "content-type": "text/html" },
+    });
   const server = Bun.serve({
     hostname: "0.0.0.0",
     port: 0,
     async fetch(req) {
       const { pathname } = new URL(req.url);
       if (pathname === "/form" && req.method === "POST") {
-        seen.formName = String((await req.formData()).get("who") ?? "");
+        const who = (await req.formData()).get("who");
+        seen.formName = typeof who === "string" ? who : "";
         return page("Message sent", `<p>Thanks, ${seen.formName.replace(/[<>&]/g, "")}.</p>`);
       }
-      if (pathname === "/form") return page("Contact form", `<form method="post" action="/form"><label>Your name <input name="who" type="text"></label><button type="submit">Send message</button></form>`);
+      if (pathname === "/form")
+        return page(
+          "Contact form",
+          `<form method="post" action="/form"><label>Your name <input name="who" type="text"></label><button type="submit">Send message</button></form>`,
+        );
       if (pathname === "/login" && req.method === "POST") {
         const f = await req.formData();
         if (f.get("user") === "alice" && f.get("pass") === password) {
@@ -118,7 +153,11 @@ function startSite(host: string, password: string): Site {
         seen.loginBad++;
         return page("Smoke sign in", `<p>Wrong username or password.</p>`);
       }
-      if (pathname === "/login") return page("Smoke sign in", `<form method="post" action="/login"><label>Username <input name="user" type="text"></label><label>Password <input name="pass" type="password"></label><button type="submit">Sign in</button></form>`);
+      if (pathname === "/login")
+        return page(
+          "Smoke sign in",
+          `<form method="post" action="/login"><label>Username <input name="user" type="text"></label><label>Password <input name="pass" type="password"></label><button type="submit">Sign in</button></form>`,
+        );
       if (pathname === "/captcha") {
         seen.captchaViews++;
         return page("Verify you are human", `<p>This step needs a person to solve a puzzle.</p>`);
@@ -129,13 +168,30 @@ function startSite(host: string, password: string): Site {
   return { server, seen, base: `http://${host}:${server.port}`, password };
 }
 
-async function scenarios(server: HostServer, site: Site, botId: string, db: Database, secrets: SecretStore, workspace: string) {
-  const ui = (path: string, body: object) => fetch(`${server.url}${path}`, { method: "POST", headers: { "content-type": "application/json", origin: server.url }, body: JSON.stringify(body) });
+async function scenarios(
+  server: HostServer,
+  site: Site,
+  botId: string,
+  db: Database,
+  secrets: SecretStore,
+  workspace: string,
+) {
+  const ui = (path: string, body: object) =>
+    fetch(`${server.url}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: server.url },
+      body: JSON.stringify(body),
+    });
 
-  const received: ServerEvent[] = [];
+  const received: HostEvent[] = [];
   const abort = new AbortController();
   void (async () => {
-    const res = await fetch(`${server.url}/api/events`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}", signal: abort.signal });
+    const res = await fetch(`${server.url}/api/events`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+      signal: abort.signal,
+    });
     const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = "";
     for (;;) {
@@ -143,7 +199,7 @@ async function scenarios(server: HostServer, site: Site, botId: string, db: Data
       if (done) return;
       const parts = (buffer + value).split("\n\n");
       buffer = parts.pop() ?? "";
-      for (const p of parts) received.push(JSON.parse(p.replace(/^data: /, "")));
+      for (const p of parts) received.push(HostEvent.parse(JSON.parse(p.replace(/^data: /, ""))));
     }
   })();
 
@@ -151,13 +207,16 @@ async function scenarios(server: HostServer, site: Site, botId: string, db: Data
     const t = Date.now();
     while (!cond()) {
       if (Date.now() - t > ms) fail(`timed out waiting for ${what}`);
-      const err = received.find((e) => e.type === "error") as Extract<ServerEvent, { type: "error" }> | undefined;
+      const err = received.find((e) => e.type === "error") as
+        | Extract<ServerEvent, { type: "error" }>
+        | undefined;
       if (err) fail(`chat error while waiting for ${what}: ${err.message}`);
       await Bun.sleep(100);
     }
   };
   const doneCount = () => received.filter((e) => e.type === "done").length;
-  const tools = () => received.filter((e) => e.type === "tool").map((e) => (e as { name: string }).name);
+  const tools = () =>
+    received.filter((e) => e.type === "tool").map((e) => (e as { name: string }).name);
 
   /** Sends a user message and waits for that turn to finish; returns the tools it used. */
   const turn = async (prompt: string) => {
@@ -170,7 +229,10 @@ async function scenarios(server: HostServer, site: Site, botId: string, db: Data
   };
 
   step("enable the browser for the bot");
-  check((await ui("/api/bots/browser", { botId, enabled: true })).status === 200, "POST /api/bots/browser enabled:true");
+  check(
+    (await ui("/api/bots/browser", { botId, enabled: true })).status === 200,
+    "POST /api/bots/browser enabled:true",
+  );
   check((await ui("/api/open", { botId })).status === 200, "bot opened");
 
   step("(a) open a local page, fill and submit a form");
@@ -178,43 +240,79 @@ async function scenarios(server: HostServer, site: Site, botId: string, db: Data
     `Use your browser tools (mcp__browser__*). Open ${site.base}/form, type "Ada Lovelace" into the "Your name" field, click "Send message", and then tell me the page heading you end up on.`,
   );
   console.log(`  tools: ${toolsA.join(", ")}`);
-  check(toolsA.some((t) => t === "mcp__browser__browser_open"), "the bot used browser_open");
-  check(site.seen.formName === "Ada Lovelace", `the server received the submitted form (who=${JSON.stringify(site.seen.formName)})`);
+  check(
+    toolsA.some((t) => t === "mcp__browser__browser_open"),
+    "the bot used browser_open",
+  );
+  check(
+    site.seen.formName === "Ada Lovelace",
+    `the server received the submitted form (who=${JSON.stringify(site.seen.formName)})`,
+  );
 
   step("(b) browser_login with a vault entry");
   // The vault only accepts https (or localhost) sign-in URLs, so this smoke-only entry goes straight into its own DB and secret store.
   const entryId = randomUUID();
   const t = Date.now();
-  db.query("INSERT INTO credential_entries (id, label, sign_in_url, origin, username, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(entryId, "Smoke Login", `${site.base}/login`, site.base, "alice", t, t);
+  db.query(
+    "INSERT INTO credential_entries (id, label, sign_in_url, origin, username, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).run(entryId, "Smoke Login", `${site.base}/login`, site.base, "alice", t, t);
   await secrets.set(credentialSecretName(entryId), site.password);
   const cards0 = received.filter((e) => e.type === "wait").length;
-  const toolsB1 = await turn(`Sign in to the test site with the stored credential "Smoke Login": call browser_credentials, then browser_login with that label. Do not open the login page yourself.`);
+  const toolsB1 = await turn(
+    `Sign in to the test site with the stored credential "Smoke Login": call browser_credentials, then browser_login with that label. Do not open the login page yourself.`,
+  );
   console.log(`  tools: ${toolsB1.join(", ")}`);
-  const card = received.filter((e) => e.type === "wait").slice(cards0)[0] as Extract<ServerEvent, { type: "wait" }> | undefined;
+  const card = received.filter((e) => e.type === "wait").slice(cards0)[0] as
+    | Extract<ServerEvent, { type: "wait" }>
+    | undefined;
   check(!!card && card.kind === "approval", `first use shows an approval card (${card?.title})`);
   check(card!.actions.map((a) => a.label).join("/") === "Allow/Deny", "card offers Allow/Deny");
   check(site.seen.loginOk === 0, "no sign-in happened before approval");
   const n = doneCount();
-  check((await ui("/api/waits/answer", { id: card!.id, action: "allow" })).status === 200, "answered Allow through /api/waits/answer");
+  check(
+    (await ui("/api/waits/answer", { id: card!.id, action: "allow" })).status === 200,
+    "answered Allow through /api/waits/answer",
+  );
   await until("the resumed turn to finish", () => doneCount() > n);
-  check(site.seen.loginOk === 1, "the resumed turn signed in (the site accepted the stored password)");
+  check(
+    site.seen.loginOk === 1,
+    "the resumed turn signed in (the site accepted the stored password)",
+  );
   check(site.seen.loginBad === 0, "no failed sign-in attempts");
 
   step("(c) browser_request_takeover");
   const cards1 = received.filter((e) => e.type === "wait").length;
-  const toolsC = await turn(`Open ${site.base}/captcha. That page needs a human, so call browser_request_takeover with a one-sentence reason and end your turn. When the user answers, tell me what they said.`);
+  const toolsC = await turn(
+    `Open ${site.base}/captcha. That page needs a human, so call browser_request_takeover with a one-sentence reason and end your turn. When the user answers, tell me what they said.`,
+  );
   console.log(`  tools: ${toolsC.join(", ")}`);
-  const tcard = received.filter((e) => e.type === "wait").slice(cards1)[0] as Extract<ServerEvent, { type: "wait" }> | undefined;
-  check(!!tcard && tcard.kind === "takeover", `takeover card appears (${tcard?.title}: ${tcard?.detail})`);
-  check(tcard!.actions.map((a) => a.label).join("/") === "I'm done/Skip", "card offers I'm done/Skip");
+  const tcard = received.filter((e) => e.type === "wait").slice(cards1)[0] as
+    | Extract<ServerEvent, { type: "wait" }>
+    | undefined;
+  check(
+    !!tcard && tcard.kind === "takeover",
+    `takeover card appears (${tcard?.title}: ${tcard?.detail})`,
+  );
+  check(
+    tcard!.actions.map((a) => a.label).join("/") === "I'm done/Skip",
+    "card offers I'm done/Skip",
+  );
   const m = doneCount();
-  check((await ui("/api/waits/answer", { id: tcard!.id, action: "skip" })).status === 200, "answered Skip through /api/waits/answer");
+  check(
+    (await ui("/api/waits/answer", { id: tcard!.id, action: "skip" })).status === 200,
+    "answered Skip through /api/waits/answer",
+  );
   await until("the resumed takeover turn to finish", () => doneCount() > m);
   const transcript = JSON.stringify(await getSessionMessages(botId, { dir: workspace }));
-  check(transcript.includes(`<browser-wait-result id=\\"${tcard!.id}\\">`) && transcript.includes("The user skipped the takeover"), "the bot received the Skip resume message");
+  check(
+    transcript.includes(`<browser-wait-result id=\\"${tcard!.id}\\">`) &&
+      transcript.includes("The user skipped the takeover"),
+    "the bot received the Skip resume message",
+  );
 
   step("sandbox: the bot's shell cannot reach engine state or the browser endpoint");
-  const endpoint = server.browser.lease(botId).servers[0].url;
+  const endpoint = server.browser.lease(botId).servers[0]?.url;
+  if (!endpoint) throw new Error("the lease has no browser endpoint");
   const before = (await getSessionMessages(botId, { dir: workspace })).length;
   await turn(
     `Run these four shell commands with your Bash tool, each as its own call, exactly as written, and do not retry or work around failures:\n` +
@@ -224,15 +322,30 @@ async function scenarios(server: HostServer, site: Site, botId: string, db: Data
       `4. python3 -c "import os; print(os.listdir(os.path.expanduser('~/.agent-browser')))" 2>&1\n` +
       `Then reply with the four outputs.`,
   );
-  const results = (await getSessionMessages(botId, { dir: workspace })).slice(before).filter((x) => x.type === "user").map((x) => JSON.stringify(x.message));
+  const results = (await getSessionMessages(botId, { dir: workspace }))
+    .slice(before)
+    .filter((x) => x.type === "user")
+    .map((x) => JSON.stringify(x.message));
   const outputs = results.filter((r) => r.includes("tool_result"));
   check(outputs.length >= 4, `the bot ran four Bash commands (${outputs.length} results)`);
-  const [ls, cat, curl, py] = outputs;
+  const [ls = "", cat = "", curl = "", py = ""] = outputs;
   for (const o of outputs) console.log(`  bash result: ${o.slice(0, 400)}`);
-  check(/denied|Operation not permitted|exit=[1-9]/.test(ls) && !/sessions|browsers|\.key/.test(ls), "ls ~/.agent-browser was denied and listed nothing");
-  check(/denied|Operation not permitted|No such file|exit=[1-9]/.test(cat), "cat ~/.agent-browser/config.json was denied");
-  check(/PermissionError|Operation not permitted|denied/.test(py) && !/sessions|browsers/.test(py), "a python listing of ~/.agent-browser was denied (sandbox layer)");
-  check(!/http=200/.test(curl) && /exit=[1-9]|http=000/.test(curl), "curl to the browser endpoint failed from the sandbox");
+  check(
+    /denied|Operation not permitted|exit=[1-9]/.test(ls) && !/sessions|browsers|\.key/.test(ls),
+    "ls ~/.agent-browser was denied and listed nothing",
+  );
+  check(
+    /denied|Operation not permitted|No such file|exit=[1-9]/.test(cat),
+    "cat ~/.agent-browser/config.json was denied",
+  );
+  check(
+    /PermissionError|Operation not permitted|denied/.test(py) && !/sessions|browsers/.test(py),
+    "a python listing of ~/.agent-browser was denied (sandbox layer)",
+  );
+  check(
+    !/http=200/.test(curl) && /exit=[1-9]|http=000/.test(curl),
+    "curl to the browser endpoint failed from the sandbox",
+  );
 
   step("sign out and shut down");
   await ui("/api/bots/browser/sign-out", { botId });

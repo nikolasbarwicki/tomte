@@ -1,6 +1,6 @@
 import { EngineError } from "./engine-cli.ts";
-import type { BrowserRuntimes } from "./runtime.ts";
 import type { HumanWaits, WaitingForUser } from "./human-waits.ts";
+import type { BrowserRuntimes } from "./runtime.ts";
 
 export type ControlHolder = "bot" | "draining" | "user";
 
@@ -10,7 +10,7 @@ export interface TakeoverOptions {
   /** Sends a host message into the bot's session (queued while it is busy). */
   deliver(botId: string, text: string): void;
   /** Control ends after this long without input. Default 30 minutes. */
-  inactivityMs?: number;
+  inactivityMs?: number | undefined;
 }
 
 interface Control {
@@ -145,7 +145,13 @@ export class Takeover {
     this.controls.delete(botId);
     const refused = this.o.runtimes.forBot(botId).releaseControl();
     this.notify(botId);
-    if (tell && refused) this.o.deliver(botId, msg("The user has handed the browser back. Your browser calls during that time were refused with \"user has control\". Take a fresh snapshot before continuing."));
+    if (tell && refused)
+      this.o.deliver(
+        botId,
+        msg(
+          'The user has handed the browser back. Your browser calls during that time were refused with "user has control". Take a fresh snapshot before continuing.',
+        ),
+      );
   }
 
   private notify(botId: string) {

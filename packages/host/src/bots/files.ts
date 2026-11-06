@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, rmSync, watch, type FSWatcher } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+
 import type { BotFile } from "@claudebot/contract/events";
 
 const IGNORED = new Set([".DS_Store"]);
@@ -36,7 +37,11 @@ export function deleteFile(dir: string, rel: string): boolean {
   const abs = resolveInside(dir, rel);
   if (!abs || !existsSync(abs) || !lstatSync(abs).isFile()) return false;
   rmSync(abs);
-  for (let d = dirname(abs); d !== dir && readdirSync(d).every((n) => IGNORED.has(n)); d = dirname(d))
+  for (
+    let d = dirname(abs);
+    d !== dir && readdirSync(d).every((n) => IGNORED.has(n));
+    d = dirname(d)
+  )
     rmSync(d, { recursive: true });
   return true;
 }

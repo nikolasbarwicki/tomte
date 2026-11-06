@@ -1,7 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { delimiter, join } from "node:path";
+
 import { isMusl } from "../harness/index.ts";
 import { findChrome } from "./engine-cli.ts";
 
@@ -9,7 +18,7 @@ const isWin = process.platform === "win32";
 /** Where the managed engine is installed: `agent-browser/` in the data root. */
 const managedRoot = (dataRoot: string) => join(dataRoot, "agent-browser");
 
-export const ENGINE_VERSION = "0.41.2";
+const ENGINE_VERSION = "0.41.2";
 
 /** SHA-256 of each release binary, hashed locally from github.com/vercel-labs/agent-browser/releases/tag/v0.41.2. */
 const ENGINE_SHA256: Record<string, string> = {
@@ -23,7 +32,9 @@ const ENGINE_SHA256: Record<string, string> = {
 };
 
 export type ResolvedEngine = { path: string; source: "AGENT_BROWSER_PATH" | "managed" | "PATH" };
-export type EngineStatus = { status: "available"; path: string; source: ResolvedEngine["source"] } | { status: "unavailable"; reason: string };
+export type EngineStatus =
+  | { status: "available"; path: string; source: ResolvedEngine["source"] }
+  | { status: "unavailable"; reason: string };
 
 /** Release asset name suffix for this machine, or undefined when upstream ships no binary for it. */
 function platformKey(): string | undefined {
@@ -51,14 +62,24 @@ function onPath(): string | undefined {
 }
 
 export function resolveEngine(dataRoot: string): ResolvedEngine | undefined {
-  const pick = (path: string | undefined, source: ResolvedEngine["source"]) => (path && existsSync(path) ? { path, source } : undefined);
-  return pick(process.env.AGENT_BROWSER_PATH, "AGENT_BROWSER_PATH") ?? pick(managedBinary(dataRoot), "managed") ?? pick(onPath(), "PATH");
+  const pick = (path: string | undefined, source: ResolvedEngine["source"]) =>
+    path && existsSync(path) ? { path, source } : undefined;
+  return (
+    pick(process.env.AGENT_BROWSER_PATH, "AGENT_BROWSER_PATH") ??
+    pick(managedBinary(dataRoot), "managed") ??
+    pick(onPath(), "PATH")
+  );
 }
 
 export function engineStatus(dataRoot: string): EngineStatus {
   const e = resolveEngine(dataRoot);
   if (e) {
-    if (!findChrome()) return { status: "unavailable", reason: "Chrome for Testing is not installed; run `bun packages/host/src/host.ts install-browser`" };
+    if (!findChrome())
+      return {
+        status: "unavailable",
+        reason:
+          "Chrome for Testing is not installed; run `bun packages/host/src/host.ts install-browser`",
+      };
     return { status: "available", ...e };
   }
   const reason = platformKey()
@@ -68,15 +89,24 @@ export function engineStatus(dataRoot: string): EngineStatus {
 }
 
 /** Download the pinned engine, verify its pinned SHA-256, install Chrome for Testing through the engine, and mark it current. */
-export async function installManagedEngine(dataRoot: string, version = ENGINE_VERSION): Promise<string> {
-  if (version !== ENGINE_VERSION) throw new Error(`only the pinned agent-browser ${ENGINE_VERSION} can be installed (requested ${version})`);
+export async function installManagedEngine(
+  dataRoot: string,
+  version = ENGINE_VERSION,
+): Promise<string> {
+  if (version !== ENGINE_VERSION)
+    throw new Error(
+      `only the pinned agent-browser ${ENGINE_VERSION} can be installed (requested ${version})`,
+    );
   const key = platformKey();
   if (!key) throw new Error(`no agent-browser build for ${process.platform}/${process.arch}`);
   const asset = `agent-browser-${key}${isWin ? ".exe" : ""}`;
-  const res = await fetch(`https://github.com/vercel-labs/agent-browser/releases/download/v${version}/${asset}`);
+  const res = await fetch(
+    `https://github.com/vercel-labs/agent-browser/releases/download/v${version}/${asset}`,
+  );
   if (!res.ok) throw new Error(`download failed: ${res.status} ${asset}`);
   const bytes = Buffer.from(await res.arrayBuffer());
-  if (createHash("sha256").update(bytes).digest("hex") !== ENGINE_SHA256[key]) throw new Error(`checksum mismatch for ${asset}`);
+  if (createHash("sha256").update(bytes).digest("hex") !== ENGINE_SHA256[key])
+    throw new Error(`checksum mismatch for ${asset}`);
   const dest = join(managedRoot(dataRoot), version);
   mkdirSync(dest, { recursive: true });
   const bin = join(dest, isWin ? "agent-browser.exe" : "agent-browser");

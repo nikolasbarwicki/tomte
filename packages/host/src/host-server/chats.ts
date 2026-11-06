@@ -1,26 +1,44 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import type { FSWatcher } from "node:fs";
+
 import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk";
-import { botFilesPath, getBot, newSession, recordMessage, touchBot, watchFiles, type Thread, type TurnResult } from "../bots/index.ts";
+import type {
+  Bot,
+  BotsEvent,
+  HostEvent,
+  Notice,
+  RoutinesEvent,
+  ServerEvent,
+} from "@claudebot/contract/events";
+
+import {
+  botFilesPath,
+  getBot,
+  newSession,
+  recordMessage,
+  touchBot,
+  watchFiles,
+  type Thread,
+  type ThreadEnv,
+  type TurnResult,
+} from "../bots/index.ts";
 import type { Handoffs, Mention } from "../handoffs/index.ts";
 import type { Executor } from "../routines/index.ts";
-import type { Bot, BotsEvent, Notice, RoutinesEvent, ServerEvent } from "@claudebot/contract/events";
-import type { HostEvent } from "./events.ts";
 import { createNotices } from "./notices.ts";
 import { createRoutineTurns } from "./routine-turns.ts";
-import { openBotThread, type ThreadEnv } from "./threads.ts";
+import { openBotThread } from "./threads.ts";
 import type { Transcript } from "./transcript.ts";
 import { botsEvent, filesEvent, memoryEvents } from "./views.ts";
 
 export interface ChatsDeps extends ThreadEnv {
   db: Database;
   handoffs: Pick<Handoffs, "receivedCards" | "startDelivered">;
-  transcript(bot: Bot): Promise<Transcript>;
+  transcript: (bot: Bot) => Promise<Transcript>;
   /** Human-wait cards still open for a bot, replayed into a rebuilt chat. */
-  pendingWaits(botId: string): ServerEvent[];
+  pendingWaits: (botId: string) => ServerEvent[];
   routinesEvent(botId: string): RoutinesEvent;
-  broadcast(e: HostEvent): void;
+  broadcast: (e: HostEvent) => void;
 }
 
 /** The chat the page shows, with what the user can do in it. */
@@ -40,15 +58,15 @@ export interface Chats {
   /** Sends a host message into a bot's session: queued while the bot is busy, and the session reopens if it is closed. */
   deliver(botId: string, text: string): Promise<void>;
   /** Shows a notice to the page and has the open bot narrate it. */
-  notify(source: string, title: string, body?: string): void;
+  notify: (source: string, title: string, body?: string) => void;
   /** Shows an event in a bot's chat if it has one. */
   emitTo(botId: string, e: ServerEvent): void;
   isWorking(botId: string): boolean;
   /** True while no human is watching the bot's turn: a routine turn or a headless run. */
   unattended(botId: string): boolean;
   botsEvent(): BotsEvent;
-  currentBotId(): string | undefined;
-  announceBots(): void;
+  currentBotId: () => string | undefined;
+  announceBots: () => void;
   open(): OpenChat | undefined;
   /** Shows the bot's chat; a chat still running in the background is shown as it is, live. */
   switchTo(bot: Bot): Promise<void>;
@@ -117,7 +135,9 @@ export function createChats(deps: ChatsDeps): Chats {
   const announceBots = () => broadcast(botsEvent(dataRoot, db, isWorking));
 
   const queuedEvent = (e: UserEntry): ServerEvent =>
-    e.mentions.length ? { type: "queued", id: e.id, text: e.shown, mentions: e.mentions } : { type: "queued", id: e.id, text: e.shown };
+    e.mentions.length
+      ? { type: "queued", id: e.id, text: e.shown, mentions: e.mentions }
+      : { type: "queued", id: e.id, text: e.shown };
 
   /** Shows a user message in the transcript and records it as the bot's latest; called when it reaches the bot. */
   function userSaid(chat: Chat, text: string, mentions: Mention[]) {
@@ -137,7 +157,11 @@ export function createChats(deps: ChatsDeps): Chats {
     routineTurns.startReady(
       (botId) => chats.get(botId),
       (chat, job) => {
-        emit(chat, { type: "routine", name: job.routine.name, trigger: job.prompt.includes('trigger="manual"') ? "manual" : "schedule" });
+        emit(chat, {
+          type: "routine",
+          name: job.routine.name,
+          trigger: job.prompt.includes('trigger="manual"') ? "manual" : "schedule",
+        });
         chat.routineTurn = true;
         return { done: turn(chat, job.prompt), stop: (reason) => chat.thread.close(reason) };
       },
@@ -149,7 +173,8 @@ export function createChats(deps: ChatsDeps): Chats {
         if (e.source === "user") {
           emit(chat, { type: "dequeued", id: e.id });
           userSaid(chat, e.shown, e.mentions);
-        } else for (const card of deps.handoffs.receivedCards(e.text, chat.bot.id)) emit(chat, card);
+        } else
+          for (const card of deps.handoffs.receivedCards(e.text, chat.bot.id)) emit(chat, card);
       }
       void turn(chat, entries.map((e) => e.text).join("\n\n"));
     }
@@ -187,17 +212,28 @@ export function createChats(deps: ChatsDeps): Chats {
     try {
       out = await chat.thread.send(text, (m) => {
         if (m.type === "system" && m.subtype === "compact_boundary")
-          emit(chat, { type: "compacted", trigger: m.compact_metadata.trigger, preTokens: m.compact_metadata.pre_tokens });
+          emit(chat, {
+            type: "compacted",
+            trigger: m.compact_metadata.trigger,
+            preTokens: m.compact_metadata.pre_tokens,
+          });
         if (m.type === "assistant")
-          for (const blk of m.message.content) if (blk.type === "tool_use") emit(chat, { type: "tool", name: blk.name, input: JSON.stringify(blk.input) });
+          for (const blk of m.message.content)
+            if (blk.type === "tool_use")
+              emit(chat, { type: "tool", name: blk.name, input: JSON.stringify(blk.input) });
         if (m.type !== "stream_event" || m.parent_tool_use_id) return;
         const ev = m.event;
-        if (ev.type === "content_block_start" && ev.content_block.type === "text") emit(chat, { type: "text_start" });
-        if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") emit(chat, { type: "delta", text: ev.delta.text });
+        if (ev.type === "content_block_start" && ev.content_block.type === "text")
+          emit(chat, { type: "text_start" });
+        if (ev.type === "content_block_delta" && ev.delta.type === "text_delta")
+          emit(chat, { type: "delta", text: ev.delta.text });
       });
       emit(chat, { type: "done" });
-      if (out.text.trim()) recordMessage(db, chat.bot.id, { from: "bot", text: out.text, at: Date.now() });
-      const usage = await chat.thread.contextUsage().catch((e) => console.error(`[host] context usage failed: ${(e as Error).message}`));
+      if (out.text.trim())
+        recordMessage(db, chat.bot.id, { from: "bot", text: out.text, at: Date.now() });
+      const usage = await chat.thread
+        .contextUsage()
+        .catch((e) => console.error(`[host] context usage failed: ${(e as Error).message}`));
       if (usage) emit(chat, { type: "context", ...usage });
     } catch (e) {
       out = e as Error;
@@ -228,18 +264,36 @@ export function createChats(deps: ChatsDeps): Chats {
   const openThread = (bot: Bot, resume: boolean, chat: () => Chat): Thread =>
     openBotThread(deps, bot, resume, {
       onMemory: (scope, text) => {
-        if (scope === "user" || current?.bot.id === bot.id) broadcast({ type: "memory", scope, text });
+        if (scope === "user" || current?.bot.id === bot.id)
+          broadcast({ type: "memory", scope, text });
       },
       unattended: () => chat().routineTurn,
       ask: (event) => waitForUser(chat(), event),
     });
 
-  function createChat(bot: Bot, { history, hasSession }: Transcript, inbox: InboxEntry[] = []): Chat {
+  function createChat(
+    bot: Bot,
+    { history, hasSession }: Transcript,
+    inbox: InboxEntry[] = [],
+  ): Chat {
     history.push(...deps.pendingWaits(bot.id));
     const routine = routineTurns.headless(bot.id);
-    if (routine) history.push({ type: "info", text: `routine "${routine}" is running in the background; its reply appears here when it finishes` });
+    if (routine)
+      history.push({
+        type: "info",
+        text: `routine "${routine}" is running in the background; its reply appears here when it finishes`,
+      });
     for (const e of inbox) if (e.source === "user") history.push(queuedEvent(e));
-    const chat: Chat = { bot, history, busy: false, routineTurn: false, pending: new Map(), configStale: false, inbox, thread: openThread(bot, hasSession, () => chat) };
+    const chat: Chat = {
+      bot,
+      history,
+      busy: false,
+      routineTurn: false,
+      pending: new Map(),
+      configStale: false,
+      inbox,
+      thread: openThread(bot, hasSession, () => chat),
+    };
     chats.set(bot.id, chat);
     return chat;
   }
@@ -251,7 +305,9 @@ export function createChats(deps: ChatsDeps): Chats {
     announceBots();
     for (const e of memoryEvents(dataRoot, chat.bot.id)) broadcast(e);
     filesWatcher?.close();
-    filesWatcher = watchFiles(botFilesPath(dataRoot, chat.bot.id), () => broadcast(filesEvent(dataRoot, current?.bot.id)));
+    filesWatcher = watchFiles(botFilesPath(dataRoot, chat.bot.id), () =>
+      broadcast(filesEvent(dataRoot, current?.bot.id)),
+    );
     broadcast(filesEvent(dataRoot, chat.bot.id));
     broadcast(deps.routinesEvent(chat.bot.id));
   }
@@ -361,7 +417,14 @@ export function createChats(deps: ChatsDeps): Chats {
       }
     },
     notices: notices.recent,
-    replayOpen: () => (current ? [deps.routinesEvent(current.bot.id), { type: "reset", botId: current.bot.id }, ...current.history] : []),
+    replayOpen: () =>
+      current
+        ? [
+            deps.routinesEvent(current.bot.id),
+            { type: "reset", botId: current.bot.id },
+            ...current.history,
+          ]
+        : [],
     close() {
       for (const chat of chats.values()) chat.thread.close("shutdown");
       filesWatcher?.close();

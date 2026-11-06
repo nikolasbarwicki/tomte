@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createServer, request, type Server } from "node:http";
 import { connect, type AddressInfo, type Socket } from "node:net";
+
 import { createEgressProxy, isBlockedAddress, type EgressProxy } from "./egress-proxy.ts";
 
 /** Hostnames the fake DNS knows; every allowed address is dialed to the local test origin, recording what was dialed. */
@@ -17,8 +18,12 @@ let proxy: EgressProxy;
 
 beforeAll(async () => {
   origin = createServer((req, res) => {
-    if (req.url === "/redirect-to-loopback") return void res.writeHead(302, { location: "http://127.0.0.1:1/" }).end();
-    if (req.url === "/redirect-to-metadata") return void res.writeHead(302, { location: "http://169.254.169.254/latest/meta-data/" }).end();
+    if (req.url === "/redirect-to-loopback")
+      return void res.writeHead(302, { location: "http://127.0.0.1:1/" }).end();
+    if (req.url === "/redirect-to-metadata")
+      return void res
+        .writeHead(302, { location: "http://169.254.169.254/latest/meta-data/" })
+        .end();
     res.end(`origin saw host ${req.headers.host}`);
   });
   await new Promise<void>((r) => origin.listen(0, "127.0.0.1", r));
@@ -41,13 +46,26 @@ afterAll(async () => {
 const proxyPort = () => Number(new URL(proxy.url).port);
 
 /** A plain HTTP request through the proxy, the way a browser sends it. */
-function viaProxy(url: string): Promise<{ status: number; body: string; location?: string }> {
+function viaProxy(
+  url: string,
+): Promise<{ status: number; body: string; location?: string | undefined }> {
   return new Promise((resolve, reject) => {
-    request({ host: "127.0.0.1", port: proxyPort(), method: "GET", path: url, headers: { host: new URL(url).host } }, (res) => {
-      let body = "";
-      res.on("data", (d) => (body += d));
-      res.on("end", () => resolve({ status: res.statusCode!, body, location: res.headers.location }));
-    })
+    request(
+      {
+        host: "127.0.0.1",
+        port: proxyPort(),
+        method: "GET",
+        path: url,
+        headers: { host: new URL(url).host },
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (d) => (body += d));
+        res.on("end", () =>
+          resolve({ status: res.statusCode!, body, location: res.headers.location }),
+        );
+      },
+    )
       .on("error", reject)
       .end();
   });
@@ -71,18 +89,48 @@ function freshSince(): number {
 /** CONNECT through the proxy; resolves with the status line the proxy sent. */
 function tunnel(target: string): Promise<{ status: number; socket: Socket }> {
   return new Promise((resolve, reject) => {
-    const socket = connect({ host: "127.0.0.1", port: proxyPort() }, () => socket.write(`CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n\r\n`));
-    socket.once("data", (d) => resolve({ status: Number(/^HTTP\/1\.1 (\d+)/.exec(d.toString())![1]), socket }));
+    const socket = connect({ host: "127.0.0.1", port: proxyPort() }, () =>
+      socket.write(`CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n\r\n`),
+    );
+    socket.once("data", (d) =>
+      resolve({ status: Number(/^HTTP\/1\.1 (\d+)/.exec(d.toString())![1]), socket }),
+    );
     socket.on("error", reject);
   });
 }
 
 describe("addresses", () => {
-  test.each(["127.0.0.1", "127.8.9.10", "::1", "::", "::ffff:127.0.0.1", "::ffff:7f00:1", "169.254.169.254", "169.254.0.1", "fe80::1", "febf::1", "0.0.0.0", "0.1.2.3", "::ffff:169.254.169.254", "64:ff9b::7f00:1", "fd00:ec2::254", "not-an-ip"])("%s is blocked", (a) => {
+  test.each([
+    "127.0.0.1",
+    "127.8.9.10",
+    "::1",
+    "::",
+    "::ffff:127.0.0.1",
+    "::ffff:7f00:1",
+    "169.254.169.254",
+    "169.254.0.1",
+    "fe80::1",
+    "febf::1",
+    "0.0.0.0",
+    "0.1.2.3",
+    "::ffff:169.254.169.254",
+    "64:ff9b::7f00:1",
+    "fd00:ec2::254",
+    "not-an-ip",
+  ])("%s is blocked", (a) => {
     expect(isBlockedAddress(a)).toBe(true);
   });
 
-  test.each(["93.184.216.34", "192.168.1.20", "10.0.0.1", "172.16.5.5", "2606:2800:220:1:248:1893:25c8:1946", "fd12:3456::1", "::ffff:192.168.1.1", "fec0::1"])("%s is allowed", (a) => {
+  test.each([
+    "93.184.216.34",
+    "192.168.1.20",
+    "10.0.0.1",
+    "172.16.5.5",
+    "2606:2800:220:1:248:1893:25c8:1946",
+    "fd12:3456::1",
+    "::ffff:192.168.1.1",
+    "fec0::1",
+  ])("%s is allowed", (a) => {
     expect(isBlockedAddress(a)).toBe(false);
   });
 });
@@ -104,7 +152,13 @@ describe("http through the proxy", () => {
 
   test("direct loopback is blocked on any port, v4 and v6, and nothing is dialed", async () => {
     dialed.length = 0;
-    for (const u of [`http://127.0.0.1:${originPort}/`, "http://127.0.0.1:1/", "http://localhost:80/", "http://[::1]:80/", "http://[::ffff:127.0.0.1]:80/"]) {
+    for (const u of [
+      `http://127.0.0.1:${originPort}/`,
+      "http://127.0.0.1:1/",
+      "http://localhost:80/",
+      "http://[::1]:80/",
+      "http://[::ffff:127.0.0.1]:80/",
+    ]) {
       expect((await viaProxy(u)).status).toBe(403);
     }
     expect(dialed).toEqual([]);
@@ -159,7 +213,13 @@ describe("CONNECT through the proxy", () => {
 
   test("loopback, a rebinding name, link-local and v6 loopback are refused", async () => {
     dialed.length = 0;
-    for (const t of [`127.0.0.1:${originPort}`, "rebind.test:443", "169.254.169.254:80", "[::1]:443", "[::ffff:127.0.0.1]:443"]) {
+    for (const t of [
+      `127.0.0.1:${originPort}`,
+      "rebind.test:443",
+      "169.254.169.254:80",
+      "[::1]:443",
+      "[::ffff:127.0.0.1]:443",
+    ]) {
       const { status, socket } = await tunnel(t);
       expect(status).toBe(403);
       socket.destroy();

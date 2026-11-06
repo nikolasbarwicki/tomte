@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { engineStatus, installManagedEngine, resolveEngine } from "./engine.ts";
 
 const envKeys = ["AGENT_BROWSER_PATH", "PATH"] as const;
@@ -24,7 +25,9 @@ describe("engine resolution", () => {
     process.env.PATH = join(dir, "bin");
   });
   afterEach(() => {
-    for (const k of envKeys) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+    for (const k of envKeys)
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -62,7 +65,8 @@ describe("engine resolution", () => {
 
   test("refuses a checksum mismatch and installs nothing", async () => {
     const realFetch = globalThis.fetch;
-    globalThis.fetch = (async () => new Response(new Uint8Array([1, 2, 3]))) as unknown as typeof fetch;
+    globalThis.fetch = (async () =>
+      new Response(new Uint8Array([1, 2, 3]))) as unknown as typeof fetch;
     try {
       await expect(installManagedEngine(dataRoot)).rejects.toThrow("checksum mismatch");
     } finally {

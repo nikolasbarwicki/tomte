@@ -1,11 +1,11 @@
 import { getBot } from "./bots/index.ts";
 import { resolveCli } from "./harness/index.ts";
+import { createHostServer } from "./host-server/index.ts";
 import { InvalidConfig, parseHostConfig } from "./platform/config.ts";
 import { acquireDataRootLock, DataRootLocked } from "./platform/data-root-lock.ts";
 import { openDb } from "./platform/db.ts";
-import { ensureWorkspace } from "./platform/workspace.ts";
 import { keychainSecrets } from "./platform/secrets.ts";
-import { createHostServer } from "./host-server/index.ts";
+import { ensureWorkspace } from "./platform/workspace.ts";
 
 const parsed = (() => {
   try {
@@ -24,7 +24,9 @@ if (!cli && !process.env.ANTHROPIC_API_KEY) {
   process.exit(2);
 }
 if (!cli) {
-  console.error("no claude binary resolved; set CLAUDE_PATH or run `bun packages/host/src/host.ts install-cli`");
+  console.error(
+    "no claude binary resolved; set CLAUDE_PATH or run `bun packages/host/src/host.ts install-cli`",
+  );
   process.exit(2);
 }
 const lock = (() => {
@@ -49,7 +51,9 @@ const server = await createHostServer({
   process.exit(2);
 });
 const opened = server.currentBotId() ? getBot(config.dataRoot, server.currentBotId()!) : undefined;
-console.log(`claudebot UI: ${server.url}  workspace=${ensureWorkspace(config.dataRoot)}  data=${config.dataRoot}  bot=${opened ? `${opened.name} (${opened.id})` : "none"}`);
+console.log(
+  `claudebot UI: ${server.url}  workspace=${ensureWorkspace(config.dataRoot)}  data=${config.dataRoot}  bot=${opened ? `${opened.name} (${opened.id})` : "none"}`,
+);
 if (server.publicUrl !== server.url) console.log(`public URL: ${server.publicUrl}`);
 
 const shutdown = async () => {
@@ -59,5 +63,5 @@ const shutdown = async () => {
   if (id) console.log(`reopen with: bun run ui ${id}`);
   process.exit(0);
 };
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+process.on("SIGINT", () => void shutdown());
+process.on("SIGTERM", () => void shutdown());

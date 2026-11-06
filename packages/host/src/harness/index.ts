@@ -1,13 +1,22 @@
+import { randomUUID } from "node:crypto";
 import { chmodSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+
 import type { McpServerConfig, Options, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
 
-export { authCommand, cmdExeSpawner, installManagedCli, isMusl, loginShellPath, resolveCli, type ResolvedCli } from "./cli.ts";
+export {
+  authCommand,
+  cmdExeSpawner,
+  installManagedCli,
+  isMusl,
+  loginShellPath,
+  resolveCli,
+  type ResolvedCli,
+} from "./cli.ts";
 
 /** An HTTP MCP server owned by the host; the token travels as a bearer header, never in argv. */
-export interface HostMcpServer {
+interface HostMcpServer {
   name: string;
   url: string;
   token: string;
@@ -19,8 +28,8 @@ export interface HostServerLease {
   /** Guidance for the bot about these servers, appended to its system prompt. */
   instructions?: string;
   /** How the CLI must confine the bot shell while this lease is held; absent for an unconfined bot. */
-  isolation?: IsolationProfile;
-  release(): void;
+  isolation?: IsolationProfile | undefined;
+  release: () => void;
 }
 
 /** Leases the host servers a bot may use; the lease is empty when the bot has none. */
@@ -47,21 +56,21 @@ export interface IsolationProfile {
 }
 
 /** What a harness launches with from the bot's integrations: their MCP servers, disallowed tools and plugins. */
-export interface LaunchIntegrations {
+interface LaunchIntegrations {
   mcpServers: Record<string, McpServerConfig>;
   disallowedTools: string[];
   plugins: SdkPluginConfig[];
 }
 
-export interface HarnessLaunchInput {
+interface HarnessLaunchInput {
   hostServers: HostMcpServer[];
   /** Integration servers, disallowed tools and plugins for this session. */
-  integrations?: LaunchIntegrations;
+  integrations?: LaunchIntegrations | undefined;
   systemPromptAppend: string;
   isolation: IsolationProfile;
 }
 
-export interface HarnessLaunch {
+interface HarnessLaunch {
   options: Partial<Options>;
   /** Removes any temporary files; safe to call once the CLI has read its configuration. */
   dispose(): void;
@@ -77,7 +86,11 @@ export const claudeHarness: Harness = {
   launch({ hostServers, integrations, systemPromptAppend, isolation }) {
     const mcpServers: Record<string, McpServerConfig> = { ...integrations?.mcpServers };
     for (const s of hostServers) {
-      mcpServers[s.name] = { type: "http", url: s.url, headers: { Authorization: `Bearer ${s.token}` } };
+      mcpServers[s.name] = {
+        type: "http",
+        url: s.url,
+        headers: { Authorization: `Bearer ${s.token}` },
+      };
     }
     const extraArgs: Record<string, string | null> = {};
     let mcpFile: string | undefined;
@@ -94,7 +107,10 @@ export const claudeHarness: Harness = {
         strictMcpConfig: true,
         settingSources: ["user"],
         extraArgs,
-        disallowedTools: [...(integrations?.disallowedTools ?? []), ...(isolation.shell?.denyRead.map((p) => `Read(/${p}/**)`) ?? [])],
+        disallowedTools: [
+          ...(integrations?.disallowedTools ?? []),
+          ...(isolation.shell?.denyRead.map((p) => `Read(/${p}/**)`) ?? []),
+        ],
         ...(isolation.shell
           ? {
               sandbox: {

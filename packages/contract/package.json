@@ -4,9 +4,13 @@
   "type": "module",
   "exports": {
     "./events": "./src/events.ts",
-    "./avatars": "./src/avatars.ts"
+    "./avatars": "./src/avatars.ts",
+    "./api": "./src/api.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
   }
 }

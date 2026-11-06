@@ -1,15 +1,25 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+
+import { z } from "zod";
+
 import type { HostOrigin } from "../platform/config.ts";
 import type { HumanWaits } from "./human-waits.ts";
 import { toEngineInput } from "./input.ts";
 import type { LiveView } from "./live-view.ts";
 import type { Takeover } from "./takeover.ts";
-import { guardUiRequest, rejectRequest } from "./ui-guard.ts";
+import { BotRef, guardUiRequest, rejectRequest } from "./ui-guard.ts";
 
-export const CONTROL_PATH = "/api/browser/control";
-export const INPUT_PATH = "/api/browser/input";
-export const WAIT_ANSWER_PATH = "/api/waits/answer";
-export const BROWSER_UI_PATHS: ReadonlySet<string> = new Set([CONTROL_PATH, INPUT_PATH, WAIT_ANSWER_PATH]);
+const CONTROL_PATH = "/api/browser/control";
+const INPUT_PATH = "/api/browser/input";
+const WAIT_ANSWER_PATH = "/api/waits/answer";
+export const BROWSER_UI_PATHS: ReadonlySet<string> = new Set([
+  CONTROL_PATH,
+  INPUT_PATH,
+  WAIT_ANSWER_PATH,
+]);
+
+const ControlAction = z.object({ action: z.enum(["take", "hand_back"]) });
+const WaitAnswer = z.object({ id: z.string(), action: z.string() });
 
 export interface BrowserUiRoutesOptions {
   host: HostOrigin;
@@ -19,28 +29,37 @@ export interface BrowserUiRoutesOptions {
   liveView: LiveView;
 }
 
-const ok = (res: ServerResponse) => void res.writeHead(200, { "content-type": "application/json" }).end("{}");
+const ok = (res: ServerResponse) =>
+  void res.writeHead(200, { "content-type": "application/json" }).end("{}");
 
 /**
  * The UI's browser routes that act: take control or hand back, send input, answer a wait card. They share the
  * live view's checks (own Host and Origin, JSON). Input bodies are never logged, echoed or stored.
  */
 export function createBrowserUiRoutes(o: BrowserUiRoutesOptions) {
-  return async function handle(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
+  return async function handle(
+    req: IncomingMessage,
+    res: ServerResponse,
+    path: string,
+  ): Promise<void> {
     const body = await guardUiRequest(req, res, o.host);
     if (!body) return;
-    const botId = typeof body.botId === "string" ? body.botId : "";
 
     if (path === WAIT_ANSWER_PATH) {
-      const answered = typeof body.id === "string" && typeof body.action === "string" && o.waits.answer(body.id, body.action);
+      const answer = WaitAnswer.safeParse(body);
+      const answered = answer.success && o.waits.answer(answer.data.id, answer.data.action);
       return answered ? ok(res) : rejectRequest(res, 404, "no such pending request");
     }
-    if (!botId) return rejectRequest(res, 400, "botId required");
-    if (!o.isEnabled(botId)) return rejectRequest(res, 403, "the browser is switched off for this bot");
+    const ref = BotRef.safeParse(body);
+    if (!ref.success) return rejectRequest(res, 400, "botId required");
+    const { botId } = ref.data;
+    if (!o.isEnabled(botId))
+      return rejectRequest(res, 403, "the browser is switched off for this bot");
 
     if (path === CONTROL_PATH) {
-      if (body.action === "hand_back") return o.takeover.handBack(botId), ok(res);
-      if (body.action !== "take") return rejectRequest(res, 400, "action must be take or hand_back");
+      const control = ControlAction.safeParse(body);
+      if (!control.success) return rejectRequest(res, 400, "action must be take or hand_back");
+      if (control.data.action === "hand_back") return (o.takeover.handBack(botId), ok(res));
       try {
         await o.takeover.start(botId);
       } catch (e) {
@@ -50,10 +69,12 @@ export function createBrowserUiRoutes(o: BrowserUiRoutesOptions) {
     }
 
     // INPUT_PATH
-    if (!o.takeover.accepts(botId)) return rejectRequest(res, 409, "you do not have control of this browser");
+    if (!o.takeover.accepts(botId))
+      return rejectRequest(res, 409, "you do not have control of this browser");
     const message = toEngineInput(body);
     if (!message) return rejectRequest(res, 400, "invalid input event");
-    if (!o.liveView.sendInput(botId, message)) return rejectRequest(res, 409, "the browser is not running");
+    if (!o.liveView.sendInput(botId, message))
+      return rejectRequest(res, 409, "the browser is not running");
     o.takeover.touch(botId);
     ok(res);
   };

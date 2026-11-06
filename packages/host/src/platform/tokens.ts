@@ -6,7 +6,7 @@ const digest = (token: string) => createHash("sha256").update(token).digest();
 export class TokenRegistry {
   private entries: { digest: Buffer; botId: string }[] = [];
 
-  issue(botId: string): { token: string; revoke(): void } {
+  issue(botId: string): { token: string; revoke: () => void } {
     const token = randomBytes(32).toString("base64url");
     const entry = { digest: digest(token), botId };
     this.entries.push(entry);

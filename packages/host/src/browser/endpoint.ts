@@ -1,15 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+
 import type { HostServerLease } from "../harness/index.ts";
 import { serveMcpRequest } from "../host-mcp/index.ts";
-import { PageState } from "./page-state.ts";
-import type { EgressProxy } from "./egress-proxy.ts";
-import type { BrowserRuntimes } from "./runtime.ts";
-import type { Takeover } from "./takeover.ts";
-import type { BrowserLogin } from "./login.ts";
-import { browserIsolation } from "./sandbox.ts";
-import { BROWSER_INSTRUCTIONS, BROWSER_SERVER_NAME, createBrowserMcpServer } from "./tools.ts";
 import type { HostOrigin } from "../platform/config.ts";
 import { TokenRegistry } from "../platform/tokens.ts";
+import type { EgressProxy } from "./egress-proxy.ts";
+import type { BrowserLogin } from "./login.ts";
+import { PageState } from "./page-state.ts";
+import type { BrowserRuntimes } from "./runtime.ts";
+import { browserIsolation } from "./sandbox.ts";
+import type { Takeover } from "./takeover.ts";
+import { BROWSER_INSTRUCTIONS, BROWSER_SERVER_NAME, createBrowserMcpServer } from "./tools.ts";
 
 export const BROWSER_ENDPOINT_PATH = "/mcp/browser";
 
@@ -20,12 +21,12 @@ export interface BrowserEndpointDeps {
   isEnabled(botId: string): boolean;
   runtimes: BrowserRuntimes;
   /** The bot's files folder. */
-  filesDir(botId: string): string;
+  filesDir: (botId: string) => string;
   egress: EgressProxy;
   takeover: Takeover;
   login: BrowserLogin;
   /** True while the bot runs a routine, with no user present. */
-  unattended(botId: string): boolean;
+  unattended: (botId: string) => boolean;
   /** The host-wide token registry shared with the other host endpoints; a private one when omitted. */
   tokens?: TokenRegistry;
 }
@@ -53,16 +54,32 @@ export function createBrowserEndpoint(deps: BrowserEndpointDeps): BrowserEndpoin
       serveMcpRequest(req, res, {
         host: deps.host,
         tokens,
-        refuse: (botId) => (deps.isEnabled(botId) ? undefined : "the browser is switched off for this bot"),
+        refuse: (botId) =>
+          deps.isEnabled(botId) ? undefined : "the browser is switched off for this bot",
         server: (botId) =>
-          createBrowserMcpServer({ botId, browser: deps.runtimes.forBot(botId), egress: deps.egress, page: pageOf(botId), filesDir: deps.filesDir(botId), takeover: deps.takeover, login: deps.login, unattended: () => deps.unattended(botId) }),
+          createBrowserMcpServer({
+            botId,
+            browser: deps.runtimes.forBot(botId),
+            egress: deps.egress,
+            page: pageOf(botId),
+            filesDir: deps.filesDir(botId),
+            takeover: deps.takeover,
+            login: deps.login,
+            unattended: () => deps.unattended(botId),
+          }),
       }),
 
     lease(botId) {
       if (!deps.isEnabled(botId)) return { servers: [], release() {} };
       const { token, revoke } = tokens.issue(botId);
       return {
-        servers: [{ name: BROWSER_SERVER_NAME, url: `${deps.host.localUrl}${BROWSER_ENDPOINT_PATH}`, token }],
+        servers: [
+          {
+            name: BROWSER_SERVER_NAME,
+            url: `${deps.host.localUrl}${BROWSER_ENDPOINT_PATH}`,
+            token,
+          },
+        ],
         instructions: BROWSER_INSTRUCTIONS,
         isolation: browserIsolation(),
         release: revoke,

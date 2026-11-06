@@ -8,7 +8,7 @@ import { join } from "node:path";
  * `state_save`, ...), not on categories such as "eval" or "network"; a deny list of categories is silently
  * ignored, so this is a default-deny allow list. A feature that needs another engine action adds it here.
  */
-export const ALLOWED_ACTIONS = [
+const ALLOWED_ACTIONS = [
   "launch",
   "close",
   "navigate",
@@ -34,7 +34,7 @@ export const ALLOWED_ACTIONS = [
 ] as const;
 
 /** Spelled out as well, so the intent survives someone widening the allow list. */
-export const DENIED_ACTIONS = [
+const DENIED_ACTIONS = [
   "evaluate",
   "download",
   "upload",
