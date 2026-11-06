@@ -40,7 +40,7 @@ import { act } from "./api.ts";
 import { botTheme } from "./avatars.ts";
 import { BotAvatar } from "./bot-avatar.tsx";
 import { kTokens } from "./format.ts";
-import { splitMentions } from "./mentions.ts";
+import { bindMentions } from "./mentions.ts";
 
 export type Item =
   | { kind: "user"; text: string; mentions?: { id: string; name: string }[] }
@@ -165,8 +165,9 @@ function RowView({ row, running, bots, onShowBrowser }: { row: Row; running: boo
   switch (row.kind) {
     case "user": {
       const mentions = row.mentions ?? [];
-      const segments = splitMentions(row.text, mentions);
-      const leading = mentions.filter((m) => !segments.some((s) => typeof s !== "string" && s.mention.id === m.id)).map((m) => ({ mention: m, text: `@${m.name}` }));
+      const bound = bindMentions(row.text, mentions);
+      const segments = bound.segments;
+      const leading = mentions.filter((m) => !bound.mentions.includes(m)).map((m) => ({ mention: m, text: `@${m.name}` }));
       return (
         <Message align="end">
           <MessageContent>
