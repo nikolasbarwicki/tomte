@@ -47,7 +47,6 @@ function useLive(botId: string): Live {
   const [state, setState] = useState<Live>({ live: false, tabs: [], holder: "bot" });
   useEffect(() => {
     const abort = new AbortController();
-    setState({ live: false, tabs: [], holder: "bot" });
     const apply = (m: LiveMessage) =>
       setState((s) => {
         if (m.type === "state")
@@ -61,7 +60,7 @@ function useLive(botId: string): Live {
         if (m.type === "tabs") return { ...s, tabs: m.tabs };
         return s;
       });
-    (async () => {
+    void (async () => {
       // A POST: the host only serves this stream to same-origin JSON requests.
       while (!abort.signal.aborted) {
         try {
@@ -88,7 +87,10 @@ function useLive(botId: string): Live {
         await new Promise((r) => setTimeout(r, 2000));
       }
     })();
-    return () => abort.abort();
+    return () => {
+      abort.abort();
+      setState({ live: false, tabs: [], holder: "bot" });
+    };
   }, [botId]);
   return state;
 }
@@ -188,7 +190,7 @@ export function BrowserPanel({
 }) {
   const { live, frame: data, size, url: navigated, tabs, holder } = useLive(botId);
   const [error, setError] = useState<string>();
-  const input = useInput(botId, size);
+  const { frame: frameRef, handlers, keys } = useInput(botId, size);
   // The engine sends no URL on connect, so the active tab's address fills in until the first navigation.
   const url = tabs.find((t) => t.active)?.url || navigated;
   const control = async (action: "take" | "hand_back") => {
@@ -234,16 +236,16 @@ export function BrowserPanel({
             <DropdownMenuCheckboxItem
               checked={headed}
               onCheckedChange={(checked) =>
-                act("/api/bots/browser/headed", { botId, headed: checked })
+                void act("/api/bots/browser/headed", { botId, headed: checked })
               }
             >
               Show window
             </DropdownMenuCheckboxItem>
-            <DropdownMenuItem onClick={() => act("/api/bots/browser/restart", { botId })}>
+            <DropdownMenuItem onClick={() => void act("/api/bots/browser/restart", { botId })}>
               <RotateCwIcon /> Restart browser
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={signOut}>
+            <DropdownMenuItem variant="destructive" onClick={() => void signOut()}>
               <LogOutIcon /> Sign out of everything
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -281,15 +283,15 @@ export function BrowserPanel({
                   userHolds && "cursor-crosshair ring-2 ring-blue-500 ring-inset",
                 )}
                 tabIndex={userHolds ? 0 : -1}
-                {...(userHolds ? input.keys : {})}
+                {...(userHolds ? keys : {})}
               >
                 <img
-                  ref={input.frame}
+                  ref={frameRef}
                   className={cn("block w-full", userHolds && "touch-none select-none")}
                   alt="The bot's browser"
                   draggable={false}
                   src={`data:image/jpeg;base64,${data}`}
-                  {...(userHolds ? input.handlers : {})}
+                  {...(userHolds ? handlers : {})}
                 />
               </div>
             ) : (
@@ -301,7 +303,7 @@ export function BrowserPanel({
           <div className="flex items-center gap-2">
             {userHolds ? (
               <>
-                <Button size="sm" onClick={() => control("hand_back")}>
+                <Button size="sm" onClick={() => void control("hand_back")}>
                   <HandIcon /> Hand back
                 </Button>
                 <span className="text-muted-foreground text-xs">
@@ -314,7 +316,7 @@ export function BrowserPanel({
                   size="sm"
                   variant="outline"
                   disabled={holder === "draining"}
-                  onClick={() => control("take")}
+                  onClick={() => void control("take")}
                 >
                   {holder === "draining" ? <Spinner /> : <MousePointerClickIcon />}
                   {holder === "draining" ? "Taking control…" : "Take control"}

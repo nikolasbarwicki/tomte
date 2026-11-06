@@ -100,11 +100,11 @@ function Header({ integration: i, onBack }: { integration: Integration; onBack: 
         <div className="flex shrink-0 items-center gap-2">
           {isSetUp(i) &&
             (i.enabled ? (
-              <Button variant="outline" disabled={busy} onClick={() => setEnabled(false)}>
+              <Button variant="outline" disabled={busy} onClick={() => void setEnabled(false)}>
                 Pause
               </Button>
             ) : (
-              <Button disabled={busy} onClick={() => setEnabled(true)}>
+              <Button disabled={busy} onClick={() => void setEnabled(true)}>
                 Resume
               </Button>
             ))}
@@ -139,7 +139,7 @@ function Connection({ integration: i }: { integration: Integration }) {
             variant="outline"
             size="sm"
             disabled={busy}
-            onClick={() => run("/api/integrations/probe")}
+            onClick={() => void run("/api/integrations/probe")}
           >
             {i.state === "connected"
               ? "Refresh tools"
@@ -246,7 +246,7 @@ function Permissions({ integration: i }: { integration: Integration }) {
                 variant="ghost"
                 size="sm"
                 disabled={busy}
-                onClick={() => run("/api/integrations/reset-policies")}
+                onClick={() => void run("/api/integrations/reset-policies")}
               />
             }
           >
@@ -306,7 +306,9 @@ function Permissions({ integration: i }: { integration: Integration }) {
                 key={t.name}
                 tool={t}
                 disabled={busy}
-                onPolicy={(policy) => run("/api/integrations/set-policy", { tool: t.name, policy })}
+                onPolicy={(policy) =>
+                  void run("/api/integrations/set-policy", { tool: t.name, policy })
+                }
               />
             ))}
           </ul>
@@ -397,7 +399,7 @@ function Skills({ integration: i }: { integration: Integration }) {
                 checked={k.enabled}
                 disabled={busy}
                 onCheckedChange={(enabled) =>
-                  run("/api/integrations/set-skill-enabled", { skill: k.name, enabled })
+                  void run("/api/integrations/set-skill-enabled", { skill: k.name, enabled })
                 }
               />
               <label htmlFor={id} className="flex min-w-0 flex-col gap-0.5">
@@ -473,7 +475,7 @@ function DangerZone({ integration: i }: { integration: Integration }) {
           action="Disconnect"
           disabled={busy}
           onClick={() =>
-            confirmed(
+            void confirmed(
               "/api/integrations/disconnect",
               `Disconnect ${i.label}?`,
               "Its stored secret is deleted; tool settings are kept.",
@@ -489,7 +491,7 @@ function DangerZone({ integration: i }: { integration: Integration }) {
           action="Remove"
           disabled={busy}
           onClick={() =>
-            confirmed(
+            void confirmed(
               "/api/integrations/remove",
               `Remove ${i.label}?`,
               "The server and its tool settings are deleted.",

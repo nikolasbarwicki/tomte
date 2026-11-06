@@ -60,7 +60,8 @@ beforeAll(() => {
 
 afterAll(() => {
   for (const k of ENV_KEYS)
-    saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+    if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -423,7 +424,7 @@ describe("user takeover", () => {
 
   test("control ends after the inactivity period and counts as Skip for a requested takeover", async () => {
     await startServer(250);
-    const { botId, call, holder } = await setup();
+    const { call, holder } = await setup();
     const received = events();
     const wait = await request(call, "enter the code");
     await until(() => holder.at(-1) === "user");

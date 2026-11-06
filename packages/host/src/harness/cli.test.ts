@@ -59,7 +59,8 @@ describe("managed Claude CLI", () => {
   afterEach(() => {
     globalThis.fetch = realFetch;
     for (const k of envKeys)
-      saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
     rmSync(dir, { recursive: true, force: true });
   });
 

@@ -14,12 +14,15 @@
     "depcheck": "depcruise packages",
     "check": "bun run typecheck && bun run depcheck && bun test",
     "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint --type-aware"
   },
   "devDependencies": {
     "@swc/core": "^1.16.22",
     "dependency-cruiser": "^18.7.2",
     "oxfmt": "^0.77.0",
+    "oxlint": "1.92.0",
+    "oxlint-tsgolint": "7.0.2006",
     "typescript": "^7.0.2"
   },
   "engines": {

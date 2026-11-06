@@ -41,7 +41,6 @@ let fakeDir: string;
 let home: string;
 let sockets: string;
 const spawned: number[] = [];
-const egresses: EgressProxy[] = [];
 
 beforeAll(() => {
   root = realpathSync(mkdtempSync(join(tmpdir(), "lifecycle-test-")));
@@ -53,7 +52,8 @@ beforeAll(() => {
 
 afterAll(() => {
   for (const k of ENV_KEYS)
-    saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+    if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
   for (const pid of spawned) if (isAlive(pid)) process.kill(-pid, "SIGKILL");
   rmSync(root, { recursive: true, force: true });
 });

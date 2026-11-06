@@ -67,7 +67,7 @@ export function CustomForm({ onDone }: { onDone: (id: string) => void }) {
     onDone(body.id);
   };
   return (
-    <form onSubmit={submit} className="flex flex-col gap-6">
+    <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-6">
       <FieldGroup className="gap-4">
         <Field>
           <FieldLabel htmlFor="custom-name">Name</FieldLabel>

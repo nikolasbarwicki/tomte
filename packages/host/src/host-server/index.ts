@@ -1,7 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { createServer, type RequestListener } from "node:http";
 import type { AddressInfo } from "node:net";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type {
@@ -65,7 +64,7 @@ export interface HostServer {
   browser: BrowserEndpoint;
   /** The bots endpoint's token leases, so a caller can act as a bot session. */
   bots: BotsEndpoint;
-  currentBotId(): string | undefined;
+  currentBotId: () => string | undefined;
   /** Closes every thread and browser, then stops listening. */
   close(): Promise<void>;
   /** Everything the browser and handoff features hold for a bot being deleted. Does not touch the bot's files or config. */
@@ -155,7 +154,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     integrations,
     hostServers,
     handoffs,
-    transcript: transcripts.transcript,
+    transcript: (bot) => transcripts.transcript(bot),
     pendingWaits: browser.pendingWaits,
     routinesEvent: (botId) => routinesEvent(botId),
     broadcast,

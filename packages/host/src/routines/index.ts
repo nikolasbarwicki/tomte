@@ -51,7 +51,7 @@ export type RoutineJob = { bot: Bot; routine: RoutineRecord; prompt: string };
 /** One agent turn in the bot's chat session; `done` resolves to the final text, `stop` ends it early (rejecting `done`). */
 export type Executor = (job: RoutineJob) => {
   done: Promise<string>;
-  stop(reason: string): void;
+  stop: (reason: string) => void;
 };
 
 /** A run in progress; `removed` marks one stopped by `remove()`, whose row the cascade already owns. */
@@ -148,7 +148,7 @@ export function createRoutines(deps: {
 }) {
   const { db, dataRoot, onChange, execute } = deps;
   const now = deps.now ?? Date.now;
-  const jobs = new Map<string, { stop(): void }>();
+  const jobs = new Map<string, { stop: () => void }>();
   const running = new Map<string, LiveRun>();
 
   const require = (id: string) => {
@@ -326,7 +326,7 @@ export function createRoutines(deps: {
 
     /** Shutdown: stop all jobs and close running threads; their rows are reconciled on next start. */
     stop() {
-      for (const id of [...jobs.keys()]) disarm(id);
+      for (const id of jobs.keys()) disarm(id);
       for (const e of running.values()) e.stop?.("shutdown");
     },
 

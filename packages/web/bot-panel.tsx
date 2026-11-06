@@ -170,7 +170,7 @@ function Files({ bot, files }: { bot: BotSummary; files: FilesEvent }) {
           variant="outline"
           size="sm"
           title={files.dir}
-          onClick={() => act("/api/files/reveal", {})}
+          onClick={() => void act("/api/files/reveal", {})}
         >
           <FolderOpenIcon /> Open folder
         </Button>
@@ -199,7 +199,7 @@ function Files({ bot, files }: { bot: BotSummary; files: FilesEvent }) {
                 type="button"
                 className="grid min-w-0 flex-1 text-left"
                 title={`Show ${f.path} in Finder`}
-                onClick={() => act("/api/files/reveal", { path: f.path })}
+                onClick={() => void act("/api/files/reveal", { path: f.path })}
               >
                 <span className="truncate text-sm">{f.path}</span>
                 <span className="text-muted-foreground text-xs">
@@ -220,11 +220,11 @@ function Files({ bot, files }: { bot: BotSummary; files: FilesEvent }) {
                   <EllipsisIcon />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-40">
-                  <DropdownMenuItem onClick={() => act("/api/files/reveal", { path: f.path })}>
+                  <DropdownMenuItem onClick={() => void act("/api/files/reveal", { path: f.path })}>
                     <FolderOpenIcon /> Show in Finder
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={() => remove(f.path)}>
+                  <DropdownMenuItem variant="destructive" onClick={() => void remove(f.path)}>
                     <TrashIcon /> Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -254,7 +254,7 @@ function Browser({ bot, unavailable }: { bot: BotSummary; unavailable: string | 
           id="browser-enabled"
           checked={bot.browser.enabled}
           disabled={!!unavailable && !bot.browser.enabled}
-          onCheckedChange={(enabled) => act("/api/bots/browser", { botId: bot.id, enabled })}
+          onCheckedChange={(enabled) => void act("/api/bots/browser", { botId: bot.id, enabled })}
         />
       </Field>
       {unavailable && (

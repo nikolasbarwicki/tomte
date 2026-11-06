@@ -48,9 +48,8 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await host.stop();
-  savedConfig === undefined
-    ? delete process.env.CLAUDE_CONFIG_DIR
-    : (process.env.CLAUDE_CONFIG_DIR = savedConfig);
+  if (savedConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = savedConfig;
   rmSync(scratch, { recursive: true, force: true });
 });
 

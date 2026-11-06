@@ -31,9 +31,8 @@ function request<T>(path: string, method: string, params: object): Promise<T> {
     createInterface({ input: sock }).once("line", (line) => {
       sock.destroy();
       const msg = JSON.parse(line);
-      msg.error
-        ? reject(new Error(`${method}: ${msg.error.code ?? JSON.stringify(msg.error)}`))
-        : resolve(msg.result);
+      if (msg.error) reject(new Error(`${method}: ${msg.error.code ?? JSON.stringify(msg.error)}`));
+      else resolve(msg.result);
     });
   });
 }
@@ -91,7 +90,11 @@ export function watchHerdr(
       );
       createInterface({ input: s }).on("line", (line) => {
         const msg = JSON.parse(line);
-        if (msg.error) return void (log(`herdr: subscription ${msg.error.code}`), retry());
+        if (msg.error) {
+          log(`herdr: subscription ${msg.error.code}`);
+          retry();
+          return;
+        }
         if (msg.result) return void (warned = false);
         if (/^pane[._](created|closed)$/.test(msg.event)) {
           sock = undefined;
