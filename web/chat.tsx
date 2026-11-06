@@ -137,7 +137,7 @@ export function ChatView({
           </Tooltip>
         </AppBar>
         <Transcript bot={bot} bots={bots} items={items} busy={busy} onShowBrowser={showBrowser} />
-        <Composer bot={bot} bots={bots} busy={busy} draft={draft} onDraftTaken={onDraftTaken} />
+        <Composer bot={bot} bots={bots} draft={draft} onDraftTaken={onDraftTaken} />
       </div>
       {wide ? (
         panelOpen && <aside className="flex w-[400px] shrink-0 flex-col border-l xl:w-[440px]">{panel}</aside>
@@ -231,7 +231,7 @@ function SessionSetting({ label, options, apply }: { label: string; options: str
 const MODELS = ["opus", "sonnet", "haiku"];
 const EFFORTS = ["low", "medium", "high", "max"];
 
-function Composer({ bot, bots, busy, draft, onDraftTaken }: { bot: BotSummary; bots: BotSummary[]; busy: boolean; draft: string | undefined; onDraftTaken: () => void }) {
+function Composer({ bot, bots, draft, onDraftTaken }: { bot: BotSummary; bots: BotSummary[]; draft: string | undefined; onDraftTaken: () => void }) {
   const [input, setInput] = useState(draft ?? "");
   const [caret, setCaret] = useState(input.length);
   const [picked, setPicked] = useState<MentionTarget[]>([]);
@@ -274,7 +274,7 @@ function Composer({ bot, bots, busy, draft, onDraftTaken }: { bot: BotSummary; b
 
   const send = async () => {
     const text = input.trim();
-    if (!text || busy) return;
+    if (!text) return;
     const sent = mentions;
     setInput("");
     setPicked([]);
@@ -392,7 +392,7 @@ function Composer({ bot, bots, busy, draft, onDraftTaken }: { bot: BotSummary; b
                 <Kbd>@</Kbd> hand off to a bot · <Kbd>Shift</Kbd>
                 <Kbd>Enter</Kbd> new line
               </p>
-              <InputGroupButton type="submit" variant="default" size="icon-sm" className="ml-auto rounded-full @xl:ml-0" disabled={busy || !input.trim()} aria-label="Send">
+              <InputGroupButton type="submit" variant="default" size="icon-sm" className="ml-auto rounded-full @xl:ml-0" disabled={!input.trim()} aria-label="Send">
                 <ArrowUpIcon />
               </InputGroupButton>
             </InputGroupAddon>

@@ -2,6 +2,9 @@ import type { BotAvatar } from "./avatars.ts";
 
 export type ServerEvent =
   | { type: "user"; text: string; mentions?: { id: string; name: string }[] }
+  /** A user message sent while the bot was busy; it waits as pending until `dequeued`, then shows as `user` if it ran. */
+  | { type: "queued"; id: string; text: string; mentions?: { id: string; name: string }[] }
+  | { type: "dequeued"; id: string }
   | { type: "text_start" }
   | { type: "delta"; text: string }
   | { type: "tool"; name: string; input: string }

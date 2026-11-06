@@ -14,6 +14,7 @@ import {
   MessageCircleQuestionIcon,
   ShieldQuestionIcon,
   WrenchIcon,
+  XIcon,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,8 @@ import { bindMentions } from "./mentions.ts";
 
 export type Item =
   | { kind: "user"; text: string; mentions?: { id: string; name: string }[] }
+  /** A message sent while the bot was busy; shown below the live thread until it runs or is cancelled. */
+  | { kind: "queued"; id: string; text: string; mentions?: { id: string; name: string }[] }
   | { kind: "assistant" | "error" | "info" | "update"; text: string }
   | { kind: "tool"; name: string; input: string }
   | { kind: "ask"; id: string; question: string; answer?: string }
@@ -54,6 +57,15 @@ export type Item =
   | { kind: "handoff"; direction: "sent" | "received"; bot: string; botId?: string; title: string; status: string; text: string };
 
 export function reduce(items: Item[], e: ServerEvent): Item[] {
+  if (e.type === "queued") return [...items, { kind: "queued", id: e.id, text: e.text, mentions: e.mentions }];
+  if (e.type === "dequeued") return items.filter((i) => !(i.kind === "queued" && i.id === e.id));
+  // Queued messages stay after the live thread, so output that arrives while they wait carries on from the item before them.
+  const queued = items.filter((i) => i.kind === "queued");
+  if (queued.length === 0) return reduceLive(items, e);
+  return [...reduceLive(items.filter((i) => i.kind !== "queued"), e), ...queued];
+}
+
+function reduceLive(items: Item[], e: Exclude<ServerEvent, { type: "queued" | "dequeued" }>): Item[] {
   const last = items[items.length - 1];
   switch (e.type) {
     case "user":
@@ -99,8 +111,9 @@ export function reduce(items: Item[], e: ServerEvent): Item[] {
 }
 
 type ToolItem = Extract<Item, { kind: "tool" }>;
+type QueuedItem = Extract<Item, { kind: "queued" }>;
 /** What the thread renders: items as they came, except back-to-back tool calls collapse into one trace of steps. */
-type Row = Exclude<Item, ToolItem> | { kind: "steps"; tools: ToolItem[] };
+type Row = Exclude<Item, ToolItem | QueuedItem> | { kind: "steps"; tools: ToolItem[] };
 
 /** Scroller items use `content-visibility: auto`, whose paint containment would clip a handoff card's shadow. */
 const UNCLIPPED = "[content-visibility:visible]";
@@ -109,6 +122,7 @@ function toRows(items: Item[]): Row[] {
   const rows: Row[] = [];
   for (const item of items) {
     const last = rows.at(-1);
+    if (item.kind === "queued") continue;
     if (item.kind !== "tool") rows.push(item);
     else if (last?.kind === "steps") last.tools.push(item);
     else rows.push({ kind: "steps", tools: [item] });
@@ -132,6 +146,7 @@ export function Transcript({ bot, bots, items, busy, onShowBrowser }: { bot: Bot
     );
   }
   const rows = toRows(items);
+  const queued = items.filter((i): i is QueuedItem => i.kind === "queued");
   return (
     <MessageScrollerProvider autoScroll>
       <MessageScroller className="flex-1">
@@ -152,6 +167,11 @@ export function Transcript({ bot, bots, items, busy, onShowBrowser }: { bot: Bot
                 </Marker>
               </MessageScrollerItem>
             )}
+            {queued.map((q) => (
+              <MessageScrollerItem key={q.id} messageId={`queued-${q.id}`}>
+                <UserMessage text={q.text} mentions={q.mentions} bots={bots} queuedId={q.id} />
+              </MessageScrollerItem>
+            ))}
           </MessageScrollerContent>
         </MessageScrollerViewport>
         <MessageScrollerButton />
@@ -163,42 +183,8 @@ export function Transcript({ bot, bots, items, busy, onShowBrowser }: { bot: Bot
 /** `running`: the row is the live edge of a turn still in progress. */
 function RowView({ row, running, bots, onShowBrowser }: { row: Row; running: boolean; bots: BotSummary[]; onShowBrowser: () => void }) {
   switch (row.kind) {
-    case "user": {
-      const mentions = row.mentions ?? [];
-      const bound = bindMentions(row.text, mentions);
-      const segments = bound.segments;
-      const leading = mentions.filter((m) => !bound.mentions.includes(m)).map((m) => ({ mention: m, text: `@${m.name}` }));
-      return (
-        <Message align="end">
-          <MessageContent>
-            <Bubble align="end">
-              <BubbleContent className="whitespace-pre-wrap">
-                {[...leading.flatMap((s) => [s, " "]), ...segments].map((s, i) => {
-                  if (typeof s === "string") return s;
-                  const target = bots.find((b) => b.id === s.mention.id);
-                  return target ? (
-                    <Link
-                      key={i}
-                      to="/bots/$botId"
-                      params={{ botId: target.id }}
-                      style={botTheme(target.avatar.stroke)}
-                      className="bot-theme inline-flex items-baseline gap-1 rounded-full bg-background px-1.5 font-semibold text-primary transition-colors hover:bg-secondary"
-                    >
-                      <BotAvatar avatar={target.avatar} className="size-[1.1em] self-center" />
-                      {s.text.slice(1)}
-                    </Link>
-                  ) : (
-                    <span key={i} className="font-semibold">
-                      {s.text}
-                    </span>
-                  );
-                })}
-              </BubbleContent>
-            </Bubble>
-          </MessageContent>
-        </Message>
-      );
-    }
+    case "user":
+      return <UserMessage text={row.text} mentions={row.mentions} bots={bots} />;
     case "assistant":
       return (
         <Message>
@@ -259,6 +245,51 @@ function RowView({ row, running, bots, onShowBrowser }: { row: Row; running: boo
     case "approve":
       return <ApproveCard item={row} />;
   }
+}
+
+/** A message from the user. `queuedId` marks one still waiting for the bot: it is dimmed and can be cancelled. */
+function UserMessage({ text, mentions = [], bots, queuedId }: { text: string; mentions?: { id: string; name: string }[]; bots: BotSummary[]; queuedId?: string }) {
+  const bound = bindMentions(text, mentions);
+  const leading = mentions.filter((m) => !bound.mentions.includes(m)).map((m) => ({ mention: m, text: `@${m.name}` }));
+  return (
+    <Message align="end">
+      <MessageContent>
+        <Bubble align="end" className={cn(queuedId && "opacity-60")}>
+          <BubbleContent className="whitespace-pre-wrap">
+            {[...leading.flatMap((s) => [s, " "]), ...bound.segments].map((s, i) => {
+              if (typeof s === "string") return s;
+              const target = bots.find((b) => b.id === s.mention.id);
+              return target ? (
+                <Link
+                  key={i}
+                  to="/bots/$botId"
+                  params={{ botId: target.id }}
+                  style={botTheme(target.avatar.stroke)}
+                  className="bot-theme inline-flex items-baseline gap-1 rounded-full bg-background px-1.5 font-semibold text-primary transition-colors hover:bg-secondary"
+                >
+                  <BotAvatar avatar={target.avatar} className="size-[1.1em] self-center" />
+                  {s.text.slice(1)}
+                </Link>
+              ) : (
+                <span key={i} className="font-semibold">
+                  {s.text}
+                </span>
+              );
+            })}
+          </BubbleContent>
+        </Bubble>
+        {queuedId && (
+          <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+            Queued · runs after the current turn
+            <Button type="button" variant="ghost" size="sm" onClick={() => void act("/api/send/cancel", { id: queuedId })}>
+              <XIcon data-icon="inline-start" />
+              Cancel
+            </Button>
+          </div>
+        )}
+      </MessageContent>
+    </Message>
+  );
 }
 
 /** Tool calls the bot made in a row. The host reports no tool results, so the newest call of a live turn is the one running. */

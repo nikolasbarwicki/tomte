@@ -181,14 +181,38 @@ describe("routine and chat never drive the browser at once", () => {
     expect(await chatCall("browser_snapshot")).toEqual({ isError: true, text: "previous browser call still running" });
     expect((await routineSide).isError).toBe(false);
   });
+});
 
-  test("the chat cannot start its own turn while a headless routine runs", async () => {
+describe("messages sent while a headless routine runs", () => {
+  /** A headless routine holding its bot, with the chat opened on top of it; `messages()[0]` is the routine's prompt. */
+  async function headlessHold() {
     await startServer();
     const { botId } = await setup(false);
     writeFileSync(join(claudeDir, "hold"), "");
     await startRoutine(botId);
     await until(() => messages().length === 1);
     expect((await ui("/api/open", { botId })).status).toBe(200);
-    expect((await ui("/api/send", { text: "hello" })).status).toBe(409);
+  }
+
+  test("wait for the routine to end, then reach the bot as the next turn", async () => {
+    await headlessHold();
+    const sent = (await (await ui("/api/send", { text: "later" })).json()) as { queued?: string };
+    expect(sent.queued).toBeString();
+    expect(messages()).toHaveLength(1);
+
+    rmSync(join(claudeDir, "hold"), { force: true });
+    await until(() => messages().length === 2);
+    expect(messages()[1]).toBe("later");
+  });
+
+  test("are not delivered once cancelled", async () => {
+    await headlessHold();
+    const { queued } = (await (await ui("/api/send", { text: "oops" })).json()) as { queued: string };
+    await ui("/api/send", { text: "keep" });
+    expect((await ui("/api/send/cancel", { id: queued })).status).toBe(200);
+
+    rmSync(join(claudeDir, "hold"), { force: true });
+    await until(() => messages().length === 2);
+    expect(messages()[1]).toBe("keep");
   });
 });
