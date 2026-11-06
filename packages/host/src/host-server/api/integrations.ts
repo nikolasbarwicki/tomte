@@ -45,8 +45,8 @@ export async function integrationApi(
       }
       case "/api/integrations/connect-oauth": {
         const a = Id.extend({
-          clientId: z.string().optional(),
-          clientSecret: z.string().optional(),
+          clientId: z.string().exactOptional(),
+          clientSecret: z.string().exactOptional(),
         }).parse(b);
         const own =
           a.clientId === undefined && a.clientSecret === undefined

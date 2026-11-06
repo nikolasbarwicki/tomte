@@ -5,13 +5,13 @@ import { z } from "zod";
 
 import { getBot } from "../../bots/index.ts";
 import { NotFound } from "../../platform/errors.ts";
-import { Conflict, RoutineInput } from "../../routines/index.ts";
+import { Conflict, RoutineInput, RoutinePatch } from "../../routines/index.ts";
 import { json } from "../http.ts";
 import type { ApiContext } from "./context.ts";
 
 const Id = z.object({ id: z.string() });
 const RoutineCreate = RoutineInput.extend({ botId: z.string() });
-const RoutinePatch = RoutineInput.partial().extend({ id: z.string() });
+const RoutineEdit = RoutinePatch.extend({ id: z.string() });
 const RunsQuery = Id.extend({ before: z.number().optional(), limit: z.number().int().optional() });
 const Preview = z.object({ schedule: RoutineInput.shape.schedule });
 
@@ -34,17 +34,8 @@ export async function routineApi(
         return json(res, routines.create(botId, input));
       }
       case "/api/routines/update": {
-        const { id, name, instruction, schedule, active, catchUp } = RoutinePatch.parse(b);
-        return json(
-          res,
-          routines.update(id, {
-            ...(name !== undefined && { name }),
-            ...(instruction !== undefined && { instruction }),
-            ...(schedule !== undefined && { schedule }),
-            ...(active !== undefined && { active }),
-            ...(catchUp !== undefined && { catchUp }),
-          }),
-        );
+        const { id, ...patch } = RoutineEdit.parse(b);
+        return json(res, routines.update(id, patch));
       }
       case "/api/routines/delete":
         await routines.remove(Id.parse(b).id);
