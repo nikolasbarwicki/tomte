@@ -3,8 +3,17 @@ import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { z } from "zod";
+
 /** A failed engine call: the engine said no, did not answer in time, or could not be run. */
 export class EngineError extends Error {}
+
+/** The JSON envelope the engine prints for every `--json` call. */
+const EngineReply = z.object({
+  success: z.boolean().optional(),
+  data: z.unknown(),
+  error: z.string().nullish(),
+});
 
 /** What the engine returns for a snapshot of the active tab. */
 export interface PageData {
@@ -156,9 +165,9 @@ function spawnEngine(launch: EngineLaunch, args: string[], timeoutMs: number): P
           "outcome uncertain: the browser did not answer in time; take a snapshot before retrying",
         ),
       );
-    let reply: { success?: boolean; data?: unknown; error?: string | null };
+    let reply: z.infer<typeof EngineReply>;
     try {
-      reply = JSON.parse(out.trim());
+      reply = EngineReply.parse(JSON.parse(out.trim()));
     } catch {
       return reject(
         new EngineError(

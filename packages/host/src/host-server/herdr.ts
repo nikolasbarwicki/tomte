@@ -4,15 +4,47 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
-type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
-type Pane = { pane_id: string; agent?: string | null; cwd?: string };
-type StatusChange = {
-  pane_id: string;
-  agent?: string | null;
-  display_agent?: string | null;
-  title?: string | null;
-  agent_status: AgentStatus;
-};
+import { z } from "zod";
+
+/** A status herdr adds later reads as `unknown`, which is never reported. */
+const AgentStatus = z.enum(["idle", "working", "blocked", "done", "unknown"]).catch("unknown");
+type AgentStatus = z.infer<typeof AgentStatus>;
+const PaneList = z.object({
+  panes: z.array(z.object({ pane_id: z.string(), cwd: z.string().optional() })),
+});
+const StatusChange = z.object({
+  pane_id: z.string(),
+  agent: z.string().nullish(),
+  display_agent: z.string().nullish(),
+  title: z.string().nullish(),
+  agent_status: AgentStatus,
+});
+/** One line from the herdr socket: a reply (`result` or `error`) or a subscription event. */
+const Message = z.object({
+  result: z.unknown().optional(),
+  error: z.looseObject({ code: z.union([z.string(), z.number()]).optional() }).optional(),
+  event: z.string().optional(),
+  data: z.unknown().optional(),
+});
+
+/** A line from the herdr socket that is not the JSON herdr's protocol describes. */
+class HerdrProtocolError extends Error {}
+
+function parse<T>(schema: z.ZodType<T>, line: unknown): T {
+  const parsed = schema.safeParse(line);
+  if (!parsed.success) throw new HerdrProtocolError(z.prettifyError(parsed.error));
+  return parsed.data;
+}
+
+function parseLine(line: string): z.infer<typeof Message> {
+  let v: unknown;
+  try {
+    v = JSON.parse(line);
+  } catch {
+    throw new HerdrProtocolError("herdr sent a line that is not JSON");
+  }
+  return parse(Message, v);
+}
 
 /** Agent states worth telling the user about. */
 const NOTIFY: Partial<Record<AgentStatus, string>> = { blocked: "needs input", done: "finished" };
@@ -23,16 +55,26 @@ function socketPath(): string {
 }
 
 /** One request/response round trip on a fresh connection. */
-function request<T>(path: string, method: string, params: object): Promise<T> {
+function request<T>(
+  path: string,
+  method: string,
+  params: object,
+  result: z.ZodType<T>,
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const sock = connect(path);
     sock.once("error", reject);
     sock.write(JSON.stringify({ id: method, method, params }) + "\n");
     createInterface({ input: sock }).once("line", (line) => {
       sock.destroy();
-      const msg = JSON.parse(line);
-      if (msg.error) reject(new Error(`${method}: ${msg.error.code ?? JSON.stringify(msg.error)}`));
-      else resolve(msg.result);
+      try {
+        const msg = parseLine(line);
+        if (msg.error)
+          reject(new Error(`${method}: ${String(msg.error.code ?? JSON.stringify(msg.error))}`));
+        else resolve(parse(result, msg.result));
+      } catch (e) {
+        reject(e);
+      }
     });
   });
 }
@@ -67,7 +109,7 @@ export function watchHerdr(
     }
     try {
       const gen = ++generation;
-      const { panes } = await request<{ panes: Pane[] }>(path, "pane.list", {});
+      const { panes } = await request(path, "pane.list", {}, PaneList);
       if (gen !== generation || stopped) return;
       cwds.clear();
       for (const p of panes) if (p.cwd) cwds.set(p.pane_id, p.cwd);
@@ -89,20 +131,28 @@ export function watchHerdr(
         }) + "\n",
       );
       createInterface({ input: s }).on("line", (line) => {
-        const msg = JSON.parse(line);
+        let msg: z.infer<typeof Message>;
+        let d: z.infer<typeof StatusChange> | undefined;
+        try {
+          msg = parseLine(line);
+          if (msg.event === "pane.agent_status_changed") d = parse(StatusChange, msg.data);
+        } catch (e) {
+          if (!(e instanceof HerdrProtocolError)) throw e;
+          log(`herdr: ${e.message}`);
+          return retry();
+        }
         if (msg.error) {
-          log(`herdr: subscription ${msg.error.code}`);
+          log(`herdr: subscription ${String(msg.error.code)}`);
           retry();
           return;
         }
         if (msg.result) return void (warned = false);
-        if (/^pane[._](created|closed)$/.test(msg.event)) {
+        if (msg.event && /^pane[._](created|closed)$/.test(msg.event)) {
           sock = undefined;
           s.destroy();
           return void start();
         }
-        if (msg.event !== "pane.agent_status_changed") return;
-        const d = msg.data as StatusChange;
+        if (!d) return;
         const what = NOTIFY[d.agent_status];
         if (!what || !d.agent) return;
         const where = cwds.get(d.pane_id);

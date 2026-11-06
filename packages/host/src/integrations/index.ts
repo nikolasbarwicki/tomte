@@ -4,6 +4,7 @@ import { existsSync, rmSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
 import type { McpServerConfig, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
+import type { OAuthStart } from "@claudebot/contract/api";
 import type {
   CatalogInfo,
   Integration,
@@ -23,10 +24,14 @@ import {
   getDefaultEnvironment,
 } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type {
-  OAuthClientInformationMixed,
-  OAuthTokens,
+import {
+  OAuthClientInformationFullSchema,
+  OAuthClientInformationSchema,
+  OAuthTokensSchema,
+  type OAuthClientInformationMixed,
+  type OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
+import { z } from "zod";
 
 import { InvalidInput, NotFound } from "../platform/errors.ts";
 import { secretName, type SecretStore } from "../platform/secrets.ts";
@@ -80,12 +85,19 @@ const SIGN_IN_TTL_MS = 10 * 60_000;
 const EXPIRY_MARGIN_MS = 5 * 60_000;
 
 /** The OAuth half of an integration's keychain entry: the registered client and the current tokens. */
-type OAuthSecret = {
-  client?: OAuthClientInformationMixed;
-  tokens?: OAuthTokens;
-  expiresAt?: number | undefined;
-};
-type Secret = { token?: string; env?: Record<string, string>; oauth?: OAuthSecret };
+const OAuthSecret = z.object({
+  client: z.union([OAuthClientInformationFullSchema, OAuthClientInformationSchema]).exactOptional(),
+  tokens: OAuthTokensSchema.exactOptional(),
+  expiresAt: z.number().optional(),
+});
+type OAuthSecret = z.infer<typeof OAuthSecret>;
+/** An integration's keychain entry, stored as JSON. */
+const Secret = z.object({
+  token: z.string().exactOptional(),
+  env: z.record(z.string(), z.string()).exactOptional(),
+  oauth: OAuthSecret.exactOptional(),
+});
+type Secret = z.infer<typeof Secret>;
 
 /** Google issues a refresh token only when asked for offline access, and re-issues one only on a fresh consent. */
 export function withOfflineAccess(u: URL): URL {
@@ -377,7 +389,7 @@ export function createIntegrations(deps: {
 
   const readSecret = async (id: string): Promise<Secret> => {
     const raw = await secrets.get(secretName(id));
-    return raw ? (JSON.parse(raw) as Secret) : {};
+    return raw ? Secret.parse(JSON.parse(raw)) : {};
   };
 
   const pending = new Map<string, { id: string; provider: OAuthState; at: number }>();
@@ -460,7 +472,7 @@ export function createIntegrations(deps: {
   async function connectOAuth(
     rawId: string,
     own?: { clientId: string; clientSecret: string },
-  ): Promise<{ authorizeUrl: string }> {
+  ): Promise<OAuthStart> {
     const r = peek(rawId);
     const ownClient = ownClientOf(r.auth);
     if (r.auth.kind !== "oauth" && !ownClient)

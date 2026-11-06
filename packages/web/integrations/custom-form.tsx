@@ -1,4 +1,4 @@
-import type { IntegrationTransport } from "@claudebot/contract/events";
+import { Integration, type IntegrationTransport } from "@claudebot/contract/events";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -17,7 +17,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
-import { errorOf, post } from "../api.ts";
+import { errorOf, post, readJson } from "../api.ts";
 import { signIn } from "./auth.tsx";
 import { TRANSPORT_LABEL } from "./model.ts";
 
@@ -59,7 +59,7 @@ export function CustomForm({ onDone }: { onDone: (id: string) => void }) {
       setBusy(false);
       return setError(await errorOf(r));
     }
-    const body: { id: string } = await r.json();
+    const body = await readJson(r, Integration);
     const signInError = wantsSignIn ? await signIn(body.id, tab) : undefined;
     setBusy(false);
     // The server exists now; a failed sign-in is retried from its detail page, not by adding it again.

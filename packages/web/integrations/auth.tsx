@@ -1,3 +1,4 @@
+import { OAuthStart } from "@claudebot/contract/api";
 import type { Integration, OwnClient } from "@claudebot/contract/events";
 import { Check, ChevronDown, Copy, ExternalLink } from "lucide-react";
 import { useState, type ComponentProps, type ReactNode } from "react";
@@ -9,7 +10,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/c
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 
-import { errorOf, post } from "../api.ts";
+import { errorOf, post, readJson } from "../api.ts";
 
 /** Opens the provider's sign-in page in `tab`, which the caller opened inside the click so the browser allows it. */
 export async function signIn(
@@ -22,7 +23,7 @@ export async function signIn(
     tab?.close();
     return errorOf(r);
   }
-  const body = await r.json();
+  const body = await readJson(r, OAuthStart);
   if (tab) tab.location.href = body.authorizeUrl;
   else window.open(body.authorizeUrl, "_blank");
 }

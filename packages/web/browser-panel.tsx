@@ -1,4 +1,4 @@
-import type { LiveMessage } from "@claudebot/contract/events";
+import { LiveMessage } from "@claudebot/contract/events";
 import {
   EllipsisIcon,
   GlobeIcon,
@@ -28,7 +28,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-import { act, errorOf, post } from "./api.ts";
+import { act, errorOf, parseJson, post } from "./api.ts";
 import { confirmAction } from "./confirm.tsx";
 
 type Tab = Extract<LiveMessage, { type: "tabs" }>["tabs"][number];
@@ -78,7 +78,8 @@ function useLive(botId: string): Live {
             if (done) break;
             const parts = (buffer + value).split("\n\n");
             buffer = parts.pop() ?? "";
-            for (const p of parts) apply(JSON.parse(p.replace(/^data: /, "")) as LiveMessage);
+            for (const p of parts)
+              apply(parseJson(p.replace(/^data: /, ""), LiveMessage, "/api/browser/live"));
           }
         } catch {
           if (abort.signal.aborted) return;

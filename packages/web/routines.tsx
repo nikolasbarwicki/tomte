@@ -1,4 +1,5 @@
-import type { Routine, RoutineRun, RunStatus } from "@claudebot/contract/events";
+import { RoutinePreview } from "@claudebot/contract/api";
+import { RoutineRun, type Routine, type RunStatus } from "@claudebot/contract/events";
 import {
   AlarmClockIcon,
   ChevronRightIcon,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Streamdown } from "streamdown";
+import { z } from "zod";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,7 +56,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import { act, errorOf, post } from "./api.ts";
+import { act, errorOf, post, readJson } from "./api.ts";
 import { confirmAction } from "./confirm.tsx";
 import { dateTime } from "./format.ts";
 import { DAYS, browserZone, describe, fromSchedule, toSchedule, type Preset } from "./schedule.ts";
@@ -139,7 +141,7 @@ function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   useEffect(() => {
     if (!open) return;
     void post("/api/routines/runs", { id: r.id }).then(
-      async (res) => res.ok && setRuns(await res.json()),
+      async (res) => res.ok && setRuns(await readJson(res, z.array(RoutineRun))),
     );
   }, [open, r.id, lastRunId, r.lastRun?.status]);
 
@@ -335,7 +337,7 @@ function RoutineForm({
   useEffect(() => {
     const refresh = async () => {
       const res = await post("/api/routines/preview", { schedule: JSON.parse(scheduleKey) });
-      setPreview(await res.json());
+      setPreview(res.ok ? await readJson(res, RoutinePreview) : { error: await errorOf(res) });
     };
     const t = setTimeout(() => void refresh(), 300);
     return () => clearTimeout(t);

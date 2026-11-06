@@ -1,23 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type {
-  BotsEvent,
-  CredentialsEvent,
-  FilesEvent,
-  IntegrationsEvent,
-  MemoryEvent,
-  RoutinesEvent,
-  ServerEvent,
-} from "@claudebot/contract/events";
-
-export type HostEvent =
-  | ServerEvent
-  | MemoryEvent
-  | FilesEvent
-  | RoutinesEvent
-  | BotsEvent
-  | IntegrationsEvent
-  | CredentialsEvent;
+import type { HostEvent } from "@claudebot/contract/events";
 
 /** The page's server-sent event stream: every connected page gets every event. */
 export interface EventStream {

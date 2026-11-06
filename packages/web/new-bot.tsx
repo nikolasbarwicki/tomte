@@ -1,7 +1,7 @@
 import { FACE_NAMES, STROKE_NAMES, STROKES } from "@claudebot/contract/avatars";
+import { Bot } from "@claudebot/contract/events";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +27,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-import { errorOf, post } from "./api.ts";
+import { errorOf, post, readJson } from "./api.ts";
 import { randomAvatar } from "./avatars.ts";
 import { BotAvatar } from "./bot-avatar.tsx";
 
@@ -57,7 +57,7 @@ export function NewBotDialog({
     setAvatar(randomAvatar());
     setError("");
     onOpenChange(false);
-    const { id } = z.object({ id: z.string() }).parse(await r.json());
+    const { id } = await readJson(r, Bot);
     void navigate({ to: "/bots/$botId", params: { botId: id } });
   };
   return (

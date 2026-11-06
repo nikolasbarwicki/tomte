@@ -1,5 +1,6 @@
 import type { ServerResponse } from "node:http";
 
+import type { RoutinePreview } from "@claudebot/contract/api";
 import { z } from "zod";
 
 import { getBot } from "../../bots/index.ts";
@@ -55,7 +56,9 @@ export async function routineApi(
         return json(res, routines.runs(q.id, q.before, q.limit));
       }
       case "/api/routines/preview":
-        return json(res, { next: routines.preview(Preview.parse(b).schedule) });
+        return json(res, {
+          next: routines.preview(Preview.parse(b).schedule),
+        } satisfies RoutinePreview);
     }
     res.writeHead(404).end();
   } catch (e) {

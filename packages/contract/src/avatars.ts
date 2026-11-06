@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /** One-line doodle faces on a 160×160 canvas; each path is drawn without lifting the pen, so it can animate as a single stroke. */
 export const FACES = {
   tuft: "M70 120 C46 118 36 98 38 80 C40 58 58 42 80 42 C78 34 84 28 90 30 C96 32 92 40 82 42 C104 42 122 60 122 82 C122 104 106 120 84 120 C76 104 66 96 66 88 C66 82 72 82 72 88 C72 94 82 96 90 90 C92 86 92 82 96 82 C100 82 100 88 94 90",
@@ -42,13 +44,15 @@ export const STROKES = {
 
 export type Face = keyof typeof FACES;
 export type Stroke = keyof typeof STROKES;
-export type BotAvatar = { face: Face; stroke: Stroke };
 
 export const FACE_NAMES = Object.keys(FACES) as Face[];
 export const STROKE_NAMES = Object.keys(STROKES) as Stroke[];
 
 export const isFace = (s: string): s is Face => Object.hasOwn(FACES, s);
 export const isStroke = (s: string): s is Stroke => Object.hasOwn(STROKES, s);
+
+export const BotAvatar = z.object({ face: z.literal(FACE_NAMES), stroke: z.literal(STROKE_NAMES) });
+export type BotAvatar = z.infer<typeof BotAvatar>;
 
 /** The name at `i` wrapped into range; the name lists are non-empty constants, so a miss is a programming error. */
 export function nameAt<T extends string>(names: readonly T[], i: number): T {

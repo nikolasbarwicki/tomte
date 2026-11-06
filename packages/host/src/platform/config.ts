@@ -19,6 +19,8 @@ export interface HostConfig {
   herdr: boolean;
   /** Serve the web UI through Vite (the dev script sets it). */
   vite: boolean;
+  /** Ask the user before a bot runs a tool instead of approving everything; `CLAUDEBOT_ASK_APPROVAL`. */
+  askApproval: boolean;
 }
 
 /** The startup flags or environment variables are wrong; the message says which and why. */
@@ -120,7 +122,7 @@ function parseFlags(argv: readonly string[]) {
 
 /**
  * Reads the host's configuration from command-line flags (`--mode`, `--data-root`, `--host`, `--port`, `--public-url`, `--herdr`, `--vite`)
- * and `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|HERDR|VITE`. `positionals` are the arguments that are not flags.
+ * and `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|HERDR|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
  * Without a data root the OS application-data directory is used.
  */
 export function parseHostConfig(
@@ -145,6 +147,7 @@ export function parseHostConfig(
   const rawPublicUrl = values["public-url"] ?? get("CLAUDEBOT_PUBLIC_URL");
   const rawHerdr = get("CLAUDEBOT_HERDR");
   const rawVite = get("CLAUDEBOT_VITE");
+  const rawAskApproval = get("CLAUDEBOT_ASK_APPROVAL");
 
   return {
     config: {
@@ -159,6 +162,8 @@ export function parseHostConfig(
       herdr:
         values.herdr ?? (rawHerdr === undefined ? false : parseBool("CLAUDEBOT_HERDR", rawHerdr)),
       vite: values.vite ?? (rawVite === undefined ? false : parseBool("CLAUDEBOT_VITE", rawVite)),
+      askApproval:
+        rawAskApproval === undefined ? false : parseBool("CLAUDEBOT_ASK_APPROVAL", rawAskApproval),
     },
     positionals,
   };

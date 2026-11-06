@@ -1,7 +1,13 @@
 import type { Database } from "bun:sqlite";
 
 import { getSessionInfo, getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
-import type { Bot, LastMessage, RunTrigger, ServerEvent } from "@claudebot/contract/events";
+import {
+  RunTrigger,
+  type Bot,
+  type LastMessage,
+  type ServerEvent,
+} from "@claudebot/contract/events";
+import { z } from "zod";
 
 import { currentSession, listBots, markSeen, getActivity, recordMessage } from "../bots/index.ts";
 import { parseMentions, type Handoffs } from "../handoffs/index.ts";
@@ -9,6 +15,16 @@ import { parseMentions, type Handoffs } from "../handoffs/index.ts";
 export type Transcript = { history: ServerEvent[]; hasSession: boolean };
 
 const ROUTINE_TAG = /^<scheduled-routine name="([^"]*)" trigger="(schedule|manual)"/;
+
+/** A tool call's input as the session file holds it; handoff cards read only its text fields. */
+const ToolInput = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((input) =>
+    Object.fromEntries(
+      Object.entries(input).filter((e): e is [string, string] => typeof e[1] === "string"),
+    ),
+  );
 
 /** Rebuilds UI transcripts from Claude Code's own session files. */
 export function createTranscripts({
@@ -39,7 +55,7 @@ export function createTranscripts({
         for (const text of texts) {
           const routine = text.match(ROUTINE_TAG);
           if (routine)
-            out.push({ type: "routine", name: routine[1], trigger: routine[2] as RunTrigger });
+            out.push({ type: "routine", name: routine[1], trigger: RunTrigger.parse(routine[2]) });
           else if (/^<handoff(-update)? /.test(text))
             out.push(...handoffs.receivedCards(text, ownerId));
           else if (!text.startsWith("<") || text.startsWith("<mention ")) {
@@ -55,7 +71,7 @@ export function createTranscripts({
           if (b.type === "tool_use")
             out.push(
               { type: "tool", name: b.name, input: JSON.stringify(b.input) },
-              ...handoffs.sentCards(b.name, b.input as Record<string, string>, ownerId),
+              ...handoffs.sentCards(b.name, ToolInput.parse(b.input), ownerId),
             );
         }
       }

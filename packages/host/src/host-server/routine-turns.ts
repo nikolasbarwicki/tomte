@@ -23,6 +23,7 @@ export interface RoutineTurnsDeps {
   db: Database;
   integrations: IntegrationsSource;
   hostServers: HostServersSource;
+  approveAll: boolean;
   announceBots: () => void;
   /** A headless run ended; the bot's chat, if any, may now show it. */
   headlessDone(botId: string): void;
@@ -48,7 +49,15 @@ export function createRoutineTurns(deps: RoutineTurnsDeps): RoutineTurns {
 
   function startHeadless(item: QueuedRoutine) {
     const { bot, routine } = item.job;
-    const h = runHeadless(cwd, dataRoot, cli, deps.integrations, deps.hostServers, item.job);
+    const h = runHeadless(
+      cwd,
+      dataRoot,
+      cli,
+      deps.integrations,
+      deps.hostServers,
+      deps.approveAll,
+      item.job,
+    );
     item.stop = h.stop;
     headlessRuns.set(bot.id, routine.name);
     deps.announceBots();

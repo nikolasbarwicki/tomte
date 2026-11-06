@@ -1,6 +1,11 @@
 import type { Database } from "bun:sqlite";
 
-import type { RoutineRun, RunStatus, RunTrigger, Schedule } from "@claudebot/contract/events";
+import {
+  Schedule,
+  type RoutineRun,
+  type RunStatus,
+  type RunTrigger,
+} from "@claudebot/contract/events";
 
 /** A routine as stored; `Routine` adds the fields derived at read time. */
 export type RoutineRecord = {
@@ -47,7 +52,7 @@ const toRoutine = (r: RoutineRow): RoutineRecord => ({
   botId: r.bot_id,
   name: r.name,
   instruction: r.instruction,
-  schedule: JSON.parse(r.schedule) as Schedule,
+  schedule: Schedule.parse(JSON.parse(r.schedule)),
   active: !!r.active,
   catchUp: !!r.catch_up,
   lastScheduledFor: r.last_scheduled_for,

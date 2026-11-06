@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { z } from "zod";
+
 import type { HostOrigin } from "../platform/config.ts";
 
 export function rejectRequest(res: ServerResponse, status: number, message: string) {
@@ -8,12 +10,15 @@ export function rejectRequest(res: ServerResponse, status: number, message: stri
     .end(JSON.stringify({ error: message }));
 }
 
+const JsonObject = z.record(z.string(), z.unknown());
+
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown> | undefined> {
   let s = "";
   for await (const chunk of req) s += chunk;
+  if (!s) return {};
   try {
-    const v = s ? JSON.parse(s) : {};
-    return v && typeof v === "object" && !Array.isArray(v) ? v : undefined;
+    const parsed = JsonObject.safeParse(JSON.parse(s));
+    return parsed.success ? parsed.data : undefined;
   } catch {
     return undefined;
   }

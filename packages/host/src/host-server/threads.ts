@@ -14,6 +14,8 @@ export interface ThreadEnv {
   cli: ResolvedCli;
   integrations: IntegrationsSource;
   hostServers: HostServersSource;
+  /** Approve every tool call instead of asking the user; off when `HostConfig.askApproval` is set. */
+  approveAll: boolean;
 }
 
 export interface ThreadHooks {
@@ -26,7 +28,7 @@ export interface ThreadHooks {
 
 /** Opens a bot's Claude Code thread in the host. */
 export function openBotThread(
-  { cwd, dataRoot, cli, integrations, hostServers }: ThreadEnv,
+  { cwd, dataRoot, cli, integrations, hostServers, approveAll }: ThreadEnv,
   bot: Bot,
   resume: boolean,
   hooks: ThreadHooks,
@@ -37,7 +39,7 @@ export function openBotThread(
     ...botContext(dataRoot, bot),
     resume,
     idleMs: 10 * 60_000,
-    approveAll: process.env.CLAUDEBOT_ASK_APPROVAL !== "1",
+    approveAll,
     integrations,
     hostServers: () => hostServers(bot.id),
     log: (l) => console.error(l),

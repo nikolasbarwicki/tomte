@@ -153,6 +153,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     db,
     integrations,
     hostServers,
+    approveAll: !o.config.askApproval,
     handoffs,
     transcript: (bot) => transcripts.transcript(bot),
     pendingWaits: browser.pendingWaits,

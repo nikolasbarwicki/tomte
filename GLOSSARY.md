@@ -17,7 +17,7 @@
 - **Assignee**: the bot a handoff is given to; it does the work in its own session.
 - **Brief**: the self-contained instructions in a handoff (goal, context, constraints, deliverable, done criteria); the assignee sees nothing else of the requester's conversation.
 - **Agent card**: a bot's public description for other bots (id, name, purpose, status), as listed by `list_bots`.
-- **Contract**: the types and data the host shares with the web app (server events, avatars), kept in the `@claudebot/contract` package (`packages/contract/`); it imports nothing else local.
+- **Contract**: the Zod schemas, derived types and data the host shares with the web app (server events, HTTP responses, avatars), kept in the `@claudebot/contract` package (`packages/contract/`); it imports nothing else local.
 - **Composition root**: `packages/host/src/host-server/index.ts`, the one place that constructs the features, passes each its collaborators, and starts and stops them.
 - **Local mode**: the host runs on the user's own machine; it defaults to a free loopback port and a public URL that is that loopback URL.
 - **Remote mode**: the host runs on a server and users reach it through the public URL, the origin that users and OAuth providers use. Both modes bind loopback only.
