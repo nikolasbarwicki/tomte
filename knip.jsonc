@@ -18,18 +18,11 @@
       "project": ["src/**/*.ts"],
     },
     "packages/web": {
-      "entry": ["main.tsx", "vite.config.ts"],
-      "project": ["**/*.{ts,tsx}"],
-      // Imported only from tailwind.css via @import, which knip doesn't parse.
-      "ignoreDependencies": [
-        "tailwindcss",
-        "tw-animate-css",
-        "shadcn",
-        "@fontsource-variable/geist",
-      ],
+      // Linked from index.html (/tailwind.css), which knip doesn't follow for stylesheets.
+      "entry": ["tailwind.css"],
+      "project": ["**/*.{ts,tsx,css}"],
     },
     "packages/contract": {
-      "entry": ["src/events.ts", "src/avatars.ts"],
       "project": ["src/**/*.ts"],
     },
   },

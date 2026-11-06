@@ -12,10 +12,11 @@
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun test",
     "depcheck": "depcruise packages",
-    "check": "bun run typecheck && bun run depcheck && bun test",
+    "check": "bun run fmt:check && bun run lint && bun run knip && bun run typecheck && bun run depcheck && bun run test",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "lint": "oxlint --type-aware"
+    "lint": "oxlint --type-aware",
+    "knip": "knip"
   },
   "devDependencies": {
     "@swc/core": "^1.16.22",
