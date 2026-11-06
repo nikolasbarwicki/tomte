@@ -1,5 +1,5 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema-jsonc.json",
+  "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
       // omp hook installed by symlink (see header of the file), never imported.
@@ -18,8 +18,9 @@
       "project": ["src/**/*.ts"],
     },
     "packages/web": {
-      // Linked from index.html (/tailwind.css), which knip doesn't follow for stylesheets.
-      "entry": ["tailwind.css"],
+      "vite": { "config": ["vite.config.ts"] },
+      // Linked from index.html (/tailwind.css), which knip doesn't follow for stylesheets; the plugin config makes it an entry.
+      "tailwind": { "config": ["tailwind.css"] },
       "project": ["**/*.{ts,tsx,css}"],
     },
     "packages/contract": {
@@ -27,7 +28,7 @@
     },
   },
   "ignoreIssues": {
-    // shadcn-generated primitives export their full variant set by design; kept verbatim so `shadcn add` updates stay diffable.
+    // components/ui is vendored shadcn: files keep every export the registry ships so later `shadcn add` diffs stay clean.
     "packages/web/components/ui/**": ["exports", "types"],
   },
 }
