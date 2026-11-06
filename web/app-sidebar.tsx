@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useMatchRoute } from "@tanstack/react-router";
 import { useTheme } from "next-themes";
-import { BellIcon, BotIcon, FolderIcon, KeyRoundIcon, MoonIcon, PlugIcon, PlusIcon, SunIcon } from "lucide-react";
+import { BellIcon, FolderIcon, KeyRoundIcon, MoonIcon, PlugIcon, PlusIcon, SunIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -12,7 +12,6 @@ import {
   SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuBadge,
   SidebarMenuButton,
@@ -63,19 +62,6 @@ export function AppSidebar({
   };
   return (
     <Sidebar>
-      <SidebarHeader>
-        <div className="flex items-center gap-2 px-1 py-1">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <BotIcon className="size-4" />
-          </div>
-          <div className="grid min-w-0 flex-1 leading-tight">
-            <span className="truncate text-sm font-semibold">claudebot</span>
-            <span className="truncate text-xs text-muted-foreground" title={info?.cli}>
-              {info ? `Claude via ${info.auth}` : "Connecting…"}
-            </span>
-          </div>
-        </div>
-      </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Bots</SidebarGroupLabel>

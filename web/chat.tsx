@@ -109,7 +109,7 @@ export function ChatView({
                   onClick={async () => {
                     const ok = await confirmAction({
                       title: `Start a new session for ${bot.name}?`,
-                      description: "Claude forgets this conversation. Memory, files and routines are kept.",
+                      description: "The bot forgets this conversation. Memory, files and routines are kept.",
                       action: "New session",
                     });
                     if (ok) await act("/api/session/new", {});
@@ -311,12 +311,12 @@ function Composer({ bot, bots, busy, draft, onDraftTaken }: { bot: BotSummary; b
           {mentions.length > 0 && (
             <div className="flex flex-wrap gap-1.5 px-3 pt-3">
               {mentions.map((m) => (
-                <span key={m.id} className="inline-flex h-6 items-center gap-1 rounded-full bg-primary/10 pr-1 pl-2 text-xs font-medium text-primary">
+                <span key={m.id} className="inline-flex h-6 items-center gap-1 rounded-full bg-secondary pr-1 pl-2 text-xs font-medium text-secondary-foreground">
                   @{m.name}
                   <button
                     type="button"
                     aria-label={`Remove ${m.name}`}
-                    className="rounded-full p-0.5 hover:bg-primary/15"
+                    className="rounded-full p-0.5 hover:bg-foreground/10"
                     onClick={() => setMentions(mentions.filter((x) => x.id !== m.id))}
                   >
                     <XIcon className="size-3" />

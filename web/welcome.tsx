@@ -9,7 +9,7 @@ export function Welcome({ loading, hasBots, onNewBot }: { loading: boolean; hasB
   return (
     <div className="flex h-full min-h-0 flex-col">
       <AppBar>
-        <h1 className="text-sm font-medium">claudebot</h1>
+        <h1 className="text-sm font-medium">Bots</h1>
       </AppBar>
       {loading ? (
         <div className="flex flex-1 items-center justify-center">

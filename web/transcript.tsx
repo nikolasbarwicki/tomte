@@ -148,7 +148,7 @@ function Row({ item, onShowBrowser }: { item: Item; onShowBrowser: () => void })
       return (
         <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-muted px-4 py-2.5 text-sm break-words whitespace-pre-wrap">
           {item.mentions?.map((m) => (
-            <span key={m.id} className="mr-1 font-medium text-primary">
+            <span key={m.id} className="mr-1 font-semibold">
               @{m.name}
             </span>
           ))}
@@ -181,7 +181,7 @@ function Row({ item, onShowBrowser }: { item: Item; onShowBrowser: () => void })
       return (
         <div className="flex items-center gap-3 py-2 text-xs text-muted-foreground">
           <span className="h-px flex-1 bg-border" />
-          New session · earlier messages are no longer in Claude's context
+          New session · earlier messages are no longer in the bot's context
           <span className="h-px flex-1 bg-border" />
         </div>
       );
@@ -306,7 +306,7 @@ function AskCard({ item }: { item: Extract<Item, { kind: "ask" }> }) {
       icon={<MessageCircleQuestionIcon />}
       title={
         <>
-          <span className="text-xs font-medium text-muted-foreground">Claude asks</span>
+          <span className="text-xs font-medium text-muted-foreground">The bot asks</span>
           <span className="whitespace-pre-wrap">{item.question}</span>
         </>
       }

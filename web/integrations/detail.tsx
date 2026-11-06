@@ -274,7 +274,7 @@ function Skills({ integration: i }: { integration: Integration }) {
       title="Skills"
       description={
         repo ? (
-          <a href={repo} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-foreground">
+          <a href={repo} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-link">
             From {repo.replace(/^https:\/\//, "")}
             <ExternalLink className="size-3" />
           </a>
