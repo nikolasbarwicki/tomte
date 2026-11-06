@@ -198,6 +198,10 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     for (const c of clients) c.write(`data: ${JSON.stringify(e)}\n\n`);
   };
 
+  /** A message waiting for its bot to be free. `text` is what the bot receives. A user entry also keeps what the page shows, so it can be listed and cancelled until it runs. */
+  type UserEntry = { source: "user"; id: string; text: string; shown: string; mentions: Mention[] };
+  type InboxEntry = { source: "host"; text: string } | UserEntry;
+
   /** A bot's conversation with a live thread; it exists while the bot is open or still running a turn in the background. */
   type Chat = {
     bot: Bot;
@@ -211,8 +215,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     pending: Map<string, (value: string) => void>;
     /** Integration or bot settings changed during a turn; the thread reopens once the turn ends. */
     configStale: boolean;
-    /** Host messages for the bot (a human wait's outcome) that start the next turn once the bot is free. */
-    inbox: string[];
+    /** Messages for the bot that start the next turn once it is free: the user's sends while it was busy, and host messages (a human wait's outcome). */
+    inbox: InboxEntry[];
   };
   const chats = new Map<string, Chat>();
   /** The chat shown in the UI. */
@@ -224,6 +228,15 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     chat.history.push(e);
     if (chat === current) broadcast(e);
   };
+
+  const queuedEvent = (e: UserEntry): ServerEvent =>
+    e.mentions.length ? { type: "queued", id: e.id, text: e.shown, mentions: e.mentions } : { type: "queued", id: e.id, text: e.shown };
+
+  /** Shows a user message in the transcript and records it as the bot's latest; called when it reaches the bot. */
+  function userSaid(chat: Chat, text: string, mentions: Mention[]) {
+    emit(chat, mentions.length ? { type: "user", text, mentions } : { type: "user", text });
+    recordMessage(db, chat.bot.id, { from: "user", text, at: Date.now() });
+  }
 
   /** Closes a chat that is neither shown nor running; its session resumes from disk when the bot is opened again. */
   function release(chat: Chat) {
@@ -310,9 +323,14 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     }
     for (const chat of chats.values()) {
       if (!chat.inbox.length || chat.busy || headlessRuns.has(chat.bot.id)) continue;
-      const texts = chat.inbox.splice(0);
-      for (const card of texts.flatMap((t) => receivedCards(t, chat.bot.id))) emit(chat, card);
-      void turn(chat, texts.join("\n\n"));
+      const entries = chat.inbox.splice(0);
+      for (const e of entries) {
+        if (e.source === "user") {
+          emit(chat, { type: "dequeued", id: e.id });
+          userSaid(chat, e.shown, e.mentions);
+        } else for (const card of receivedCards(e.text, chat.bot.id)) emit(chat, card);
+      }
+      void turn(chat, entries.map((e) => e.text).join("\n\n"));
     }
     if (current) await narrate(current);
   }
@@ -326,7 +344,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       const t = await transcript(bot);
       chat = chats.get(botId) ?? createChat(bot, t);
     }
-    chat.inbox.push(text);
+    chat.inbox.push({ source: "host", text });
     await drain();
   }
 
@@ -551,11 +569,12 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     return { history, hasSession };
   }
 
-  function createChat(bot: Bot, { history, hasSession }: Transcript): Chat {
+  function createChat(bot: Bot, { history, hasSession }: Transcript, inbox: InboxEntry[] = []): Chat {
     history.push(...waits.pending(bot.id));
     const headless = headlessRuns.get(bot.id);
     if (headless) history.push({ type: "info", text: `routine "${headless}" is running in the background; its reply appears here when it finishes` });
-    const chat: Chat = { bot, history, busy: false, routineTurn: false, pending: new Map(), configStale: false, inbox: [], thread: openThread(bot, hasSession, () => chat) };
+    for (const e of inbox) if (e.source === "user") history.push(queuedEvent(e));
+    const chat: Chat = { bot, history, busy: false, routineTurn: false, pending: new Map(), configStale: false, inbox, thread: openThread(bot, hasSession, () => chat) };
     chats.set(bot.id, chat);
     return chat;
   }
@@ -593,7 +612,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     const t = await transcript(old.bot);
     if (chats.get(old.bot.id) === old && !old.busy) {
       old.thread.close("reload");
-      const chat = createChat(old.bot, t);
+      const chat = createChat(old.bot, t, old.inbox);
       if (current === old) {
         current = chat;
         show(chat);
@@ -686,8 +705,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     const chat = current;
     switch (path) {
       case "/api/send": {
-        if (chat.busy) return json(res, { error: "a turn is already running" }, 409);
-        if (headlessRuns.has(chat.bot.id)) return json(res, { error: "a routine is running in this chat; wait for it to finish" }, 409);
         const ids = Array.isArray(b.mentions) ? b.mentions : [];
         const mentions: Mention[] = [];
         for (const id of ids) {
@@ -695,11 +712,27 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
           if (!target) return json(res, { error: `cannot mention ${typeof id === "string" ? id : "that"}: unknown bot or the open bot` }, 400);
           if (!mentions.some((m) => m.id === target.id)) mentions.push({ id: target.id, name: target.name });
         }
-        emit(chat, mentions.length ? { type: "user", text: str("text"), mentions } : { type: "user", text: str("text") });
-        recordMessage(db, chat.bot.id, { from: "user", text: str("text"), at: Date.now() });
+        const text = withMentions(str("text"), mentions);
+        if (chat.busy || headlessRuns.has(chat.bot.id)) {
+          const entry: UserEntry = { source: "user", id: randomUUID(), text, shown: str("text"), mentions };
+          chat.inbox.push(entry);
+          emit(chat, queuedEvent(entry));
+          return json(res, { ok: true, queued: entry.id });
+        }
+        userSaid(chat, str("text"), mentions);
         json(res, { ok: true });
-        void turn(chat, withMentions(str("text"), mentions));
+        void turn(chat, text);
         return;
+      }
+      case "/api/send/cancel": {
+        for (const c of chats.values()) {
+          const i = c.inbox.findIndex((e) => e.source === "user" && e.id === str("id"));
+          if (i < 0) continue;
+          c.inbox.splice(i, 1);
+          emit(c, { type: "dequeued", id: str("id") });
+          return json(res, { ok: true });
+        }
+        return json(res, { error: "that message already reached the bot" }, 404);
       }
       case "/api/answer": {
         for (const c of chats.values()) {

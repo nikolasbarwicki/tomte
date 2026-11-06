@@ -101,19 +101,17 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 
 Each is independent and fits in one PR. Order within the section is by user-visible pain.
 
-### 6a. Message queue while busy
+### 6a. Message queue while busy (shipped; steer and pause open)
 
-**Problem.** `/api/send` in `src/host-server.ts` returns 409 when `chat.busy` or a headless routine run holds the bot. The user must wait and retype.
+**Problem.** `/api/send` used to return 409 when `chat.busy` or a headless routine run held the bot, so the user had to wait and retype.
 
-**Plan.**
-- On busy, push the text onto `chat.inbox` instead of rejecting. `drain()` already starts the next turn from the inbox once the bot is free and no headless run holds it, and already merges several texts into one turn.
-- Show queued messages in the transcript as pending, with a cancel button that removes the entry from `chat.inbox` while it has not drained.
-- Mentions resolve at send time, as now; store the resolved text, not the raw input.
-- Later: "steer", which pushes into the live SDK `Inbox` in `src/thread.ts` mid-turn, and "pause". Both need SDK behaviour checked first.
+**Shipped.**
+- On busy, `/api/send` pushes a user entry onto `chat.inbox` and emits a `queued` event. `drain()` starts the next turn once the bot is free and no headless run holds it, merging several texts into one turn. It emits `dequeued`, then the normal `user` event, when the entry reaches the bot.
+- Inbox entries are tagged by `source` (`user` or `host`). Only user entries carry an id and can be cancelled: `/api/send/cancel` removes one while it has not drained and answers 404 once it has.
+- The transcript shows queued messages dimmed below the working marker, with a Cancel button. A reconnecting page and `reload()` both replay or carry them.
+- Mentions resolve at send time; the entry stores the resolved text for the bot and the typed text for the page.
 
-**Decision needed.** The inbox mixes user messages with host messages (human-wait outcomes, handoff updates). Either tag entries by source so cancel only touches user ones, or keep a separate user queue drained ahead of the inbox. Tagging is less code.
-
-**Done when.** Sending during a running turn shows the message as queued, it runs as the next turn, and cancelling it before then means it never reaches the bot.
+**Open.** "Steer", which pushes into the live SDK `Inbox` in `src/thread.ts` mid-turn, and "pause". Both need SDK behaviour checked first.
 
 ### 6b. Bot templates
 
