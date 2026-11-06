@@ -122,7 +122,7 @@ function parseFlags(argv: readonly string[]) {
 
 /**
  * Reads the host's configuration from command-line flags (`--mode`, `--data-root`, `--host`, `--port`, `--public-url`, `--herdr`, `--vite`)
- * and `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|HERDR|VITE`. `positionals` are the arguments that are not flags.
+ * and `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|HERDR|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
  * Without a data root the OS application-data directory is used.
  */
 export function parseHostConfig(
@@ -163,9 +163,7 @@ export function parseHostConfig(
         values.herdr ?? (rawHerdr === undefined ? false : parseBool("CLAUDEBOT_HERDR", rawHerdr)),
       vite: values.vite ?? (rawVite === undefined ? false : parseBool("CLAUDEBOT_VITE", rawVite)),
       askApproval:
-        rawAskApproval === undefined
-          ? false
-          : parseBool("CLAUDEBOT_ASK_APPROVAL", rawAskApproval),
+        rawAskApproval === undefined ? false : parseBool("CLAUDEBOT_ASK_APPROVAL", rawAskApproval),
     },
     positionals,
   };

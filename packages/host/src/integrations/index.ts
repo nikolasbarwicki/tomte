@@ -4,6 +4,7 @@ import { existsSync, rmSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
 import type { McpServerConfig, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
+import type { OAuthStart } from "@claudebot/contract/api";
 import type {
   CatalogInfo,
   Integration,
@@ -460,7 +461,7 @@ export function createIntegrations(deps: {
   async function connectOAuth(
     rawId: string,
     own?: { clientId: string; clientSecret: string },
-  ): Promise<{ authorizeUrl: string }> {
+  ): Promise<OAuthStart> {
     const r = peek(rawId);
     const ownClient = ownClientOf(r.auth);
     if (r.auth.kind !== "oauth" && !ownClient)

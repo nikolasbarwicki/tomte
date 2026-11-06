@@ -16,6 +16,9 @@
     },
     "packages/contract": {
       "name": "@claudebot/contract",
+      "dependencies": {
+        "zod": "^4.6.7",
+      },
     },
     "packages/host": {
       "name": "@claudebot/host",

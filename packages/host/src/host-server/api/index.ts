@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { body, json, type Handler } from "../http.ts";
+import { z } from "zod";
+
+import { body, InvalidBody, json, type Handler } from "../http.ts";
 import { botRoutes } from "./bots.ts";
 import { chatRoutes } from "./chat.ts";
 import type { ApiContext, ApiRequest } from "./context.ts";
@@ -9,7 +11,7 @@ import { fileRoutes } from "./files.ts";
 import { integrationApi } from "./integrations.ts";
 import { routineApi } from "./routines.ts";
 
-/** The `/api/*` routes. A failure answers 500 with the error as the body, without logging. */
+/** The `/api/*` routes. A malformed body answers 400 with `{ error }`; any other failure answers 500 with the error as the body, without logging. */
 export function createApi(ctx: ApiContext): Handler {
   const anyBot = botRoutes(ctx);
   const openBot = { ...chatRoutes(ctx), ...fileRoutes(ctx) };
@@ -23,12 +25,7 @@ export function createApi(ctx: ApiContext): Handler {
       const r = await credentialApi(ctx.credentials, path, b);
       return r ? json(res, r.body, r.status) : void res.writeHead(404).end();
     }
-    const r: ApiRequest = {
-      res,
-      path,
-      body: b,
-      str: (key) => (typeof b[key] === "string" ? (b[key] as string) : ""),
-    };
+    const r: ApiRequest = { res, path, parse: (schema) => schema.parse(b) };
     const botRoute = Object.hasOwn(anyBot, path) ? anyBot[path] : undefined;
     if (botRoute) return botRoute(r);
     const chat = ctx.chats.open();
@@ -40,7 +37,11 @@ export function createApi(ctx: ApiContext): Handler {
 
   return (req, res, url) =>
     api(req, res, url.pathname).catch((e) => {
-      if (!res.headersSent) res.writeHead(500);
+      if (!res.headersSent) {
+        if (e instanceof InvalidBody) return json(res, { error: e.message }, 400);
+        if (e instanceof z.ZodError) return json(res, { error: z.prettifyError(e) }, 400);
+        res.writeHead(500);
+      }
       res.end(String(e));
     });
 }

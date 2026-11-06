@@ -1,18 +1,14 @@
-import type {
-  BotsEvent,
-  BotSummary,
-  ContextEvent,
-  CredentialEntry,
-  CredentialsEvent,
-  FilesEvent,
+import {
+  HostEvent,
   HostInfo,
-  Integration,
-  IntegrationsEvent,
-  MemoryEvent,
-  MemoryScope,
-  Notice,
-  RoutinesEvent,
-  ServerEvent,
+  type BotSummary,
+  type ContextEvent,
+  type CredentialEntry,
+  type FilesEvent,
+  type Integration,
+  type MemoryScope,
+  type Notice,
+  type RoutinesEvent,
 } from "@claudebot/contract/events";
 import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
@@ -20,20 +16,11 @@ import { toast } from "sonner";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
-import { act, post } from "./api.ts";
+import { act, parseJson, post, readJson } from "./api.ts";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { needsAttention } from "./integrations/model.ts";
 import { NewBotDialog } from "./new-bot.tsx";
 import { reduce, type Item } from "./transcript.tsx";
-
-type StreamEvent =
-  | ServerEvent
-  | MemoryEvent
-  | FilesEvent
-  | RoutinesEvent
-  | BotsEvent
-  | IntegrationsEvent
-  | CredentialsEvent;
 
 /** A prompt waiting in a bot's composer, put there by an integration's Try it. */
 export type Draft = { botId: string; text: string };
@@ -94,10 +81,10 @@ export function Shell() {
   }, [routeBotId]);
 
   useEffect(() => {
-    void post("/api/info", {}).then(async (r) => setInfo(await r.json()));
+    void post("/api/info", {}).then(async (r) => setInfo(await readJson(r, HostInfo)));
     const es = new EventSource("/api/events");
     es.onmessage = (m) => {
-      const e = JSON.parse(m.data) as StreamEvent;
+      const e = parseJson(m.data, HostEvent, "/api/events");
       if (e.type === "integrations") return setIntegrations(e.integrations);
       if (e.type === "credentials") return setCredentials(e.credentials);
       if (e.type === "memory") return setMemory((prev) => ({ ...prev, [e.scope]: e.text }));

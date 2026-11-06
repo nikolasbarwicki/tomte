@@ -6,6 +6,7 @@ import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk";
 import type {
   Bot,
   BotsEvent,
+  HostEvent,
   Notice,
   RoutinesEvent,
   ServerEvent,
@@ -23,7 +24,6 @@ import {
 } from "../bots/index.ts";
 import type { Handoffs, Mention } from "../handoffs/index.ts";
 import type { Executor } from "../routines/index.ts";
-import type { HostEvent } from "./events.ts";
 import { createNotices } from "./notices.ts";
 import { createRoutineTurns } from "./routine-turns.ts";
 import { openBotThread, type ThreadEnv } from "./threads.ts";
