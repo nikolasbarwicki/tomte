@@ -13,11 +13,14 @@
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun test",
     "depcheck": "depcruise packages",
-    "check": "bun run typecheck && bun run depcheck && bun test"
+    "check": "bun run typecheck && bun run depcheck && bun test",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
   },
   "devDependencies": {
     "@swc/core": "^1.16.22",
     "dependency-cruiser": "^18.7.2",
+    "oxfmt": "^0.77.0",
     "typescript": "^7.0.2"
   },
   "engines": {
