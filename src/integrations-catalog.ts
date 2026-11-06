@@ -1,16 +1,13 @@
-import type { IntegrationAuth, OwnClient } from "../web/events.ts";
+import type { CatalogInfo, IntegrationAuth, OwnClient } from "../web/events.ts";
+import { ICONS } from "./integration-icons.ts";
 
 /** A built-in service. Adding one means adding an entry here, not a new code path. */
-export type CatalogEntry = {
+export type CatalogEntry = CatalogInfo & {
   id: string;
   label: string;
   url: string;
-  /** What the card asks for; "none" until an auth flow for the service exists. */
+  /** What the screen asks for; "none" until an auth flow for the service exists. */
   auth: IntegrationAuth;
-  /** A note shown on the card. */
-  note?: string;
-  /** Git repository cloned for the skills this service brings. */
-  skillsRepo?: string;
 };
 
 const GITHUB_OAUTH: OwnClient = {
@@ -38,9 +35,29 @@ const GMAIL_OAUTH: OwnClient = {
 };
 
 export const CATALOG: readonly CatalogEntry[] = [
-  { id: "gmail", label: "Gmail", url: "https://gmailmcp.googleapis.com/mcp/v1", auth: { kind: "oauth", client: "own", ownClient: GMAIL_OAUTH } },
-  { id: "linear", label: "Linear", url: "https://mcp.linear.app/mcp", auth: { kind: "oauth", client: "dcr", alternative: { tokenLabel: "API key", tokenUrl: "https://linear.app/settings/account/security" } } },
-  { id: "github", label: "GitHub", url: "https://api.githubcopilot.com/mcp/", auth: { kind: "bearer", tokenLabel: "Fine-grained personal access token", tokenUrl: "https://github.com/settings/personal-access-tokens/new", ownClient: GITHUB_OAUTH } },
-  { id: "posthog", label: "PostHog", url: "https://mcp.posthog.com/mcp", auth: { kind: "oauth", client: "dcr", alternative: { tokenLabel: "Personal API key", tokenUrl: "https://app.posthog.com/settings/user-api-keys" } } },
-  { id: "cloudflare", label: "Cloudflare", url: "https://mcp.cloudflare.com/mcp", auth: { kind: "oauth", client: "dcr", alternative: { tokenLabel: "API token", tokenUrl: "https://dash.cloudflare.com/profile/api-tokens" } }, skillsRepo: "https://github.com/cloudflare/skills" },
+  {
+    id: "gmail", label: "Gmail", url: "https://gmailmcp.googleapis.com/mcp/v1", auth: { kind: "oauth", client: "own", ownClient: GMAIL_OAUTH },
+    tagline: "Search, read and draft email", icon: ICONS.gmail,
+    examples: ["Summarize my unread email from today", "Find the newest invoice in my inbox and tell me the total", "Draft a reply to my most recent email"],
+  },
+  {
+    id: "linear", label: "Linear", url: "https://mcp.linear.app/mcp", auth: { kind: "oauth", client: "dcr", alternative: { tokenLabel: "API key", tokenUrl: "https://linear.app/settings/account/security" } },
+    tagline: "Issues, projects and triage", icon: ICONS.linear,
+    examples: ["What is assigned to me this week?", "Triage the backlog and suggest priorities", "Summarize what my team closed in the last seven days"],
+  },
+  {
+    id: "github", label: "GitHub", url: "https://api.githubcopilot.com/mcp/", auth: { kind: "bearer", tokenLabel: "Fine-grained personal access token", tokenUrl: "https://github.com/settings/personal-access-tokens/new", ownClient: GITHUB_OAUTH },
+    tagline: "Repositories, issues and pull requests", icon: ICONS.github,
+    examples: ["Which of my pull requests are waiting on review?", "Summarize the open issues labeled bug in my main repository"],
+  },
+  {
+    id: "posthog", label: "PostHog", url: "https://mcp.posthog.com/mcp", auth: { kind: "oauth", client: "dcr", alternative: { tokenLabel: "Personal API key", tokenUrl: "https://app.posthog.com/settings/user-api-keys" } },
+    tagline: "Product analytics and feature flags", icon: ICONS.posthog,
+    examples: ["How did signups trend over the last 30 days?", "Which feature flags are rolled out to everyone?"],
+  },
+  {
+    id: "cloudflare", label: "Cloudflare", url: "https://mcp.cloudflare.com/mcp", auth: { kind: "oauth", client: "dcr", alternative: { tokenLabel: "API token", tokenUrl: "https://dash.cloudflare.com/profile/api-tokens" } },
+    tagline: "Workers, DNS, storage and logs", icon: ICONS.cloudflare, skillsRepo: "https://github.com/cloudflare/skills",
+    examples: ["List my Workers and when each was last deployed", "Show the DNS records of my main zone"],
+  },
 ];

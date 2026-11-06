@@ -195,7 +195,8 @@ export function createIntegrations(deps: {
 
   const view = (r: IntegrationRecord): Integration => {
     const entry = catalog.find((c) => c.id === r.catalogId);
-    return { ...r, redirectUrl: deps.oauthRedirectUrl, label: entry?.label ?? r.name, note: entry?.note, tools: store.tools(db, r.id), skills: store.skills(db, r.id), skillsError: skillsErrors.get(r.id) };
+    const info = entry && { tagline: entry.tagline, icon: entry.icon, examples: entry.examples, skillsRepo: entry.skillsRepo };
+    return { ...r, catalog: info ?? null, redirectUrl: deps.oauthRedirectUrl, label: entry?.label ?? r.name, tools: store.tools(db, r.id), skills: store.skills(db, r.id), skillsError: skillsErrors.get(r.id) };
   };
 
   const cloneDir = (r: IntegrationRecord) => join(clonesDir, r.name);

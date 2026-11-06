@@ -99,8 +99,20 @@ export type IntegrationTool = {
   name: string; description: string; readOnly: boolean; destructive: boolean; policy: ToolPolicy; lastSeen: number;
 };
 export type IntegrationSkill = { name: string; description: string; enabled: boolean };
+/** A brand mark: one path on a 24×24 viewBox, drawn white on `color`. */
+export type BrandIcon = { color: string; path: string };
+/** What a built-in catalog entry adds to its integration's screen. */
+export type CatalogInfo = {
+  /** One line on what the service gives bots. */
+  tagline: string;
+  icon: BrandIcon;
+  /** Prompts a bot can run once the service is connected. */
+  examples: string[];
+  /** Git repository cloned for the skills this service brings. */
+  skillsRepo?: string;
+};
 export type Integration = {
-  id: string; catalogId: string | null; label: string; note?: string; name: string; transport: IntegrationTransport; auth: IntegrationAuth; redirectUrl: string;
+  id: string; catalogId: string | null; catalog: CatalogInfo | null; label: string; name: string; transport: IntegrationTransport; auth: IntegrationAuth; redirectUrl: string;
   enabled: boolean; state: ConnState; error: string | null; tools: IntegrationTool[]; skills: IntegrationSkill[]; skillsError?: string; createdAt: number; updatedAt: number;
 };
 /** Every integration for the Integrations screen; global, lives outside chat history. */

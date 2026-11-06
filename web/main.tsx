@@ -26,7 +26,8 @@ import { AppSidebar, type View } from "./app-sidebar.tsx";
 import { ChatView } from "./chat.tsx";
 import { ConfirmHost } from "./confirm.tsx";
 import { Credentials } from "./credentials.tsx";
-import { Integrations } from "./integrations.tsx";
+import { needsAttention } from "./integrations/model.ts";
+import { Integrations } from "./integrations/screen.tsx";
 import { NewBotDialog } from "./new-bot.tsx";
 import { reduce, type Item } from "./transcript.tsx";
 import { Welcome } from "./welcome.tsx";
@@ -48,6 +49,9 @@ function App() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [credentials, setCredentials] = useState<CredentialEntry[]>([]);
   const [view, setView] = useState<View>("chat");
+  const [integrationId, setIntegrationId] = useState<string>();
+  /** A prompt waiting in a bot's composer, put there by an integration's Try it. */
+  const [draft, setDraft] = useState<{ botId: string; text: string }>();
   const bot = bots?.find((b) => b.id === botId);
 
   useEffect(() => {
@@ -104,14 +108,30 @@ function App() {
         view={view}
         info={info}
         notices={notices}
-        integrationsNeedingAttention={integrations.filter((i) => i.enabled && (i.state === "failed" || i.state === "needs-auth")).length}
-        onView={setView}
+        integrationsNeedingAttention={integrations.filter(needsAttention).length}
+        onView={(v) => {
+          setView(v);
+          setIntegrationId(undefined);
+        }}
         onOpenBot={openBot}
         onNewBot={() => setNewBotOpen(true)}
       />
       <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
         {view === "integrations" ? (
-          <Integrations integrations={integrations} />
+          <Integrations
+            integrations={integrations}
+            selectedId={integrationId}
+            onSelect={setIntegrationId}
+            onTry={
+              bots?.length
+                ? (text) => {
+                    const id = botId ?? bots[0].id;
+                    setDraft({ botId: id, text });
+                    openBot(id);
+                  }
+                : undefined
+            }
+          />
         ) : view === "credentials" ? (
           <Credentials credentials={credentials} bots={bots ?? []} />
         ) : bot ? (
@@ -126,6 +146,8 @@ function App() {
             files={files}
             routines={routines?.botId === bot.id ? routines.routines : undefined}
             browserUnavailable={info?.browser.status === "unavailable" ? info.browser.reason : undefined}
+            draft={draft?.botId === bot.id ? draft.text : undefined}
+            onDraftTaken={() => setDraft(undefined)}
           />
         ) : (
           <Welcome loading={!bots} hasBots={!!bots?.length} onNewBot={() => setNewBotOpen(true)} />

@@ -36,6 +36,7 @@ let secrets: ReturnType<typeof memorySecrets>;
 let changes: number;
 let clock = 1_000;
 const REDIRECT = "http://127.0.0.1:9/oauth/callback";
+const SHOWN = { tagline: "Test service", icon: { color: "#000000", path: "M0 0h24v24H0z" }, examples: [] };
 let hostDir: string;
 
 beforeEach(() => {
@@ -365,7 +366,7 @@ test("connecting a built-in with a skills repo clones it once into the host fold
   const repos: string[] = [];
   const cloned = createIntegrations({
     db: migrate(new Database(":memory:")), secrets, hostDir, oauthRedirectUrl: REDIRECT, onChange: () => {},
-    catalog: [{ id: "cf", label: "CF", url: `http://127.0.0.1:${s.port}/mcp`, auth: { kind: "bearer" }, skillsRepo: "https://example.test/cf/skills.git" }],
+    catalog: [{ id: "cf", label: "CF", url: `http://127.0.0.1:${s.port}/mcp`, auth: { kind: "bearer" }, skillsRepo: "https://example.test/cf/skills.git", ...SHOWN }],
     gitClone: async (repo, dest) => {
       repos.push(repo);
       skillDir(join(dest, "skills"), "wrangler", "Run Wrangler");
@@ -393,7 +394,7 @@ test("a failed clone is an inline error and the connection still works", async (
   const s = authed("cf");
   const cloned = createIntegrations({
     db: migrate(new Database(":memory:")), secrets, hostDir, oauthRedirectUrl: REDIRECT, onChange: () => {},
-    catalog: [{ id: "cf", label: "CF", url: `http://127.0.0.1:${s.port}/mcp`, auth: { kind: "bearer" }, skillsRepo: "x" }],
+    catalog: [{ id: "cf", label: "CF", url: `http://127.0.0.1:${s.port}/mcp`, auth: { kind: "bearer" }, skillsRepo: "x", ...SHOWN }],
     gitClone: async () => { throw new Error("git clone failed: offline"); },
   });
   try {
@@ -627,7 +628,7 @@ test("OAuth: an integration without OAuth refuses to start a sign-in", async () 
 const OWN = { appLabel: "test app", steps: ["do it"], scope: "mail.read mail.write" };
 function ownClientIntegrations(f: ReturnType<typeof oauthFixture>, auth: "oauth" | "bearer") {
   secrets = memorySecrets();
-  const catalog: CatalogEntry[] = [{ id: "own", label: "Own", url: f.url, auth: auth === "oauth" ? { kind: "oauth", client: "own", ownClient: OWN } : { kind: "bearer", ownClient: OWN } }];
+  const catalog: CatalogEntry[] = [{ id: "own", label: "Own", url: f.url, auth: auth === "oauth" ? { kind: "oauth", client: "own", ownClient: OWN } : { kind: "bearer", ownClient: OWN }, ...SHOWN }];
   integrations = createIntegrations({ db: migrate(new Database(":memory:")), secrets, hostDir, now: () => clock, onChange: () => {}, oauthRedirectUrl: REDIRECT, catalog });
   return integrations.list()[0]!.id;
 }

@@ -38,6 +38,8 @@ export function ChatView({
   files,
   routines,
   browserUnavailable,
+  draft,
+  onDraftTaken,
 }: {
   bot: BotSummary;
   bots: BotSummary[];
@@ -48,6 +50,9 @@ export function ChatView({
   files: FilesEvent;
   routines: Routine[] | undefined;
   browserUnavailable: string | undefined;
+  /** Text to start the composer with, e.g. an integration's example prompt. */
+  draft: string | undefined;
+  onDraftTaken: () => void;
 }) {
   const wide = useMediaQuery("(min-width: 1024px)");
   const [pinned, setPinned] = useState(() => localStorage.getItem(PANEL_KEY) !== "closed");
@@ -128,7 +133,7 @@ export function ChatView({
           </Tooltip>
         </AppBar>
         <Transcript bot={bot} items={items} busy={busy} onShowBrowser={showBrowser} />
-        <Composer bot={bot} bots={bots} busy={busy} />
+        <Composer bot={bot} bots={bots} busy={busy} draft={draft} onDraftTaken={onDraftTaken} />
       </div>
       {wide ? (
         panelOpen && <aside className="flex w-[400px] shrink-0 flex-col border-l xl:w-[440px]">{panel}</aside>
@@ -231,11 +236,18 @@ function ModelMenu() {
   );
 }
 
-function Composer({ bot, bots, busy }: { bot: BotSummary; bots: BotSummary[]; busy: boolean }) {
-  const [input, setInput] = useState("");
+function Composer({ bot, bots, busy, draft, onDraftTaken }: { bot: BotSummary; bots: BotSummary[]; busy: boolean; draft: string | undefined; onDraftTaken: () => void }) {
+  const [input, setInput] = useState(draft ?? "");
   const [mentions, setMentions] = useState<{ id: string; name: string }[]>([]);
   const [highlight, setHighlight] = useState(0);
   const textarea = useRef<HTMLTextAreaElement>(null);
+
+  // The draft is now this composer's own text; leave the caret after it so the user can edit or send.
+  useEffect(() => {
+    if (draft === undefined) return;
+    textarea.current?.setSelectionRange(draft.length, draft.length);
+    onDraftTaken();
+  }, []);
 
   const mentionQuery = input.match(/(?:^|\s)@([^\s@]*)$/)?.[1];
   const candidates =
