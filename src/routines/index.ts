@@ -347,3 +347,5 @@ export function createRoutines(deps: {
     },
   };
 }
+
+export type Routines = ReturnType<typeof createRoutines>;

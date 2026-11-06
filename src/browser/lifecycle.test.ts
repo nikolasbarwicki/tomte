@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { createBot, getBot } from "../bots/index.ts";
 import { createCredentials } from "../credentials/index.ts";
 import { migrate } from "../platform/db.ts";
-import { createHostServer, type HostServer } from "../host-server.ts";
+import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { removeBotBrowser } from "./cleanup.ts";
 import { createBrowserEndpoint } from "./endpoint.ts";

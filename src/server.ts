@@ -3,7 +3,7 @@ import { getBot } from "./bots/index.ts";
 import { resolveCli } from "./harness/index.ts";
 import { openDb } from "./platform/db.ts";
 import { keychainSecrets } from "./platform/secrets.ts";
-import { createHostServer } from "./host-server.ts";
+import { createHostServer } from "./host-server/index.ts";
 
 const [cwdArg, botArg] = process.argv.slice(2);
 const cli = resolveCli();

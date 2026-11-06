@@ -10,7 +10,7 @@ import { engineStatus } from "./engine.ts";
 import { createBot } from "../bots/index.ts";
 import { resolveCli } from "../harness/index.ts";
 import { migrate } from "../platform/db.ts";
-import { createHostServer, type HostServer } from "../host-server.ts";
+import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { credentialSecretName, memorySecrets, type SecretStore } from "../platform/secrets.ts";
 import type { ServerEvent } from "../contract/events.ts";
 

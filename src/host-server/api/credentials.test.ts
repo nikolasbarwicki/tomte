@@ -1,8 +1,9 @@
 import { beforeEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { migrate } from "../platform/db.ts";
-import { createCredentials, credentialApi, type Credentials } from "./index.ts";
-import { credentialSecretName, memorySecrets } from "../platform/secrets.ts";
+import { migrate } from "../../platform/db.ts";
+import { createCredentials, type Credentials } from "../../credentials/index.ts";
+import { credentialSecretName, memorySecrets } from "../../platform/secrets.ts";
+import { credentialApi } from "./credentials.ts";
 
 const PASSWORD = "hunter2-very-secret";
 let db: Database;
