@@ -5,7 +5,7 @@ import { InvalidInput, NotFound } from "../../platform/errors.ts";
 
 const Id = z.object({ id: z.string() });
 
-/** The `/api/credentials/*` routes as a pure function of path and JSON body; `undefined` means no such route. */
+/** The `/api/credentials/*` routes as a function of path and JSON body; `undefined` means no such route. A body that does not match its schema throws a `ZodError`, which the API answers with 400. */
 export async function credentialApi(
   creds: Credentials,
   path: string,
@@ -37,8 +37,6 @@ export async function credentialApi(
     }
     return undefined;
   } catch (e) {
-    if (e instanceof z.ZodError)
-      return { status: 400, body: { error: e.issues.map((i) => i.message).join("; ") } };
     if (e instanceof InvalidInput) return { status: 400, body: { error: e.message } };
     if (e instanceof NotFound) return { status: 404, body: { error: e.message } };
     throw e;

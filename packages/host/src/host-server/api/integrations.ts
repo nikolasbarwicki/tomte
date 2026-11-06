@@ -83,8 +83,6 @@ export async function integrationApi(
     }
     res.writeHead(404).end();
   } catch (e) {
-    if (e instanceof z.ZodError)
-      return json(res, { error: e.issues.map((i) => i.message).join("; ") }, 400);
     if (e instanceof InvalidInput) return json(res, { error: e.message }, 400);
     if (e instanceof NameTaken) return json(res, { error: e.message }, 409);
     if (e instanceof NotFound) return json(res, { error: e.message }, 404);

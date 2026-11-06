@@ -62,8 +62,6 @@ export async function routineApi(
     }
     res.writeHead(404).end();
   } catch (e) {
-    if (e instanceof z.ZodError)
-      return json(res, { error: e.issues.map((i) => i.message).join("; ") }, 400);
     if (e instanceof Conflict) return json(res, { error: e.message }, 409);
     if (e instanceof NotFound) return json(res, { error: e.message }, 404);
     throw e;
