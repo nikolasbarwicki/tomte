@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  SHERIF_VERSION: 1.13.0
   GITLEAKS_VERSION: 8.30.1
   GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
 
@@ -60,6 +61,19 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: printf '%s\n' "$PR_TITLE" | bunx commitlint
+
+  sherif:
+    name: sherif
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bunx sherif@${SHERIF_VERSION}
 
   secrets:
     name: secrets
