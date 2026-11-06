@@ -42,3 +42,11 @@ test("a bot.json with a field of the wrong type throws a ZodError", () => {
   });
   expect(() => getBot(dataRoot, id)).toThrow(z.ZodError);
 });
+
+test("a bot.json with an empty sessions list throws a ZodError rather than yielding a bot with no session", () => {
+  const { id } = createBot(dataRoot, "Ada", "tests");
+  rewrite(id, (s) => {
+    s.sessions = [];
+  });
+  expect(() => getBot(dataRoot, id)).toThrow(z.ZodError);
+});

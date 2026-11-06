@@ -26,7 +26,7 @@ export const BROWSER_FILES_DIR = "browser";
 
 /** `bot.json` as any release wrote it; files from before a field existed lack it. */
 const StoredBot = Bot.extend({
-  sessions: Bot.shape.sessions.optional(),
+  sessions: Bot.shape.sessions.min(1).optional(),
   avatar: BotAvatar.optional(),
   browser: BotBrowserSettings.extend({ headed: z.boolean().default(false) }).default({
     enabled: false,
