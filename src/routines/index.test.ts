@@ -3,11 +3,11 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBot } from "./bots.ts";
-import { migrate } from "./db.ts";
-import { Conflict, createRoutines, type Executor } from "./routines.ts";
-import * as store from "./routines-store.ts";
-import type { Schedule } from "./contract/events.ts";
+import { createBot } from "../bots/index.ts";
+import { migrate } from "../platform/db.ts";
+import { Conflict, createRoutines, type Executor } from "./index.ts";
+import * as store from "./store.ts";
+import type { Schedule } from "../contract/events.ts";
 
 const at = (iso: string) => Date.parse(iso);
 const hourly: Schedule = { kind: "cron", expr: "0 * * * *", tz: "UTC" };

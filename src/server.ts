@@ -1,8 +1,8 @@
 import { realpathSync } from "node:fs";
-import { getBot } from "./bots.ts";
-import { resolveCli } from "./cli.ts";
-import { openDb } from "./db.ts";
-import { keychainSecrets } from "./secrets.ts";
+import { getBot } from "./bots/index.ts";
+import { resolveCli } from "./harness/cli.ts";
+import { openDb } from "./platform/db.ts";
+import { keychainSecrets } from "./platform/secrets.ts";
 import { createHostServer } from "./host-server.ts";
 
 const [cwdArg, botArg] = process.argv.slice(2);

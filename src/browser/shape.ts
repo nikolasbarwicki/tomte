@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { BROWSER_FILES_DIR } from "../bots.ts";
+import { BROWSER_FILES_DIR } from "../bots/index.ts";
 
 /** About how much page text one result may carry. */
 export const RESULT_LIMIT = 20_000;

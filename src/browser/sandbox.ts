@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
-import type { IsolationProfile } from "../harness.ts";
+import type { IsolationProfile } from "../harness/index.ts";
 
 export type SandboxStatus = { status: "available" } | { status: "unavailable"; reason: string };
 

@@ -13,11 +13,11 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { cmdExeSpawner, loginShellPath, type ResolvedCli } from "./cli.ts";
-import { claudeHarness, type HostServerLease } from "./harness.ts";
-import type { IntegrationsSource } from "./integrations.ts";
+import { cmdExeSpawner, loginShellPath, type ResolvedCli } from "../harness/cli.ts";
+import { claudeHarness, type HostServerLease } from "../harness/index.ts";
+import type { IntegrationsSource } from "../integrations/index.ts";
 import { appendMemory, readMemory, writeMemory, type MemoryPaths } from "./memory.ts";
-import type { MemoryScope } from "./contract/events.ts";
+import type { MemoryScope } from "../contract/events.ts";
 
 export const APP = "claudebot";
 export const VERSION = "0.1.0";

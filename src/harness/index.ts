@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { McpServerConfig, Options } from "@anthropic-ai/claude-agent-sdk";
-import type { SessionIntegrations } from "./integrations.ts";
+import type { SessionIntegrations } from "../integrations/index.ts";
 
 /** An HTTP MCP server owned by the host; the token travels as a bearer header, never in argv. */
 export interface HostMcpServer {

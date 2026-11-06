@@ -7,12 +7,12 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { migrate } from "./db.ts";
-import { NameTaken, createIntegrations, withOfflineAccess, type Integrations, type ServerName } from "./integrations.ts";
-import { InvalidInput } from "./platform/errors.ts";
-import { CATALOG, type CatalogEntry } from "./integrations-catalog.ts";
-import * as store from "./integrations-store.ts";
-import { memorySecrets } from "./secrets.ts";
+import { migrate } from "../platform/db.ts";
+import { NameTaken, createIntegrations, withOfflineAccess, type Integrations, type ServerName } from "./index.ts";
+import { InvalidInput } from "../platform/errors.ts";
+import { CATALOG, type CatalogEntry } from "./catalog.ts";
+import * as store from "./store.ts";
+import { memorySecrets } from "../platform/secrets.ts";
 
 let server: ReturnType<typeof Bun.serve>;
 let url: string;
@@ -259,7 +259,7 @@ test("a built-in rejects a token it has no auth for", async () => {
   await expect(integrations.setBearer(gmail.id, "x")).rejects.toThrow(InvalidInput);
 });
 
-const fixture = `${import.meta.dir}/fixtures/stdio-server.ts`;
+const fixture = `${import.meta.dir}/../testing/stdio-server.ts`;
 const addLocal = (name = "loc", env: Record<string, string> = { FIXTURE_SECRET: "s3cret-value" }) =>
   integrations.addCustom({ name, transport: "stdio", command: process.execPath, args: [fixture], env });
 

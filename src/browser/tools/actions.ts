@@ -7,7 +7,7 @@ import { httpUrl } from "./navigation.ts";
 import { pageTool, snapshotOutcome, textOutcome } from "./page.ts";
 import { ToolError } from "./result.ts";
 import { shapePage } from "../shape.ts";
-import { BROWSER_FILES_DIR } from "../../bots.ts";
+import { BROWSER_FILES_DIR } from "../../bots/index.ts";
 
 const ref = z.string().max(40).describe("A ref from the latest snapshot, like r3.e5");
 const tabId = z.string().regex(/^t\d{1,4}$/).describe("A tab id from the tab list, like t2");

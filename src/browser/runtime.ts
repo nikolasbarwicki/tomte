@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { resolveEngine } from "../browser-engine.ts";
-import type { SecretStore } from "../secrets.ts";
+import { resolveEngine } from "./engine.ts";
+import type { SecretStore } from "../platform/secrets.ts";
 import { writeActionPolicy } from "./action-policy.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
 import { DEFAULT_CALL_TIMEOUT_MS, EngineError, findChrome, listSessions, restoreStatePath, runEngine, SESSION_PREFIX, sessionName, socketDir, type EngineLaunch } from "./engine-cli.ts";

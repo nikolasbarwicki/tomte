@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { claudeHarness } from "../harness.ts";
+import { claudeHarness } from "../harness/index.ts";
 import { browserIsolation, sandboxStatus } from "./sandbox.ts";
 
 const probe = (platform: NodeJS.Platform, have: string[] = []) => ({

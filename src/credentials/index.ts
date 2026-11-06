@@ -1,9 +1,9 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { InvalidInput, NotFound } from "./platform/errors.ts";
-import { credentialSecretName, type SecretStore } from "./secrets.ts";
-import type { CredentialEntry } from "./contract/events.ts";
+import { InvalidInput, NotFound } from "../platform/errors.ts";
+import { credentialSecretName, type SecretStore } from "../platform/secrets.ts";
+import type { CredentialEntry } from "../contract/events.ts";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 

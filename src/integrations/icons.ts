@@ -1,4 +1,4 @@
-import type { BrandIcon } from "./contract/events.ts";
+import type { BrandIcon } from "../contract/events.ts";
 
 /** Brand marks from Simple Icons (CC0, simpleicons.org): one 24×24 path and the brand colour each. */
 export const ICONS = {

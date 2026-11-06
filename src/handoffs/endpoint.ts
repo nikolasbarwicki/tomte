@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { HostServerLease } from "../harness.ts";
-import { TokenRegistry } from "../tokens.ts";
+import type { HostServerLease } from "../harness/index.ts";
+import { TokenRegistry } from "../platform/tokens.ts";
 import type { HandoffStore } from "./store.ts";
 import type { BotsToolContext } from "./tools/context.ts";
 import { BOTS_INSTRUCTIONS, BOTS_SERVER_NAME, createBotsMcpServer } from "./tools.ts";

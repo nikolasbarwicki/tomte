@@ -5,14 +5,14 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBot } from "../bots.ts";
-import { migrate } from "../db.ts";
+import { createBot } from "../bots/index.ts";
+import { migrate } from "../platform/db.ts";
 import { createHostServer, type HostServer } from "../host-server.ts";
-import { memorySecrets } from "../secrets.ts";
+import { memorySecrets } from "../platform/secrets.ts";
 import type { LiveMessage, ServerEvent } from "../contract/events.ts";
 
-const FAKE_ENGINE = join(import.meta.dir, "..", "fixtures", "fake-agent-browser.ts");
-const FAKE_CLAUDE = join(import.meta.dir, "..", "fixtures", "fake-claude.ts");
+const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
+const FAKE_CLAUDE = join(import.meta.dir, "..", "testing", "fake-claude.ts");
 const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH", "FAKE_CLAUDE_DIR"] as const;
 
 let root: string;

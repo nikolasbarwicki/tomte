@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { HostServerLease } from "../harness.ts";
+import type { HostServerLease } from "../harness/index.ts";
 import { PageState } from "./page-state.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
 import type { BrowserRuntimes } from "./runtime.ts";
@@ -8,7 +8,7 @@ import type { Takeover } from "./takeover.ts";
 import type { BrowserLogin } from "./login.ts";
 import { browserIsolation } from "./sandbox.ts";
 import { BROWSER_INSTRUCTIONS, BROWSER_SERVER_NAME, createBrowserMcpServer } from "./tools.ts";
-import { TokenRegistry } from "../tokens.ts";
+import { TokenRegistry } from "../platform/tokens.ts";
 
 export const BROWSER_ENDPOINT_PATH = "/mcp/browser";
 

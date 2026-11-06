@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { ConnState, IntegrationAuth, IntegrationSkill, IntegrationTool, IntegrationTransport, ToolPolicy } from "./contract/events.ts";
+import type { ConnState, IntegrationAuth, IntegrationSkill, IntegrationTool, IntegrationTransport, ToolPolicy } from "../contract/events.ts";
 
 export type IntegrationRecord = {
   id: string; catalogId: string | null; name: string; transport: IntegrationTransport; auth: IntegrationAuth;

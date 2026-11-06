@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { startHandoffHost, parse, type BotCaller, type HandoffHost } from "./test-host.ts";
+import { startHandoffHost, parse, type BotCaller, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
 beforeEach(async () => void (host = await startHandoffHost()));

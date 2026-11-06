@@ -1,5 +1,5 @@
-import type { CatalogInfo, IntegrationAuth, OwnClient } from "./contract/events.ts";
-import { ICONS } from "./integration-icons.ts";
+import type { CatalogInfo, IntegrationAuth, OwnClient } from "../contract/events.ts";
+import { ICONS } from "./icons.ts";
 
 /** A built-in service. Adding one means adding an entry here, not a new code path. */
 export type CatalogEntry = CatalogInfo & {

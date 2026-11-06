@@ -6,11 +6,11 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBot, getBot } from "../bots.ts";
-import { createCredentials } from "../credentials.ts";
-import { migrate } from "../db.ts";
+import { createBot, getBot } from "../bots/index.ts";
+import { createCredentials } from "../credentials/index.ts";
+import { migrate } from "../platform/db.ts";
 import { createHostServer, type HostServer } from "../host-server.ts";
-import { memorySecrets } from "../secrets.ts";
+import { memorySecrets } from "../platform/secrets.ts";
 import { removeBotBrowser } from "./cleanup.ts";
 import { createBrowserEndpoint } from "./endpoint.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
@@ -21,7 +21,7 @@ import { isAlive } from "./process.ts";
 import { Takeover } from "./takeover.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./runtime.ts";
 
-const FAKE_ENGINE = join(import.meta.dir, "..", "fixtures", "fake-agent-browser.ts");
+const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH"] as const;
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 

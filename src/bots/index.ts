@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { userMemoryPath, type MemoryPaths } from "./memory.ts";
-import { defaultAvatar, type BotAvatar } from "./contract/avatars.ts";
-import type { Bot } from "./contract/events.ts";
+import { defaultAvatar, type BotAvatar } from "../contract/avatars.ts";
+import type { Bot } from "../contract/events.ts";
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 

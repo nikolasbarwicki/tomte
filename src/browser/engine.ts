@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
-import { isMusl } from "./cli.ts";
-import { findChrome } from "./browser/engine-cli.ts";
+import { isMusl } from "../harness/cli.ts";
+import { findChrome } from "./engine-cli.ts";
 
 const isWin = process.platform === "win32";
 const managedRoot = () => process.env.CLAUDEBOT_BROWSER_ROOT ?? join(homedir(), ".cache", "claudebot", "agent-browser");

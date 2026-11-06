@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { botFilesPath } from "../bots.ts";
-import { startHandoffHost, parse, type HandoffHost } from "./test-host.ts";
+import { botFilesPath } from "../bots/index.ts";
+import { startHandoffHost, parse, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
 beforeEach(async () => void (host = await startHandoffHost()));

@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { RoutineRun, RunStatus, RunTrigger, Schedule } from "./contract/events.ts";
+import type { RoutineRun, RunStatus, RunTrigger, Schedule } from "../contract/events.ts";
 
 /** A routine as stored; `Routine` adds the fields derived at read time. */
 export type RoutineRecord = {

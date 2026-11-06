@@ -9,13 +9,13 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { auth as mcpAuth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { McpServerConfig, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
-import { InvalidInput, NotFound } from "./platform/errors.ts";
-import { secretName, type SecretStore } from "./secrets.ts";
-import { CATALOG, type CatalogEntry } from "./integrations-catalog.ts";
-import { buildPlugin, gitClone, scanSkills, type GitClone } from "./integration-skills.ts";
-import * as store from "./integrations-store.ts";
-import type { DiscoveredTool, IntegrationRecord } from "./integrations-store.ts";
-import type { CatalogInfo, Integration, IntegrationAuth, IntegrationTransport, OwnClient, ToolPolicy } from "./contract/events.ts";
+import { InvalidInput, NotFound } from "../platform/errors.ts";
+import { secretName, type SecretStore } from "../platform/secrets.ts";
+import { CATALOG, type CatalogEntry } from "./catalog.ts";
+import { buildPlugin, gitClone, scanSkills, type GitClone } from "./skills.ts";
+import * as store from "./store.ts";
+import type { DiscoveredTool, IntegrationRecord } from "./store.ts";
+import type { CatalogInfo, Integration, IntegrationAuth, IntegrationTransport, OwnClient, ToolPolicy } from "../contract/events.ts";
 
 export type { ToolPolicy };
 export type ServerName = string & { readonly __brand: "ServerName" };
