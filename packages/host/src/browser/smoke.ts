@@ -6,7 +6,7 @@ import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
-import type { ServerEvent } from "@claudebot/contract/events";
+import { HostEvent, type ServerEvent } from "@claudebot/contract/events";
 import type { Server } from "bun";
 
 import { createBot } from "../bots/index.ts";
@@ -183,7 +183,7 @@ async function scenarios(
       body: JSON.stringify(body),
     });
 
-  const received: ServerEvent[] = [];
+  const received: HostEvent[] = [];
   const abort = new AbortController();
   void (async () => {
     const res = await fetch(`${server.url}/api/events`, {
@@ -199,7 +199,7 @@ async function scenarios(
       if (done) return;
       const parts = (buffer + value).split("\n\n");
       buffer = parts.pop() ?? "";
-      for (const p of parts) received.push(JSON.parse(p.replace(/^data: /, "")));
+      for (const p of parts) received.push(HostEvent.parse(JSON.parse(p.replace(/^data: /, ""))));
     }
   })();
 

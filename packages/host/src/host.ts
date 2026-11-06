@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 
 import { getSessionInfo } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
 
 import {
   Thread,
@@ -37,10 +38,14 @@ const { config } = parsed;
 
 const log = (l: string) => console.error(l);
 
+const PackageVersion = z.object({ version: z.string() });
+
 function sdkVersion(): string {
   const require = createRequire(import.meta.url);
   const entry = require.resolve("@anthropic-ai/claude-agent-sdk");
-  return JSON.parse(readFileSync(join(dirname(entry), "package.json"), "utf8")).version;
+  return PackageVersion.parse(
+    JSON.parse(readFileSync(join(dirname(entry), "package.json"), "utf8")),
+  ).version;
 }
 
 /** Non-interactive host policy for this script: answers come from the host, never CLI stdin. */
