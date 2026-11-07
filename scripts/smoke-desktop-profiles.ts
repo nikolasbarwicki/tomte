@@ -29,15 +29,14 @@ import {
   describeProcess,
   fail,
   info,
-  leftovers,
   libraryTraces,
   listing,
-  processes,
   sleep,
   trayView,
   until,
   type Launched,
 } from "./desktop-smoke-kit.ts";
+import { processes } from "./process-guard.ts";
 
 const CONNECTIONS_SCHEME = "claudebot-desktop://connections";
 const HOST_OS = process.platform === "win32" ? "windows" : process.platform;
@@ -73,7 +72,6 @@ async function main(): Promise<void> {
   const run = await createSmokeRun(process.argv[2], "claudebot-desktop-profiles-smoke-");
   const {
     root,
-    needles,
     userData,
     fakeCli,
     launched,
@@ -82,6 +80,7 @@ async function main(): Promise<void> {
     hostOf,
     nothingRemains,
     quit,
+    sweep,
     cleanup,
   } = run;
   const oauth = oauthFixture();
@@ -728,14 +727,7 @@ async function main(): Promise<void> {
     for (const app of launched) await app.close().catch(() => {});
     remote.kill("SIGKILL");
     await remote.exited;
-    for (const p of leftovers(needles)) {
-      console.log(`  cleaning up leftover ${describeProcess(p)}`);
-      try {
-        process.kill(p.pid, "SIGKILL");
-      } catch {
-        // Already gone.
-      }
-    }
+    for (const p of sweep()) console.log(`  cleaned up leftover ${describeProcess(p)}`);
     await mismatch.stop(true);
     await tlsFixture.stop(true);
     await oauth.server.stop(true);

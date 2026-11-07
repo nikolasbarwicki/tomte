@@ -10,6 +10,14 @@ import { join, resolve } from "node:path";
 
 import { _electron, type ElectronApplication, type Page } from "playwright-core";
 
+import {
+  outsideLineage,
+  type ProcessRow,
+  processes,
+  processesUnder,
+  refusal,
+} from "./process-guard.ts";
+
 export const ROOT = join(import.meta.dir, "..");
 export const FAKE_CLAUDE = join(ROOT, "packages/host/src/testing/fake-claude.ts");
 export const EVIDENCE_DIR = join(ROOT, ".scratch");
@@ -46,30 +54,12 @@ export async function until<T>(
   }
 }
 
-export interface ProcessRow {
-  pid: number;
-  ppid: number;
-  tty: string;
-  command: string;
-}
-
-export function processes(): ProcessRow[] {
-  const out = Bun.spawnSync(["ps", "-axo", "pid=,ppid=,tty=,command="]).stdout.toString();
-  return out.split("\n").flatMap((line) => {
-    const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
-    return m ? [{ pid: Number(m[1]), ppid: Number(m[2]), tty: m[3]!, command: m[4]! }] : [];
-  });
-}
-
 export const alive = (pid: number) => processes().some((p) => p.pid === pid);
 
-/** Every process whose command line names the temp root, the packaged app (so its helpers and its host), or the fake CLI. */
+/** Every process whose command line names the temp root, the packaged app (so its helpers and its host), or the fake CLI. Never this script or the `bun run` that started it, whose command lines may name the app. */
 export function leftovers(needles: string[]): ProcessRow[] {
-  return processes().filter(
-    (p) =>
-      p.pid !== process.pid &&
-      !p.command.startsWith("ps ") &&
-      needles.some((n) => p.command.includes(n)),
+  return outsideLineage(processes(), process.pid).filter(
+    (p) => !p.command.startsWith("ps ") && needles.some((n) => p.command.includes(n)),
   );
 }
 
@@ -197,6 +187,8 @@ export interface SmokeRun {
   nothingRemains: (label: string, ignorePids?: number[]) => Promise<void>;
   hostLog: () => string;
   quit: (l: Launched) => Promise<void>;
+  /** SIGKILLs the processes of the run that are still there and that this run saw appear (never one that was already running or that it did not see) and returns them. */
+  sweep: () => ProcessRow[];
   /** Deletes the temp root and the temp home. */
   cleanup: () => Promise<void>;
 }
@@ -211,6 +203,12 @@ export async function createSmokeRun(
   const executable = join(appBundle, "Contents/MacOS/Claudebot");
   if (!existsSync(executable))
     fail(`no packaged app at ${appBundle}; run \`bun run package:desktop\``);
+  // The `finally` of every smoke kills what is left under the bundle path, so a copy somebody is using must never be there.
+  const rows = outsideLineage(processes(), process.pid);
+  const running = [...new Set([appBundle, realpathSync(appBundle)])].flatMap((b) =>
+    processesUnder(b, rows),
+  );
+  if (running.length > 0) fail(refusal("smoke-test", appBundle, running));
 
   const root = await mkdtemp(join(tmpdir(), rootPrefix));
   // The engine's socket paths must stay under 104 bytes, so the home is short and apart from the root.
@@ -232,6 +230,12 @@ export async function createSmokeRun(
   );
   await chmod(fakeCli, 0o755);
   const launched: ElectronApplication[] = [];
+  // Every pid of the run that was ever seen; `sweep` kills only those.
+  const seen = new Set<number>();
+  const sampler = setInterval(() => {
+    for (const p of leftovers(needles)) seen.add(p.pid);
+  }, 200);
+  sampler.unref();
 
   /** The environment of a launch: this process's, minus any claudebot or Claude setting of the developer's. */
   function launchEnv(extra: Record<string, string>): Record<string, string> {
@@ -328,6 +332,18 @@ export async function createSmokeRun(
     check(code === 0, `app.quit() ended the app with exit code ${code}`);
   }
 
+  function sweep(): ProcessRow[] {
+    const stray = leftovers(needles).filter((p) => seen.has(p.pid));
+    for (const p of stray) {
+      try {
+        process.kill(p.pid, "SIGKILL");
+      } catch {
+        // Already gone.
+      }
+    }
+    return stray;
+  }
+
   return {
     appBundle,
     root,
@@ -349,7 +365,9 @@ export async function createSmokeRun(
     nothingRemains,
     hostLog,
     quit,
+    sweep,
     async cleanup() {
+      clearInterval(sampler);
       await rm(root, { recursive: true, force: true });
       await rm(homeDir, { recursive: true, force: true });
       info(`removed ${root} and ${homeDir}`);

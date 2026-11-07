@@ -1,10 +1,12 @@
 import { SESSION_COOKIE } from "@claudebot/contract/sidecar";
 import { BrowserWindow } from "electron";
 
+import { windowChrome } from "./window-chrome.ts";
+
 function messagePage(html: string): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(
     `<!doctype html><meta charset="utf-8"><title>Claudebot</title>
-<style>html{height:100%;background:#111;color:#aaa;font:15px system-ui,sans-serif}body{height:100%;margin:0;display:grid;place-items:center}pre{max-width:80ch;white-space:pre-wrap;font:12px ui-monospace,monospace}</style>
+<style>html{height:100%;background:#111;color:#aaa;font:15px system-ui,sans-serif}body{height:100%;margin:0;display:grid;place-items:center}pre{max-width:80ch;white-space:pre-wrap;font:12px ui-monospace,monospace}body::before{content:"";position:fixed;inset:0 0 auto;height:env(titlebar-area-height,0px);-webkit-app-region:drag}</style>
 <body><div>${html}</div></body>`,
   )}`;
 }
@@ -13,13 +15,14 @@ const escapeHtml = (text: string) => text.replace(/[&<>"]/g, (c) => `&#${c.charC
 
 const STARTING_PAGE = messagePage("Starting&hellip;");
 
-/** The one window, which shows a placeholder until the host is ready. The renderer has no Node, runs in the sandbox with context isolation and gets no preload script. */
+/** The one window, which shows a placeholder until the host is ready. The renderer has no Node, runs in the sandbox with context isolation and gets no preload script. On macOS the title strip is replaced by the traffic lights over the page (`windowChrome`); the placeholder pages keep a draggable strip under them. */
 export function createWindow(show = true): BrowserWindow {
   const window = new BrowserWindow({
     show,
     width: 1280,
     height: 860,
     title: "Claudebot",
+    ...windowChrome(process.platform),
     webPreferences: {
       contextIsolation: true,
       sandbox: true,

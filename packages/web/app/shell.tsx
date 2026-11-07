@@ -51,7 +51,8 @@ export function Shell() {
           integrationsNeedingAttention={integrations.filter(needsAttention).length}
           onNewBot={newBot}
         />
-        <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
+        {/* Collapsed (or on a narrow window, where the sidebar is a sheet) the inset's bars start under the native window controls; expanded, the sidebar's own strip holds them. */}
+        <SidebarInset className="min-h-0 min-w-0 overflow-hidden [--titlebar-inset:env(titlebar-area-x,0px)] md:peer-data-[state=expanded]:[--titlebar-inset:0px]">
           <Outlet />
         </SidebarInset>
         <NewBotDialog open={newBotOpen} onOpenChange={setNewBotOpen} />

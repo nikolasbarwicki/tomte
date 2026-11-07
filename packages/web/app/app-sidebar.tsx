@@ -15,6 +15,7 @@ import { useTheme } from "next-themes";
 import { useState } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
+import { TitlebarStrip } from "@/components/titlebar.tsx";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -92,6 +93,7 @@ export function AppSidebar({
   };
   return (
     <Sidebar>
+      <TitlebarStrip className="border-sidebar-border [:root[data-wco]_&]:border-b" />
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Bots</SidebarGroupLabel>

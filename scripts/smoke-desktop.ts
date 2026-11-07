@@ -38,11 +38,11 @@ import {
   leftovers,
   libraryTraces,
   listing,
-  processes,
   sleep,
   trayView,
   until,
 } from "./desktop-smoke-kit.ts";
+import { type ProcessRow, processes } from "./process-guard.ts";
 
 async function main(): Promise<void> {
   const {
@@ -61,6 +61,7 @@ async function main(): Promise<void> {
     nothingRemains,
     hostLog,
     quit,
+    sweep,
     cleanup,
     settingsFile,
     loginItemFile,
@@ -662,14 +663,7 @@ async function main(): Promise<void> {
     await nothingRemains("the gracefully quit launch");
   } finally {
     for (const app of launched) await app.close().catch(() => {});
-    for (const p of leftovers(needles)) {
-      console.log(`  cleaning up leftover ${describeProcess(p)}`);
-      try {
-        process.kill(p.pid, "SIGKILL");
-      } catch {
-        // Already gone.
-      }
-    }
+    for (const p of sweep()) console.log(`  cleaned up leftover ${describeProcess(p)}`);
     await landingServer.stop(true);
     await oauth.server.stop(true);
     const unchanged = defaultFolders.every(
