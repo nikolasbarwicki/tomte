@@ -34,6 +34,8 @@ export interface HostConfig {
   reveal: boolean;
   /** Whether every bot's shell runs under isolation, not only bots with the browser enabled; remote mode only. */
   isolateAllBots: boolean;
+  /** Run as the desktop app's sidecar: read the launch token from stdin, print one JSON ready line to stdout, and shut down when stdin ends; local mode only; `--sidecar`. */
+  sidecar: boolean;
 }
 
 /** The startup flags or environment variables are wrong; the message says which and why. */
@@ -49,6 +51,7 @@ const FLAGS = {
   herdr: { type: "boolean" },
   vite: { type: "boolean" },
   "allow-plain-http": { type: "boolean" },
+  sidecar: { type: "boolean" },
   secrets: { type: "string" },
   "secrets-key-file": { type: "string" },
 } as const;
@@ -177,7 +180,7 @@ function parseFlags(argv: readonly string[]) {
 
 /**
  * Reads the host's configuration from command-line flags (`--mode`, `--data-root`, `--host`, `--port`, `--public-url`, `--allow-plain-http`,
- * `--secrets`, `--secrets-key-file`, `--herdr`, `--vite`) and
+ * `--secrets`, `--secrets-key-file`, `--herdr`, `--vite`, `--sidecar`) and
  * `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|ALLOW_PLAIN_HTTP|SECRETS|SECRETS_KEY_FILE|HERDR|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
  * Without a data root the OS application-data directory is used. Remote mode parses on Linux only (ADR-0006).
  */
@@ -194,6 +197,10 @@ export function parseHostConfig(
     throw new InvalidConfig(`invalid mode "${mode}": expected local or remote`);
   if (mode === "remote" && system.platform !== "linux")
     throw new InvalidConfig(remoteRefusal(system.platform));
+  if (mode === "remote" && values.sidecar)
+    throw new InvalidConfig(
+      "--sidecar is for the desktop app's local host and cannot run in remote mode; drop --sidecar or use --mode local",
+    );
   const rawDataRoot = values["data-root"] ?? get("CLAUDEBOT_DATA_ROOT");
   const address = values.host ?? get("CLAUDEBOT_HOST") ?? DEFAULT_BIND.address;
   const rawPublicUrl = values["public-url"] ?? get("CLAUDEBOT_PUBLIC_URL");
@@ -233,6 +240,7 @@ export function parseHostConfig(
       headedBrowser: mode === "local",
       reveal: mode === "local",
       isolateAllBots: mode === "remote",
+      sidecar: values.sidecar ?? false,
       herdr:
         values.herdr ?? (rawHerdr === undefined ? false : parseBool("CLAUDEBOT_HERDR", rawHerdr)),
       vite: values.vite ?? (rawVite === undefined ? false : parseBool("CLAUDEBOT_VITE", rawVite)),

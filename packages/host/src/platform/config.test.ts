@@ -106,6 +106,7 @@ describe("flags and environment", () => {
       headedBrowser: false,
       reveal: false,
       isolateAllBots: true,
+      sidecar: false,
       herdr: true,
       vite: true,
       askApproval: true,
@@ -452,5 +453,27 @@ describe("which Host headers name the host", () => {
     [undefined, false],
   ])("%s", (header, named) => {
     expect(origin.namesHost(header)).toBe(named);
+  });
+});
+
+describe("sidecar mode", () => {
+  test("is off unless --sidecar is passed, and is not read from the environment", () => {
+    expect(parse().config.sidecar).toBe(false);
+    expect(parse([], { CLAUDEBOT_SIDECAR: "1" }).config.sidecar).toBe(false);
+    expect(parse(["--sidecar"]).config.sidecar).toBe(true);
+  });
+
+  test("is refused in remote mode, which still parses on Linux without it", () => {
+    const linux: HostSystem = { platform: "linux", home: "/home/ada" };
+    const remote = ["--mode", "remote", "--secrets-key-file", KEY_FILE];
+    expect(() => parse([...remote, "--sidecar"], {}, linux)).toThrow(InvalidConfig);
+    expect(() => parse([...remote, "--sidecar"], {}, linux)).toThrow("remote mode");
+    expect(parse(remote, {}, linux).config.sidecar).toBe(false);
+  });
+
+  test("on macOS, remote mode is refused for its platform before the sidecar flag is considered", () => {
+    const mac: HostSystem = { platform: "darwin", home: "/Users/ada" };
+    const argv = ["--mode", "remote", "--secrets-key-file", KEY_FILE, "--sidecar"];
+    expect(() => parse(argv, {}, mac)).toThrow("Linux only");
   });
 });

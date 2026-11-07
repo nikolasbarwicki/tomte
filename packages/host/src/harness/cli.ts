@@ -101,7 +101,7 @@ export async function installManagedCli(dataRoot: string, version = "latest"): P
   mkdirSync(dest, { recursive: true });
   const tgz = join(tmpdir(), `claude-${meta.version}-${process.pid}.tgz`);
   writeFileSync(tgz, bytes);
-  const r = spawnSync("tar", ["-xzf", tgz, "-C", dest], { stdio: "inherit" });
+  const r = spawnSync("tar", ["-xzf", tgz, "-C", dest], { stdio: ["ignore", 2, 2] });
   rmSync(tgz, { force: true });
   if (r.status !== 0) throw new Error("tar extraction failed");
   const bin = findBinary(join(dest, "package"));

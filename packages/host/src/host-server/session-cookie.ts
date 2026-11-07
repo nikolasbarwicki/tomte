@@ -1,5 +1,4 @@
-/** The cookie that carries a device token for the browser UI; scripts send the same token as a bearer instead. */
-const SESSION_COOKIE = "claudebot_session";
+import { SESSION_COOKIE } from "@claudebot/contract/sidecar";
 
 /** A browser stays paired for as long as browsers let a cookie live. */
 const SESSION_MAX_AGE_SECONDS = 400 * 24 * 60 * 60;

@@ -5,7 +5,8 @@
   "exports": {
     "./events": "./src/events.ts",
     "./avatars": "./src/avatars.ts",
-    "./api": "./src/api.ts"
+    "./api": "./src/api.ts",
+    "./sidecar": "./src/sidecar.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
