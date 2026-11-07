@@ -11,16 +11,18 @@ import {
 const parse = (
   argv: readonly string[] = [],
   env: Record<string, string | undefined> = {},
-  system?: HostSystem,
+  system: HostSystem = { platform: "linux", home: "/home/ada" },
 ) => parseHostConfig(argv, env, system);
+
+const KEY_FILE = "/srv/claudebot/secrets.key";
 
 describe("defaults", () => {
   test.each([
     { name: "local mode by default", argv: [], mode: "local", port: 0 },
     { name: "local mode picks a free port", argv: ["--mode", "local"], mode: "local", port: 0 },
     {
-      name: "remote mode binds loopback on a free port until the remote mode spec says otherwise",
-      argv: ["--mode", "remote"],
+      name: "remote mode binds loopback on a free port",
+      argv: ["--mode", "remote", "--secrets-key-file", KEY_FILE],
       mode: "remote",
       port: 0,
     },
@@ -36,14 +38,32 @@ describe("defaults", () => {
     expect(config.bind).toEqual({ address: "127.0.0.1", port });
   });
 
-  test.each([["local"], ["remote"]])(
-    "%s mode serves no Vite and watches no herdr unless asked",
-    (mode) => {
-      const { config } = parse(["--mode", mode]);
-      expect(config.vite).toBe(false);
-      expect(config.herdr).toBe(false);
-    },
-  );
+  test.each([
+    ["local", []],
+    ["remote", ["--secrets-key-file", KEY_FILE]],
+  ])("%s mode serves no Vite and watches no herdr unless asked", (mode, extra) => {
+    const { config } = parse(["--mode", mode, ...extra]);
+    expect(config.vite).toBe(false);
+    expect(config.herdr).toBe(false);
+  });
+
+  test("local mode keeps secrets in the keychain, allows headed Chrome and reveal, and isolates only browser bots", () => {
+    const { config } = parse(["--mode", "local"]);
+    expect(config.secrets).toEqual({ backend: "keychain" });
+    expect(config.headedBrowser).toBe(true);
+    expect(config.reveal).toBe(true);
+    expect(config.isolateAllBots).toBe(false);
+    expect(config.allowPlainHttp).toBe(false);
+  });
+
+  test("remote mode keeps secrets in a file, runs headless without reveal, and isolates every bot", () => {
+    const { config } = parse(["--mode", "remote", "--secrets-key-file", KEY_FILE]);
+    expect(config.secrets).toEqual({ backend: "file", keyFile: KEY_FILE });
+    expect(config.headedBrowser).toBe(false);
+    expect(config.reveal).toBe(false);
+    expect(config.isolateAllBots).toBe(true);
+    expect(config.allowPlainHttp).toBe(false);
+  });
 
   test("the dev script's flags turn Vite on and leave herdr off", () => {
     const { config } = parse(["--port", "5173", "--vite"]);
@@ -69,6 +89,9 @@ describe("flags and environment", () => {
       CLAUDEBOT_HOST: "::1",
       CLAUDEBOT_PORT: "8080",
       CLAUDEBOT_PUBLIC_URL: "https://claudebot.example.com",
+      CLAUDEBOT_ALLOW_PLAIN_HTTP: "1",
+      CLAUDEBOT_SECRETS: "file",
+      CLAUDEBOT_SECRETS_KEY_FILE: KEY_FILE,
       CLAUDEBOT_HERDR: "1",
       CLAUDEBOT_ASK_APPROVAL: "1",
       CLAUDEBOT_VITE: "true",
@@ -78,6 +101,11 @@ describe("flags and environment", () => {
       mode: "remote",
       bind: { address: "::1", port: 8080 },
       publicUrl: "https://claudebot.example.com",
+      allowPlainHttp: true,
+      secrets: { backend: "file", keyFile: KEY_FILE },
+      headedBrowser: false,
+      reveal: false,
+      isolateAllBots: true,
       herdr: true,
       vite: true,
       askApproval: true,
@@ -157,9 +185,9 @@ describe("data root", () => {
   });
 
   test("remote mode has the same default as local mode", () => {
-    expect(parse(["--mode", "remote"], {}, linux).config.dataRoot).toBe(
-      parse([], {}, linux).config.dataRoot,
-    );
+    expect(
+      parse(["--mode", "remote", "--secrets-key-file", KEY_FILE], {}, linux).config.dataRoot,
+    ).toBe(parse([], {}, linux).config.dataRoot);
   });
 
   test("an environment variable overrides the default", () => {
@@ -182,7 +210,10 @@ describe("data root", () => {
   });
 });
 
-describe("loopback only", () => {
+describe("binding beyond loopback", () => {
+  const URL_HTTPS = "https://claudebot.example.com";
+  const URL_HTTP = "http://100.64.0.7:8080";
+
   test.each([
     "0.0.0.0",
     "::",
@@ -191,19 +222,62 @@ describe("loopback only", () => {
     "8.8.8.8",
     "claudebot.example.com",
     "128.0.0.1",
-  ])("rejects binding %s and names it", (address) => {
-    expect(() => parse(["--host", address])).toThrow(InvalidConfig);
-    expect(() => parse(["--host", address])).toThrow(address);
-  });
+  ])(
+    "rejects binding %s with no public URL and no flag, names it, and names both ways out",
+    (address) => {
+      expect(() => parse(["--host", address])).toThrow(InvalidConfig);
+      expect(() => parse(["--host", address])).toThrow(address);
+      expect(() => parse(["--host", address])).toThrow("--public-url");
+      expect(() => parse(["--host", address])).toThrow("--allow-plain-http");
+    },
+  );
 
   test("rejects a non-loopback bind from the environment", () => {
     expect(() => parse([], { CLAUDEBOT_HOST: "0.0.0.0" })).toThrow("0.0.0.0");
   });
 
   test("remote mode rejects it too", () => {
-    expect(() => parse(["--mode", "remote", "--host", "203.0.113.7"])).toThrow("203.0.113.7");
+    expect(() =>
+      parse(["--mode", "remote", "--secrets-key-file", KEY_FILE, "--host", "203.0.113.7"]),
+    ).toThrow("203.0.113.7");
   });
 
+  test("rejects a non-loopback bind with an HTTP public URL and no flag", () => {
+    expect(() => parse(["--host", "0.0.0.0", "--public-url", URL_HTTP])).toThrow(
+      "--allow-plain-http",
+    );
+  });
+
+  test.each([
+    { name: "an HTTPS public URL", argv: ["--public-url", URL_HTTPS], env: {} },
+    {
+      name: "an HTTPS public URL from the environment",
+      argv: [],
+      env: { CLAUDEBOT_PUBLIC_URL: URL_HTTPS },
+    },
+    { name: "--allow-plain-http", argv: ["--allow-plain-http"], env: {} },
+    {
+      name: "--allow-plain-http and an HTTP public URL",
+      argv: ["--allow-plain-http", "--public-url", URL_HTTP],
+      env: {},
+    },
+    { name: "CLAUDEBOT_ALLOW_PLAIN_HTTP", argv: [], env: { CLAUDEBOT_ALLOW_PLAIN_HTTP: "1" } },
+  ])("accepts binding 0.0.0.0 with $name", ({ argv, env }) => {
+    expect(parse(["--host", "0.0.0.0", ...argv], env).config.bind.address).toBe("0.0.0.0");
+  });
+
+  test("the plain-HTTP flag is off unless set, and the environment can switch it off", () => {
+    expect(parse().config.allowPlainHttp).toBe(false);
+    expect(parse(["--allow-plain-http"]).config.allowPlainHttp).toBe(true);
+    expect(parse([], { CLAUDEBOT_ALLOW_PLAIN_HTTP: "0" }).config.allowPlainHttp).toBe(false);
+  });
+
+  test("an HTTP public URL on a loopback bind needs no flag", () => {
+    expect(parse(["--public-url", URL_HTTP]).config.publicUrl).toBe(URL_HTTP);
+  });
+});
+
+describe("loopback binds", () => {
   test.each([
     ["127.0.0.1", "127.0.0.1"],
     ["127.8.9.10", "127.8.9.10"],
@@ -248,13 +322,15 @@ describe("invalid input", () => {
     expect(() => parse(argv)).toThrow(message);
   });
 
-  test.each([["CLAUDEBOT_HERDR"], ["CLAUDEBOT_VITE"], ["CLAUDEBOT_ASK_APPROVAL"]])(
-    "rejects %s set to a value that is not 1, true, 0 or false",
-    (name) => {
-      expect(() => parse([], { [name]: "yes" })).toThrow(InvalidConfig);
-      expect(() => parse([], { [name]: "yes" })).toThrow(name);
-    },
-  );
+  test.each([
+    ["CLAUDEBOT_HERDR"],
+    ["CLAUDEBOT_VITE"],
+    ["CLAUDEBOT_ASK_APPROVAL"],
+    ["CLAUDEBOT_ALLOW_PLAIN_HTTP"],
+  ])("rejects %s set to a value that is not 1, true, 0 or false", (name) => {
+    expect(() => parse([], { [name]: "yes" })).toThrow(InvalidConfig);
+    expect(() => parse([], { [name]: "yes" })).toThrow(name);
+  });
 
   test("tool approval is off unless CLAUDEBOT_ASK_APPROVAL turns it on", () => {
     expect(parse().config.askApproval).toBe(false);
@@ -265,6 +341,90 @@ describe("invalid input", () => {
     expect(() => parse(["--public-url", "https://user:hunter2@claudebot.example.com"])).not.toThrow(
       "hunter2",
     );
+  });
+});
+
+describe("remote mode platform", () => {
+  const argv = ["--mode", "remote", "--secrets-key-file", KEY_FILE];
+
+  test("is refused on macOS, naming Linux and the keychain", () => {
+    const system: HostSystem = { platform: "darwin", home: "/Users/ada" };
+    expect(() => parse(argv, {}, system)).toThrow(InvalidConfig);
+    expect(() => parse(argv, {}, system)).toThrow("Linux only");
+    expect(() => parse(argv, {}, system)).toThrow("keychain");
+    expect(() =>
+      parse([], { CLAUDEBOT_MODE: "remote", CLAUDEBOT_SECRETS_KEY_FILE: KEY_FILE }, system),
+    ).toThrow("Linux only");
+  });
+
+  test("is refused on Windows, naming Linux", () => {
+    const system: HostSystem = { platform: "win32", home: "C:\\Users\\ada" };
+    expect(() => parse(argv, {}, system)).toThrow(InvalidConfig);
+    expect(() => parse(argv, {}, system)).toThrow("Linux only");
+  });
+
+  test("parses on Linux", () => {
+    expect(parse(argv, {}, { platform: "linux", home: "/home/ada" }).config.mode).toBe("remote");
+  });
+
+  test.each(["darwin", "win32", "linux"] as const)("local mode parses on %s", (platform) => {
+    expect(parse([], {}, { platform, home: "/home/ada" }).config.mode).toBe("local");
+  });
+});
+
+describe("secrets backend", () => {
+  test("a bare remote mode is rejected: its default backend is a file and it has no key file", () => {
+    expect(() => parse(["--mode", "remote"])).toThrow(InvalidConfig);
+    expect(() => parse(["--mode", "remote"])).toThrow("--secrets-key-file");
+  });
+
+  test.each([
+    { argv: ["--secrets", "file"], message: "--secrets-key-file" },
+    {
+      argv: ["--secrets", "file", "--secrets-key-file", "keys/secrets.key"],
+      message: "absolute path",
+    },
+    { argv: ["--secrets", "file", "--secrets-key-file", ""], message: "absolute path" },
+    { argv: ["--secrets", "vault"], message: "vault" },
+    { argv: ["--secrets-key-file", KEY_FILE], message: "keychain" },
+    { argv: ["--secrets", "keychain", "--secrets-key-file", KEY_FILE], message: "keychain" },
+    {
+      argv: ["--mode", "remote", "--secrets", "keychain", "--secrets-key-file", KEY_FILE],
+      message: "keychain",
+    },
+  ])("rejects $argv", ({ argv, message }) => {
+    expect(() => parse(argv)).toThrow(InvalidConfig);
+    expect(() => parse(argv)).toThrow(message);
+  });
+
+  test.each([
+    {
+      name: "local mode can opt into the file backend",
+      argv: ["--secrets", "file", "--secrets-key-file", KEY_FILE],
+      secrets: { backend: "file", keyFile: KEY_FILE },
+    },
+    {
+      name: "remote mode can opt into the keychain",
+      argv: ["--mode", "remote", "--secrets", "keychain"],
+      secrets: { backend: "keychain" },
+    },
+  ])("$name", ({ argv, secrets }) => {
+    expect(parse(argv).config.secrets).toEqual(secrets);
+  });
+
+  test("the environment names the backend and the key file, and a flag wins", () => {
+    const env = { CLAUDEBOT_SECRETS: "file", CLAUDEBOT_SECRETS_KEY_FILE: KEY_FILE };
+    expect(parse([], env).config.secrets).toEqual({ backend: "file", keyFile: KEY_FILE });
+    expect(parse(["--secrets-key-file", "/other/key"], env).config.secrets).toEqual({
+      backend: "file",
+      keyFile: "/other/key",
+    });
+  });
+
+  test("an empty key file variable counts as unset", () => {
+    expect(parse([], { CLAUDEBOT_SECRETS_KEY_FILE: "" }).config.secrets).toEqual({
+      backend: "keychain",
+    });
   });
 });
 

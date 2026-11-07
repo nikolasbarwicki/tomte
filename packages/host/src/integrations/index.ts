@@ -84,9 +84,11 @@ const DISCOVERY_TIMEOUT_MS = 15_000;
 const SIGN_IN_TTL_MS = 10 * 60_000;
 const EXPIRY_MARGIN_MS = 5 * 60_000;
 
-/** The OAuth half of an integration's keychain entry: the registered client and the current tokens. */
+/** The OAuth half of an integration's keychain entry: the registered client, the redirect URL it was registered with, and the current tokens. */
 const OAuthSecret = z.object({
   client: z.union([OAuthClientInformationFullSchema, OAuthClientInformationSchema]).exactOptional(),
+  /** Recorded when a client is registered dynamically; absent for a static client and for a client registered before it was recorded. */
+  redirectUrl: z.string().exactOptional(),
   tokens: OAuthTokensSchema.exactOptional(),
   expiresAt: z.number().optional(),
 });
@@ -98,6 +100,18 @@ const Secret = z.object({
   oauth: OAuthSecret.exactOptional(),
 });
 type Secret = z.infer<typeof Secret>;
+
+/**
+ * The redirect URLs a dynamically registered client is registered for. A client stored before the URL was recorded
+ * falls back to the `redirect_uris` the server echoed in its client information; one with neither is unknown, so it
+ * is treated as registered for no current URL and registers again on the next connect.
+ */
+const registeredRedirects = (o: OAuthSecret): string[] =>
+  o.redirectUrl !== undefined
+    ? [o.redirectUrl]
+    : o.client && "redirect_uris" in o.client
+      ? o.client.redirect_uris
+      : [];
 
 /** Google issues a refresh token only when asked for offline access, and re-issues one only on a fresh consent. */
 export function withOfflineAccess(u: URL): URL {
@@ -131,6 +145,7 @@ class OAuthState implements OAuthClientProvider {
   clientInformation = () => this.secret.client;
   saveClientInformation(c: OAuthClientInformationMixed) {
     this.secret.client = c;
+    this.secret.redirectUrl = this.redirectUrl;
   }
   tokens = () => this.secret.tokens;
   async saveTokens(t: OAuthTokens) {
@@ -468,7 +483,7 @@ export function createIntegrations(deps: {
     }
   }
 
-  /** Registers (or reuses) a client, then returns the provider's authorize URL. A browsed built-in gets its row here; no secret is stored until sign-in completes. */
+  /** Registers (or reuses) a client, then returns the provider's authorize URL. A dynamically registered client that was registered for another redirect URL is dropped and registers again; its tokens stay stored until the new sign-in completes. A browsed built-in gets its row here; no secret is stored until sign-in completes. */
   async function connectOAuth(
     rawId: string,
     own?: { clientId: string; clientSecret: string },
@@ -479,7 +494,10 @@ export function createIntegrations(deps: {
       throw new InvalidInput("this integration does not sign in with OAuth");
     for (const [state, p] of pending) if (now() - p.at > SIGN_IN_TTL_MS) pending.delete(state);
     const state = randomBytes(24).toString("base64url");
-    let client = (await readSecret(r.id)).oauth?.client;
+    const stored = (await readSecret(r.id)).oauth;
+    let client = stored?.client;
+    if (stored && !ownClient && !registeredRedirects(stored).includes(deps.oauthRedirectUrl))
+      client = undefined;
     if (ownClient) {
       const clientId = own?.clientId.trim();
       const clientSecret = own?.clientSecret.trim();

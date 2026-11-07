@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { claudeHarness } from "../harness/index.ts";
-import { browserIsolation, sandboxStatus } from "./sandbox.ts";
+import { sandboxStatus } from "./sandbox.ts";
 
 const probe = (platform: NodeJS.Platform, have: string[] = []) => ({
   platform,
@@ -28,31 +27,5 @@ describe("sandbox availability", () => {
       status: "unavailable",
       reason: expect.stringContaining("win32"),
     });
-  });
-});
-
-describe("claude isolation profile", () => {
-  const launch = (isolation = {}) =>
-    claudeHarness.launch({ hostServers: [], systemPromptAppend: "", isolation }).options;
-
-  test("browser bots get a hard sandbox with outbound traffic and denied state dir", () => {
-    const o = launch(browserIsolation());
-    expect(o.sandbox).toMatchObject({
-      enabled: true,
-      failIfUnavailable: true,
-      allowUnsandboxedCommands: false,
-      network: { allowedDomains: ["*"] },
-      filesystem: { denyRead: expect.arrayContaining([expect.stringContaining(".agent-browser")]) },
-    });
-    expect(o.sandbox?.network?.allowLocalBinding).toBeUndefined();
-    expect(o.disallowedTools).toContainEqual(
-      expect.stringMatching(/^Read\(\/\/.*\.agent-browser\/\*\*\)$/),
-    );
-  });
-
-  test("bots without the browser stay unconfined", () => {
-    const o = launch();
-    expect(o.sandbox).toBeUndefined();
-    expect(o.disallowedTools).toEqual([]);
   });
 });

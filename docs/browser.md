@@ -73,7 +73,7 @@ What you type and click during a takeover is sent straight to the browser. It is
 Open **Credentials** to add website logins: a label, a sign-in URL, a username and a password.
 
 - The sign-in URL must be `https` (plain `http` is accepted only for localhost, for testing). The entry is bound to that URL's origin (scheme, host, port).
-- The password is stored **only in the OS keychain**. It is not in claudebot's database or files, and no screen or API returns it. Editing an entry with an empty password keeps the old one.
+- The password is stored **only in the host's secret store** (the OS keychain, or the encrypted secrets file in remote mode). It is not in claudebot's database or files, and no screen or API returns it. Editing an entry with an empty password keeps the old one.
 - A bot can list entries by label and site (never secrets) and sign in by naming one with `browser_login`. The password never reaches the model, transcript, tool arguments or tool output.
 - The engine fills the password only on a page matching the entry's origin.
 - **First use needs your approval.** The bot's chat shows an approval card (**Allow** / **Deny**). Allow creates a **grant** for that bot and that entry; the bot is told to call `browser_login` again. The grant is remembered.

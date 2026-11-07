@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { errorOf, parseJson } from "@/host/api.ts";
+import { usePublicHostInfo } from "@/host/hooks.ts";
 import { cn } from "@/lib/utils";
 
 import {
@@ -202,6 +203,7 @@ export function BrowserPanel({
   const url = tabs.find((t) => t.active)?.url || navigated;
   const [controlling, startControl] = useTransition();
   const [configuring, configure] = useTransition();
+  const canShowWindow = usePublicHostInfo()?.capabilities.headedBrowser === true;
   const control = (action: "take" | "hand_back") =>
     startControl(async () => {
       const res = await controlBrowser(botId, action);
@@ -253,16 +255,18 @@ export function BrowserPanel({
             {configuring ? <Spinner /> : <EllipsisIcon />}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuCheckboxItem
-              checked={headed}
-              onCheckedChange={(checked) =>
-                configure(async () => {
-                  await setBrowserHeaded(botId, checked);
-                })
-              }
-            >
-              Show window
-            </DropdownMenuCheckboxItem>
+            {canShowWindow && (
+              <DropdownMenuCheckboxItem
+                checked={headed}
+                onCheckedChange={(checked) =>
+                  configure(async () => {
+                    await setBrowserHeaded(botId, checked);
+                  })
+                }
+              >
+                Show window
+              </DropdownMenuCheckboxItem>
+            )}
             <DropdownMenuItem
               onClick={() =>
                 configure(async () => {

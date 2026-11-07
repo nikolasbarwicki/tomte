@@ -18,7 +18,12 @@ export function createApi(ctx: ApiContext): Handler {
   const anyBot = botRoutes(ctx);
   const openBot = { ...chatRoutes(ctx), ...fileRoutes(ctx) };
 
-  async function api(req: IncomingMessage, res: ServerResponse, path: string) {
+  async function api(
+    req: IncomingMessage,
+    res: ServerResponse,
+    path: string,
+    query: URLSearchParams,
+  ) {
     if (path === "/api/events") return ctx.events.subscribe(req, res, ctx.snapshot());
     const b = await readJsonObject(req);
     if (path.startsWith("/api/devices/")) return deviceApi(ctx, req, res, path, b);
@@ -28,7 +33,7 @@ export function createApi(ctx: ApiContext): Handler {
       const r = await credentialApi(ctx.credentials, path, b);
       return r ? json(res, r.body, r.status) : void res.writeHead(404).end();
     }
-    const r: ApiRequest = { res, path, parse: (schema) => schema.parse(b) };
+    const r: ApiRequest = { res, path, query, parse: (schema) => schema.parse(b) };
     const botRoute = Object.hasOwn(anyBot, path) ? anyBot[path] : undefined;
     if (botRoute) return botRoute(r);
     const chat = ctx.chats.open();
@@ -39,7 +44,7 @@ export function createApi(ctx: ApiContext): Handler {
   }
 
   return (req, res, url) =>
-    api(req, res, url.pathname).catch((e) => {
+    api(req, res, url.pathname, url.searchParams).catch((e) => {
       if (!res.headersSent) {
         if (e instanceof InvalidBody) return json(res, { error: e.message }, 400);
         if (e instanceof z.ZodError) return json(res, { error: z.prettifyError(e) }, 400);

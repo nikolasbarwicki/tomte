@@ -5,6 +5,7 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { PublicHostInfo } from "@claudebot/contract/api";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
@@ -250,6 +251,15 @@ describe("sandbox unavailable", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: NO_SANDBOX.reason });
     await closeAll();
+  });
+
+  test("host-info reports the sandbox capability as it changes, without a device token", async () => {
+    const capability = async () =>
+      PublicHostInfo.parse(await (await fetch(`${server.clientUrl}/api/host-info`)).json())
+        .capabilities.browserSandbox;
+    expect(await capability()).toBe(true);
+    sandbox = NO_SANDBOX;
+    expect(await capability()).toBe(false);
   });
 });
 

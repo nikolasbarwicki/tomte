@@ -14,7 +14,7 @@ import { createHumanWaits, type HumanWaitsOptions } from "./human-waits.ts";
 import { createLiveView, type LiveViewOptions } from "./live-view.ts";
 import { CREDENTIAL_EXCHANGE_PATH, createBrowserLogin } from "./login.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./runtime.ts";
-import { sandboxStatus, type SandboxStatus } from "./sandbox.ts";
+import { browserIsolation, sandboxStatus, type SandboxStatus } from "./sandbox.ts";
 import { Takeover } from "./takeover.ts";
 import { createBrowserUiRoutes } from "./ui-routes.ts";
 
@@ -24,6 +24,7 @@ export { installManagedEngine } from "./engine.ts";
 export { LIVE_VIEW_PATH } from "./live-view.ts";
 export { CREDENTIAL_PLUGIN_COMMAND } from "./login.ts";
 export { BROWSER_UI_PATHS } from "./ui-routes.ts";
+export { browserIsolation, sandboxStatus };
 export {
   CREDENTIAL_EXCHANGE_PATH,
   type BrowserRuntimeOptions,
@@ -41,6 +42,8 @@ export interface BrowserOptions extends HumanWaitsOptions {
   /** The agent listener: bots are leased URLs on it, and the browser endpoint and credential exchange check requests against it. */
   agent: HostOrigin;
   bot(botId: string): Bot | undefined;
+  /** Whether a bot may run headed Chrome. When false, Chrome launches headless whatever a bot's stored setting says. */
+  headedAllowed: boolean;
   filesDir: (botId: string) => string;
   /** True while no human is watching the bot's turn. */
   unattended: (botId: string) => boolean;
@@ -63,6 +66,8 @@ export interface Browser {
   handleLiveView(req: IncomingMessage, res: ServerResponse): Promise<void>;
   /** Serves the paths in `BROWSER_UI_PATHS`. */
   handleUi(req: IncomingMessage, res: ServerResponse, path: string): Promise<void>;
+  /** Whether the shell sandbox can run here. */
+  sandbox(): SandboxStatus;
   /** Whether the browser can be switched on: the engine, Chrome and the shell sandbox must all be usable. */
   status(): EngineStatus;
   /** Wait cards still open for a bot, to replay into its chat. */
@@ -85,7 +90,7 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
   await egress.start();
   const runtimes = createBrowserRuntimes(o.secrets, egress, o.dataRoot, {
     ...o.runtime,
-    headed: (botId) => o.bot(botId)?.browser.headed ?? false,
+    headed: (botId) => o.headedAllowed && (o.bot(botId)?.browser.headed ?? false),
   });
   runtimes.start();
   const waits = createHumanWaits({ emit: o.emit, deliver: o.deliver });
@@ -130,6 +135,7 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
     handleCredentialExchange: (req, res) => login.handle(req, res, o.agent),
     handleLiveView: (req, res) => liveView.handle(req, res),
     handleUi: ui,
+    sandbox: sandboxOf,
     status() {
       const engine = engineStatus(o.dataRoot);
       if (engine.status === "unavailable") return engine;

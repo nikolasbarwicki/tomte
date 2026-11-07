@@ -148,6 +148,10 @@ export function OwnClientForm({
         <Field>
           <FieldLabel>Redirect address to register</FieldLabel>
           <CopyBlock value={i.redirectUrl} />
+          <FieldDescription>
+            Register this address with the provider. If the host's public URL changes, register the
+            new one too.
+          </FieldDescription>
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field>

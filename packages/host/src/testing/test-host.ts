@@ -1,9 +1,11 @@
 // Shared whole-host setup for handoff tests: the real host server, the fake Claude CLI and MCP clients acting as bots.
 // Each test file starts its own host with `startHandoffHost()` and stops it with `stop()`; `hostFlags` are command-line flags for the host's config and `ui` is the built web UI the client listener serves.
 // The data root is a temp directory and the database is in memory, unless `hostFlags` carries `--data-root`: then the database is a file in that data root. `cwd` is the host's workspace directory inside the data root.
+// The host runs the fake CLI through a wrapper script that names the fake's state directory on its command line, so the fake needs nothing from its environment.
 import { Database } from "bun:sqlite";
 import { expect } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -19,8 +21,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import { createBot } from "../bots/index.ts";
-import { createHostServer, type HostServer } from "../host-server/index.ts";
-import { parseHostConfig } from "../platform/config.ts";
+import { createHostServer, type HostServer, type HostServerOptions } from "../host-server/index.ts";
+import { parseHostConfig, type HostSystem } from "../platform/config.ts";
 import { acquireDataRootLock, type DataRootLock } from "../platform/data-root-lock.ts";
 import { migrate, openDb } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
@@ -31,11 +33,10 @@ import { asDevice, pairDevice } from "./paired-device.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "fake-agent-browser.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "fake-claude.ts");
-const ENV_KEYS = [
-  "AGENT_BROWSER_PATH",
-  "AGENT_BROWSER_EXECUTABLE_PATH",
-  "FAKE_CLAUDE_DIR",
-] as const;
+const ENV_KEYS = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH"] as const;
+
+/** Remote mode parses on Linux only; the data root is explicit, so tests on any OS can name it. */
+const LINUX: HostSystem = { platform: "linux", home: tmpdir() };
 
 export type ToolResult = { isError: boolean; text: string };
 export type BotCaller = (name: string, args?: Record<string, unknown>) => Promise<ToolResult>;
@@ -52,14 +53,25 @@ export interface HandoffHost {
   actAs(botId: string): Promise<{ call: BotCaller; token: string; url: string; revoke(): void }>;
   /** Texts the fake CLI received for the bot's first session, oldest first. */
   messagesOf(botId: string): string[];
-  /** CLI launches the fake CLI recorded: the directory it ran in, the system prompt addition and the MCP servers it was given. */
+  /** CLI launches the fake CLI recorded: the directory it ran in, the system prompt addition, the MCP servers it was given, the whole environment it started with and its command line. */
   launches(): {
     cwd: string;
     appendSystemPrompt?: string;
     mcpServers: Record<string, { url: string; headers: { Authorization: string } }>;
+    env: Record<string, string>;
+    argv: string[];
   }[];
+  /** The browser engine invocations the fake engine recorded, oldest first. */
+  engineCalls(): { argv: string[] }[];
   /** From now on, every message the fake CLI receives makes it call the host's `remember` tool with this line. */
   rememberOnMessage(scope: "user" | "bot", line: string): void;
+  /** The executable the host runs as its Claude CLI, and what its `auth status` reports from now on. */
+  readonly cliPath: string;
+  setSignedIn(signedIn: boolean): void;
+  /** The exit code the fake's `auth login` returns from now on. */
+  setLoginExit(code: number): void;
+  /** Whether the host finds the shell sandbox usable from now on; it starts out usable. */
+  setSandboxAvailable(available: boolean): void;
   /** While held, a message the fake CLI receives keeps its turn running. */
   hold(): void;
   release(): void;
@@ -77,14 +89,16 @@ export interface HandoffHost {
   until(check: () => boolean, ms?: number): Promise<void>;
   /** Moves the clock that pairing codes expire by forward; nothing sleeps. It survives `restart()`. */
   advanceClock(ms: number): void;
-  /** Closes the host and starts a new one on the same database and data root; `server` is replaced. */
-  restart(): Promise<void>;
+  /** Closes the host and starts a new one on the same database and data root; `server` is replaced. `hostFlags` replaces the flags the host started with. */
+  restart(hostFlags?: string[]): Promise<void>;
   stop(): Promise<void>;
 }
 
 export async function startHandoffHost(
   hostFlags: string[] = [],
   ui?: UiAssets,
+  /** Stands in for the OS file manager, so a test sees what the host would reveal and never launches one. */
+  reveal?: HostServerOptions["reveal"],
 ): Promise<HandoffHost> {
   const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   const root = realpathSync(mkdtempSync(join(tmpdir(), "handoffs-test-")));
@@ -96,9 +110,14 @@ export async function startHandoffHost(
   writeFileSync(chrome, "");
   process.env.AGENT_BROWSER_PATH = FAKE_ENGINE;
   process.env.AGENT_BROWSER_EXECUTABLE_PATH = chrome;
-  process.env.FAKE_CLAUDE_DIR = claudeDir;
+  const cliPath = join(root, "claude-wrapper");
+  writeFileSync(
+    cliPath,
+    `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE_CLAUDE)} ${JSON.stringify(claudeDir)} "$@"\n`,
+  );
+  chmodSync(cliPath, 0o755);
 
-  const config = parseHostConfig(["--data-root", dataRoot, ...hostFlags], {}).config;
+  let config = parseHostConfig(["--data-root", dataRoot, ...hostFlags], {}, LINUX).config;
   const restoreEnv = () => {
     for (const k of ENV_KEYS)
       if (saved[k] === undefined) delete process.env[k];
@@ -118,14 +137,19 @@ export async function startHandoffHost(
     : migrate(new Database(":memory:"));
   const secrets = memorySecrets();
   let clock = Date.now();
+  let sandboxAvailable = true;
   const startServer = () =>
     createHostServer({
       config,
-      cli: { path: FAKE_CLAUDE, source: "CLAUDE_PATH", needsShell: false },
+      cli: { path: cliPath, source: "CLAUDE_PATH", needsShell: false },
       db,
       secrets,
       browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir } },
-      sandbox: () => ({ status: "available" }),
+      sandbox: () =>
+        sandboxAvailable
+          ? { status: "available" }
+          : { status: "unavailable", reason: "no sandbox in this test" },
+      ...(reveal !== undefined && { reveal }),
       now: () => clock,
       ...(ui !== undefined && { ui }),
     });
@@ -178,8 +202,18 @@ export async function startHandoffHost(
         .filter((m: { sessionId: string }) => m.sessionId === botId)
         .map((m: { text: string }) => m.text),
     launches: () => lines(join(claudeDir, "launches.jsonl")),
+    engineCalls: () => lines(join(fakeDir, "calls.jsonl")),
     rememberOnMessage: (scope, line) =>
       writeFileSync(join(claudeDir, "remember.json"), JSON.stringify({ scope, line })),
+    cliPath,
+    setSignedIn: (signedIn) =>
+      signedIn
+        ? rmSync(join(claudeDir, "signed-out"), { force: true })
+        : writeFileSync(join(claudeDir, "signed-out"), ""),
+    setLoginExit: (code) => writeFileSync(join(claudeDir, "login-exit"), String(code)),
+    setSandboxAvailable: (available) => {
+      sandboxAvailable = available;
+    },
     hold: () => writeFileSync(join(claudeDir, "hold"), ""),
     release: () => rmSync(join(claudeDir, "hold"), { force: true }),
     advanceClock: (ms) => {
@@ -199,9 +233,11 @@ export async function startHandoffHost(
       for (let i = 0; i < ms / 25 && !check(); i++) await Bun.sleep(25);
       expect(check()).toBe(true);
     },
-    async restart() {
+    async restart(flags) {
       await Promise.all(clients.splice(0).map((c) => c.close()));
       await server.close();
+      if (flags)
+        config = parseHostConfig(["--data-root", config.dataRoot, ...flags], {}, LINUX).config;
       server = await startServer();
     },
     async stop() {

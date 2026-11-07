@@ -7,9 +7,12 @@ export interface SecretStore {
 
 const SERVICE = "claudebot";
 
+/** On Windows a roaming profile would copy the default entry to other computers; `local` keeps it on this one. */
+const PERSIST = process.platform === "win32" ? ({ persist: "local" } as const) : {};
+
 export const keychainSecrets: SecretStore = {
   get: (name) => Bun.secrets.get({ service: SERVICE, name }),
-  set: (name, value) => Bun.secrets.set({ service: SERVICE, name, value }),
+  set: (name, value) => Bun.secrets.set({ service: SERVICE, name, value, ...PERSIST }),
   delete: async (name) => void (await Bun.secrets.delete({ service: SERVICE, name })),
 };
 

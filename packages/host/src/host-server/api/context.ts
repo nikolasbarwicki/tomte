@@ -20,9 +20,13 @@ export interface ApiContext {
   cwd: string;
   /** Where bots, their memory and the user memory live. */
   dataRoot: string;
+  /** Whether a bot may run headed Chrome; see `HostConfig.headedBrowser`. */
+  headedBrowser: boolean;
   cli: ResolvedCli;
   db: Database;
   chats: Chats;
+  /** Called after a bot is created, so sessions open before it pick up what depends on the set of bots. */
+  botsChanged: () => void;
   browser: Browser;
   routines: Routines;
   integrations: Integrations;
@@ -31,14 +35,17 @@ export interface ApiContext {
   /** Which device each request came from, and the responses still open for it. */
   sessions: DeviceSessions;
   events: EventStream;
+  /** Shows a path in the OS file manager; absent when the host cannot (`config.reveal` is off), so no request can spawn one. */
+  reveal: ((path: string, log: (line: string) => void) => void) | undefined;
   /** Everything a page receives when it connects. */
   snapshot(): HostEvent[];
 }
 
-/** A decoded `/api/*` request: its path and JSON body. */
+/** A decoded `/api/*` request: its path, query string and JSON body. */
 export interface ApiRequest {
   res: ServerResponse;
   path: string;
+  query: URLSearchParams;
   /** The body parsed by `schema`; a mismatch throws a `ZodError`, which the API answers with 400. */
   parse: <T>(schema: z.ZodType<T>) => T;
 }

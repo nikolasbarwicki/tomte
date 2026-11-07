@@ -9,6 +9,7 @@ const useHost = <T>(sel: (s: HostState) => T) =>
   useSyncExternalStore(hostStore.subscribe, () => sel(hostStore.get()));
 
 export const useHostInfo = () => useHost((s) => s.info);
+export const usePublicHostInfo = () => useHost((s) => s.publicInfo);
 export const useBots = () => useHost((s) => s.bots);
 export const useOpenBotId = () => useHost((s) => s.openBotId);
 export const useChat = () => useHost((s) => s.chat);

@@ -15,6 +15,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { migrate } from "../platform/db.ts";
 import { InvalidInput } from "../platform/errors.ts";
 import { memorySecrets } from "../platform/secrets.ts";
+import { oauthFixture } from "../testing/fake-oauth-server.ts";
 import { CATALOG, type CatalogEntry } from "./catalog.ts";
 import {
   NameTaken,
@@ -641,115 +642,6 @@ test("a failed clone is an inline error and the connection still works", async (
   }
 });
 
-/** A fake authorization server and a protected MCP server on one origin: discovery, DCR, PKCE code exchange, refresh. */
-function oauthFixture(own?: { id: string; secret: string }) {
-  let registrations = 0;
-  const codes = new Map<string, { challenge: string; clientId: string }>();
-  const live = new Set<string>();
-  const refreshes = new Set<string>();
-  let n = 0;
-  const s = Bun.serve({
-    port: 0,
-    async fetch(req) {
-      const u = new URL(req.url);
-      const origin = u.origin;
-      const j = (v: unknown, status = 200) => Response.json(v, { status });
-      if (u.pathname === "/.well-known/oauth-protected-resource/mcp")
-        return j({ resource: `${origin}/mcp`, authorization_servers: [origin] });
-      if (u.pathname === "/.well-known/oauth-authorization-server")
-        return j({
-          issuer: origin,
-          authorization_endpoint: `${origin}/authorize`,
-          token_endpoint: `${origin}/token`,
-          ...(!own && { registration_endpoint: `${origin}/register` }),
-          response_types_supported: ["code"],
-          code_challenge_methods_supported: ["S256"],
-          grant_types_supported: ["authorization_code", "refresh_token"],
-          token_endpoint_auth_methods_supported: own ? ["client_secret_post"] : ["none"],
-        });
-      if (u.pathname === "/register") {
-        registrations++;
-        const meta = (await req.json()) as object;
-        return j({ ...meta, client_id: `client-${++n}` }, 201);
-      }
-      if (u.pathname === "/token") {
-        const f = new URLSearchParams(await req.text());
-        if (own && (f.get("client_id") !== own.id || f.get("client_secret") !== own.secret))
-          return j(
-            { error: "invalid_client", error_description: "The client credentials are incorrect" },
-            401,
-          );
-        const issue = () => {
-          const access = `at-${++n}`;
-          live.add(access);
-          const refresh = `rt-${n}`;
-          refreshes.add(refresh);
-          return j({
-            access_token: access,
-            token_type: "Bearer",
-            expires_in: 3600,
-            refresh_token: refresh,
-          });
-        };
-        if (f.get("grant_type") === "refresh_token")
-          return refreshes.delete(f.get("refresh_token") ?? "")
-            ? issue()
-            : j({ error: "invalid_grant" }, 400);
-        const c = codes.get(f.get("code") ?? "");
-        codes.delete(f.get("code") ?? "");
-        const verifier = f.get("code_verifier") ?? "";
-        const digest = new Bun.CryptoHasher("sha256").update(verifier).digest("base64url");
-        if (!c || c.challenge !== digest) return j({ error: "invalid_grant" }, 400);
-        return issue();
-      }
-      if (u.pathname === "/mcp") {
-        const bearer = req.headers.get("authorization")?.slice(7) ?? "";
-        if (!live.has(bearer))
-          return new Response("no", {
-            status: 401,
-            headers: {
-              "www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`,
-            },
-          });
-        const mcp = new McpServer({ name: "fixture", version: "1.0.0" });
-        mcp.registerTool(
-          "lookup",
-          { description: "x", annotations: { readOnlyHint: true } },
-          async () => ({ content: [{ type: "text", text: "ok" }] }),
-        );
-        mcp.registerTool(
-          "delete_all",
-          { description: "x", annotations: { destructiveHint: true } },
-          async () => ({ content: [{ type: "text", text: "gone" }] }),
-        );
-        const transport = new WebStandardStreamableHTTPServerTransport({
-          enableJsonResponse: true,
-        });
-        await mcp.connect(transport);
-        return transport.handleRequest(req);
-      }
-      return new Response("nope", { status: 404 });
-    },
-  });
-  /** What the browser does at the authorize URL: approve and return the redirect's query. */
-  const approve = (authorizeUrl: string) => {
-    const a = new URL(authorizeUrl);
-    const code = `code-${++n}`;
-    codes.set(code, {
-      challenge: a.searchParams.get("code_challenge")!,
-      clientId: a.searchParams.get("client_id")!,
-    });
-    return { a, code, state: a.searchParams.get("state")! };
-  };
-  return {
-    server: s,
-    url: `http://127.0.0.1:${s.port}/mcp`,
-    approve,
-    registrations: () => registrations,
-    expireAll: () => live.clear(),
-  };
-}
-
 test("OAuth: Connect returns an authorize URL, the right state stores tokens and lists tools, and a reconnect restores tool choices", async () => {
   const f = oauthFixture();
   try {
@@ -1102,6 +994,144 @@ test("own client: built-ins sharing an app label sign in with the client entered
       "two",
     ]);
     expect((await integrations.finishOAuth(y.state, { code: y.code })).state).toBe("connected");
+  } finally {
+    await f.server.stop(true);
+  }
+});
+
+const MOVED = "https://claudebot.example.com/oauth/callback";
+
+/** One database and keychain, two hosts: an integration signs in under `REDIRECT`, then a host with `to` as its redirect URL takes over. `edit` rewrites the stored secret first. */
+async function signedInThenMoved(
+  f: ReturnType<typeof oauthFixture>,
+  to: string,
+  edit: (oauth: Record<string, any>) => void = () => {},
+) {
+  const db = migrate(new Database(":memory:"));
+  const host = (oauthRedirectUrl: string) =>
+    createIntegrations({
+      db,
+      secrets,
+      hostDir,
+      now: () => clock,
+      onChange: () => {},
+      oauthRedirectUrl,
+    });
+  const before = host(REDIRECT);
+  const { id } = await before.addCustom({ name: "oa", url: f.url, transport: "http", oauth: true });
+  const x = f.approve((await before.connectOAuth(id)).authorizeUrl);
+  await before.finishOAuth(x.state, { code: x.code });
+  for (const [k, v] of secrets.entries) {
+    const secret = JSON.parse(v);
+    edit(secret.oauth);
+    await secrets.set(k, JSON.stringify(secret));
+  }
+  return { id, after: host(to) };
+}
+
+test("OAuth: a client registered for another redirect URL registers again on the next connect, and its tokens keep working until then", async () => {
+  const f = oauthFixture();
+  try {
+    const { id, after } = await signedInThenMoved(f, MOVED);
+    expect(JSON.stringify((await after.session()).mcpServers["oa" as ServerName])).toContain(
+      "Bearer at-",
+    );
+
+    const x = f.approve((await after.connectOAuth(id)).authorizeUrl);
+    expect(x.a.searchParams.get("redirect_uri")).toBe(MOVED);
+    expect(f.registeredRedirects()).toEqual([[REDIRECT], [MOVED]]);
+    expect(JSON.stringify((await after.session()).mcpServers["oa" as ServerName])).toContain(
+      "Bearer at-",
+    );
+    expect((await after.finishOAuth(x.state, { code: x.code })).state).toBe("connected");
+
+    const y = f.approve((await after.connectOAuth(id)).authorizeUrl);
+    expect(y.a.searchParams.get("client_id")).toBe(x.a.searchParams.get("client_id"));
+    expect(f.registrations()).toBe(2);
+  } finally {
+    await f.server.stop(true);
+  }
+});
+
+test("OAuth: a connect under the same redirect URL reuses the client", async () => {
+  const f = oauthFixture();
+  try {
+    const { id, after } = await signedInThenMoved(f, REDIRECT);
+    f.approve((await after.connectOAuth(id)).authorizeUrl);
+    expect(f.registrations()).toBe(1);
+  } finally {
+    await f.server.stop(true);
+  }
+});
+
+const BEFORE_RECORDING = (oauth: Record<string, any>) => delete oauth.redirectUrl;
+
+test("OAuth: a client stored before the redirect URL was recorded is judged by the redirect_uris it was registered with", async () => {
+  const f = oauthFixture();
+  try {
+    const same = await signedInThenMoved(f, REDIRECT, BEFORE_RECORDING);
+    f.approve((await same.after.connectOAuth(same.id)).authorizeUrl);
+    expect(f.registrations()).toBe(1);
+  } finally {
+    await f.server.stop(true);
+  }
+  const g = oauthFixture();
+  try {
+    const moved = await signedInThenMoved(g, MOVED, BEFORE_RECORDING);
+    g.approve((await moved.after.connectOAuth(moved.id)).authorizeUrl);
+    expect(g.registeredRedirects()).toEqual([[REDIRECT], [MOVED]]);
+  } finally {
+    await g.server.stop(true);
+  }
+});
+
+test("OAuth: a stored client with no known redirect URL registers again", async () => {
+  const f = oauthFixture();
+  try {
+    const { id, after } = await signedInThenMoved(f, REDIRECT, (oauth) => {
+      delete oauth.redirectUrl;
+      delete oauth.client.redirect_uris;
+    });
+    f.approve((await after.connectOAuth(id)).authorizeUrl);
+    expect(f.registrations()).toBe(2);
+  } finally {
+    await f.server.stop(true);
+  }
+});
+
+test("own client: a changed redirect URL never replaces the user's client", async () => {
+  const f = oauthFixture({ id: "mine", secret: "s3cret" });
+  try {
+    const db = migrate(new Database(":memory:"));
+    const host = (oauthRedirectUrl: string) =>
+      createIntegrations({
+        db,
+        secrets,
+        hostDir,
+        now: () => clock,
+        onChange: () => {},
+        oauthRedirectUrl,
+        catalog: [
+          {
+            id: "own",
+            label: "Own",
+            url: f.url,
+            auth: { kind: "oauth", client: "own", ownClient: OWN },
+            ...SHOWN,
+          },
+        ],
+      });
+    const before = host(REDIRECT);
+    const id = before.list()[0]!.id;
+    const x = f.approve(
+      (await before.connectOAuth(id, { clientId: "mine", clientSecret: "s3cret" })).authorizeUrl,
+    );
+    await before.finishOAuth(x.state, { code: x.code });
+
+    const y = f.approve((await host(MOVED).connectOAuth(id)).authorizeUrl);
+    expect(y.a.searchParams.get("client_id")).toBe("mine");
+    expect(y.a.searchParams.get("redirect_uri")).toBe(MOVED);
+    expect(f.registrations()).toBe(0);
   } finally {
     await f.server.stop(true);
   }

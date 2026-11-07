@@ -21,7 +21,16 @@ const BrowserEnabled = BotId.extend({ enabled: z.boolean() });
 const BrowserHeaded = BotId.extend({ headed: z.boolean() });
 
 /** Routes that address a bot by id, or none; they work whether or not a bot is open. */
-export function botRoutes({ cwd, dataRoot, cli, db, chats, browser }: ApiContext): ApiRoutes {
+export function botRoutes({
+  cwd,
+  dataRoot,
+  cli,
+  db,
+  chats,
+  browser,
+  headedBrowser,
+  botsChanged,
+}: ApiContext): ApiRoutes {
   const browserLifecycle: ApiRoutes[string] = async ({ res, path, parse }) => {
     const bot = getBot(dataRoot, parse(BotId).botId);
     if (!bot) return json(res, { error: "no such bot" }, 404);
@@ -34,7 +43,6 @@ export function botRoutes({ cwd, dataRoot, cli, db, chats, browser }: ApiContext
       json(res, {
         cwd,
         cli: `${cli.path} (${cli.source})`,
-        auth: process.env.ANTHROPIC_API_KEY ? "api key" : "CLI stored login",
         browser: browser.status(),
       }),
     "/api/seen": async ({ res, parse }) => {
@@ -47,6 +55,7 @@ export function botRoutes({ cwd, dataRoot, cli, db, chats, browser }: ApiContext
     "/api/bots/new": async ({ res, parse }) => {
       const { name, purpose, face, stroke } = parse(NewBot);
       const bot = createBot(dataRoot, name, purpose, undefined, { face, stroke });
+      botsChanged();
       await chats.switchTo(bot);
       return json(res, bot);
     },
@@ -66,6 +75,8 @@ export function botRoutes({ cwd, dataRoot, cli, db, chats, browser }: ApiContext
       const { botId, headed } = parse(BrowserHeaded);
       const bot = getBot(dataRoot, botId);
       if (!bot) return json(res, { error: "no such bot" }, 404);
+      if (headed && !headedBrowser)
+        return json(res, { error: "headed Chrome is not available on this host" }, 409);
       setBrowserHeaded(dataRoot, bot.id, headed);
       // The window is chosen when the engine launches Chrome, so a running browser must restart to pick it up.
       await browser.restart(bot.id);

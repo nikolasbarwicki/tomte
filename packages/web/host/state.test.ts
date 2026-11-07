@@ -106,10 +106,24 @@ test("snapshot events replace their slice and host-info sets the info", () => {
   const info = {
     cwd: "/",
     cli: "claude",
-    auth: "ok",
     browser: { status: "unavailable", reason: "none" },
   } as const;
   expect(applyEvent(s, { type: "host-info", info }).info).toBe(info);
+});
+
+test("public-info sets what the host can do, which stays undefined until then", () => {
+  expect(initialHostState.publicInfo).toBeUndefined();
+  const info = {
+    version: "0.1.0",
+    apiVersion: 1,
+    mode: "remote",
+    claude: "signed-in",
+    capabilities: { reveal: false, headedBrowser: false, browserSandbox: true },
+  } as const;
+  const s = play([{ type: "user", text: "hi" }]);
+  const next = applyEvent(s, { type: "public-info", info });
+  expect(next.publicInfo).toBe(info);
+  expect(next.chat).toBe(s.chat);
 });
 
 test("a bots event leaves the chat reference identical", () => {

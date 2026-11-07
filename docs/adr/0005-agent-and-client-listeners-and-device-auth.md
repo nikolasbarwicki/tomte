@@ -30,7 +30,8 @@ An agent and a person never share a listener. A request cannot reach the other s
 
 These paths skip the device token check only. Host, Origin and content type still apply to them.
 
-- `/api/pair`, the pairing exchange.
+- `POST /api/pair`, the pairing exchange.
+- `GET /api/host-info`, which says what this host is and can do so the UI can hide actions it cannot perform. It returns the host version, the API version, the mode, the Claude sign-in state in remote mode only, and the reveal, headed-browser and browser-sandbox capabilities, and nothing else: no bot, path, device or secret. The Claude sign-in state is the one piece of host state a request without a token can read, a deliberate exception. Any other method on this path needs a device token. It is never served on the agent listener.
 - `/oauth/callback`, which its OAuth `state` parameter protects.
 - Every path outside `/api/*`: the static UI assets and the login page, which must load before a device has a token.
 
@@ -78,7 +79,7 @@ Three routes under `/api/devices/` sit behind the boundary check like every othe
 - Bot tool calls are unaffected: the agent listener keeps the rules of ADR-0001, and the existing handoff tests pass through it unchanged.
 - The boundary check is part of the trust boundary, like the checks in ADR-0001. A route added under `/api/*` gets device-token protection with no extra code. A route added outside `/api/*` is public, so it must not carry host state.
 - A device token is a bearer credential. Anyone who obtains it acts as that device until the user revokes it.
-- The client listener is still loopback-only. Binding it to a network address is a later decision.
+- The client listener binds loopback unless configured otherwise; see the note below.
 - The desktop app spec will add the sidecar topology to this ADR: how the desktop main process starts the host and obtains its first device token.
 
 ### Decisions kept on purpose
@@ -87,3 +88,7 @@ Three routes under `/api/devices/` sit behind the boundary check like every othe
 - **A wrong content type gets 415, not 403.** Host and Origin failures are 403 because they identify a caller the host refuses. A wrong content type is a malformed request from a caller that may be allowed, so it gets the status that names the problem. A cross-origin `text/plain` POST still gets 403, because the Origin check runs first.
 - **One global pairing lockout counter, reset when a code is created.** The host counts failed exchanges in one database row, not per address, so `host pair` in another process and a restarted host see the same count. Creating a code, from `host pair` or the Devices page, resets the count, and so does the lockout itself. A successful exchange does not. Each code therefore gets at most 10 guesses, and old typos cannot lock out a fresh code. The cost is that anyone who reaches the client listener can lock out the current code with 10 bad requests, and the user creates a new one. Locked-out attempts get the same 401 as a wrong code.
 - **Revoke ends every open response for the device, not only event streams.** Live view and takeover streams stay open as long as an event stream does, and in-flight requests started before the revoke would otherwise finish with the revoked device's access. Ending all of them makes revocation take effect at once.
+
+## Note: binding the client listener beyond loopback
+
+`HostConfig.bind` may now name a non-loopback address, in either mode. Parsing accepts it only when the public URL is `https:` or `--allow-plain-http` (`CLAUDEBOT_ALLOW_PLAIN_HTTP`) is set for a private network such as Tailscale; an unset public URL counts as plain HTTP. The error names both ways out. The agent listener still binds `127.0.0.1` only, and the device-token checks above apply on any address.

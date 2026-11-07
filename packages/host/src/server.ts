@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 import { getBot } from "./bots/index.ts";
-import { resolveCli } from "./harness/index.ts";
+import { adoptClaudeConfigDir, resolveCli } from "./harness/index.ts";
 import { createHostServer } from "./host-server/index.ts";
 import { acquireDataRootLock, DataRootLocked } from "./platform/data-root-lock.ts";
 import { openDb } from "./platform/db.ts";
@@ -11,11 +11,11 @@ import {
   parseStartupConfig,
   serverCommand,
 } from "./platform/launch.ts";
-import { keychainSecrets } from "./platform/secrets.ts";
 import { ensureWorkspace } from "./platform/workspace.ts";
 import { directoryAssets, embeddedAssets, type UiAssets } from "./ui/index.ts";
 
 const { config, positionals } = parseStartupConfig();
+adoptClaudeConfigDir(config);
 const [botArg] = positionals;
 
 /** The built web UI to serve: embedded in the compiled host, else the web package's build output; none when Vite serves it. Exits when the UI is not there. */
@@ -63,7 +63,6 @@ const server = await createHostServer({
   config,
   cli,
   db: openDb(config.dataRoot),
-  secrets: keychainSecrets,
   botId: botArg,
   ...(ui && { ui }),
 }).catch((e: Error) => {
