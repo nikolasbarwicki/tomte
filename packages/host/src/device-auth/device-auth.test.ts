@@ -36,3 +36,27 @@ describe("a device's last activity", () => {
     expect(auth.list()[0]!.lastSeenAt).toBeNull();
   });
 });
+
+describe("a launch device", () => {
+  const launch = (n: number) => Buffer.alloc(32, n).toString("base64url");
+
+  test("replaces only the device an earlier launch registered, and a paired device with the same name stays", () => {
+    const { auth } = setup();
+    const paired = auth.pair(auth.createPairingCode(), "This computer")!;
+
+    auth.registerLaunchDevice(launch(1));
+    auth.registerLaunchDevice(launch(2));
+
+    expect(auth.authenticate(launch(1))).toBeUndefined();
+    expect(auth.authenticate(launch(2))).toBeDefined();
+    expect(auth.authenticate(paired.token)).toBe(paired.deviceId);
+    expect(auth.list().filter((d) => d.name === "This computer")).toHaveLength(2);
+  });
+
+  test("refuses a token that is not a launch token, leaving the earlier launch device in place", () => {
+    const { auth } = setup();
+    auth.registerLaunchDevice(launch(1));
+    expect(() => auth.registerLaunchDevice("short")).toThrow();
+    expect(auth.authenticate(launch(1))).toBeDefined();
+  });
+});

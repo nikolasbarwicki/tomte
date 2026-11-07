@@ -5,6 +5,7 @@
 const HOST = "^packages/host/src/";
 const WEB = "^packages/web/";
 const CONTRACT = "^packages/contract/";
+const DESKTOP = "^packages/desktop/";
 const WEB_FEATURES = `${WEB}features/`;
 const WEB_SHARED = `${WEB}(components|hooks|lib|host)/`;
 const WEB_UI = `${WEB}components/ui/`;
@@ -41,6 +42,8 @@ module.exports = {
           "\\.test\\.tsx?$",
           // A bun --preload script for subprocess tests, loaded by path.
           `${HOST}testing/pretend-linux\\.ts$`,
+          // The desktop app's main process: bundled by scripts/build-desktop.ts and run by Electron, never imported.
+          `${DESKTOP}src/main\\.ts$`,
         ],
       },
       to: {},
@@ -59,6 +62,21 @@ module.exports = {
       severity: "error",
       from: { path: HOST },
       to: { path: WEB },
+    },
+    {
+      name: "host-not-to-desktop",
+      comment: "The host never imports the desktop package; the app only spawns the host binary.",
+      severity: "error",
+      from: { path: HOST },
+      to: { path: DESKTOP },
+    },
+    {
+      name: "desktop-only-to-contract",
+      comment:
+        "The desktop package imports no other workspace package than the contract: it never runs host code or bundles the UI.",
+      severity: "error",
+      from: { path: DESKTOP },
+      to: { path: "^packages/", pathNot: `${DESKTOP}|${CONTRACT}` },
     },
     {
       name: "web-only-to-contract",

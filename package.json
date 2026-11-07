@@ -20,11 +20,18 @@
     "fmt:check": "oxfmt --check",
     "lint": "oxlint --type-aware",
     "knip": "knip",
-    "prepare": "if git rev-parse --git-dir >/dev/null 2>&1; then lefthook install; fi"
+    "prepare": "if git rev-parse --git-dir >/dev/null 2>&1; then lefthook install; fi",
+    "build:desktop": "bun scripts/build-desktop.ts",
+    "package:desktop": "bun scripts/package-desktop.ts",
+    "icons:desktop": "bun scripts/make-tray-icons.ts",
+    "smoke:desktop": "bun scripts/smoke-desktop.ts",
+    "smoke:desktop:profiles": "bun scripts/smoke-desktop-profiles.ts",
+    "smoke:desktop:titlebar": "bun scripts/smoke-desktop-titlebar.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
+    "@electron/packager": "^20.3.0",
     "@swc/core": "^1.16.22",
     "dependency-cruiser": "^18.7.2",
     "knip": "^6.44.1",
@@ -32,6 +39,7 @@
     "oxfmt": "^0.77.0",
     "oxlint": "1.92.0",
     "oxlint-tsgolint": "7.0.2006",
+    "playwright-core": "^1.65.0",
     "typescript": "^7.0.2"
   },
   "engines": {

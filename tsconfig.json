@@ -3,6 +3,7 @@
   "compilerOptions": { "paths": { "@/*": ["./packages/web/*"] } },
   "references": [
     { "path": "./packages/contract" },
+    { "path": "./packages/desktop" },
     { "path": "./packages/host" },
     { "path": "./packages/web" }
   ]

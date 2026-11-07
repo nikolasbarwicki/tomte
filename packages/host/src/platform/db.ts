@@ -142,6 +142,11 @@ CREATE TABLE IF NOT EXISTS pairing_failures (
 );
 `;
 
+const SCHEMA_V9 = `
+ALTER TABLE devices ADD COLUMN launch INTEGER NOT NULL DEFAULT 0;  -- 1 for the device a desktop sidecar's launch token registered; never inferred from the name
+CREATE UNIQUE INDEX devices_one_launch ON devices(launch) WHERE launch = 1;
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -156,6 +161,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V6,
     SCHEMA_V7,
     SCHEMA_V8,
+    SCHEMA_V9,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

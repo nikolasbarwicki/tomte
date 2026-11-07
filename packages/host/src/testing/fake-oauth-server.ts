@@ -10,6 +10,7 @@ export function oauthFixture(own?: { id: string; secret: string }) {
   const refreshes = new Set<string>();
   let n = 0;
   const s = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
       const u = new URL(req.url);

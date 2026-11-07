@@ -3,7 +3,7 @@
 // Baselines are the measured totals rounded down to a whole percent. Raise them as tests land, never lower them.
 import { readFile } from "node:fs/promises";
 
-const BASELINE = { lines: 93, functions: 89 };
+const BASELINE = { lines: 94, functions: 90 };
 
 const LCOV_PATH = "coverage/lcov.info";
 

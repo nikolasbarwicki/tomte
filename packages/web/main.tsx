@@ -9,6 +9,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { router } from "./app/router.tsx";
 import { SessionGate } from "./app/session-gate.tsx";
+import { trackWindowControlsOverlay } from "./lib/window-controls-overlay.ts";
+
+trackWindowControlsOverlay();
 
 createRoot(document.getElementById("root")!).render(
   <ThemeProvider attribute="class" defaultTheme="system" enableSystem>

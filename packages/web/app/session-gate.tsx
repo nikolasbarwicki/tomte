@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 
+import { TitlebarStrip } from "@/components/titlebar.tsx";
 import { Spinner } from "@/components/ui/spinner";
 import { Login } from "@/features/login/index.ts";
 import { probeSession } from "@/host/api.ts";
@@ -15,10 +16,16 @@ export function SessionGate({ children }: { children: ReactNode }) {
     void probeSession();
   }, []);
   if (session === "paired") return children;
-  if (session === "unpaired") return <Login />;
   return (
-    <div className="flex min-h-svh items-center justify-center">
-      <Spinner className="text-muted-foreground size-5" />
-    </div>
+    <>
+      <TitlebarStrip className="fixed inset-x-0 top-0" />
+      {session === "unpaired" ? (
+        <Login />
+      ) : (
+        <div className="flex min-h-svh items-center justify-center">
+          <Spinner className="text-muted-foreground size-5" />
+        </div>
+      )}
+    </>
   );
 }

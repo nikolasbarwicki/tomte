@@ -139,6 +139,30 @@
   color: var(--link);
 }
 
+/* Desktop app, native window controls over the page (see lib/window-controls-overlay.ts): the top bars move the window, and whatever in them can be clicked does not. Popovers and menus render outside them. */
+:root[data-wco] [data-titlebar] {
+  -webkit-app-region: drag;
+}
+:root[data-wco]
+  [data-titlebar]
+  :is(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    label,
+    [role="button"],
+    [role="combobox"],
+    [role="menuitem"],
+    [role="switch"],
+    [role="tab"],
+    [tabindex]:not([tabindex="-1"])
+  ) {
+  -webkit-app-region: no-drag;
+}
+
 /* A bot's chat takes its accents from the bot's color; `--bot` and `--bot-foreground` are set inline from its avatar stroke. */
 .bot-theme {
   --primary: var(--bot);

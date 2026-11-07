@@ -25,6 +25,11 @@
       "tailwind": { "config": ["tailwind.css"] },
       "project": ["**/*.{ts,tsx,css}"],
     },
+    "packages/desktop": {
+      // Bundled to dist/main.cjs by scripts/build-desktop.ts and run by Electron, never imported.
+      "entry": ["src/main.ts"],
+      "project": ["src/**/*.ts"],
+    },
     "packages/contract": {
       "project": ["src/**/*.ts"],
     },

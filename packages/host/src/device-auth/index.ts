@@ -1,6 +1,8 @@
 import type { Database } from "bun:sqlite";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 
+import { LAUNCH_DEVICE_NAME, LaunchToken } from "@claudebot/contract/sidecar";
+
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const CODE_LENGTH = 12;
 const GROUP = 4;
@@ -54,6 +56,11 @@ export interface DeviceAuth {
   pair(code: string, name: string): PairedDevice | undefined;
   /** The id of the device a token belongs to, which also records the device's activity; undefined for an unknown token. */
   authenticate(token: string): string | undefined;
+  /**
+   * Registers a desktop sidecar's launch token as the device "This computer", replacing the device an earlier sidecar run registered, in one write transaction.
+   * The earlier one is found by a stored marker, never by name, so a paired device with the same name stays. Throws when the token is not a `LaunchToken`.
+   */
+  registerLaunchDevice(token: string): void;
   /** Every paired device, oldest first. */
   list(): DeviceSummary[];
   /** Deletes the device, so its token stops working; false when there is no such device. */
@@ -149,6 +156,16 @@ export function createDeviceAuth(deps: { db: Database; now?: () => number }): De
 
     revoke(id) {
       return db.query("DELETE FROM devices WHERE id = ?").run(id).changes > 0;
+    },
+
+    registerLaunchDevice(token) {
+      const launchToken = LaunchToken.parse(token);
+      db.transaction(() => {
+        db.run("DELETE FROM devices WHERE launch = 1");
+        db.query(
+          "INSERT INTO devices (id, name, token_digest, created_at, launch) VALUES (?, ?, ?, ?, 1)",
+        ).run(randomUUID(), LAUNCH_DEVICE_NAME, digest(launchToken), now());
+      }).immediate();
     },
   };
 }
