@@ -38,6 +38,10 @@ JSON
 
 `bun run smoke:host [binary]` (default: this machine's build output) runs a built binary for real: it copies it outside the repo, installs the managed Claude CLI with `install-cli` (unless `CLAUDE_PATH` names one), starts it on a temporary data root, pairs with `pair`, creates a bot, checks the event stream, loads the embedded UI (every asset `index.html` references, with the CSP), checks what the client listener refuses, stops it with SIGTERM and removes everything. It needs network for the CLI install and runs only a binary built for the machine it runs on (for a Linux binary in a container, compile the script with `bun build --compile --target=bun-linux-arm64 scripts/smoke-host.ts` and run both binaries there).
 
+## Deploy kit
+
+`deploy/` holds the kit that installs the host on a systemd Linux server (`install.sh`, `claudebot.service`, `Caddyfile`). `deploy/README.md` is the self-hoster's guide; keep it in step with the unit, the installer and `platform/config.ts`. The kit has no permanent tests. Check it with `systemd-analyze verify deploy/claudebot.service` (Linux only), `shellcheck deploy/install.sh` and `caddy validate --config deploy/Caddyfile --adapter caddyfile`. The real-server run is ticket 04 of spec 5.
+
 ## Agent skills
 
 ### Issue tracker

@@ -1,0 +1,59 @@
+[Unit]
+Description=claudebot host (remote mode)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=claudebot
+Group=claudebot
+EnvironmentFile=/etc/claudebot/claudebot.env
+LoadCredentialEncrypted=secrets-key:/etc/credstore.encrypted/claudebot.secrets-key
+ExecStart=/usr/local/bin/claudebot-host --mode remote --data-root /var/lib/claudebot --secrets-key-file %d/secrets-key
+WorkingDirectory=/var/lib/claudebot
+StateDirectory=claudebot
+StateDirectoryMode=0700
+UMask=0077
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+KillSignal=SIGTERM
+Restart=always
+RestartSec=5
+
+# Hardening. Bot shells and browser bots run under bubblewrap, which needs unprivileged
+# user, pid, net, ipc, uts and cgroup namespaces, a fresh /proc mount and mount, pivot_root,
+# unshare and sethostname. The sandbox runtime starts and applies its deny-read list under
+# every directive below (checked on Ubuntu 24.04, systemd 255). Each directive left out says why.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectProc=invisible
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectClock=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+# AF_NETLINK: bubblewrap brings up loopback in its network namespace over netlink.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+# ProtectHostname=yes: denies sethostname(), which bubblewrap calls for the sandbox's UTS
+# namespace (--hostname localhost), and its fresh /proc mount fails under it.
+# RestrictNamespaces=: denies the namespaces bubblewrap creates.
+# SystemCallFilter=: the @system-service set denies unshare, mount and pivot_root, which
+# bubblewrap needs (the sandbox dies with SIGSYS).
+# ProtectKernelTunables=, ProtectKernelLogs=: they over-mount parts of /proc, and the kernel
+# then refuses bubblewrap's fresh proc mount in its new user namespace (ADR-0006).
+# ProcSubset=pid: hides /proc/sys, which bubblewrap reads to map users.
+# MemoryDenyWriteExecute=: Chrome's V8 (browser bots) needs writable executable memory.
+# PrivateUsers=: bubblewrap still starts under it, but it remaps every other uid, including
+# root's ownership of the credential, and was not checked with the Claude CLI and Chrome.
+
+[Install]
+WantedBy=multi-user.target
