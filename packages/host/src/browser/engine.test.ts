@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { hostCommand } from "../platform/launch.ts";
 import { engineStatus, installManagedEngine, resolveEngine } from "./engine.ts";
 
 const envKeys = ["AGENT_BROWSER_PATH", "PATH"] as const;
@@ -34,7 +35,9 @@ describe("engine resolution", () => {
   test("unavailable with an install hint when nothing resolves", () => {
     const s = engineStatus(dataRoot);
     expect(s.status).toBe("unavailable");
-    expect(s.status === "unavailable" && s.reason).toContain("install-browser");
+    expect(s.status === "unavailable" && s.reason).toContain(
+      hostCommand("install-browser", "--data-root", dataRoot),
+    );
   });
 
   test("prefers override env, then the data root's managed install, then PATH", () => {

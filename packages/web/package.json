@@ -3,9 +3,11 @@
   "private": true,
   "type": "module",
   "sideEffects": [
-    "**/*.css"
+    "**/*.css",
+    "./lib/zod-jitless.ts"
   ],
   "scripts": {
+    "build": "vite build",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

@@ -10,6 +10,8 @@
     },
     "packages/host": {
       "entry": [
+        // Compiled by scripts/build-host.ts; main.ts loads the other two by dynamic import.
+        "src/main.ts",
         "src/host.ts",
         "src/server.ts",
         // Spawned as subprocesses by tests via path strings (fake Claude, MCP stdio server, lock holder, fake agent-browser).

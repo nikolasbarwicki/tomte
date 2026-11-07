@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { shortTime } from "@/lib/format.ts";
+import { withoutTransitions } from "@/lib/theme.ts";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<BotStatus, string> = {
@@ -252,7 +253,7 @@ function ThemeToggle() {
             variant="ghost"
             size="icon-xs"
             aria-label={dark ? "Light theme" : "Dark theme"}
-            onClick={() => setTheme(dark ? "light" : "dark")}
+            onClick={() => withoutTransitions(() => setTheme(dark ? "light" : "dark"))}
           />
         }
       >

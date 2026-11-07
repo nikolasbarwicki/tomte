@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 
+import { hostCommand } from "../platform/launch.ts";
 import type { SecretStore } from "../platform/secrets.ts";
 import { writeActionPolicy } from "./action-policy.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
@@ -160,7 +161,7 @@ export function createBrowserRuntimes(
     const chrome = findChrome();
     if (!chrome)
       throw new BrowserUnavailable(
-        "Chrome for Testing is not installed; run `bun packages/host/src/host.ts install-browser`",
+        `Chrome for Testing is not installed; run \`${hostCommand("install-browser", "--data-root", dataRoot)}\``,
       );
     key ??= engineKey(secrets).catch((e) => {
       key = undefined;

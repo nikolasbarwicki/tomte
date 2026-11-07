@@ -19,8 +19,10 @@ import { Takeover } from "./takeover.ts";
 import { createBrowserUiRoutes } from "./ui-routes.ts";
 
 export { BROWSER_ENDPOINT_PATH, type BrowserEndpoint } from "./endpoint.ts";
+export { runCredentialPlugin } from "./credential-plugin.ts";
 export { installManagedEngine } from "./engine.ts";
 export { LIVE_VIEW_PATH } from "./live-view.ts";
+export { CREDENTIAL_PLUGIN_COMMAND } from "./login.ts";
 export { BROWSER_UI_PATHS } from "./ui-routes.ts";
 export {
   CREDENTIAL_EXCHANGE_PATH,

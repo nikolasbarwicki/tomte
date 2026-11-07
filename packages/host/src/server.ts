@@ -1,31 +1,51 @@
+import { fileURLToPath } from "node:url";
+
 import { getBot } from "./bots/index.ts";
 import { resolveCli } from "./harness/index.ts";
 import { createHostServer } from "./host-server/index.ts";
-import { InvalidConfig, parseHostConfig } from "./platform/config.ts";
 import { acquireDataRootLock, DataRootLocked } from "./platform/data-root-lock.ts";
 import { openDb } from "./platform/db.ts";
+import {
+  hostCommand,
+  isCompiledHost,
+  parseStartupConfig,
+  serverCommand,
+} from "./platform/launch.ts";
 import { keychainSecrets } from "./platform/secrets.ts";
 import { ensureWorkspace } from "./platform/workspace.ts";
+import { directoryAssets, embeddedAssets, type UiAssets } from "./ui/index.ts";
 
-const parsed = (() => {
-  try {
-    return parseHostConfig(process.argv.slice(2), process.env);
-  } catch (e) {
-    if (!(e instanceof InvalidConfig)) throw e;
-    console.error(e.message);
+const { config, positionals } = parseStartupConfig();
+const [botArg] = positionals;
+
+/** The built web UI to serve: embedded in the compiled host, else the web package's build output; none when Vite serves it. Exits when the UI is not there. */
+async function uiAssets(): Promise<UiAssets | undefined> {
+  const compiled = isCompiledHost();
+  if (config.vite) {
+    if (!compiled) return undefined;
+    console.error(
+      "--vite needs the web package source and Vite, which the compiled host does not include; run the source with `bun run dev`",
+    );
     process.exit(2);
   }
-})();
-const { config } = parsed;
-const [botArg] = parsed.positionals;
-const cli = resolveCli(config.dataRoot);
-if (!cli && !process.env.ANTHROPIC_API_KEY) {
-  console.error("refusing to start: no ANTHROPIC_API_KEY and no claude binary");
-  process.exit(2);
+  const webBuild = fileURLToPath(new URL("../../web/dist", import.meta.url));
+  const assets = compiled ? embeddedAssets() : directoryAssets(webBuild);
+  if (!(await assets.read("/index.html"))) {
+    console.error(
+      compiled
+        ? "this host binary was built without the web UI; rebuild it with `bun run build:host`"
+        : `no web UI build at ${webBuild}; run \`bun run build:web\` first, or start with \`--vite\` (\`bun run dev\`) to serve the UI through Vite`,
+    );
+    process.exit(2);
+  }
+  return assets;
 }
+const ui = await uiAssets();
+
+const cli = resolveCli(config.dataRoot);
 if (!cli) {
   console.error(
-    "no claude binary resolved; set CLAUDE_PATH or run `bun packages/host/src/host.ts install-cli`",
+    `refusing to start: no claude binary resolved (CLAUDE_PATH, managed copy, PATH); set CLAUDE_PATH or run \`${hostCommand("install-cli", "--data-root", config.dataRoot)}\``,
   );
   process.exit(2);
 }
@@ -45,6 +65,7 @@ const server = await createHostServer({
   db: openDb(config.dataRoot),
   secrets: keychainSecrets,
   botId: botArg,
+  ...(ui && { ui }),
 }).catch((e: Error) => {
   console.error(e.message);
   lock.release();
@@ -55,17 +76,15 @@ console.log(
   `claudebot UI: ${server.clientUrl}  workspace=${ensureWorkspace(config.dataRoot)}  data=${config.dataRoot}  bot=${opened ? `${opened.name} (${opened.id})` : "none"}`,
 );
 if (server.publicUrl !== server.clientUrl) console.log(`public URL: ${server.publicUrl}`);
-const shellWord = (s: string) =>
-  /^[\w./@%+=:,-]+$/.test(s) ? s : `'${s.replaceAll("'", "'\\''")}'`;
 console.log(
-  `pair a browser: bun run host pair --data-root ${shellWord(config.dataRoot)}  (prints a code, valid once for 10 minutes; enter it at ${server.publicUrl})`,
+  `pair a browser: ${hostCommand("pair", "--data-root", config.dataRoot)}  (prints a code, valid once for 10 minutes; enter it at ${server.publicUrl})`,
 );
 
 const shutdown = async () => {
   const id = server.currentBotId();
   await server.close();
   lock.release();
-  if (id) console.log(`reopen with: bun run ui ${id}`);
+  if (id) console.log(`reopen with: ${serverCommand(id)}`);
   process.exit(0);
 };
 process.on("SIGINT", () => void shutdown());

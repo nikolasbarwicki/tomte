@@ -1,5 +1,5 @@
 // Shared whole-host setup for handoff tests: the real host server, the fake Claude CLI and MCP clients acting as bots.
-// Each test file starts its own host with `startHandoffHost()` and stops it with `stop()`; `hostFlags` are command-line flags for the host's config.
+// Each test file starts its own host with `startHandoffHost()` and stops it with `stop()`; `hostFlags` are command-line flags for the host's config and `ui` is the built web UI the client listener serves.
 // The data root is a temp directory and the database is in memory, unless `hostFlags` carries `--data-root`: then the database is a file in that data root. `cwd` is the host's workspace directory inside the data root.
 import { Database } from "bun:sqlite";
 import { expect } from "bun:test";
@@ -25,6 +25,7 @@ import { acquireDataRootLock, type DataRootLock } from "../platform/data-root-lo
 import { migrate, openDb } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
+import type { UiAssets } from "../ui/index.ts";
 import { defined } from "./defined.ts";
 import { asDevice, pairDevice } from "./paired-device.ts";
 
@@ -81,7 +82,10 @@ export interface HandoffHost {
   stop(): Promise<void>;
 }
 
-export async function startHandoffHost(hostFlags: string[] = []): Promise<HandoffHost> {
+export async function startHandoffHost(
+  hostFlags: string[] = [],
+  ui?: UiAssets,
+): Promise<HandoffHost> {
   const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   const root = realpathSync(mkdtempSync(join(tmpdir(), "handoffs-test-")));
   const dataRoot = join(root, "ws");
@@ -123,6 +127,7 @@ export async function startHandoffHost(hostFlags: string[] = []): Promise<Handof
       browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir } },
       sandbox: () => ({ status: "available" }),
       now: () => clock,
+      ...(ui !== undefined && { ui }),
     });
   let server = await startServer();
   const deviceToken = pairDevice(server);

@@ -30,6 +30,14 @@ gh api -X PUT repos/OWNER/REPO/branches/main/protection --input - <<'JSON'
 JSON
 ```
 
+## Host binary
+
+`bun run build:host [target…]` builds the web UI, then compiles `packages/host/src/main.ts` with `bun build --compile` into `dist/host/claudebot-host-<os>-<arch>[.exe]` (gitignored) for `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64` and `windows-x64`; name targets to build only those. `scripts/build-host.ts` explains the x64 baseline, minify and sourcemap choices. The built web UI is embedded (`ui/assets.ts`); Vite, the Claude CLI and the browser engine are not.
+
+`main.ts` is the one compiled entry and also runs from source: `[flags] [botId]` starts the server like `bun run ui`; `pair`, `install-cli`, `install-browser`, `browser-smoke`, `auth-status` and `auth-login` run the `host.ts` subcommands; `credential-plugin <url>` is internal (the browser engine spawns the binary with it). Any message that names a command goes through `platform/launch.ts` (`hostCommand`, `serverCommand`), so it names the binary or `bun run host` depending on how the host was started.
+
+`bun run smoke:host [binary]` (default: this machine's build output) runs a built binary for real: it copies it outside the repo, installs the managed Claude CLI with `install-cli` (unless `CLAUDE_PATH` names one), starts it on a temporary data root, pairs with `pair`, creates a bot, checks the event stream, loads the embedded UI (every asset `index.html` references, with the CSP), checks what the client listener refuses, stops it with SIGTERM and removes everything. It needs network for the CLI install and runs only a binary built for the machine it runs on (for a Linux binary in a container, compile the script with `bun build --compile --target=bun-linux-arm64 scripts/smoke-host.ts` and run both binaries there).
+
 ## Agent skills
 
 ### Issue tracker
