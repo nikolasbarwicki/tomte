@@ -8,7 +8,7 @@ import {
   type Browser,
 } from "../browser/index.ts";
 import { BOTS_ENDPOINT_PATH, type Handoffs } from "../handoffs/index.ts";
-import { PAIR_PATH } from "./boundary.ts";
+import { HOST_INFO_PATH, PAIR_PATH } from "./boundary.ts";
 
 export type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
 
@@ -51,11 +51,12 @@ export function agentRoutes(o: { browser: Browser; handoffs: Handoffs }): Route[
   ];
 }
 
-/** What the client listener serves besides the web app, in match order. `oauthCallback` and `api` answer their own failures. */
+/** What the client listener serves besides the web app, in match order. `oauthCallback`, `hostInfo` and `api` answer their own failures. */
 export function clientRoutes(o: {
   browser: Browser;
   oauthCallback: Handler;
   pair: Handler;
+  hostInfo: Handler;
   api: Handler;
 }): Route[] {
   const { browser } = o;
@@ -69,6 +70,7 @@ export function clientRoutes(o: {
       handler: o.pair,
       label: "[host] pairing failed:",
     },
+    { match: (p, req) => p === HOST_INFO_PATH && req.method === "GET", handler: o.hostInfo },
     {
       match: (p) => p === LIVE_VIEW_PATH,
       handler: (req, res) => browser.handleLiveView(req, res),

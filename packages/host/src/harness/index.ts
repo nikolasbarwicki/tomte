@@ -6,11 +6,18 @@ import { join } from "node:path";
 import type { McpServerConfig, Options, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
 
 export {
+  VERSION,
+  adoptClaudeConfigDir,
+  claudeConfigDir,
+  createClaudeAccess,
+  type ClaudeAccess,
+  type SignInState,
+} from "./claude-access.ts";
+export {
   authCommand,
   cmdExeSpawner,
   installManagedCli,
   isMusl,
-  loginShellPath,
   resolveCli,
   type ResolvedCli,
 } from "./cli.ts";
@@ -35,25 +42,43 @@ export interface HostServerLease {
 /** Leases the host servers a bot may use; the lease is empty when the bot has none. */
 export type HostServersSource = (botId: string) => HostServerLease;
 
-/** One lease holding every server of `leases`, their instructions joined and the first isolation profile; releasing it releases them all. */
+/**
+ * One lease holding every server of `leases`, their instructions joined and their isolation profiles merged: the union of
+ * what they deny, and a disabled shell when any of them disables it. Releasing it releases them all.
+ */
 export function combineLeases(leases: HostServerLease[]): HostServerLease {
   const instructions = leases.flatMap((l) => (l.instructions ? [l.instructions] : [])).join("\n\n");
+  const profiles = leases.flatMap((l) => (l.isolation ? [l.isolation] : []));
   return {
     servers: leases.flatMap((l) => l.servers),
     ...(instructions && { instructions }),
-    isolation: leases.find((l) => l.isolation)?.isolation,
+    isolation: profiles.length
+      ? {
+          denyRead: [...new Set(profiles.flatMap((p) => p.denyRead))],
+          shell: profiles.some((p) => p.shell === "disabled") ? "disabled" : "sandboxed",
+        }
+      : undefined,
     release: () => leases.forEach((l) => l.release()),
   };
 }
 
 /** Sandbox/isolation settings a harness renders into its launch options. */
 export interface IsolationProfile {
+  /** Paths the bot's shell and Read tool must not read; the CLI process itself is not affected. */
+  denyRead: string[];
   /**
-   * Confines the bot's shell commands: public outbound traffic only (no loopback, no Unix sockets, no keychain
-   * service), and these paths unreadable by the shell and the Read tool. Absent means today's unconfined behaviour.
+   * `sandboxed`: the bot's shell commands run in the CLI's sandbox (public outbound traffic only: no loopback, no Unix
+   * sockets, no keychain service) and the CLI stops rather than run them unconfined. `disabled`: the sandbox cannot run
+   * here, so the bot gets no shell tools at all; its shell is never unconfined.
    */
-  shell?: { denyRead: string[] };
+  shell: "sandboxed" | "disabled";
 }
+
+/** The Claude Code tools that run a shell command, or start or stop one in the background. */
+const SHELL_TOOLS = ["Bash", "PowerShell", "Monitor", "TaskStop"];
+
+/** The deny rules that keep the Read tool out of `path`, whether it is a file or a directory. */
+const readDenies = (path: string) => [`Read(/${path})`, `Read(/${path}/**)`];
 
 /** What a harness launches with from the bot's integrations: their MCP servers, disallowed tools and plugins. */
 interface LaunchIntegrations {
@@ -67,7 +92,8 @@ interface HarnessLaunchInput {
   /** Integration servers, disallowed tools and plugins for this session. */
   integrations?: LaunchIntegrations | undefined;
   systemPromptAppend: string;
-  isolation: IsolationProfile;
+  /** How the bot's shell is confined; absent for an unconfined bot. */
+  isolation?: IsolationProfile | undefined;
 }
 
 interface HarnessLaunch {
@@ -109,16 +135,17 @@ export const claudeHarness: Harness = {
         extraArgs,
         disallowedTools: [
           ...(integrations?.disallowedTools ?? []),
-          ...(isolation.shell?.denyRead.map((p) => `Read(/${p}/**)`) ?? []),
+          ...(isolation?.denyRead.flatMap(readDenies) ?? []),
+          ...(isolation?.shell === "disabled" ? SHELL_TOOLS : []),
         ],
-        ...(isolation.shell
+        ...(isolation?.shell === "sandboxed"
           ? {
               sandbox: {
                 enabled: true,
                 failIfUnavailable: true,
                 allowUnsandboxedCommands: false,
                 network: { allowedDomains: ["*"] },
-                filesystem: { denyRead: isolation.shell.denyRead },
+                filesystem: { denyRead: isolation.denyRead },
               },
             }
           : {}),

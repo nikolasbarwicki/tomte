@@ -1,4 +1,4 @@
-import { HostInfo } from "@claudebot/contract/api";
+import { HostInfo, PublicHostInfo } from "@claudebot/contract/api";
 import { HostEvent } from "@claudebot/contract/events";
 import { toast } from "sonner";
 
@@ -12,6 +12,9 @@ export function connectHostStream(
 ): () => void {
   void post("/api/info", {}).then(async (r) =>
     store.dispatch({ type: "host-info", info: await readJson(r, HostInfo) }),
+  );
+  void fetch("/api/host-info").then(async (r) =>
+    store.dispatch({ type: "public-info", info: await readJson(r, PublicHostInfo) }),
   );
   const es = new EventSource("/api/events");
   es.onmessage = (m) => {

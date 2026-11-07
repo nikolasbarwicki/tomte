@@ -13,7 +13,14 @@ import { Thread, type HostDelegate, type ThreadEnv } from "./thread.ts";
 export { Thread, type HostDelegate, type ThreadEnv, type TurnResult } from "./thread.ts";
 export { readMemory, userMemoryPath } from "./memory.ts";
 export { getActivity, markSeen, recordMessage } from "./activity-store.ts";
-export { deleteFile, listFiles, resolveInside, reveal, watchFiles } from "./files.ts";
+export {
+  deleteFile,
+  listFiles,
+  openFileInside,
+  resolveInside,
+  reveal,
+  watchFiles,
+} from "./files.ts";
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -23,6 +30,14 @@ export const botMemoryPath = (dataRoot: string, id: string) =>
   join(botDir(dataRoot, id), "memory.md");
 /** Everything the bot produces for the user lives here. */
 export const botFilesPath = (dataRoot: string, id: string) => join(botDir(dataRoot, id), "files");
+/** The directory of every bot but `botId`, which is where a bot's memory, settings and files live and nobody else's business. */
+export function otherBotDirs(dataRoot: string, botId: string): string[] {
+  if (!existsSync(botsDir(dataRoot))) return [];
+  return readdirSync(botsDir(dataRoot))
+    .filter((id) => id !== botId)
+    .map((id) => botDir(dataRoot, id));
+}
+
 /** Subfolder of the files area holding browser screenshots and oversized pages; scratch for the current session, hidden from the Files panel. */
 export const BROWSER_FILES_DIR = "browser";
 
@@ -155,7 +170,7 @@ export const headlessDelegate: HostDelegate = {
 
 /** Opens a Claude Code thread bound to a bot in the host's shared thread environment. */
 export function openThread(
-  { cwd, dataRoot, cli, integrations, hostServers, approveAll }: ThreadEnv,
+  { cwd, dataRoot, cli, claude, integrations, hostServers, approveAll }: ThreadEnv,
   bot: Bot,
   opts: {
     resume?: boolean;
@@ -167,6 +182,7 @@ export function openThread(
 ): Thread {
   return new Thread({
     cli,
+    claude,
     cwd,
     ...botContext(dataRoot, bot),
     approveAll,

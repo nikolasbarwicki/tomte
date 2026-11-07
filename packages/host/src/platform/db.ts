@@ -167,8 +167,16 @@ export function migrate(db: Database): Database {
   return db;
 }
 
+const DB_FILE = "claudebot.db";
+
 /** Opens the database in the data root, creating the directory and the file on first run. */
 export function openDb(dataRoot: string): Database {
   mkdirSync(dataRoot, { recursive: true });
-  return migrate(new Database(join(dataRoot, "claudebot.db"), { create: true }));
+  return migrate(new Database(join(dataRoot, DB_FILE), { create: true }));
 }
+
+/** The database file in the data root, and the write-ahead log and shared-memory files SQLite keeps beside it in WAL mode. */
+export const dbFiles = (dataRoot: string): string[] => {
+  const file = join(dataRoot, DB_FILE);
+  return [file, `${file}-wal`, `${file}-shm`];
+};

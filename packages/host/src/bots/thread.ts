@@ -17,18 +17,16 @@ import type { MemoryScope } from "@claudebot/contract/events";
 import { z } from "zod";
 
 import {
+  VERSION,
   claudeHarness,
   cmdExeSpawner,
-  loginShellPath,
+  type ClaudeAccess,
   type HostServerLease,
   type HostServersSource,
   type ResolvedCli,
 } from "../harness/index.ts";
 import type { IntegrationsSource } from "../integrations/index.ts";
 import { appendMemory, readMemory, writeMemory, type MemoryPaths } from "./memory.ts";
-
-const APP = "claudebot";
-const VERSION = "0.1.0";
 
 /** Decisions the host (its UI/user) owns. */
 export interface HostDelegate {
@@ -48,6 +46,8 @@ export interface ThreadEnv {
   /** Where bots, their memory and the user memory live. */
   dataRoot: string;
   cli: ResolvedCli;
+  /** The environment and sign-in every Claude CLI child runs with. */
+  claude: ClaudeAccess;
   integrations: IntegrationsSource;
   hostServers: HostServersSource;
   /** Approve every tool call instead of asking the user; off when `HostConfig.askApproval` is set. */
@@ -56,6 +56,7 @@ export interface ThreadEnv {
 
 export interface ThreadOptions {
   cli: ResolvedCli;
+  claude: ClaudeAccess;
   cwd: string;
   sessionId?: string | undefined;
   /** True when this session id already has a transcript on disk. */
@@ -246,17 +247,9 @@ export class Thread {
     });
   }
 
-  private env(): Record<string, string | undefined> {
-    const env: Record<string, string | undefined> = { ...process.env };
-    env.PATH = loginShellPath();
-    env.CLAUDE_AGENT_SDK_CLIENT_APP = `${APP}/${VERSION}`;
-    if (this.o.cli.source === "managed") env.DISABLE_AUTOUPDATER = "1";
-    else delete env.DISABLE_AUTOUPDATER;
-    return env;
-  }
-
   private async open() {
     const inbox = new Inbox();
+    await this.o.claude.requireSignIn();
     const session = await this.o.integrations?.session();
     const lease = this.o.hostServers?.();
     const section = (title: string, path: string) => {
@@ -273,7 +266,7 @@ export class Thread {
       hostServers: lease?.servers ?? [],
       integrations: session,
       systemPromptAppend: append,
-      isolation: lease?.isolation ?? {},
+      isolation: lease?.isolation,
     });
     try {
       const q = query({
@@ -292,7 +285,7 @@ export class Thread {
           mcpServers: { host: this.hostServer() },
           ...launch.options,
           ...(this.model !== undefined && { model: this.model }),
-          env: this.env(),
+          env: this.o.claude.env(),
           stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
         },
       });

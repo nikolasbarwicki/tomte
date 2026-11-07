@@ -39,6 +39,8 @@ module.exports = {
           "\\.d\\.ts$",
           // Tests are run by the test runner, never imported.
           "\\.test\\.tsx?$",
+          // A bun --preload script for subprocess tests, loaded by path.
+          `${HOST}testing/pretend-linux\\.ts$`,
         ],
       },
       to: {},

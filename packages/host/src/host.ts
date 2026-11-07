@@ -22,12 +22,22 @@ import {
 } from "./bots/index.ts";
 import { installManagedEngine } from "./browser/index.ts";
 import { createDeviceAuth } from "./device-auth/index.ts";
-import { authCommand, installManagedCli, resolveCli, type ResolvedCli } from "./harness/index.ts";
+import {
+  adoptClaudeConfigDir,
+  authCommand,
+  claudeConfigDir,
+  createClaudeAccess,
+  installManagedCli,
+  resolveCli,
+  type ClaudeAccess,
+  type ResolvedCli,
+} from "./harness/index.ts";
 import { openDb } from "./platform/db.ts";
 import { hostCommand, parseStartupConfig } from "./platform/launch.ts";
 import { ensureWorkspace } from "./platform/workspace.ts";
 
 const { config, positionals } = parseStartupConfig();
+adoptClaudeConfigDir(config);
 
 const log = (l: string) => console.error(l);
 
@@ -55,7 +65,7 @@ function delegate(answer: string): HostDelegate {
   };
 }
 
-function preflight(): ResolvedCli {
+function preflight(): { cli: ResolvedCli; claude: ClaudeAccess } {
   const cli = resolveCli(config.dataRoot);
   if (!cli) {
     log(
@@ -63,11 +73,7 @@ function preflight(): ResolvedCli {
     );
     process.exit(2);
   }
-  if (!process.env.ANTHROPIC_API_KEY)
-    log(
-      "[host] warning: ANTHROPIC_API_KEY not set; the CLI will use its own stored login (not valid for third-party products)",
-    );
-  return cli;
+  return { cli, claude: createClaudeAccess(config, cli) };
 }
 
 function banner(cli: ResolvedCli, sessionId: string) {
@@ -84,9 +90,16 @@ const testBot = (cwd: string, sessionId: string) => {
 };
 
 async function phaseCreate(cwd: string, sessionId: string) {
-  const cli = preflight();
+  const { cli, claude } = preflight();
   banner(cli, sessionId);
-  const t = new Thread({ cli, cwd, ...testBot(cwd, sessionId), delegate: delegate("yes"), log });
+  const t = new Thread({
+    cli,
+    claude,
+    cwd,
+    ...testBot(cwd, sessionId),
+    delegate: delegate("yes"),
+    log,
+  });
   const r = await t.send("create hello.txt containing hello");
   t.close();
   const file = join(botFilesPath(acceptanceRoot(cwd), sessionId), "hello.txt");
@@ -95,10 +108,11 @@ async function phaseCreate(cwd: string, sessionId: string) {
 }
 
 async function phaseResume(cwd: string, sessionId: string) {
-  const cli = preflight();
+  const { cli, claude } = preflight();
   banner(cli, sessionId);
   const t = new Thread({
     cli,
+    claude,
     cwd,
     ...testBot(cwd, sessionId),
     resume: true,
@@ -136,7 +150,7 @@ function runPhase(phase: string, cwd: string, sessionId: string) {
 }
 
 async function chat(botArg?: string) {
-  const cli = preflight();
+  const { cli, claude } = preflight();
   const cwd = ensureWorkspace(config.dataRoot);
   const bot = botArg ? getBot(config.dataRoot, botArg) : createBot(config.dataRoot, "CLI chat");
   if (!bot) throw new Error(`no bot ${botArg} in ${config.dataRoot}`);
@@ -172,6 +186,7 @@ async function chat(botArg?: string) {
   const open = (resume: boolean) =>
     new Thread({
       cli,
+      claude,
       cwd,
       ...botContext(config.dataRoot, bot),
       resume,
@@ -251,9 +266,21 @@ try {
       break;
     case "auth-status":
     case "auth-login": {
-      const cli = resolveCli(config.dataRoot);
-      if (!cli) throw new Error("no claude binary resolved");
-      process.exit(await authCommand(cli, cmd === "auth-status" ? "status" : "login"));
+      const { cli, claude } = preflight();
+      const status = cmd === "auth-status";
+      const code = await authCommand(cli, status ? "status" : "login", claude.env());
+      if (status || code !== 0) process.exit(code);
+      // A sign-in can land where the host's children do not look, such as a keyring that exists only in this terminal session.
+      const state = await claude.checkSignIn();
+      if (state === "signed-out") {
+        log(
+          `error: the sign-in is not visible to the host: after login, \`auth status\` in ${claudeConfigDir(config)} reports signed out`,
+        );
+        process.exit(1);
+      }
+      if (state === "unknown")
+        log(`warning: could not confirm the sign-in in ${claudeConfigDir(config)}`);
+      break;
     }
     default: {
       preflight();

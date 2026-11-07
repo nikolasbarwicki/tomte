@@ -1,6 +1,13 @@
 import type { BotFile, BotSummary } from "@claudebot/contract/events";
 import { getRouteApi } from "@tanstack/react-router";
-import { EllipsisIcon, FileIcon, FolderOpenIcon, TrashIcon, XIcon } from "lucide-react";
+import {
+  DownloadIcon,
+  EllipsisIcon,
+  FileIcon,
+  FolderOpenIcon,
+  TrashIcon,
+  XIcon,
+} from "lucide-react";
 import { useTransition, type ReactNode } from "react";
 import { Streamdown } from "streamdown";
 
@@ -22,17 +29,20 @@ import {
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useFiles, useMemory, useRoutines } from "@/host/hooks.ts";
+import { useFiles, useMemory, usePublicHostInfo, useRoutines } from "@/host/hooks.ts";
 import { dateTime, fileSize } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
 
-import { deleteFile, revealFile } from "./api.ts";
+import { deleteFile, downloadUrl, revealFile } from "./api.ts";
 
 export const PANEL_TABS = ["memory", "files", "routines", "browser"] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
 const isPanelTab = (v: unknown): v is PanelTab => PANEL_TABS.some((t) => t === v);
 
 const botRoute = getRouteApi("/bots/$botId");
+
+/** Whether the host can reveal a folder in a file manager; false until the host says so. */
+const useCanReveal = () => usePublicHostInfo()?.capabilities.reveal === true;
 
 export function BotPanel({
   bot,
@@ -153,23 +163,26 @@ function Memory({ bot }: { bot: BotSummary }) {
 function Files({ bot }: { bot: BotSummary }) {
   const files = useFiles();
   const [opening, startOpening] = useTransition();
+  const canReveal = useCanReveal();
   return (
     <div className="grid gap-3">
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground text-xs">Everything {bot.name} produced.</p>
-        <Button
-          variant="outline"
-          size="sm"
-          title={files.dir}
-          disabled={opening}
-          onClick={() =>
-            startOpening(async () => {
-              await revealFile();
-            })
-          }
-        >
-          {opening ? <Spinner /> : <FolderOpenIcon />} Open folder
-        </Button>
+        {canReveal && (
+          <Button
+            variant="outline"
+            size="sm"
+            title={files.dir}
+            disabled={opening}
+            onClick={() =>
+              startOpening(async () => {
+                await revealFile();
+              })
+            }
+          >
+            {opening ? <Spinner /> : <FolderOpenIcon />} Open folder
+          </Button>
+        )}
       </div>
       {files.files.length === 0 ? (
         <Empty className="border border-dashed p-6">
@@ -196,6 +209,7 @@ function Files({ bot }: { bot: BotSummary }) {
 
 function FileRow({ file: f }: { file: BotFile }) {
   const [pending, startTransition] = useTransition();
+  const canReveal = useCanReveal();
   const reveal = () =>
     startTransition(async () => {
       await revealFile(f.path);
@@ -220,8 +234,8 @@ function FileRow({ file: f }: { file: BotFile }) {
       <button
         type="button"
         className="grid min-w-0 flex-1 text-left"
-        title={`Show ${f.path} in Finder`}
-        disabled={pending}
+        title={canReveal ? `Show ${f.path} in Finder` : undefined}
+        disabled={pending || !canReveal}
         onClick={reveal}
       >
         <span className="truncate text-sm">{f.path}</span>
@@ -247,9 +261,14 @@ function FileRow({ file: f }: { file: BotFile }) {
           {pending ? <Spinner /> : <EllipsisIcon />}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
-          <DropdownMenuItem onClick={reveal}>
-            <FolderOpenIcon /> Show in Finder
+          <DropdownMenuItem render={<a href={downloadUrl(f.path)} download />}>
+            <DownloadIcon /> Download
           </DropdownMenuItem>
+          {canReveal && (
+            <DropdownMenuItem onClick={reveal}>
+              <FolderOpenIcon /> Show in Finder
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={() => void remove()}>
             <TrashIcon /> Delete

@@ -13,14 +13,37 @@ export const BrowserAvailability = z.discriminatedUnion("status", [
 ]);
 export type BrowserAvailability = z.infer<typeof BrowserAvailability>;
 
-/** The `/api/info` response: where the host runs and how it reaches Claude. */
+/** The `/api/info` response: where the host runs and which Claude CLI it uses. */
 export const HostInfo = z.object({
   cwd: z.string(),
   cli: z.string(),
-  auth: z.string(),
   browser: BrowserAvailability,
 });
 export type HostInfo = z.infer<typeof HostInfo>;
+
+/** The version of the `/api/*` surface a client talks to; the host-info route reports it. */
+export const API_VERSION = 1;
+
+/** Whether the Claude CLI holds a sign-in. `unknown`: `auth status` could not run or its output did not parse. */
+export const ClaudeSignIn = z.enum(["signed-in", "signed-out", "unknown"]);
+export type ClaudeSignIn = z.infer<typeof ClaudeSignIn>;
+
+/**
+ * The `/api/host-info` response, which needs no device token: what this host is and what it can do, so the UI hides
+ * actions it cannot perform. `claude` is present in remote mode only. It carries no other host state.
+ */
+export const PublicHostInfo = z.object({
+  version: z.string(),
+  apiVersion: z.number().int(),
+  mode: z.enum(["local", "remote"]),
+  claude: ClaudeSignIn.optional(),
+  capabilities: z.object({
+    reveal: z.boolean(),
+    headedBrowser: z.boolean(),
+    browserSandbox: z.boolean(),
+  }),
+});
+export type PublicHostInfo = z.infer<typeof PublicHostInfo>;
 
 /** The `/api/routines/preview` response: the next times the schedule fires. */
 export const RoutinePreview = z.object({ next: z.array(z.number()) });

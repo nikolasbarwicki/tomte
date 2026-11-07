@@ -6,12 +6,15 @@ import { parseArgs } from "node:util";
 /** Local: the host runs on the user's machine. Remote: the host runs on a server and users reach it over the network. */
 type HostMode = "local" | "remote";
 
+/** Where the host keeps its secrets: the OS keychain, or an encrypted file in the data root whose 32-byte key is read from `keyFile` (an absolute path; the key itself is never configuration). */
+type SecretsConfig = { backend: "keychain" } | { backend: "file"; keyFile: string };
+
 /** Every deployment choice, read once at startup by `parseHostConfig`; nothing downstream reads the environment for these. */
 export interface HostConfig {
   mode: HostMode;
   /** The one directory that holds all host state: database, bot directories, plugins and skills, user memory, and the managed Claude CLI and engine. Absolute. */
   dataRoot: string;
-  /** Where the client-facing server listens; always loopback. Port 0 picks a free one. */
+  /** Where the client-facing server listens. A non-loopback address parses only when the public URL is HTTPS or `allowPlainHttp` is set. Port 0 picks a free one. */
   bind: { address: string; port: number };
   /** The origin users and OAuth providers reach; the loopback URL of the bound port when unset. */
   publicUrl: string | undefined;
@@ -21,6 +24,16 @@ export interface HostConfig {
   vite: boolean;
   /** Ask the user before a bot runs a tool instead of approving everything; `CLAUDEBOT_ASK_APPROVAL`. */
   askApproval: boolean;
+  /** Allow a non-loopback bind while the public URL is not HTTPS, for private networks such as Tailscale; `--allow-plain-http`, `CLAUDEBOT_ALLOW_PLAIN_HTTP`. */
+  allowPlainHttp: boolean;
+  /** The secrets backend: keychain in local mode, file in remote mode; `--secrets`, `--secrets-key-file`, `CLAUDEBOT_SECRETS`, `CLAUDEBOT_SECRETS_KEY_FILE`. */
+  secrets: SecretsConfig;
+  /** Whether a bot may run headed Chrome; local mode only. */
+  headedBrowser: boolean;
+  /** Whether the host can reveal a folder in the user's file manager; local mode only. */
+  reveal: boolean;
+  /** Whether every bot's shell runs under isolation, not only bots with the browser enabled; remote mode only. */
+  isolateAllBots: boolean;
 }
 
 /** The startup flags or environment variables are wrong; the message says which and why. */
@@ -35,12 +48,42 @@ const FLAGS = {
   "public-url": { type: "string" },
   herdr: { type: "boolean" },
   vite: { type: "boolean" },
+  "allow-plain-http": { type: "boolean" },
+  secrets: { type: "string" },
+  "secrets-key-file": { type: "string" },
 } as const;
 
 const MODES: readonly string[] = ["local", "remote"] satisfies HostMode[];
 
-/** Both modes bind loopback on a free port unless told otherwise; the remote mode spec sets its own defaults. */
+/** Both modes bind loopback on a free port unless told otherwise; a deployment sets its own address and port. */
 const DEFAULT_BIND = { address: "127.0.0.1", port: 0 };
+
+const BACKENDS: readonly string[] = ["keychain", "file"] satisfies SecretsConfig["backend"][];
+
+/** The backend defaults to the mode's; `file` needs an absolute key file path, and `keychain` takes none, so a stray path is never silently ignored. */
+function parseSecrets(
+  mode: HostMode,
+  rawBackend: string | undefined,
+  rawKeyFile: string | undefined,
+): SecretsConfig {
+  const backend = rawBackend ?? (mode === "remote" ? "file" : "keychain");
+  if (!BACKENDS.includes(backend))
+    throw new InvalidConfig(`invalid secrets backend "${backend}": expected keychain or file`);
+  if (backend === "keychain") {
+    if (rawKeyFile !== undefined)
+      throw new InvalidConfig(
+        `a secrets key file only applies to the file backend, but the secrets backend is keychain; drop --secrets-key-file or use --secrets file`,
+      );
+    return { backend };
+  }
+  if (rawKeyFile === undefined)
+    throw new InvalidConfig(
+      `the file secrets backend needs a key file of 32 raw bytes: pass --secrets-key-file <absolute path> (CLAUDEBOT_SECRETS_KEY_FILE), or use --secrets keychain`,
+    );
+  if (!isAbsolute(rawKeyFile))
+    throw new InvalidConfig(`invalid secrets key file "${rawKeyFile}": expected an absolute path`);
+  return { backend: "file", keyFile: normalize(rawKeyFile) };
+}
 
 /** The agent listener's address; it never leaves this machine. */
 export const AGENT_ADDRESS = "127.0.0.1";
@@ -115,6 +158,15 @@ function parseBool(name: string, raw: string): boolean {
   throw new InvalidConfig(`invalid ${name} "${raw}": expected 1, true, 0 or false`);
 }
 
+/** Remote mode is Linux-only (ADR-0006): the message says why for the platform this host runs on and where remote mode can run instead. */
+function remoteRefusal(platform: NodeJS.Platform): string {
+  const why =
+    platform === "darwin"
+      ? "on macOS the Claude sign-in sits in the login keychain, where the bot sandbox cannot keep bots away from it"
+      : `this host runs on ${platform}, and remote mode is neither built nor tested there`;
+  return `remote mode is supported on Linux only: ${why}; use local mode${platform === "darwin" ? " on a Mac" : ""} and run remote mode on a Linux server`;
+}
+
 function parseFlags(argv: readonly string[]) {
   try {
     return parseArgs({ args: [...argv], options: FLAGS, allowPositionals: true });
@@ -124,9 +176,10 @@ function parseFlags(argv: readonly string[]) {
 }
 
 /**
- * Reads the host's configuration from command-line flags (`--mode`, `--data-root`, `--host`, `--port`, `--public-url`, `--herdr`, `--vite`)
- * and `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|HERDR|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
- * Without a data root the OS application-data directory is used.
+ * Reads the host's configuration from command-line flags (`--mode`, `--data-root`, `--host`, `--port`, `--public-url`, `--allow-plain-http`,
+ * `--secrets`, `--secrets-key-file`, `--herdr`, `--vite`) and
+ * `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|ALLOW_PLAIN_HTTP|SECRETS|SECRETS_KEY_FILE|HERDR|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
+ * Without a data root the OS application-data directory is used. Remote mode parses on Linux only (ADR-0006).
  */
 export function parseHostConfig(
   argv: readonly string[],
@@ -139,15 +192,24 @@ export function parseHostConfig(
   const mode = values.mode ?? get("CLAUDEBOT_MODE") ?? "local";
   if (!MODES.includes(mode))
     throw new InvalidConfig(`invalid mode "${mode}": expected local or remote`);
+  if (mode === "remote" && system.platform !== "linux")
+    throw new InvalidConfig(remoteRefusal(system.platform));
   const rawDataRoot = values["data-root"] ?? get("CLAUDEBOT_DATA_ROOT");
   const address = values.host ?? get("CLAUDEBOT_HOST") ?? DEFAULT_BIND.address;
-  if (!isLoopback(address)) {
+  const rawPublicUrl = values["public-url"] ?? get("CLAUDEBOT_PUBLIC_URL");
+  const publicUrl = rawPublicUrl === undefined ? undefined : parsePublicUrl(rawPublicUrl);
+  const rawAllowPlainHttp = get("CLAUDEBOT_ALLOW_PLAIN_HTTP");
+  const allowPlainHttp =
+    values["allow-plain-http"] ??
+    (rawAllowPlainHttp === undefined
+      ? false
+      : parseBool("CLAUDEBOT_ALLOW_PLAIN_HTTP", rawAllowPlainHttp));
+  if (!isLoopback(address) && !allowPlainHttp && !publicUrl?.startsWith("https:")) {
     throw new InvalidConfig(
-      `refusing to bind ${address}: the host listens on loopback only (127.0.0.0/8, ::1 or localhost); reach it from other machines through the public URL`,
+      `refusing to bind ${address}: the public URL is ${publicUrl ?? "not set"}, so users would reach the host over plain HTTP; set --public-url to an https:// origin (a TLS proxy in front), or pass --allow-plain-http (CLAUDEBOT_ALLOW_PLAIN_HTTP=1) on a private network such as Tailscale`,
     );
   }
   const rawPort = values.port ?? get("CLAUDEBOT_PORT");
-  const rawPublicUrl = values["public-url"] ?? get("CLAUDEBOT_PUBLIC_URL");
   const rawHerdr = get("CLAUDEBOT_HERDR");
   const rawVite = get("CLAUDEBOT_VITE");
   const rawAskApproval = get("CLAUDEBOT_ASK_APPROVAL");
@@ -161,7 +223,16 @@ export function parseHostConfig(
         address: bare(address),
         port: rawPort === undefined ? DEFAULT_BIND.port : parsePort(rawPort),
       },
-      publicUrl: rawPublicUrl === undefined ? undefined : parsePublicUrl(rawPublicUrl),
+      publicUrl,
+      allowPlainHttp,
+      secrets: parseSecrets(
+        mode as HostMode,
+        values.secrets ?? get("CLAUDEBOT_SECRETS"),
+        values["secrets-key-file"] ?? get("CLAUDEBOT_SECRETS_KEY_FILE"),
+      ),
+      headedBrowser: mode === "local",
+      reveal: mode === "local",
+      isolateAllBots: mode === "remote",
       herdr:
         values.herdr ?? (rawHerdr === undefined ? false : parseBool("CLAUDEBOT_HERDR", rawHerdr)),
       vite: values.vite ?? (rawVite === undefined ? false : parseBool("CLAUDEBOT_VITE", rawVite)),

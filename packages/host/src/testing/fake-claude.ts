@@ -1,15 +1,35 @@
 #!/usr/bin/env bun
-// Fake Claude Code speaking just enough of the stream-json control protocol for a Thread turn. Point `cli.path` at this file.
-// FAKE_CLAUDE_DIR holds: `messages.jsonl` (one line per user message received: `{ sessionId, text }`, the session taken from the CLI's argv) and an optional `hold` file:
+// Fake Claude Code speaking just enough of the stream-json control protocol for a Thread turn. Point `cli.path` at this file, or at a wrapper script that passes the directory below as its first argument, which keeps the host's environment out of the fake's.
+// The directory comes from FAKE_CLAUDE_DIR, or else from the first argument. It holds: `messages.jsonl` (one line per user message received: `{ sessionId, text }`, the session taken from the CLI's argv) and an optional `hold` file:
 // while it exists, a received user message is not answered, which keeps the turn running. An optional `result.txt` is the text each turn answers with (default "ok").
 // An optional `remember.json` (`{ scope, line }`) makes each user message call the host's in-process `remember` tool over the control protocol before the turn is answered.
+// `auth status` prints the real CLI's JSON and exits 1 while a `signed-out` file exists, else exits 0. `auth login` exits with the code in the optional `login-exit` file (default 0).
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
-const dir = process.env.FAKE_CLAUDE_DIR;
+const envDir = process.env.FAKE_CLAUDE_DIR;
+const dir = envDir ?? process.argv[2];
 if (!dir) process.exit(2);
-// `launches.jsonl` gets one line per CLI launch: `{ cwd, appendSystemPrompt, mcpServers }`. The servers are read from the --mcp-config file at startup, before the host removes it; the prompt arrives in the initialize request.
+const [command, subcommand] = process.argv.slice(envDir ? 2 : 3);
+if (command === "auth") {
+  if (subcommand === "login")
+    process.exit(
+      existsSync(join(dir, "login-exit"))
+        ? Number(readFileSync(join(dir, "login-exit"), "utf8"))
+        : 0,
+    );
+  const signedIn = !existsSync(join(dir, "signed-out"));
+  console.log(
+    JSON.stringify({
+      loggedIn: signedIn,
+      authMethod: signedIn ? "claude.ai" : "none",
+      configDirectory: process.env.CLAUDE_CONFIG_DIR,
+    }),
+  );
+  process.exit(signedIn ? 0 : 1);
+}
+// `launches.jsonl` gets one line per CLI launch: `{ cwd, appendSystemPrompt, mcpServers, env, argv }`. `argv` is the command line the CLI was started with, where the SDK puts `--settings` (the sandbox) and `--disallowedTools`. The servers are read from the --mcp-config file at startup, before the host removes it; the prompt arrives in the initialize request; `env` is the whole environment the CLI started with.
 const arg = (name: string) =>
   process.argv.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1) ??
   process.argv[process.argv.indexOf(name) + 1];
@@ -42,6 +62,8 @@ for await (const line of createInterface({ input: process.stdin })) {
           cwd: process.cwd(),
           appendSystemPrompt: m.request.appendSystemPrompt,
           mcpServers,
+          env: process.env,
+          argv: process.argv.slice(envDir ? 2 : 3),
         }) + "\n",
       );
     out({

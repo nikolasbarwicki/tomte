@@ -150,10 +150,18 @@ export function loginShellPath(): string | undefined {
   return r.status === 0 && r.stdout ? r.stdout : process.env.PATH;
 }
 
-/** `claude auth status`: separate spawn, not needed on the API-key path. */
-export function authCommand(cli: ResolvedCli, sub: "status" | "login"): Promise<number> {
+/** `claude auth status` or `claude auth login` in the foreground with the caller's terminal, in `env`; resolves with its exit code. */
+export function authCommand(
+  cli: ResolvedCli,
+  sub: "status" | "login",
+  env: Record<string, string | undefined>,
+): Promise<number> {
   return new Promise((res) => {
-    const p = spawn(cli.path, ["auth", sub], { stdio: "inherit", shell: cli.needsShell });
+    const p = spawn(cli.path, ["auth", sub], {
+      stdio: "inherit",
+      shell: cli.needsShell,
+      env: env as NodeJS.ProcessEnv,
+    });
     p.on("exit", (c) => res(c ?? 1));
   });
 }

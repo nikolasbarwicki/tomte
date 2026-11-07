@@ -1,5 +1,18 @@
 import { execFile } from "node:child_process";
-import { existsSync, lstatSync, readdirSync, rmSync, watch, type FSWatcher } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  watch,
+  type FSWatcher,
+} from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { BotFile } from "@claudebot/contract/events";
@@ -30,6 +43,44 @@ export function resolveInside(dir: string, rel: string): string | undefined {
   const abs = resolve(dir, rel);
   const r = relative(dir, abs);
   return r && !r.startsWith("..") && !isAbsolute(r) ? abs : undefined;
+}
+
+/** A regular file opened for reading; the caller closes `fd` (handing it to a stream does). */
+interface OpenedFile {
+  fd: number;
+  size: number;
+}
+
+/** What a missing path, a non-directory path component, a symlink loop or an unreadable file looks like; every other failure is a bug and propagates. */
+const NOT_READABLE = new Set(["ENOENT", "ENOTDIR", "ELOOP", "EACCES", "EISDIR", "ENAMETOOLONG"]);
+
+/**
+ * Opens the regular file `rel` under `dir` for reading, or returns undefined when `rel` escapes `dir`, names a missing
+ * file, a directory or anything but a regular file, or a symlink resolves outside `dir`. The caller reads from the
+ * returned descriptor, so what it reads is what was checked: after the open, the path is resolved again and must
+ * still lead inside `dir` to the very file the descriptor holds.
+ */
+export function openFileInside(dir: string, rel: string): OpenedFile | undefined {
+  const abs = resolveInside(dir, rel);
+  if (!abs) return undefined;
+  let fd: number | undefined;
+  try {
+    const root = realpathSync(dir);
+    const target = resolveInside(root, realpathSync(abs));
+    if (!target) return undefined;
+    // O_NONBLOCK keeps a FIFO swapped in after the check from hanging the open; it has no effect on regular files.
+    fd = openSync(target, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+    const opened = fstatSync(fd);
+    const again = resolveInside(root, realpathSync(abs));
+    if (opened.isFile() && again) {
+      const found = statSync(again);
+      if (found.dev === opened.dev && found.ino === opened.ino) return { fd, size: opened.size };
+    }
+  } catch (e) {
+    if (!NOT_READABLE.has((e as NodeJS.ErrnoException).code ?? "")) throw e;
+  }
+  if (fd !== undefined) closeSync(fd);
+  return undefined;
 }
 
 /** Delete one file, then prune subfolders it leaves empty (never `dir` itself). */

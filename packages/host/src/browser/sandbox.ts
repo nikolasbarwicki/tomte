@@ -14,12 +14,11 @@ const engineStateDir = () => join(homedir(), ".agent-browser");
  * so a sandboxed `security` command could read claudebot's keychain items; denying the user keychain files closes that.
  */
 export const browserIsolation = (): IsolationProfile => ({
-  shell: {
-    denyRead: [
-      engineStateDir(),
-      ...(process.platform === "darwin" ? [join(homedir(), "Library", "Keychains")] : []),
-    ],
-  },
+  denyRead: [
+    engineStateDir(),
+    ...(process.platform === "darwin" ? [join(homedir(), "Library", "Keychains")] : []),
+  ],
+  shell: "sandboxed",
 });
 
 export interface SandboxProbe {

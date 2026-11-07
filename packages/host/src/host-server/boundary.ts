@@ -5,8 +5,11 @@ import type { HostOrigin } from "../platform/config.ts";
 import type { DeviceSessions } from "./device-sessions.ts";
 import { readSessionCookie } from "./session-cookie.ts";
 
-/** The pairing exchange: the one `/api/*` route a device without a token may call. */
+/** The pairing exchange: the one `/api/*` route a device without a token may call with POST. */
 export const PAIR_PATH = "/api/pair";
+
+/** What this host is and can do; the one `/api/*` route a device without a token may call with GET. It carries no host state beyond the Claude sign-in. */
+export const HOST_INFO_PATH = "/api/host-info";
 
 /** `/oauth/callback` is protected by its OAuth state parameter, not by a device token. */
 const OAUTH_CALLBACK_PATH = "/oauth/callback";
@@ -15,10 +18,13 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
  * Everything outside `/api/*` is the static web app or `/oauth/callback`: assets and the login page must load
- * before a device has a token. Anything under `/api/*` needs one, except the pairing exchange.
+ * before a device has a token. Anything under `/api/*` needs one, except the pairing exchange and the host-info read.
  */
-const isOpen = (path: string) =>
-  path === PAIR_PATH || path === OAUTH_CALLBACK_PATH || !path.startsWith("/api/");
+const isOpen = (path: string, method: string) =>
+  path === PAIR_PATH ||
+  (path === HOST_INFO_PATH && method === "GET") ||
+  path === OAUTH_CALLBACK_PATH ||
+  !path.startsWith("/api/");
 
 /** The device token a request presents: an `Authorization: Bearer` header, else the session cookie. */
 function presentedToken(req: IncomingMessage): string | undefined {
@@ -51,7 +57,7 @@ export function withBoundary(
         return reject(res, 415, "content type must be application/json");
     }
     const path = new URL(req.url ?? "/", "http://x").pathname;
-    if (!isOpen(path)) {
+    if (!isOpen(path, req.method ?? "")) {
       const token = presentedToken(req);
       const deviceId = token === undefined ? undefined : devices.authenticate(token);
       if (deviceId === undefined) return reject(res, 401, "pair this device first");
