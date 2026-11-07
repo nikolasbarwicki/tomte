@@ -23,20 +23,11 @@ import {
 import { installManagedEngine } from "./browser/index.ts";
 import { createDeviceAuth } from "./device-auth/index.ts";
 import { authCommand, installManagedCli, resolveCli, type ResolvedCli } from "./harness/index.ts";
-import { InvalidConfig, parseHostConfig } from "./platform/config.ts";
 import { openDb } from "./platform/db.ts";
+import { hostCommand, parseStartupConfig } from "./platform/launch.ts";
 import { ensureWorkspace } from "./platform/workspace.ts";
 
-const parsed = (() => {
-  try {
-    return parseHostConfig(process.argv.slice(2), process.env);
-  } catch (e) {
-    if (!(e instanceof InvalidConfig)) throw e;
-    console.error(e.message);
-    process.exit(2);
-  }
-})();
-const { config } = parsed;
+const { config, positionals } = parseStartupConfig();
 
 const log = (l: string) => console.error(l);
 
@@ -66,20 +57,13 @@ function delegate(answer: string): HostDelegate {
 
 function preflight(): ResolvedCli {
   const cli = resolveCli(config.dataRoot);
-  const hasKey = !!process.env.ANTHROPIC_API_KEY;
-  if (!cli && !hasKey) {
-    log(
-      "refusing to start: no ANTHROPIC_API_KEY in the environment and no claude binary (CLAUDE_PATH, managed copy, PATH)",
-    );
-    process.exit(2);
-  }
   if (!cli) {
     log(
-      "refusing to start: no claude binary resolved; set CLAUDE_PATH or run `host.ts install-cli`",
+      `refusing to start: no claude binary resolved (CLAUDE_PATH, managed copy, PATH); set CLAUDE_PATH or run \`${hostCommand("install-cli", "--data-root", config.dataRoot)}\``,
     );
     process.exit(2);
   }
-  if (!hasKey)
+  if (!process.env.ANTHROPIC_API_KEY)
     log(
       "[host] warning: ANTHROPIC_API_KEY not set; the CLI will use its own stored login (not valid for third-party products)",
     );
@@ -238,7 +222,7 @@ async function chat(botArg?: string) {
   rl.close();
   console.log(`resume later with: bun packages/host/src/host.ts chat ${bot.id}`);
 }
-const [cmd, a1, a2] = parsed.positionals;
+const [cmd, a1, a2] = positionals;
 try {
   switch (cmd) {
     case "create":

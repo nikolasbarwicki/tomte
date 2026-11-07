@@ -21,7 +21,7 @@ import { engineStatus } from "./engine.ts";
 
 /**
  * Real-engine smoke: the real host server, egress proxy, agent-browser engine, Chrome for Testing and Claude CLI,
- * driven through the UI routes. Needs the engine installed (`bun packages/host/src/host.ts install-browser`) and a working Claude login.
+ * driven through the UI routes. Needs the engine installed (the `install-browser` host subcommand) and a working Claude login.
  */
 
 const log = (l: string) => console.error(l);

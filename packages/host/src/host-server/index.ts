@@ -6,7 +6,6 @@ import type {
   IntegrationsEvent,
   RoutinesEvent,
 } from "@claudebot/contract/events";
-import { createServer as createVite } from "vite";
 
 import { getBot, listBots, botFilesPath } from "../bots/index.ts";
 import {
@@ -26,6 +25,7 @@ import type { SecretStore } from "../platform/secrets.ts";
 import { TokenRegistry } from "../platform/tokens.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
 import { createRoutines } from "../routines/index.ts";
+import { serveUi, type UiAssets } from "../ui/index.ts";
 import { createApi } from "./api/index.ts";
 import { oauthCallback } from "./api/integrations.ts";
 import { pairRoute } from "./api/pair.ts";
@@ -55,6 +55,8 @@ export interface HostServerOptions {
   liveView?: Pick<LiveViewOptions, "maxFps" | "retryMs">;
   /** How long the user may hold a bot's browser without input before control ends; 30 minutes when omitted. */
   takeoverInactivityMs?: number;
+  /** The built web UI the client listener serves; every request no route claims answers 404 without it. Ignored when `config.vite` is on. */
+  ui?: UiAssets;
   /** The clock device auth reads for pairing code expiry, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
 }
@@ -201,12 +203,15 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
 
   const webRoot = fileURLToPath(new URL("../../../web", import.meta.url));
   const vite = o.config.vite
-    ? await createVite({
-        root: webRoot,
-        server: { middlewareMode: true, hmr: { server: clientListener.http } },
-        appType: "spa",
-      })
+    ? await import("vite").then((v) =>
+        v.createServer({
+          root: webRoot,
+          server: { middlewareMode: true, hmr: { server: clientListener.http } },
+          appType: "spa",
+        }),
+      )
     : undefined;
+  const serveBuiltUi = serveUi(o.ui ?? { read: async () => undefined });
 
   const devices = createDeviceAuth({ db, ...(o.now !== undefined && { now: o.now }) });
   const sessions = createDeviceSessions();
@@ -252,7 +257,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       devices,
       sessions,
       createRequestListener(client, (req, res) =>
-        vite ? vite.middlewares(req, res) : void res.writeHead(404).end(),
+        vite ? vite.middlewares(req, res) : serveBuiltUi(req, res),
       ),
     ),
   );

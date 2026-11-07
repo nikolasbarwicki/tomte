@@ -187,3 +187,11 @@
     animation: bot-avatar-breathe 2s ease-in-out infinite;
   }
 }
+
+/* Set by `withoutTransitions` (lib/theme.ts) while the theme flips. */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+}

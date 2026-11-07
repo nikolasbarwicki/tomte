@@ -12,6 +12,7 @@ import {
 import { delimiter, join } from "node:path";
 
 import { isMusl } from "../harness/index.ts";
+import { hostCommand } from "../platform/launch.ts";
 import { findChrome } from "./engine-cli.ts";
 
 const isWin = process.platform === "win32";
@@ -77,13 +78,12 @@ export function engineStatus(dataRoot: string): EngineStatus {
     if (!findChrome())
       return {
         status: "unavailable",
-        reason:
-          "Chrome for Testing is not installed; run `bun packages/host/src/host.ts install-browser`",
+        reason: `Chrome for Testing is not installed; run \`${hostCommand("install-browser", "--data-root", dataRoot)}\``,
       };
     return { status: "available", ...e };
   }
   const reason = platformKey()
-    ? "browser engine not installed; run `bun packages/host/src/host.ts install-browser`"
+    ? `browser engine not installed; run \`${hostCommand("install-browser", "--data-root", dataRoot)}\``
     : `no agent-browser build for ${process.platform}/${process.arch}`;
   return { status: "unavailable", reason };
 }

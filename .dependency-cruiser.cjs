@@ -16,7 +16,7 @@ const REACT = "node_modules/(@types/)?(react|react-dom)/";
 const TESTS = `(\\.test\\.tsx?$|${HOST}testing/)`;
 /** Folders under packages/host/src whose files are private behind index.ts. */
 const MODULES =
-  "(bots|browser|credentials|device-auth|handoffs|harness|host-mcp|host-server|integrations|routines)";
+  "(bots|browser|credentials|device-auth|handoffs|harness|host-mcp|host-server|integrations|routines|ui)";
 const PRIVATE = `${HOST}${MODULES}/(?!index\\.ts$)`;
 const HOST_SMOKE = `${HOST}browser/smoke\\.ts$`;
 const HOST_CLI = `${HOST}host\\.ts$`;
@@ -39,8 +39,6 @@ module.exports = {
           "\\.d\\.ts$",
           // Tests are run by the test runner, never imported.
           "\\.test\\.tsx?$",
-          // Entry point: spawned as a subprocess by path from browser/login.ts (PLUGIN_SCRIPT).
-          "^packages/host/src/browser/credential-plugin\\.ts$",
         ],
       },
       to: {},
@@ -175,5 +173,7 @@ module.exports = {
     parser: "swc",
     tsConfig: { fileName: "tsconfig.json" },
     doNotFollow: { path: "node_modules" },
+    // Build output (packages/web/dist) is generated, not source.
+    exclude: { path: "(^|/)dist/" },
   },
 };

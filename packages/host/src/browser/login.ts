@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import type { Credentials } from "../credentials/index.ts";
 import type { HostOrigin } from "../platform/config.ts";
+import { isCompiledHost } from "../platform/launch.ts";
 import { credentialSecretName, type SecretStore } from "../platform/secrets.ts";
 import { EngineError, type PageData } from "./engine-cli.ts";
 import type { HumanWaits, WaitingForUser } from "./human-waits.ts";
@@ -91,7 +92,14 @@ export interface BrowserLogin {
   handle(req: IncomingMessage, res: ServerResponse, host: HostOrigin): Promise<void>;
 }
 
+/** The host subcommand that runs the credential plugin; the compiled host has no script to spawn, so the engine spawns the binary with it. */
+export const CREDENTIAL_PLUGIN_COMMAND = "credential-plugin";
+
 const PLUGIN_SCRIPT = fileURLToPath(new URL("./credential-plugin.ts", import.meta.url));
+
+/** The arguments after `process.execPath` that make it run the credential plugin against `exchangeUrl`. */
+const pluginArgs = (exchangeUrl: string) =>
+  isCompiledHost() ? [CREDENTIAL_PLUGIN_COMMAND, exchangeUrl] : [PLUGIN_SCRIPT, exchangeUrl];
 
 const FIELD = /^\s*- (?:textbox|searchbox|combobox|spinbutton)\s+"([^"]*)"/;
 const CODE_FIELD = /code|otp|verif|token|passcode|authenticator|2fa|\bpin\b|one.?time/i;
@@ -160,7 +168,7 @@ export function createBrowserLogin(deps: BrowserLoginDeps): BrowserLogin {
       {
         name: CREDENTIAL_PLUGIN_NAME,
         command: process.execPath,
-        args: [PLUGIN_SCRIPT, deps.exchangeUrl()],
+        args: pluginArgs(deps.exchangeUrl()),
         capabilities: ["credential.read"],
       },
     ]);
