@@ -1,0 +1,6 @@
+# CLAUDEBOT_PUBLIC_URL in /etc/claudebot/claudebot.env must be exactly https://claudebot.example.com.
+# The host answers 403 to any other Host header, so do not rewrite it, and it ignores X-Forwarded-*.
+# The event stream and live view are text/event-stream, which Caddy flushes immediately: no flush_interval.
+claudebot.example.com {
+	reverse_proxy 127.0.0.1:8417
+}
