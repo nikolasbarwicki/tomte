@@ -47,6 +47,12 @@ function unpackedDir(platform: DesktopPlatform, arch: DesktopArch): string {
   return arch === "x64" ? `${prefix}-unpacked` : `${prefix}-${arch}-unpacked`;
 }
 
+/** The signable app in the unpacked folder, relative to the bundle folder: the `.app` bundle, or the app's `.exe`. */
+export function bundledAppPath(platform: "darwin" | "win32", arch: DesktopArch): string {
+  const dir = unpackedDir(platform, arch);
+  return join(dir, platform === "darwin" ? `${APP_NAME}.app` : `${APP_NAME}.exe`);
+}
+
 /** The bundled host in the unpacked app, relative to the bundle folder; `claudebot-host` is the extra resource's name. */
 export function bundledHostPath(platform: DesktopPlatform, arch: DesktopArch): string {
   const dir = unpackedDir(platform, arch);

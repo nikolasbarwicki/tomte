@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <!-- One file for everything the release signs: the Electron app and its helpers (V8) and the bundled Bun-compiled
+         host (JavaScriptCore). Both JIT, which the hardened runtime that notarization requires blocks without these.
+         Nothing else is granted: no library-validation or DYLD escape. If a signed binary needs more, the host job's
+         smoke run (it runs the signed binary) fails; add the entitlement here, and keep HOST_ENTITLEMENTS in
+         scripts/signing-kit.ts in step. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+  </dict>
+</plist>

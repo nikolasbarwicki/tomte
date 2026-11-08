@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 
 import {
   bundleDirName,
+  bundledAppPath,
   bundledHostPath,
   collectDesktopRelease,
   desktopAssets,
@@ -55,6 +56,8 @@ describe("what a release holds", () => {
     expect(bundledHostPath("darwin", "arm64")).toStartWith("mac-arm64/");
     expect(bundledHostPath("win32", "x64")).toBe("win-unpacked/resources/claudebot-host.exe");
     expect(bundledHostPath("linux", "arm64")).toBe("linux-arm64-unpacked/resources/claudebot-host");
+    expect(bundledAppPath("darwin", "arm64")).toBe("mac-arm64/Claudebot.app");
+    expect(bundledAppPath("win32", "x64")).toBe("win-unpacked/Claudebot.exe");
   });
 });
 
