@@ -26,7 +26,7 @@ export const isDesktopArch = (name: string): name is DesktopArch =>
  * The desktop installers a release ships. A host binary exists for every host target, but an installer only for these:
  * macOS on both CPUs, Windows and Linux on x64. linux-arm64 stays host-only, and the Windows arm64 app is not built.
  */
-const SUPPORTED_DESKTOP: Record<DesktopPlatform, readonly DesktopArch[]> = {
+export const SUPPORTED_DESKTOP: Record<DesktopPlatform, readonly DesktopArch[]> = {
   darwin: ["arm64", "x64"],
   win32: ["x64"],
   linux: ["x64"],

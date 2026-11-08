@@ -7,6 +7,10 @@
 //                                                    <version>) and copies its installers and metadata into <outDir>
 //   bun scripts/release.ts checksums <dir> <version> checks <dir> holds all five host binaries and every supported OS's
 //                                                    installers and metadata, then writes SHA256SUMS over every file in it
+//   bun scripts/release.ts verify-release <dir> <version>
+//                                                    checks a downloaded Release folder (`gh release download <tag> -D <dir>`):
+//                                                    every asset present, SHA256SUMS exact and matching, install.sh's
+//                                                    DEFAULT_REPO set, every latest*.yml naming <version> with the real sha512/size
 // Exits non-zero, with the reason on stderr, when a check fails.
 import { appendFileSync } from "node:fs";
 
@@ -17,9 +21,10 @@ import {
   releaseAssets,
 } from "./desktop-kit.ts";
 import { releaseForTag, writeChecksums } from "./release-kit.ts";
+import { verifyRelease } from "./release-verify.ts";
 
 const USAGE =
-  "usage: bun scripts/release.ts tag <tag> | desktop <bundleDir> <hostDir> <outDir> <version> <arch>... | checksums <dir> <version>";
+  "usage: bun scripts/release.ts tag <tag> | desktop <bundleDir> <hostDir> <outDir> <version> <arch>... | checksums <dir> <version> | verify-release <dir> <version>";
 
 const isDesktopPlatform = (name: string): name is DesktopPlatform =>
   name === "darwin" || name === "win32" || name === "linux";
@@ -62,6 +67,18 @@ async function main(): Promise<number> {
   }
   if (command === "checksums" && args.length === 2) {
     process.stdout.write(await writeChecksums(args[0] as string, releaseAssets(args[1] as string)));
+    return 0;
+  }
+  if (command === "verify-release" && args.length === 2) {
+    const [dir, version] = args as [string, string];
+    const problems = await verifyRelease(dir, version);
+    if (problems.length > 0) {
+      console.error(
+        `${dir} is not a complete release ${version}:\n${problems.map((p) => `  ${p}`).join("\n")}`,
+      );
+      return 1;
+    }
+    process.stdout.write(`${dir} is a complete, consistent release ${version}\n`);
     return 0;
   }
   console.error(USAGE);
