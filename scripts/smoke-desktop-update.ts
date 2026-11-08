@@ -1,7 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { UPDATES_ENV } from "../packages/desktop/src/updates.ts";
+import { FIXTURE_BUNDLE_ID, PRODUCTION_BUNDLE_ID } from "./desktop-kit.ts";
 import {
   check,
   createSmokeRun,
@@ -24,6 +26,29 @@ import {
 // the outcome is (an unsigned macOS app is expected to be refused by Squirrel.Mac). Prints the app's desktop.log.
 const ZIP_NAME = /\.zip$/;
 
+/** Every entry in ~/Library/Caches whose name starts with the production bundle id: the user's installed app's, never ours to touch. */
+const productionCaches = () =>
+  readdirSync(join(homedir(), "Library/Caches"))
+    .filter((n) => n.startsWith(PRODUCTION_BUNDLE_ID) && !n.startsWith(FIXTURE_BUNDLE_ID))
+    .sort();
+
+/** The app's CFBundleIdentifier, read with the system's `plutil`. */
+async function bundleId(app: string): Promise<string> {
+  const plist = Bun.spawn(
+    [
+      "plutil",
+      "-extract",
+      "CFBundleIdentifier",
+      "raw",
+      "-o",
+      "-",
+      join(app, "Contents/Info.plist"),
+    ],
+    { stdout: "pipe" },
+  );
+  return (await new Response(plist.stdout).text()).trim();
+}
+
 async function main(): Promise<void> {
   const [oldApp, feedDir] = process.argv.slice(2);
   if (!oldApp || !feedDir)
@@ -39,6 +64,28 @@ async function main(): Promise<void> {
   const metadata = join(feed, "latest-mac.yml");
   if (!existsSync(metadata)) fail(`${metadata} does not exist`);
   const newVersion = /^version:\s*(\S+)/m.exec(readFileSync(metadata, "utf8"))?.[1] ?? "?";
+
+  // A packaged app writes outside the temp HOME, under the real home and named by its bundle id: Squirrel.Mac's
+  // `<id>.ShipIt` cache, Chromium's `<id>` cache and HTTP storage, the `<id>.plist` preferences. A fixture build has its
+  // own id; the production id belongs to the user's installed app and is refused outright.
+  const id = await bundleId(resolve(oldApp ?? ""));
+  if (id !== FIXTURE_BUNDLE_ID)
+    fail(`the app's bundle id is ${id}, not ${FIXTURE_BUNDLE_ID}: package it with --update-url`);
+  const lib = join(homedir(), "Library");
+  const fixturePaths = [
+    join(lib, "Caches", `${id}.ShipIt`),
+    join(lib, "Caches", id),
+    join(lib, "HTTPStorages", id),
+    join(lib, "Preferences", `${id}.plist`),
+  ];
+  const existedBefore = new Set(fixturePaths.filter((p) => existsSync(p)));
+  const productionBefore = productionCaches();
+  console.log(
+    `bundle id ${id}; fixture paths that exist before: ${[...existedBefore].join(", ") || "(none)"}`,
+  );
+  console.log(
+    `~/Library/Caches/${PRODUCTION_BUNDLE_ID}* before: ${productionBefore.join(", ") || "(none)"}`,
+  );
 
   const requests: string[] = [];
   const server = Bun.serve({
@@ -139,12 +186,29 @@ async function main(): Promise<void> {
     for (const p of sweep()) console.log(`  cleaned up leftover ${describeProcess(p)}`);
     await server.stop(true);
     await cleanup();
+    // Only the fixture id's own paths, and only those this run created.
+    const created = fixturePaths.filter((p) => !existedBefore.has(p) && existsSync(p));
+    console.log(`fixture paths created by this run: ${created.join(", ") || "(none)"}`);
+    for (const p of created) {
+      rmSync(p, { recursive: true, force: true });
+      console.log(`removed ${p}`);
+    }
+    const productionAfter = productionCaches();
+    console.log(
+      `~/Library/Caches/${PRODUCTION_BUNDLE_ID}* after: ${productionAfter.join(", ") || "(none)"}`,
+    );
+    if (JSON.stringify(productionAfter) !== JSON.stringify(productionBefore)) {
+      console.error(
+        "smoke failed: a production-id cache entry appeared or vanished during the run",
+      );
+      process.exitCode = 1;
+    }
   }
 }
 
 try {
   await main();
-  console.log("\nsmoke passed");
+  if (process.exitCode === undefined) console.log("\nsmoke passed");
 } catch (error) {
   console.error(String(error instanceof Error ? error.message : error));
   process.exitCode = 1;

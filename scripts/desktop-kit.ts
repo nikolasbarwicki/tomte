@@ -10,6 +10,12 @@ import { HOST_BINARIES, sha256 } from "./release-kit.ts";
 
 export const APP_NAME = "Claudebot";
 
+/** The bundle id of every release and normal local build; the user's installed Claudebot has it, and so do its caches and preferences. */
+export const PRODUCTION_BUNDLE_ID = "dev.claudebot.desktop";
+
+/** The bundle id of a `--update-url` verification build. Squirrel.Mac keeps `~/Library/Caches/<bundle id>.ShipIt` under the real home, so a fixture must never share the production id. */
+export const FIXTURE_BUNDLE_ID = `${PRODUCTION_BUNDLE_ID}.updatefixture`;
+
 export type DesktopPlatform = "darwin" | "win32" | "linux";
 export type DesktopArch = "arm64" | "x64";
 

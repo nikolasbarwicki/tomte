@@ -33,10 +33,12 @@ import {
   bundleDirName,
   type DesktopArch,
   type DesktopPlatform,
+  FIXTURE_BUNDLE_ID,
   hostBinaryName,
   hostTarget,
   inCi,
   isDesktopArch,
+  PRODUCTION_BUNDLE_ID,
   updateProvider,
 } from "./desktop-kit.ts";
 import { processes, processesUnder, refusal } from "./process-guard.ts";
@@ -60,7 +62,8 @@ const { values: flags } = parseArgs({
 });
 const OUT = resolve(flags.out ?? join(ROOT, "dist/desktop"));
 const STAGE = join(OUT, ".stage");
-const BUNDLE_ID = "dev.claudebot.desktop";
+/** A fixture build (`--update-url`) has its own bundle id, so nothing it or Squirrel.Mac writes outside its temp folders is under the production id. */
+const BUNDLE_ID = flags["update-url"] === undefined ? PRODUCTION_BUNDLE_ID : FIXTURE_BUNDLE_ID;
 /** The app's version, and so the installers' names and the update metadata's. */
 const VERSION = flags.version ?? HOST_VERSION;
 /** `owner/repo`, set by GitHub Actions. Local builds have no repository coordinates. */
