@@ -1,4 +1,4 @@
-import { EffortLevel } from "@claudebot/contract/api";
+import { DEFAULT_EFFORT, DEFAULT_MODEL, EffortLevel } from "@claudebot/contract/api";
 import type { BotSummary } from "@claudebot/contract/events";
 import { getRouteApi } from "@tanstack/react-router";
 import { ArrowUpIcon, ChevronDownIcon } from "lucide-react";
@@ -30,20 +30,19 @@ import { bindMentions, type MentionTarget } from "./mentions.ts";
 
 const botRoute = getRouteApi("/bots/$botId");
 
-/**
- * One of the open session's settings in the composer, after the Model Selector pattern. The host does not report the current values,
- * so only choices made here show.
- */
+/** One of the open session's settings in the composer, after the Model Selector pattern. Starts at the host's default. */
 function SessionSetting({
   label,
   options,
+  initial,
   apply,
 }: {
   label: string;
   options: readonly string[];
+  initial: string;
   apply: (value: string) => Promise<boolean>;
 }) {
-  const [value, setValue] = useState<string>();
+  const [value, setValue] = useState(initial);
   const [applying, startApplying] = useTransition();
   return (
     <DropdownMenu>
@@ -54,25 +53,19 @@ function SessionSetting({
             variant="ghost"
             className="text-xs"
             disabled={applying}
-            aria-label={value ? `${label}: ${value}` : label}
+            aria-label={`${label}: ${value}`}
           />
         }
       >
-        {value ? (
-          <>
-            <span className="text-muted-foreground hidden sm:inline">{label}</span>
-            <span className="capitalize">{value}</span>
-          </>
-        ) : (
-          label
-        )}
+        <span className="text-muted-foreground hidden sm:inline">{label}</span>
+        <span className="capitalize">{value}</span>
         {applying ? <Spinner /> : <ChevronDownIcon />}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" className="w-36">
         <DropdownMenuGroup>
           <DropdownMenuLabel>{label}</DropdownMenuLabel>
           <DropdownMenuRadioGroup
-            value={value ?? ""}
+            value={value}
             onValueChange={(v: string) =>
               startApplying(async () => {
                 if (await apply(v)) setValue(v);
@@ -284,8 +277,18 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
               />
             </div>
             <InputGroupAddon align="block-end">
-              <SessionSetting label="Model" options={MODELS} apply={setModel} />
-              <SessionSetting label="Effort" options={EffortLevel.options} apply={setEffort} />
+              <SessionSetting
+                label="Model"
+                options={MODELS}
+                initial={DEFAULT_MODEL}
+                apply={setModel}
+              />
+              <SessionSetting
+                label="Effort"
+                options={EffortLevel.options}
+                initial={DEFAULT_EFFORT}
+                apply={setEffort}
+              />
               <p className="ml-auto hidden items-center gap-1 text-xs font-normal whitespace-nowrap @xl:flex">
                 <Kbd>@</Kbd> hand off to a bot · <Kbd>Shift</Kbd>
                 <Kbd>Enter</Kbd> new line
