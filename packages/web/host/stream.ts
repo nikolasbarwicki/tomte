@@ -1,6 +1,5 @@
 import { HostInfo, PublicHostInfo } from "@claudebot/contract/api";
 import { HostEvent } from "@claudebot/contract/events";
-import { toast } from "sonner";
 
 import { parseJson, post, probeSession, readJson } from "./api.ts";
 import type { HostStore } from "./store.ts";
@@ -19,8 +18,6 @@ export function connectHostStream(
   const es = new EventSource("/api/events");
   es.onmessage = (m) => {
     const e = parseJson(m.data, HostEvent, "/api/events");
-    if (e.type === "notify" && Date.now() - e.at < 5_000)
-      toast(e.title, { description: e.body || undefined });
     if (e.type === "reset") {
       const previous = store.get().openBotId;
       store.dispatch(e);

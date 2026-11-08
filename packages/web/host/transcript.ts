@@ -11,7 +11,7 @@ export type Item =
       text: string;
       mentions?: { id: string; name: string }[] | undefined;
     }
-  | { kind: "assistant" | "error" | "info" | "update"; text: string }
+  | { kind: "assistant" | "error" | "info"; text: string }
   | { kind: "tool"; name: string; input: string }
   | { kind: "ask"; id: string; question: string; answer?: string }
   | { kind: "approve"; id: string; tool: string; reason: string; input: string; answer?: string }
@@ -99,8 +99,6 @@ function reduceLive(
       return [...items, { kind: "error", text: e.message }];
     case "info":
       return [...items, { kind: "info", text: e.text }];
-    case "update":
-      return [...items, { kind: "update", text: e.text }];
     case "session":
       return [...items, { kind: "session" }];
     case "routine":
@@ -128,7 +126,6 @@ function reduceLive(
       ];
     case "done":
     case "reset":
-    case "notify":
     case "context":
       return items;
   }

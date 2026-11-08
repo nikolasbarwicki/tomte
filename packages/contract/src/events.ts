@@ -8,16 +8,6 @@ const Mentions = z.array(z.object({ id: z.string(), name: z.string() }));
 export const WaitAction = z.object({ id: z.string(), label: z.string() });
 export type WaitAction = z.infer<typeof WaitAction>;
 
-/** External update from herdr or an omp hook; lives outside chat history. */
-export const Notice = z.object({
-  type: z.literal("notify"),
-  source: z.string(),
-  title: z.string(),
-  body: z.string(),
-  at: z.number(),
-});
-export type Notice = z.infer<typeof Notice>;
-
 /** Current context window usage of the open bot's session, as reported by Claude Code. */
 export const ContextEvent = z.object({
   type: z.literal("context"),
@@ -76,7 +66,6 @@ export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("done") }),
   z.object({ type: z.literal("error"), message: z.string() }),
   z.object({ type: z.literal("info"), text: z.string() }),
-  z.object({ type: z.literal("update"), text: z.string() }),
   z.object({ type: z.literal("reset"), botId: z.string() }),
   /** A fresh Claude Code session started inside the same bot; earlier messages are no longer in context. */
   z.object({ type: z.literal("session") }),
@@ -98,7 +87,6 @@ export const ServerEvent = z.discriminatedUnion("type", [
     preTokens: z.number(),
   }),
   ContextEvent,
-  Notice,
 ]);
 export type ServerEvent = z.infer<typeof ServerEvent>;
 
@@ -266,8 +254,11 @@ export const IntegrationSkill = z.object({
   enabled: z.boolean(),
 });
 export type IntegrationSkill = z.infer<typeof IntegrationSkill>;
-/** A brand mark: one path on a 24×24 viewBox, drawn white on `color`. */
-export const BrandIcon = z.object({ color: z.string(), path: z.string() });
+/** A brand mark drawn on a 24×24 viewBox: one path, white on `color`. */
+const BrandPath = z.object({ color: z.string(), path: z.string() });
+/** A logo that has no single-colour mark (a full-colour or raster logo): an image the host's own origin serves, drawn as it is. */
+const BrandImage = z.object({ image: z.string() });
+export const BrandIcon = z.union([BrandPath, BrandImage]);
 export type BrandIcon = z.infer<typeof BrandIcon>;
 /** Where a built-in sits on the Integrations list, in display order. */
 export const CATALOG_CATEGORIES = [
@@ -286,7 +277,7 @@ export const CatalogInfo = z.object({
   category: CatalogCategory,
   /** One line on what the service gives bots. */
   tagline: z.string(),
-  /** Absent when Simple Icons carries no mark for the service; the screen shows its initial instead. */
+  /** Absent when no mark is vendored for the service; the screen shows its initial instead. */
   icon: BrandIcon.exactOptional(),
   /** Prompts a bot can run once the service is connected. */
   examples: z.array(z.string()),

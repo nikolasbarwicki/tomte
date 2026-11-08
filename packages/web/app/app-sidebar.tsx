@@ -1,8 +1,7 @@
 import type { HostInfo } from "@claudebot/contract/api";
-import type { BotStatus, BotSummary, Notice } from "@claudebot/contract/events";
+import type { BotStatus, BotSummary } from "@claudebot/contract/events";
 import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
-  BellIcon,
   FolderIcon,
   KeyRoundIcon,
   LaptopIcon,
@@ -13,7 +12,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
 import { confirmAction } from "@/components/confirm.tsx";
@@ -21,14 +20,6 @@ import { TitlebarStrip } from "@/components/titlebar.tsx";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Sidebar,
   SidebarContent,
@@ -104,13 +95,11 @@ function BotContextMenu({ bot, children }: { bot: BotSummary; children: ReactNod
 export function AppSidebar({
   bots,
   info,
-  notices,
   integrationsNeedingAttention,
   onNewBot,
 }: {
   bots: BotSummary[];
   info: HostInfo | undefined;
-  notices: Notice[];
   integrationsNeedingAttention: number;
   onNewBot: () => void;
 }) {
@@ -223,7 +212,6 @@ export function AppSidebar({
               <span>Devices</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <Updates notices={notices} />
         </SidebarMenu>
         <div className="text-muted-foreground flex items-center gap-1.5 border-t px-2 pt-2 text-xs">
           <FolderIcon className="size-3.5 shrink-0" />
@@ -235,45 +223,6 @@ export function AppSidebar({
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
-  );
-}
-
-function Updates({ notices }: { notices: Notice[] }) {
-  const [seenAt, setSeenAt] = useState(() => Date.now());
-  const unread = notices.filter((n) => n.at > seenAt).length;
-  return (
-    <SidebarMenuItem>
-      <Popover onOpenChange={(open) => open && setSeenAt(Date.now())}>
-        <PopoverTrigger render={<SidebarMenuButton />}>
-          <BellIcon />
-          <span>Updates</span>
-        </PopoverTrigger>
-        <PopoverContent side="right" align="end" className="w-80 gap-0 p-0">
-          <PopoverHeader className="border-b p-3">
-            <PopoverTitle>Updates</PopoverTitle>
-            <PopoverDescription>Notifications from herdr and omp hooks.</PopoverDescription>
-          </PopoverHeader>
-          {notices.length === 0 ? (
-            <p className="text-muted-foreground p-3 text-sm">Nothing yet.</p>
-          ) : (
-            <ul className="max-h-96 divide-y overflow-y-auto">
-              {notices.map((n) => (
-                <li key={`${n.at}-${n.title}`} className="grid gap-0.5 p-3 text-sm">
-                  <span className="font-medium">{n.title}</span>
-                  {n.body && <span className="text-muted-foreground line-clamp-3">{n.body}</span>}
-                  <span className="text-muted-foreground text-xs">
-                    {n.source} · {shortTime(n.at)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </PopoverContent>
-      </Popover>
-      {unread > 0 && (
-        <SidebarMenuBadge className="bg-primary text-primary-foreground">{unread}</SidebarMenuBadge>
-      )}
-    </SidebarMenuItem>
   );
 }
 

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import type { BotSummary, Notice } from "@claudebot/contract/events";
+import type { BotSummary } from "@claudebot/contract/events";
 
 import { applyEvent, initialHostState, type HostEvent, type HostState } from "./state.ts";
 
@@ -28,7 +28,6 @@ test("busy turns on for user, update, routine and received handoffs, and off for
   });
   const busyAfter = (e: HostEvent) => applyEvent(initialHostState, e).chat.busy;
   expect(busyAfter({ type: "user", text: "hi" })).toBe(true);
-  expect(busyAfter({ type: "update", text: "u" })).toBe(true);
   expect(busyAfter({ type: "routine", name: "r", trigger: "manual" })).toBe(true);
   expect(busyAfter(handoff("received"))).toBe(true);
   expect(busyAfter(handoff("sent"))).toBe(false);
@@ -66,21 +65,6 @@ test("memory events merge by scope", () => {
     { type: "memory", scope: "user", text: "likes coffee" },
   ]);
   expect(s.memory).toEqual({ user: "likes coffee", bot: "be brief" });
-});
-
-test("notices are newest first and capped at 50", () => {
-  const s = play(
-    Array.from({ length: 55 }, (_, i): Notice => ({
-      type: "notify",
-      source: "test",
-      title: `n${i}`,
-      body: "",
-      at: i,
-    })),
-  );
-  expect(s.notices).toHaveLength(50);
-  expect(s.notices[0]?.title).toBe("n54");
-  expect(s.notices.at(-1)?.title).toBe("n5");
 });
 
 test("a session event clears the context", () => {
@@ -140,5 +124,4 @@ test("a chat event leaves the other slices identical", () => {
   expect(next.integrations).toBe(s.integrations);
   expect(next.bots).toBe(s.bots);
   expect(next.memory).toBe(s.memory);
-  expect(next.notices).toBe(s.notices);
 });

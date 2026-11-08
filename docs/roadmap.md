@@ -33,7 +33,7 @@ Items 1 and 2 come first because they extend the safety advantage into unattende
 
 **Plan.**
 
-- Add a `waiting` run status. A headless approval creates a wait (reuse the existing `wait` / `wait_resolved` events and `human-waits.ts`), pushes a `Notice`, and ends the run's turn.
+- Add a `waiting` run status. A headless approval creates a wait (reuse the existing `wait` / `wait_resolved` events and `human-waits.ts`) and ends the run's turn.
 - On approval, resume the run through `deliver()` into the bot's session. On deny, tell the bot and let it finish.
 - Add Allow and Block lists per tool, fed from approval cards, so repeated approvals become rules.
 - Auto-expire a wait after a fixed time, as takeover does (30 minutes).
@@ -99,7 +99,7 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 **Plan, in order.**
 
 1. Authenticated remote access to the existing UI (tunnel or reverse proxy, with a login). Keep the loopback endpoints for bot tools untouched.
-2. One chat channel (Slack, Telegram or Discord) that posts bot messages, approval cards and `Notice`s, and routes replies into `deliver()`. Telegram and Discord are channels only, not catalog integrations.
+2. One chat channel (Slack, Telegram or Discord) that posts bot messages and approval cards, and routes replies into `deliver()`. Telegram and Discord are channels only, not catalog integrations.
 3. A service wrapper (launchd, systemd) or Docker image so the host stays up. Update docs.
 
 **Constraint.** Never expose the browser, bots or credential endpoints without the existing token, Host and Origin checks.

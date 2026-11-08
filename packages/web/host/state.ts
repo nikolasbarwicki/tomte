@@ -7,7 +7,6 @@ import type {
   HostEvent as StreamEvent,
   Integration,
   MemoryScope,
-  Notice,
   RoutinesEvent,
   ServerEvent,
 } from "@claudebot/contract/events";
@@ -35,11 +34,7 @@ export type HostState = {
   routines: RoutinesEvent | undefined;
   integrations: Integration[];
   credentials: CredentialEntry[];
-  /** Newest first, capped at `NOTICE_LIMIT`. */
-  notices: Notice[];
 };
-
-const NOTICE_LIMIT = 50;
 
 export const initialHostState: HostState = {
   info: undefined,
@@ -52,7 +47,6 @@ export const initialHostState: HostState = {
   routines: undefined,
   integrations: [],
   credentials: [],
-  notices: [],
 };
 
 /** Folds one event into the state. Slices the event does not touch keep their reference. */
@@ -74,8 +68,6 @@ export function applyEvent(s: HostState, e: HostEvent): HostState {
       return { ...s, routines: e };
     case "bots":
       return { ...s, bots: e.bots };
-    case "notify":
-      return { ...s, notices: [e, ...s.notices].slice(0, NOTICE_LIMIT) };
     case "reset":
       return { ...s, openBotId: e.botId, chat: { items: [], busy: false, context: undefined } };
     case "context":
@@ -87,12 +79,11 @@ export function applyEvent(s: HostState, e: HostEvent): HostState {
 
 function applyChatEvent(
   chat: HostState["chat"],
-  e: Exclude<ServerEvent, { type: "reset" | "notify" | "context" }>,
+  e: Exclude<ServerEvent, { type: "reset" | "context" }>,
 ): HostState["chat"] {
   const context = e.type === "session" ? undefined : chat.context;
   const busy =
     e.type === "user" ||
-    e.type === "update" ||
     e.type === "routine" ||
     (e.type === "handoff" && e.direction === "received")
       ? true

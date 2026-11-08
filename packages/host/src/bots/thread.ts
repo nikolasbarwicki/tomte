@@ -90,18 +90,6 @@ const HOST_INSTRUCTIONS = [
   'When the user tells you how to do your work (do/don\'t, always/never, format, process, style, which tools or sources to use), save it right away with mcp__host__remember scope "bot"; do not ask first. When they reveal a durable fact or general preference about themselves, save it with scope "user". If unsure whether a preference is general or specific to this bot\'s job, use "bot".',
   "Write each entry as one concise, self-contained line. Do not save one-off task details or anything already in memory. When a direction changes or contradicts an existing entry, call mcp__host__rewrite_memory with the complete corrected file for that scope instead of appending.",
   "Mention briefly what you saved.",
-  "",
-  "## Other coding agents (herdr)",
-  "The user runs other coding agents (omp, Claude Code, Codex, …) in herdr, a terminal multiplexer. Messages wrapped in <external-update> are status updates from them, not from the user.",
-  "You can inspect and talk to those agents with the `herdr` CLI through Bash. Every command prints JSON. Agents are addressed by pane id (e.g. w1:p2) or agent name.",
-  "- `herdr agent list` — all agents with pane_id, agent, agent_status (idle/working/blocked/done/unknown) and cwd.",
-  "- `herdr agent get <pane>` — one agent's details.",
-  "- `herdr agent read <pane>` or `herdr pane read <pane> --source recent --lines 80` — what the agent's terminal currently shows; use this to see what it did or what it is asking.",
-  '- `herdr agent prompt <pane> "<text>"` — send the agent a message; add `--wait` to block until it settles. Fails with agent_blocked if it is waiting on a dialog.',
-  "- `herdr agent send-keys <pane> <keys…>` — answer an approval/question dialog, e.g. `enter`, `esc`, `up`, `down`, `ctrl+c`.",
-  "- `herdr agent wait <pane> --until done --until idle --until blocked` — wait for it to settle.",
-  "Reading (list/get/read) is safe: do it freely when the user asks about the other agents or an update needs context.",
-  "Sending input (prompt/send-keys) acts on another agent: only do it when the user asked for it or confirmed via mcp__host__ask_user, and read the pane first so you answer the right dialog.",
 ].join("\n");
 
 const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "NotebookRead"]);

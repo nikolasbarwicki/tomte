@@ -7,7 +7,6 @@ import type {
   Bot,
   BotsEvent,
   HostEvent,
-  Notice,
   RoutinesEvent,
   ServerEvent,
 } from "@claudebot/contract/events";
@@ -26,7 +25,6 @@ import {
 } from "../bots/index.ts";
 import type { Handoffs, Mention } from "../handoffs/index.ts";
 import type { Executor } from "../routines/index.ts";
-import { createNotices } from "./notices.ts";
 import { createRoutineTurns } from "./routine-turns.ts";
 import { openBotThread } from "./threads.ts";
 import type { Transcript } from "./transcript.ts";
@@ -58,8 +56,6 @@ export interface Chats {
   execute: Executor;
   /** Sends a host message into a bot's session: queued while the bot is busy, and the session reopens if it is closed. */
   deliver(botId: string, text: string): Promise<void>;
-  /** Shows a notice to the page and has the open bot narrate it. */
-  notify: (source: string, title: string, body?: string) => void;
   /** Shows an event in a bot's chat if it has one. */
   emitTo(botId: string, e: ServerEvent): void;
   isWorking(botId: string): boolean;
@@ -79,8 +75,6 @@ export interface Chats {
   cancelQueued(id: string): boolean;
   /** Reopens a bot's thread, or every bot's, to pick up changed settings; a busy chat reopens after its turn. */
   reconfigure(botId: string | undefined, reason: string): void;
-  /** Recent notices, replayed on connect. */
-  notices(): Notice[];
   /** The open chat's routines, reset marker and transcript, replayed on connect. */
   replayOpen(): HostEvent[];
   close(): void;
@@ -116,7 +110,6 @@ export function createChats(deps: ChatsDeps): Chats {
   let switches = 0;
   /** Pushes the open bot's file list to the page whenever its folder changes. */
   let filesWatcher: FSWatcher | undefined;
-  const notices = createNotices({ broadcast, wake: () => void drain() });
   const routineTurns = createRoutineTurns({
     ...deps,
     announceBots: () => announceBots(),
@@ -155,7 +148,7 @@ export function createChats(deps: ChatsDeps): Chats {
     chats.delete(chat.bot.id);
   }
 
-  /** Starts every routine turn whose bot is free, then narrates pending notices in the open chat. */
+  /** Starts every routine turn whose bot is free, then delivers queued inbox entries. */
   async function drain() {
     routineTurns.startReady(
       (botId) => chats.get(botId),
@@ -181,7 +174,6 @@ export function createChats(deps: ChatsDeps): Chats {
       }
       void turn(chat, entries.map((e) => e.text).join("\n\n"));
     }
-    if (current) await narrate(current);
   }
 
   async function deliver(botId: string, text: string) {
@@ -194,15 +186,6 @@ export function createChats(deps: ChatsDeps): Chats {
     }
     chat.inbox.push({ source: "host", text });
     await drain();
-  }
-
-  /** Has the open bot tell the user about notices it has not narrated yet. */
-  async function narrate(chat: Chat) {
-    if (chat.busy || headless(chat.bot.id)) return;
-    const n = notices.takeUnspoken();
-    if (!n) return;
-    emit(chat, { type: "update", text: n.update });
-    await turn(chat, n.prompt);
   }
 
   /** Runs one turn in a chat, shown or not; failures are shown there and returned. */
@@ -396,7 +379,6 @@ export function createChats(deps: ChatsDeps): Chats {
   return {
     execute: routineTurns.execute,
     deliver,
-    notify: notices.notify,
     emitTo(botId, e) {
       const chat = chats.get(botId);
       if (chat) emit(chat, e);
@@ -437,7 +419,6 @@ export function createChats(deps: ChatsDeps): Chats {
         else chat.thread.close(reason);
       }
     },
-    notices: notices.recent,
     replayOpen: () =>
       current
         ? [

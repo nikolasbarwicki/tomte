@@ -11,11 +11,6 @@ const Id = z.object({ id: z.string() });
 const Answer = Id.extend({ value: z.string() });
 const Model = z.object({ model: z.string() });
 const Effort = z.object({ effort: EffortLevel });
-const Notify = z.object({
-  source: z.string().optional(),
-  title: z.string().min(1, "title required"),
-  body: z.string().default(""),
-});
 
 /** Routes that act on the chat the page shows. */
 export function chatRoutes({ dataRoot, chats, browser }: ApiContext): OpenChatRoutes {
@@ -56,11 +51,6 @@ export function chatRoutes({ dataRoot, chats, browser }: ApiContext): OpenChatRo
       if (!chat.newSession())
         return json(res, { error: "a turn is running; wait for it to finish" }, 409);
       browser.cancelTakeover(chat.bot.id, "a new session started");
-      return json(res, { ok: true });
-    },
-    "/api/notify": async ({ res, parse }) => {
-      const { source, title, body } = parse(Notify);
-      chats.notify(source || "external", title, body);
       return json(res, { ok: true });
     },
   };

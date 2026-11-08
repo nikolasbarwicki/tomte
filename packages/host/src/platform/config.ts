@@ -18,8 +18,6 @@ export interface HostConfig {
   bind: { address: string; port: number };
   /** The origin users and OAuth providers reach; the loopback URL of the bound port when unset. */
   publicUrl: string | undefined;
-  /** Watch herdr for updates from other agents. */
-  herdr: boolean;
   /** Serve the web UI through Vite (the dev script sets it). */
   vite: boolean;
   /** Ask the user before a bot runs a tool instead of approving everything; `CLAUDEBOT_ASK_APPROVAL`. */
@@ -48,7 +46,6 @@ const FLAGS = {
   host: { type: "string" },
   port: { type: "string" },
   "public-url": { type: "string" },
-  herdr: { type: "boolean" },
   vite: { type: "boolean" },
   "allow-plain-http": { type: "boolean" },
   sidecar: { type: "boolean" },
@@ -180,8 +177,8 @@ function parseFlags(argv: readonly string[]) {
 
 /**
  * Reads the host's configuration from command-line flags (`--mode`, `--data-root`, `--host`, `--port`, `--public-url`, `--allow-plain-http`,
- * `--secrets`, `--secrets-key-file`, `--herdr`, `--vite`, `--sidecar`) and
- * `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|ALLOW_PLAIN_HTTP|SECRETS|SECRETS_KEY_FILE|HERDR|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
+ * `--secrets`, `--secrets-key-file`, `--vite`, `--sidecar`) and
+ * `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|ALLOW_PLAIN_HTTP|SECRETS|SECRETS_KEY_FILE|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
  * Without a data root the OS application-data directory is used. Remote mode parses on Linux only (ADR-0006).
  */
 export function parseHostConfig(
@@ -217,7 +214,6 @@ export function parseHostConfig(
     );
   }
   const rawPort = values.port ?? get("CLAUDEBOT_PORT");
-  const rawHerdr = get("CLAUDEBOT_HERDR");
   const rawVite = get("CLAUDEBOT_VITE");
   const rawAskApproval = get("CLAUDEBOT_ASK_APPROVAL");
 
@@ -241,8 +237,6 @@ export function parseHostConfig(
       reveal: mode === "local",
       isolateAllBots: mode === "remote",
       sidecar: values.sidecar ?? false,
-      herdr:
-        values.herdr ?? (rawHerdr === undefined ? false : parseBool("CLAUDEBOT_HERDR", rawHerdr)),
       vite: values.vite ?? (rawVite === undefined ? false : parseBool("CLAUDEBOT_VITE", rawVite)),
       askApproval:
         rawAskApproval === undefined ? false : parseBool("CLAUDEBOT_ASK_APPROVAL", rawAskApproval),

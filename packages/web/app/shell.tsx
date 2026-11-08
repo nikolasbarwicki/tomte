@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useEffectEvent, useS
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { NewBotDialog } from "@/features/bots/index.ts";
 import { needsAttention } from "@/features/integrations/index.ts";
-import { useBots, useHostInfo, useIntegrations, useNotices } from "@/host/hooks.ts";
+import { useBots, useHostInfo, useIntegrations } from "@/host/hooks.ts";
 import { hostStore } from "@/host/store.ts";
 import { connectHostStream } from "@/host/stream.ts";
 
@@ -25,7 +25,6 @@ export function Shell() {
   const newBot = useCallback(() => setNewBotOpen(true), []);
   const bots = useBots();
   const info = useHostInfo();
-  const notices = useNotices();
   const integrations = useIntegrations();
   const navigate = useNavigate();
   const { botId: routeBotId } = useParams({ strict: false });
@@ -47,7 +46,6 @@ export function Shell() {
         <AppSidebar
           bots={bots ?? []}
           info={info}
-          notices={notices}
           integrationsNeedingAttention={integrations.filter(needsAttention).length}
           onNewBot={newBot}
         />

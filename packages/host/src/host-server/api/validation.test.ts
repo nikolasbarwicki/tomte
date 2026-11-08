@@ -48,7 +48,6 @@ test("an open bot's routes reject a bad body with 400", async () => {
   for (const [path, body] of [
     ["/api/effort", { effort: "turbo" }],
     ["/api/send", { text: "hi", mentions: "everyone" }],
-    ["/api/notify", { title: "" }],
   ] as const) {
     const res = await host.ui(path, body);
     expect(res.status).toBe(400);
