@@ -46,3 +46,7 @@ export function markSeen(db: Database, botId: string, at: number) {
     "INSERT INTO bot_activity (bot_id, seen_at) VALUES (?, ?) ON CONFLICT (bot_id) DO UPDATE SET seen_at = excluded.seen_at",
   ).run(botId, at);
 }
+
+export function deleteActivity(db: Database, botId: string) {
+  db.query("DELETE FROM bot_activity WHERE bot_id = ?").run(botId);
+}

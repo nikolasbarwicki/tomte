@@ -7,7 +7,7 @@ import type {
   RoutinesEvent,
 } from "@claudebot/contract/events";
 
-import { getBot, listBots, botFilesPath, reveal } from "../bots/index.ts";
+import { getBot, listBots, botFilesPath, deleteActivity, reveal, trashBot } from "../bots/index.ts";
 import {
   createBrowser,
   sandboxStatus,
@@ -92,7 +92,7 @@ export interface HostServer {
   signInState: () => SignInState;
   /** Closes every thread and browser, then stops listening. */
   close(): Promise<void>;
-  /** Everything the browser and handoff features hold for a bot being deleted. Does not touch the bot's files or config. */
+  /** Everything the host holds for a bot being deleted: its open handoffs fail, its routines, browser and credential grants go, its chat closes, and its directory moves to the trash (`bots/.trash/`). */
   removeBot(botId: string): Promise<void>;
 }
 
@@ -130,6 +130,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     dataRoot,
     secrets,
     headedAllowed: o.config.headedBrowser,
+    autoInstall: o.config.sidecar,
     credentials,
     tokens,
     agent: agentAt,
@@ -172,6 +173,17 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   /** Other bots' directories are on every bot's deny-read list, so a bot that appears or goes reaches the open sessions. */
   const botsChanged = () => {
     if (o.config.isolateAllBots) chats.reconfigure(undefined, "bots changed");
+  };
+  const removeBot = async (botId: string) => {
+    // Handoffs first: failing them names the bot, which needs its settings still in place.
+    handoffs.removeBot(botId);
+    await routines.removeBot(botId);
+    // After the trash move the bot no longer exists, so messages the browser cleanup sends it (a cancelled takeover) go nowhere.
+    trashBot(dataRoot, botId);
+    deleteActivity(db, botId);
+    await chats.drop(botId);
+    await browser.removeBot(botId);
+    botsChanged();
   };
   const integrations = createIntegrations({
     db,
@@ -252,6 +264,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const sessions = createDeviceSessions();
   const api = createApi({
     botsChanged,
+    removeBot,
     cwd,
     headedBrowser: o.config.headedBrowser,
     dataRoot,
@@ -315,11 +328,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     devices,
     currentBotId: chats.currentBotId,
     signInState: () => claude.signInState(),
-    async removeBot(botId) {
-      await browser.removeBot(botId);
-      handoffs.removeBot(botId);
-      botsChanged();
-    },
+    removeBot,
     async close() {
       clientListener.pause();
       agentListener.pause();

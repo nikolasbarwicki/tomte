@@ -67,3 +67,6 @@ export function openBot(botId: string): void {
 
 /** Tells the host the user has looked at `botId`'s finished turn. */
 export const markSeen = (botId: string) => post("/api/seen", { botId });
+
+/** Deletes `botId` on the host; resolves to whether it did (a working bot is refused). */
+export const deleteBot = (botId: string) => act("/api/bots/delete", { botId });

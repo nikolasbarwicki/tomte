@@ -15,6 +15,7 @@ import type {
 import {
   botFilesPath,
   getBot,
+  listBots,
   newSession,
   recordMessage,
   touchBot,
@@ -70,6 +71,8 @@ export interface Chats {
   open(): OpenChat | undefined;
   /** Shows the bot's chat; a chat still running in the background is shown as it is, live. */
   switchTo(bot: Bot): Promise<void>;
+  /** Closes and forgets a deleted bot's chat; when it was the shown one, shows the most recently active bot, or nothing. */
+  drop(botId: string): Promise<void>;
   /** Answers a question or approval; false when there is no such question. */
   answer(id: string, value: string): boolean;
   /** Takes back a queued user message; false when it already reached the bot. */
@@ -327,6 +330,23 @@ export function createChats(deps: ChatsDeps): Chats {
     void drain();
   }
 
+  async function drop(botId: string) {
+    const chat = chats.get(botId);
+    if (chat) {
+      chat.thread.close("bot deleted");
+      chats.delete(botId);
+    }
+    if (current?.bot.id !== botId) return announceBots();
+    current = undefined;
+    const next = listBots(dataRoot)[0];
+    if (next) return switchTo(next);
+    filesWatcher?.close();
+    filesWatcher = undefined;
+    announceBots();
+    for (const e of memoryEvents(dataRoot, undefined)) broadcast(e);
+    broadcast(filesEvent(dataRoot, undefined));
+  }
+
   /** Rebuilds an idle chat from disk once a headless routine has written its session. */
   async function reload(old: Chat) {
     const t = await deps.transcript(old.bot);
@@ -388,6 +408,7 @@ export function createChats(deps: ChatsDeps): Chats {
     currentBotId: () => current?.bot.id,
     open: () => current && openChat(current),
     switchTo,
+    drop,
     answer(id, value) {
       for (const c of chats.values()) {
         const resolve = c.pending.get(id);

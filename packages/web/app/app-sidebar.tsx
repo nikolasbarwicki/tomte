@@ -10,13 +10,17 @@ import {
   PlugIcon,
   PlusIcon,
   SunIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
+import { confirmAction } from "@/components/confirm.tsx";
 import { TitlebarStrip } from "@/components/titlebar.tsx";
 import { Button } from "@/components/ui/button";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
@@ -41,6 +45,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { deleteBot } from "@/host/api.ts";
 import { shortTime } from "@/lib/format.ts";
 import { withoutTransitions } from "@/lib/theme.ts";
 import { cn } from "@/lib/utils";
@@ -65,6 +70,34 @@ function StatusAvatar({ bot, className }: { bot: BotSummary; className?: string 
         <span className="ring-sidebar absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-blue-500 ring-2" />
       )}
     </span>
+  );
+}
+
+/** A bot's sidebar row; right-clicking it (or a long press) opens its actions. */
+function BotContextMenu({ bot, children }: { bot: BotSummary; children: ReactNode }) {
+  const remove = async () => {
+    const ok = await confirmAction({
+      title: `Delete ${bot.name}?`,
+      description:
+        "Its routines and credential grants are removed, its browser logins are signed out and its open handoffs fail. Memory and files are moved to the trash folder in the data root (bots/.trash).",
+      action: "Delete",
+      destructive: true,
+    });
+    if (ok) await deleteBot(bot.id);
+  };
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger render={<SidebarMenuItem />}>{children}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <DropdownMenuItem
+          variant="destructive"
+          disabled={bot.status === "working"}
+          onClick={() => void remove()}
+        >
+          <Trash2Icon /> Delete bot
+        </DropdownMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -104,7 +137,7 @@ export function AppSidebar({
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
               {bots.map((b) => (
-                <SidebarMenuItem key={b.id}>
+                <BotContextMenu key={b.id} bot={b}>
                   <SidebarMenuButton
                     isActive={!!matchRoute({ to: "/bots/$botId", params: { botId: b.id } })}
                     render={<Link to="/bots/$botId" params={{ botId: b.id }} />}
@@ -139,7 +172,7 @@ export function AppSidebar({
                       </span>
                     </span>
                   </SidebarMenuButton>
-                </SidebarMenuItem>
+                </BotContextMenu>
               ))}
             </SidebarMenu>
             {bots.length === 0 && (

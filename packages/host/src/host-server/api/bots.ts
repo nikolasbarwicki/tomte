@@ -30,6 +30,7 @@ export function botRoutes({
   browser,
   headedBrowser,
   botsChanged,
+  removeBot,
 }: ApiContext): ApiRoutes {
   const browserLifecycle: ApiRoutes[string] = async ({ res, path, parse }) => {
     const bot = getBot(dataRoot, parse(BotId).botId);
@@ -58,6 +59,14 @@ export function botRoutes({
       botsChanged();
       await chats.switchTo(bot);
       return json(res, bot);
+    },
+    "/api/bots/delete": async ({ res, parse }) => {
+      const bot = getBot(dataRoot, parse(BotId).botId);
+      if (!bot) return json(res, { error: "no such bot" }, 404);
+      if (chats.isWorking(bot.id))
+        return json(res, { error: `${bot.name} is working; wait for it to finish` }, 409);
+      await removeBot(bot.id);
+      return json(res, { ok: true });
     },
     "/api/bots/browser": async ({ res, parse }) => {
       const { botId, enabled } = parse(BrowserEnabled);

@@ -306,6 +306,19 @@ export function createRoutines(deps: {
     };
   }
 
+  async function removeRoutine(id: string): Promise<void> {
+    const r = require(id);
+    disarm(id);
+    const e = running.get(id);
+    if (e) {
+      e.removed = true;
+      e.stop?.("routine deleted");
+      await e.done;
+    }
+    store.deleteRoutine(db, id);
+    onChange(r.botId);
+  }
+
   return {
     /** Reconcile downtime, then arm every active routine. */
     start() {
@@ -371,17 +384,11 @@ export function createRoutines(deps: {
       return view(r);
     },
 
-    async remove(id: string): Promise<void> {
-      const r = require(id);
-      disarm(id);
-      const e = running.get(id);
-      if (e) {
-        e.removed = true;
-        e.stop?.("routine deleted");
-        await e.done;
-      }
-      store.deleteRoutine(db, id);
-      onChange(r.botId);
+    remove: removeRoutine,
+
+    /** A bot being deleted: stops its running routine turns and removes every routine and run it has. */
+    async removeBot(botId: string): Promise<void> {
+      for (const r of store.listRoutines(db, botId)) await removeRoutine(r.id);
     },
 
     testRun(id: string): RoutineRun {

@@ -8,6 +8,10 @@ Screenshots and pages too large for one result are saved in the `browser/` folde
 
 ## Install the engine
 
+The desktop app ships the browser: its bundle holds the pinned engine and a pinned Chrome for Testing (157.0.8103.38, full Chrome rather than the headless shell so bots can run headed), both checked against SHA-256s in claudebot's source when `bun run package:desktop` builds it (`scripts/browser-bundle.ts`). They sit in `browser-engine/` next to the host binary, and the host finds them there, so a fresh install needs no download. If that copy is missing anyway, the desktop host installs the browser below in the background and the Browser tab says it is installing; a failed install is retried the next time the browser is switched on or used.
+
+A host started from source or as a standalone binary installs it with:
+
 ```sh
 bun packages/host/src/host.ts install-browser
 ```
@@ -23,7 +27,7 @@ Your own Chrome is never used. If Chrome for Testing is missing, the browser is 
 
 The engine keeps its state and sockets in `~/.agent-browser` of the user running claudebot, not in the data root. Agent-browser 0.41.2 has no state-directory option, and its socket paths are limited to 103 bytes, which a data-root location would exceed on macOS.
 
-Engine lookup order: `AGENT_BROWSER_PATH`, the managed install, then `agent-browser` on `PATH`.
+Engine lookup order: `AGENT_BROWSER_PATH`, the bundled copy, the managed install, then `agent-browser` on `PATH`. Chrome lookup order: `AGENT_BROWSER_EXECUTABLE_PATH`, the bundled copy, then the newest one in `~/.agent-browser/browsers`.
 
 ## Enable the browser for a bot
 
@@ -100,4 +104,4 @@ Scheduled routines of a browser-enabled bot can browse using the bot's existing 
 - No file upload or download, no JavaScript evaluation.
 - Chrome for Testing is unpinned (see [Install the engine](#install-the-engine)).
 - Linux depends on `bwrap` and `socat`; without them the browser stays unavailable.
-- Deleting a bot is not yet supported in claudebot, so there is no bot-delete path that removes browser data. Use **Sign out of everything** to clear a bot's logins.
+- Deleting a bot signs it out of everything (saved logins and engine session removed), ends any takeover and removes its credential grants.

@@ -27,6 +27,8 @@ export interface ApiContext {
   chats: Chats;
   /** Called after a bot is created, so sessions open before it pick up what depends on the set of bots. */
   botsChanged: () => void;
+  /** Deletes a bot and everything the host holds for it; its directory goes to the trash. */
+  removeBot: (botId: string) => Promise<void>;
   browser: Browser;
   routines: Routines;
   integrations: Integrations;

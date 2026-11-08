@@ -9,7 +9,7 @@ type Deps = {
 
 /**
  * Everything the handoffs feature holds for a bot that is being deleted: its open handoffs, in both roles, fail and the
- * other party is told why. Claudebot has no bot-delete path yet; call this beside `removeBotBrowser` from it.
+ * other party is told why. `HostServer.removeBot` calls this beside `removeBotBrowser`.
  */
 export function removeBotHandoffs(deps: Deps, botId: string): void {
   const name = deps.botName(botId) ?? "A bot";
