@@ -6,9 +6,13 @@ name: Release
 # host     per target, on a native runner: build the host binary, smoke-run it, upload it as `release-host-<target>`
 # publish  merges every `release-*` artifact into one folder, writes SHA256SUMS over it, creates the Release
 #
-# Desktop installers (spec 7, ticket 03) join the same Release: add a job that uploads its installers as artifacts
-# named `release-<anything>`, put it in `publish.needs`, and the checksum file covers them too (scripts/release-kit.ts
-# checksums every file in the folder).
+# desktop  per OS, on a native runner: package the unsigned installers around the host job's own binary (no rebuild),
+#          check that the host in every app is that binary, upload installers + update metadata as `release-desktop-<os>`
+#
+# Installers are released for macOS (arm64 and x64), Windows x64 and Linux x64 (scripts/desktop-kit.ts
+# SUPPORTED_DESKTOP); linux-arm64 is host-only. Both macOS arches are packaged in ONE job so electron-builder writes the one
+# latest-mac.yml listing both zips (two jobs would each upload a latest-mac.yml and the merge would keep one of them).
+# `publish` fails unless every host binary, installer and metadata file of that list is in the folder.
 
 on:
   push:
@@ -28,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
+      version: ${{ steps.tag.outputs.version }}
       prerelease: ${{ steps.tag.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
@@ -93,9 +98,89 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  desktop:
+    name: desktop ${{ matrix.os }}
+    needs: [verify, host]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: true
+      matrix:
+        # `archs` is what the app is packaged for; `hosts` selects the host artifacts those apps bundle; `bundle` is
+        # the folder package:desktop writes (scripts/desktop-kit.ts bundleDirName).
+        include:
+          - {
+              os: macos,
+              runner: macos-15,
+              archs: "arm64 x64",
+              hosts: "release-host-darwin-*",
+              bundle: Claudebot-darwin-arm64-x64,
+            }
+          - {
+              os: windows,
+              runner: windows-2025,
+              archs: "x64",
+              hosts: "release-host-windows-x64",
+              bundle: Claudebot-win32-x64,
+            }
+          - {
+              os: linux,
+              runner: ubuntu-24.04,
+              archs: "x64",
+              hosts: "release-host-linux-x64",
+              bundle: Claudebot-linux-x64,
+            }
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+      ARCHS: ${{ matrix.archs }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun install --frozen-lockfile
+
+      # The release's own host binaries, as the host job smoke-ran and uploaded them (the download drops their mode).
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ matrix.hosts }}
+          merge-multiple: true
+          path: hosts
+
+      # Unsigned (no identity is ever looked up). The app version is the host's VERSION, the update provider is this
+      # repository's Releases (GITHUB_REPOSITORY, set by Actions), and the script fails when CI lacks it.
+      # `--host-dir` bundles the downloaded binaries instead of building new ones.
+      - name: Package
+        run: |
+          read -ra archs <<< "$ARCHS"
+          args=()
+          for arch in "${archs[@]}"; do args+=(--arch "$arch"); done
+          bun run package:desktop --out dist/desktop --host-dir hosts "${args[@]}"
+
+      # Fails unless the host in every app (and in the macOS update zip) is byte-identical to hosts/<binary>, the update
+      # metadata names VERSION and every installer exists; then copies exactly the installers and metadata out.
+      - name: Check host and collect
+        run: |
+          read -ra archs <<< "$ARCHS"
+          bun scripts/release.ts desktop "dist/desktop/${{ matrix.bundle }}" hosts release-desktop "$VERSION" "${archs[@]}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-desktop-${{ matrix.os }}
+          path: release-desktop
+          if-no-files-found: error
+          retention-days: 14
+
   publish:
     name: publish release
-    needs: [verify, host]
+    needs: [verify, host, desktop]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The only job that can write to the repository.
@@ -103,6 +188,7 @@ jobs:
       contents: write
     env:
       TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.verify.outputs.version }}
       PRERELEASE: ${{ needs.verify.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
@@ -119,9 +205,10 @@ jobs:
           merge-multiple: true
           path: release
 
-      # Fails unless all five host binaries are there; covers every file in release/, SHA256SUMS excluded.
+      # Fails unless all five host binaries and every supported OS's installers and update metadata are there; covers every
+      # file in release/, SHA256SUMS excluded.
       - name: Checksums
-        run: bun scripts/release.ts checksums release
+        run: bun scripts/release.ts checksums release "$VERSION"
 
       # A draft until every asset is uploaded, so nobody sees a half-filled Release. A rerun of a failed publish
       # replaces the assets of the Release that already exists.

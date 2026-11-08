@@ -49,7 +49,7 @@ export function releaseForTag(
   return release;
 }
 
-function sha256(path: string): Promise<string> {
+export function sha256(path: string): Promise<string> {
   const { promise, resolve, reject } = Promise.withResolvers<string>();
   const hash = createHash("sha256");
   createReadStream(path)
