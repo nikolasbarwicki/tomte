@@ -145,6 +145,7 @@ export const CATALOG: readonly CatalogEntry[] = [
     auth: { kind: "oauth", client: "own", ownClient: SLACK_APP },
     category: "Communication",
     tagline: "Search channels, read threads and post messages",
+    icon: ICONS.slack,
     examples: [
       "Summarize what happened in #general today",
       "Find the thread where we decided on the launch date",
@@ -175,6 +176,7 @@ export const CATALOG: readonly CatalogEntry[] = [
     auth: { kind: "oauth", client: "dcr" },
     category: "Communication",
     tagline: "Subscribers, groups and campaigns",
+    icon: ICONS.mailerlite,
     examples: [
       "How did my last campaign perform?",
       "How many subscribers joined this month?",
@@ -479,6 +481,7 @@ export const CATALOG: readonly CatalogEntry[] = [
     auth: { kind: "oauth", client: "dcr" },
     category: "Sales and payments",
     tagline: "Find and enrich companies and contacts",
+    icon: ICONS.clay,
     examples: [
       "What tables are in my Clay workspace?",
       "Enrich the company acme.com with its headcount and industry",
@@ -491,6 +494,7 @@ export const CATALOG: readonly CatalogEntry[] = [
     auth: { kind: "oauth", client: "dcr" },
     category: "Design",
     tagline: "Designs, folders and exports",
+    icon: ICONS.canva,
     examples: [
       "Find my latest presentation design",
       "Export my newest social post design as PNG",
@@ -504,6 +508,7 @@ export const CATALOG: readonly CatalogEntry[] = [
     auth: { kind: "oauth", client: "dcr" },
     category: "Design",
     tagline: "Real-world app screens and flows for reference",
+    icon: ICONS.mobbin,
     examples: [
       "Show onboarding flows from fintech apps",
       "Find examples of paywall screens",
@@ -521,6 +526,7 @@ export const CATALOG: readonly CatalogEntry[] = [
     },
     category: "Web",
     tagline: "Scrape, crawl and search the web",
+    icon: ICONS.firecrawl,
     examples: [
       "Scrape the pricing page of example.com into markdown",
       "Search the web for recent posts about MCP security",

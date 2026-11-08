@@ -55,9 +55,7 @@ function processes(): Set<string> {
   const mine = out
     .split("\n")
     .map((l) => l.trim())
-    .filter(
-      (l) => /agent-browser|Chrome for Testing/.test(l) && !/browser-smoke|\.omp\/|ps -axo/.test(l),
-    );
+    .filter((l) => /agent-browser|Chrome for Testing/.test(l) && !/browser-smoke|ps -axo/.test(l));
   return new Set(mine);
 }
 

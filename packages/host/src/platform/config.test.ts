@@ -41,10 +41,9 @@ describe("defaults", () => {
   test.each([
     ["local", []],
     ["remote", ["--secrets-key-file", KEY_FILE]],
-  ])("%s mode serves no Vite and watches no herdr unless asked", (mode, extra) => {
+  ])("%s mode serves no Vite unless asked", (mode, extra) => {
     const { config } = parse(["--mode", mode, ...extra]);
     expect(config.vite).toBe(false);
-    expect(config.herdr).toBe(false);
   });
 
   test("local mode keeps secrets in the keychain, allows headed Chrome and reveal, and isolates only browser bots", () => {
@@ -65,14 +64,9 @@ describe("defaults", () => {
     expect(config.allowPlainHttp).toBe(false);
   });
 
-  test("the dev script's flags turn Vite on and leave herdr off", () => {
+  test("the dev script's flags turn Vite on", () => {
     const { config } = parse(["--port", "5173", "--vite"]);
     expect(config.vite).toBe(true);
-    expect(config.herdr).toBe(false);
-  });
-
-  test("--herdr turns herdr on", () => {
-    expect(parse(["--herdr"]).config.herdr).toBe(true);
   });
 
   test("the public URL defaults to the loopback URL of the bound port", () => {
@@ -92,7 +86,6 @@ describe("flags and environment", () => {
       CLAUDEBOT_ALLOW_PLAIN_HTTP: "1",
       CLAUDEBOT_SECRETS: "file",
       CLAUDEBOT_SECRETS_KEY_FILE: KEY_FILE,
-      CLAUDEBOT_HERDR: "1",
       CLAUDEBOT_ASK_APPROVAL: "1",
       CLAUDEBOT_VITE: "true",
       CLAUDEBOT_DATA_ROOT: "/srv/claudebot",
@@ -107,7 +100,6 @@ describe("flags and environment", () => {
       reveal: false,
       isolateAllBots: true,
       sidecar: false,
-      herdr: true,
       vite: true,
       askApproval: true,
       dataRoot: "/srv/claudebot",
@@ -123,9 +115,8 @@ describe("flags and environment", () => {
     expect(config.bind.port).toBe(9000);
   });
 
-  test("an environment variable can switch herdr and Vite off", () => {
-    const { config } = parse([], { CLAUDEBOT_HERDR: "0", CLAUDEBOT_VITE: "false" });
-    expect(config.herdr).toBe(false);
+  test("an environment variable can switch Vite off", () => {
+    const { config } = parse([], { CLAUDEBOT_VITE: "false" });
     expect(config.vite).toBe(false);
   });
 
@@ -323,15 +314,13 @@ describe("invalid input", () => {
     expect(() => parse(argv)).toThrow(message);
   });
 
-  test.each([
-    ["CLAUDEBOT_HERDR"],
-    ["CLAUDEBOT_VITE"],
-    ["CLAUDEBOT_ASK_APPROVAL"],
-    ["CLAUDEBOT_ALLOW_PLAIN_HTTP"],
-  ])("rejects %s set to a value that is not 1, true, 0 or false", (name) => {
-    expect(() => parse([], { [name]: "yes" })).toThrow(InvalidConfig);
-    expect(() => parse([], { [name]: "yes" })).toThrow(name);
-  });
+  test.each([["CLAUDEBOT_VITE"], ["CLAUDEBOT_ASK_APPROVAL"], ["CLAUDEBOT_ALLOW_PLAIN_HTTP"]])(
+    "rejects %s set to a value that is not 1, true, 0 or false",
+    (name) => {
+      expect(() => parse([], { [name]: "yes" })).toThrow(InvalidConfig);
+      expect(() => parse([], { [name]: "yes" })).toThrow(name);
+    },
+  );
 
   test("tool approval is off unless CLAUDEBOT_ASK_APPROVAL turns it on", () => {
     expect(parse().config.askApproval).toBe(false);

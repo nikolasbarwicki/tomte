@@ -14,7 +14,20 @@ export function IntegrationIcon({
   size?: "md" | "lg";
 }) {
   const box = size === "lg" ? "size-12 rounded-xl" : "size-9 rounded-lg";
-  if (!i.catalog?.icon)
+  const icon = i.catalog?.icon;
+  if (icon && "image" in icon)
+    return (
+      <span
+        aria-hidden
+        className={cn(
+          "flex shrink-0 items-center justify-center overflow-hidden bg-white ring-1 ring-foreground/10",
+          box,
+        )}
+      >
+        <img src={icon.image} alt="" className="size-full object-contain" />
+      </span>
+    );
+  if (!icon)
     return (
       <span
         aria-hidden
@@ -31,10 +44,10 @@ export function IntegrationIcon({
     <span
       aria-hidden
       className={cn("flex shrink-0 items-center justify-center ring-1 ring-foreground/10", box)}
-      style={{ backgroundColor: i.catalog.icon.color }}
+      style={{ backgroundColor: icon.color }}
     >
       <svg viewBox="0 0 24 24" className={size === "lg" ? "size-6" : "size-[18px]"} fill="white">
-        <path d={i.catalog.icon.path} />
+        <path d={icon.path} />
       </svg>
     </span>
   );

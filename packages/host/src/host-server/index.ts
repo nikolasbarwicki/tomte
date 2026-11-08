@@ -42,7 +42,6 @@ import { withBoundary } from "./boundary.ts";
 import { createChats } from "./chats.ts";
 import { createDeviceSessions } from "./device-sessions.ts";
 import { createEventStream } from "./events.ts";
-import { watchHerdr } from "./herdr.ts";
 import { agentRoutes, clientRoutes, createRequestListener } from "./http.ts";
 import { createHostIsolation } from "./isolation.ts";
 import { openListener } from "./listener.ts";
@@ -50,7 +49,7 @@ import { createTranscripts } from "./transcript.ts";
 import { filesEvent, memoryEvents } from "./views.ts";
 
 export interface HostServerOptions {
-  /** Deployment choices parsed once at startup: the data root, where to listen and what URL users reach, Vite and herdr. */
+  /** Deployment choices parsed once at startup: the data root, where to listen and what URL users reach, and Vite. */
   config: HostConfig;
   cli: ResolvedCli;
   db: Database;
@@ -234,13 +233,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     routines: routines.list(botId),
   });
 
-  const stopHerdr = !o.config.herdr
-    ? undefined
-    : watchHerdr(
-        (title, body) => chats.notify("herdr", title, body),
-        (l) => console.error(l),
-      );
-
   if (o.config.mode === "remote") void claude.checkSignIn();
   if (initial) await chats.switchTo(initial);
   void transcripts
@@ -287,7 +279,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         credentialsEvent(),
         ...memoryEvents(dataRoot, botId),
         filesEvent(dataRoot, botId),
-        ...chats.notices(),
         ...chats.replayOpen(),
       ];
     },
@@ -333,7 +324,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       clientListener.pause();
       agentListener.pause();
       chats.close();
-      stopHerdr?.();
       routines.stop();
       await browser.close();
       await vite?.close();

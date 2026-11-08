@@ -9,7 +9,6 @@ import {
   CircleCheckIcon,
   GlobeIcon,
   HandIcon,
-  MegaphoneIcon,
   MessageCircleQuestionIcon,
   ShieldQuestionIcon,
   WrenchIcon,
@@ -201,13 +200,6 @@ function RowView({
           <AlertDescription className="break-words whitespace-pre-wrap">
             {row.text}
           </AlertDescription>
-        </Alert>
-      );
-    case "update":
-      return (
-        <Alert>
-          <MegaphoneIcon />
-          <AlertDescription className="text-foreground">{row.text}</AlertDescription>
         </Alert>
       );
     case "info":

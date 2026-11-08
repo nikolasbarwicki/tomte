@@ -2,11 +2,8 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
-      // omp hook installed by symlink (see header of the file), never imported.
-      "entry": ["integrations/omp/*.ts"],
       // @swc/core: dependency-cruiser loads it by name via `parser: "swc"` in .dependency-cruiser.cjs.
-      // @oh-my-pi/pi-coding-agent: type-only import resolved by omp at hook load time; not installed in this repo.
-      "ignoreDependencies": ["@swc/core", "@oh-my-pi/pi-coding-agent"],
+      "ignoreDependencies": ["@swc/core"],
     },
     "packages/host": {
       "entry": [
