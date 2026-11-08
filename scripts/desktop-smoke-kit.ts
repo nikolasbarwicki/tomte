@@ -23,7 +23,7 @@ export const FAKE_CLAUDE = join(ROOT, "packages/host/src/testing/fake-claude.ts"
 export const EVIDENCE_DIR = join(ROOT, ".scratch");
 const DEFAULT_APP = join(
   ROOT,
-  `dist/desktop/Claudebot-${process.platform}-${process.arch}/Claudebot.app`,
+  `dist/desktop/Claudebot-${process.platform}-${process.arch}/${process.arch === "arm64" ? "mac-arm64" : "mac"}/Claudebot.app`,
 );
 
 export const CLIENT_URL = /^http:\/\/127\.0\.0\.1:\d+\//;

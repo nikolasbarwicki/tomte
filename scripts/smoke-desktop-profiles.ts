@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { ElectronApplication, Page } from "playwright-core";
 
 // Smoke test for the desktop app's remote connection profiles, run for real against the packaged app:
-//   bun scripts/smoke-desktop-profiles.ts [dist/desktop/Claudebot-darwin-arm64/Claudebot.app]
+//   bun scripts/smoke-desktop-profiles.ts [dist/desktop/Claudebot-darwin-arm64/mac-arm64/Claudebot.app]
 // Needs `bun run package:desktop` first (it also builds dist/host/claudebot-host-<os>-<arch>, the fixture host).
 // Everything runs on a fresh temp root under the isolation rules of the DESK briefs: file secrets backend, Chromium's
 // mock keychain (so the safeStorage key is Chromium's mock key, NOT the real keychain), a fake Claude CLI, no default
