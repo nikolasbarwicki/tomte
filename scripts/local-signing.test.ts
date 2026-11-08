@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { appendFile, chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { CommandError, type Ran, type Runner } from "./command-runner.ts";
 import { hostBinaryName } from "./desktop-kit.ts";
@@ -184,6 +184,7 @@ class FakeMac {
         `  - url: Claudebot-${version}-arm64.dmg`,
         `    sha512: ${await sha512Base64(dmg)}`,
         `    size: ${(await stat(dmg)).size}`,
+        "    blockMapSize: 5",
         `path: Claudebot-${version}-arm64-mac.zip`,
         "sha512: x",
         "",
@@ -351,6 +352,10 @@ describe("runLocalSigning", () => {
     expect(sums).toContain("Claudebot-0.1.0-arm64.dmg");
     expect(sums).toContain("Claudebot-0.1.0-arm64-mac.zip");
     expect(sums).toContain("latest-mac.yml");
+    expect(sums).not.toContain("blockmap");
+    expect(await exists(`${p.dmg}.blockmap`)).toBe(false);
+    expect(await exists(join(p.artifacts, `${basename(p.dmg)}.blockmap`))).toBe(false);
+    expect(await readFile(p.metadata, "utf8")).not.toContain("blockMapSize");
 
     // nothing of the run's keychain is left
     expect(await exists(p.signingDir)).toBe(false);

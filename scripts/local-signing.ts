@@ -138,7 +138,10 @@ async function notarizeDmg(c: Ctx, d: Deps): Promise<void> {
   d.log(`notarized ${c.config.paths.dmg} (submission ${id})`);
 }
 
-/** After stapling the DMG its bytes are not what electron-builder hashed: `latest-mac.yml` must name the stapled file. */
+/**
+ * After stapling the DMG its bytes are not what electron-builder hashed: `latest-mac.yml` must name the stapled file, and
+ * the DMG's `.blockmap` (built from the old bytes) is deleted so it can never be collected or checksummed as verified.
+ */
 async function rewriteDmgMetadata(c: Ctx): Promise<void> {
   const p = c.config.paths;
   const text = await readFile(p.metadata, "utf8");
@@ -148,6 +151,7 @@ async function rewriteDmgMetadata(c: Ctx): Promise<void> {
     p.metadata,
     replaceUpdateFile(text, url, { sha512: await sha512Base64(p.dmg), size }),
   );
+  await rm(`${p.dmg}.blockmap`, { force: true });
 }
 
 /** Every file `latest-mac.yml` lists for the zip and the DMG exists with the sha512 and size it states. */
@@ -258,7 +262,8 @@ function buildSteps(config: LocalConfig): Step[] {
     },
     {
       kind: "command",
-      title: "Import the certificate and its private key; only /usr/bin/codesign may use the key",
+      title:
+        "Import the certificate and its private key; /usr/bin/codesign is added to the key's ACL",
       touches:
         "the temporary keychain only; the .p12 password is on this command's argv for its duration",
       argv: (c) => [
@@ -277,8 +282,9 @@ function buildSteps(config: LocalConfig): Step[] {
     },
     {
       kind: "command",
-      title: "Let Apple-signed tools (codesign) use the key without a prompt",
-      touches: "the key's partition list in the temporary keychain only",
+      title: "Let Apple-signed tools and apps and codesign use the key without a prompt",
+      touches:
+        "the key's partition list in the temporary keychain only (not codesign-only; see docs/release/local-signing.md)",
       argv: (c) => [
         "security",
         "set-key-partition-list",
@@ -429,8 +435,9 @@ function buildSteps(config: LocalConfig): Step[] {
     },
     {
       kind: "internal",
-      title: "Rewrite the DMG's sha512 and size in latest-mac.yml",
-      touches: `${p.metadata}`,
+      title:
+        "Rewrite the DMG's sha512 and size in latest-mac.yml, drop its blockMapSize and delete the DMG's stale .blockmap",
+      touches: `${p.metadata}; deletes ${p.dmg}.blockmap (electron-builder made it before signing and stapling; it is not regenerated, so no artifact carries a stale one)`,
       commands: () => [],
       run: rewriteDmgMetadata,
     },
@@ -630,11 +637,11 @@ export async function runLocalSigning(config: LocalConfig, d: Deps): Promise<voi
 
 /** Text the plan prints about the settings the route touches; docs/release/local-signing.md says the same. */
 const GLOBAL_SETTINGS = [
-  "Touched: nothing global on purpose. The temporary keychain is a file inside --out; it is deleted at the end.",
-  "Possibly touched (UNVERIFIED): `security create-keychain` may list the new keychain in the user search list; `delete-keychain` removes it again.",
-  "Touched only with --add-to-search-list: the user search list (the temporary keychain is put first; at the end only that entry is removed, anyone else's change to the list is kept).",
-  "Never touched: the login keychain, the default keychain, the System keychain, trust settings, login items, startup settings, anything in ~/Library/Keychains.",
-  "Outside --out: dist/host (build:host empties and refills it) and electron-builder's download caches under ~/Library/Caches/electron-builder.",
+  "Done or named on purpose: a temporary keychain file inside --out (created, unlocked, imported into, deleted); its key's ACL and partition list; a read-only snapshot of the user search list; everything the run writes under --out; dist/host (build:host empties and refills it); electron-builder's download caches under ~/Library/Caches/electron-builder; the notary uploads below.",
+  "Only with --add-to-search-list: the user search list is rewritten (the temporary keychain is put first; at the end only that entry is removed, anyone else's change to the list is kept).",
+  "OS side effects nobody has observed (UNVERIFIED): `security create-keychain` may list the new keychain in the user search list (`delete-keychain` removes it again); securityd and the keychain frameworks may write keychain metadata, lock or journal files and caches; spctl, stapler and codesign may update Gatekeeper, notarization or trust caches.",
+  "The route never names or writes the login keychain, the default keychain, the System keychain, trust settings, login items, startup settings or anything under ~/Library/Keychains; OS-side effects there are unobserved, not ruled out.",
+  "Key access: -T /usr/bin/codesign adds codesign to the key's ACL and the partition list apple-tool:,apple:,codesign: lets Apple-signed tools and apps (and codesign) use the key without a prompt while the keychain is unlocked (30 minutes idle or until sleep); this is NOT codesign-only (the partition IDs other than apple: are UNVERIFIED; the man page requires apple: for codesign).",
 ];
 
 const IDENTITY_RULE =
@@ -708,7 +715,7 @@ export function renderPlan(config: LocalConfig): string {
     ...NOTARY_UPLOADS.map((m) => `  - ${m}`),
     "",
     "Artifacts:",
-    `  ${p.artifacts}/ (DMG, update zip, blockmaps, latest-mac.yml, SHA256SUMS)`,
+    `  ${p.artifacts}/ (DMG, update zip, the zip's blockmap, latest-mac.yml, SHA256SUMS; no DMG blockmap)`,
     `  ${p.bundleDir}/ (electron-builder's output, including the unpacked app)`,
     `  ${p.stagedHost} (the signed host)`,
     "",

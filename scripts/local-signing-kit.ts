@@ -308,8 +308,10 @@ export function withoutKeychain(
 const UPDATE_FILE_KEYS = ["sha512", "size"] as const;
 
 /**
- * `latest-mac.yml` with the `sha512` and `size` of the file `url` replaced. electron-builder wrote them for the DMG as it
- * was before signing and stapling; both change the bytes. Only that entry changes; throws when it is not listed.
+ * `latest-mac.yml` with the `sha512` and `size` of the file `url` replaced and any `blockMapSize` removed from its entry.
+ * electron-builder wrote them for the DMG as it was before signing and stapling; both change the bytes, and the DMG's
+ * `.blockmap` is dropped rather than regenerated, so no entry may point at it. Only that entry changes; throws when it
+ * is not listed.
  */
 export function replaceUpdateFile(
   text: string,
@@ -327,9 +329,11 @@ export function replaceUpdateFile(
   );
   if (start < 0) throw new Error(`the update metadata does not list ${url}`);
   const seen = new Set<string>();
+  const dropped = new Set<number>();
   for (let i = start + 1; i < lines.length; i++) {
     const line = lines[i] as string;
     if (/^\s*-\s/.test(line) || /^\S/.test(line)) break;
+    if (/^\s*blockMapSize:/.test(line)) dropped.add(i);
     for (const key of UPDATE_FILE_KEYS) {
       const m = new RegExp(`^(\\s*${key}:\\s*)`).exec(line);
       if (m) {
@@ -341,5 +345,5 @@ export function replaceUpdateFile(
   if (seen.size !== UPDATE_FILE_KEYS.length) {
     throw new Error(`the update metadata's entry for ${url} lacks sha512 or size`);
   }
-  return lines.join("\n");
+  return lines.filter((_, i) => !dropped.has(i)).join("\n");
 }

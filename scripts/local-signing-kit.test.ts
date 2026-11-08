@@ -228,12 +228,16 @@ sha512: ZIPHASH
 releaseDate: '2026-01-01'
 `;
 
-  test("replaces the sha512 and size of that file only", () => {
+  test("replaces the sha512 and size of that file and drops its blockMapSize, nothing else", () => {
     const out = replaceUpdateFile(YML, "Claudebot-0.1.0-arm64.dmg", {
       sha512: "NEWHASH",
       size: 321,
     });
-    expect(out).toBe(YML.replace("OLDDMGHASH", "NEWHASH").replace("size: 200", "size: 321"));
+    expect(out).toBe(
+      YML.replace("OLDDMGHASH", "NEWHASH")
+        .replace("size: 200", "size: 321")
+        .replace("    blockMapSize: 5\n", ""),
+    );
   });
 
   test("throws when the file is not listed or its entry is incomplete", () => {
