@@ -1,0 +1,139 @@
+name: Release
+
+# Pushing a v* tag publishes a GitHub Release. Cut one as AGENTS.md ("Releasing") describes.
+#
+# verify   the tag is vMAJOR.MINOR.PATCH[-prerelease] and names the host's VERSION (scripts/release.ts tag)
+# host     per target, on a native runner: build the host binary, smoke-run it, upload it as `release-host-<target>`
+# publish  merges every `release-*` artifact into one folder, writes SHA256SUMS over it, creates the Release
+#
+# Desktop installers (spec 7, ticket 03) join the same Release: add a job that uploads its installers as artifacts
+# named `release-<anything>`, put it in `publish.needs`, and the checksum file covers them too (scripts/release-kit.ts
+# checksums every file in the folder).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+# A tag is released once at a time; a second run for the same tag waits instead of cancelling a publish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: verify tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun install --frozen-lockfile
+
+      # Fails the whole release when the tag and VERSION disagree. The tag goes through an env var, never interpolated.
+      - id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: bun scripts/release.ts tag "$TAG"
+
+  host:
+    name: host ${{ matrix.target }}
+    needs: verify
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        # Every target has a native runner, so every binary is built and smoke-run on the OS and CPU it ships for.
+        # ubuntu-24.04-arm is free for public repositories only; a private repository needs a larger runner here.
+        # macos-15-intel is the last GitHub-hosted Intel macOS image (offered until August 2027).
+        include:
+          - { target: darwin-arm64, runner: macos-15, ext: "" }
+          - { target: darwin-x64, runner: macos-15-intel, ext: "" }
+          - { target: linux-x64, runner: ubuntu-24.04, ext: "" }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm, ext: "" }
+          - { target: windows-x64, runner: windows-2025, ext: ".exe" }
+    defaults:
+      run:
+        shell: bash
+    env:
+      BINARY: dist/host/claudebot-host-${{ matrix.target }}${{ matrix.ext }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build:host ${{ matrix.target }}
+
+      # Runs the binary the job just built (copied outside the repo, own temp data root); needs network for `install-cli`.
+      - name: Smoke
+        run: bun run smoke:host "$BINARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-host-${{ matrix.target }}
+          path: ${{ env.BINARY }}
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: publish release
+    needs: [verify, host]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The only job that can write to the repository.
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release
+
+      # Fails unless all five host binaries are there; covers every file in release/, SHA256SUMS excluded.
+      - name: Checksums
+        run: bun scripts/release.ts checksums release
+
+      # A draft until every asset is uploaded, so nobody sees a half-filled Release. A rerun of a failed publish
+      # replaces the assets of the Release that already exists.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+          else
+            gh release create "$TAG" release/* --verify-tag --draft --title "$TAG" --generate-notes --prerelease="$PRERELEASE"
+          fi
+          gh release edit "$TAG" --draft=false --prerelease="$PRERELEASE"
