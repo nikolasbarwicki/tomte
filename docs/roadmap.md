@@ -136,15 +136,13 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 
 ### 6c. Bot edit and delete
 
-**Problem.** No edit route or UI. `HostServer.removeBot` exists and calls `removeBotBrowser` and `removeBotHandoffs`, but nothing calls it outside tests, and it leaves the bot's directory, routines and chat state alone (`packages/host/src/handoffs/cleanup.ts`: "Claudebot has no bot-delete path yet").
+**Problem.** No edit route or UI. Delete is built: `/api/bots/delete` (bot header, trash icon) calls `HostServer.removeBot`, which fails the bot's open handoffs, removes its routines, activity row, browser state and credential grants, closes its chat and moves its directory to `bots/.trash/<id>-<timestamp>/`. It refuses with 409 while the bot is working. Restoring is manual (move the folder back). Claude session files for the bot stay in the workspace's session history.
 
 **Plan.**
 
 - Edit: `/api/bots/update` for name and purpose. `openThread` snapshots both into the `Thread` through `botContext`, so `configStale` and `thread.close()` are not enough: a reopened thread keeps the old persona. Save the bot, update `chat.bot`, then replace `chat.thread` with `openThread(chat.bot, true, ...)` as `/api/session/new` does. If a turn is running, defer the swap to turn end with its own flag beside `configStale`.
-- Delete: `/api/bots/delete` that refuses while a turn or headless run is active, then calls `removeBot`, deletes the bot's routines, closes and drops its `Chat`, and removes the bot directory.
-- UI: edit and delete in the bot header; delete asks for confirmation naming what goes (memory, files, routines, open handoffs).
-
-**Decision needed.** Hard delete or move the bot directory to a trash folder. Trash is safer for `files/`; pick it unless disk use is a concern.
+- UI: edit in the bot header.
+- Optional: a trash view to restore or purge deleted bots, and purging `bots/.trash` automatically.
 
 **Done when.** Deleting a bot with an open handoff, a credential grant and a routine leaves none of them behind, and the other bot is told the handoff failed.
 

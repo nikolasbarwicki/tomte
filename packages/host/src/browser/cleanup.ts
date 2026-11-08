@@ -5,7 +5,7 @@ import type { Takeover } from "./takeover.ts";
 
 /**
  * Everything the browser feature holds for a bot that is being deleted: its tokens stop working, its browser
- * closes with saved logins deleted, its pending human waits are cancelled and any takeover ends, and its credential grants go. Claudebot has no bot-delete path yet; call this from it.
+ * closes with saved logins deleted, its pending human waits are cancelled and any takeover ends, and its credential grants go. `HostServer.removeBot` calls this.
  */
 export async function removeBotBrowser(
   deps: {

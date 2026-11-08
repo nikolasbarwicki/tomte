@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
@@ -12,7 +20,7 @@ import { Thread, type HostDelegate, type ThreadEnv } from "./thread.ts";
 
 export { Thread, type HostDelegate, type ThreadEnv, type TurnResult } from "./thread.ts";
 export { readMemory, userMemoryPath } from "./memory.ts";
-export { getActivity, markSeen, recordMessage } from "./activity-store.ts";
+export { deleteActivity, getActivity, markSeen, recordMessage } from "./activity-store.ts";
 export {
   deleteFile,
   listFiles,
@@ -101,6 +109,19 @@ export function createBot(
   };
   save(dataRoot, bot);
   return bot;
+}
+
+/** Where deleted bots go: inside `bots/`, so isolated sessions still cannot read them, but never listed (its name is not a bot id). */
+const TRASH = ".trash";
+
+/** Moves the bot's directory (settings, memory, files) to the trash instead of deleting it; the bot is gone from the host at once. Returns the new path. */
+export function trashBot(dataRoot: string, id: string): string | undefined {
+  if (!getBot(dataRoot, id)) return undefined;
+  const trash = join(botsDir(dataRoot), TRASH);
+  mkdirSync(trash, { recursive: true });
+  const to = join(trash, `${id}-${Date.now()}`);
+  renameSync(botDir(dataRoot, id), to);
+  return to;
 }
 
 export function setBrowserEnabled(dataRoot: string, id: string, enabled: boolean): Bot | undefined {
