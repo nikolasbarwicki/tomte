@@ -37,6 +37,13 @@ Method: I ran `curl` against each server's `.well-known` OAuth metadata, and sen
 - Write tools: add-tasks, update-tasks, complete-tasks, delete-object, add-projects/sections/comments [UNVERIFIED names]. delete-object should ask.
 - Gotchas: the OAuth AS lives on a different host from the MCP resource, so claudebot must follow `authorization_servers` from the protected-resource metadata.
 
+## ticktick — TickTick
+
+- URL: `https://mcp.ticktick.com` (streamable HTTP). Vendor-hosted; docs: https://help.ticktick.com/articles/7438129581631995904.
+- Auth: protected-resource metadata points at the authorization server `https://ticktick.com`, whose metadata has `registration_endpoint` (`https://api.ticktick.com/oauth/register`) and `client_registration_types_supported: ["dynamic"]`; PKCE S256, `token_endpoint_auth_methods_supported` includes `none`. Scopes: `tasks:read tasks:write`. The vendor documents an API token (Settings → Account & Security → API Token) as a bearer alternative.
+- Catalog: `{ kind: "oauth", client: "dcr", alternative: { tokenLabel: "API token", tokenUrl: "https://ticktick.com/webapp/#settings/account" } }`.
+- Gotchas: as with Todoist, the AS lives on a different host from the MCP resource; the grant types list only `authorization_code` (no `refresh_token`), so expect re-connects when the access token expires [UNVERIFIED lifetime].
+
 ## trello — Trello
 
 - No official remote MCP server was found. `mcp.trello.com` returns an Atlassian 503 "no_healthy_upstream" page, so that hostname does not serve a working MCP server right now.

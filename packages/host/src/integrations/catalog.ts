@@ -414,6 +414,26 @@ export const CATALOG: readonly CatalogEntry[] = [
     examples: ["What is due today?", "Add a task to call the dentist tomorrow at 10"],
   },
   {
+    id: "ticktick",
+    label: "TickTick",
+    url: "https://mcp.ticktick.com",
+    auth: {
+      kind: "oauth",
+      client: "dcr",
+      alternative: {
+        tokenLabel: "API token",
+        tokenUrl: "https://ticktick.com/webapp/#settings/account",
+      },
+    },
+    category: "Productivity",
+    tagline: "Tasks, lists and due dates",
+    icon: ICONS.ticktick,
+    examples: [
+      "What tasks do I have today?",
+      "Add a high-priority task to prepare the meeting deck tomorrow at 3pm",
+    ],
+  },
+  {
     id: "clickup",
     label: "ClickUp",
     url: "https://mcp.clickup.com/mcp",
