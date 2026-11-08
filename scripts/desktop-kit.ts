@@ -108,24 +108,45 @@ export function inCi(env: Record<string, string | undefined>): boolean {
 }
 
 /**
+ * The metadata channel of every build. electron-builder names a pre-release's metadata after its suffix (`rc-mac.yml` for
+ * `0.2.0-rc.1`), but the release holds `latest-*.yml` for every tag (`releaseAssets`); electron-updater asks a
+ * pre-release's own channel file first and falls back to `latest-*.yml`, so one channel serves stable and pre-releases.
+ */
+const CHANNEL = "latest";
+
+/**
  * Where the app looks for updates: this repository's GitHub Releases. Without repository coordinates a local build gets
  * the placeholder host (reserved `.invalid`, never resolves) so the metadata stays well-formed; in CI that is an error,
  * so a release can never ship an app that updates from nowhere.
+ * `fixtureUrl` (`package-desktop --update-url`) points a local verification build at a feed the developer runs on this
+ * machine: loopback `http` only, and never in CI, so a release cannot carry it.
  */
-export function updateProvider(repository: string | undefined, ci: boolean) {
+export function updateProvider(repository: string | undefined, ci: boolean, fixtureUrl?: string) {
+  if (fixtureUrl !== undefined) {
+    if (ci) throw new Error("--update-url is for local verification builds; refusing it in CI");
+    if (!/^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+(\/\S*)?$/.test(fixtureUrl))
+      throw new Error(
+        `--update-url ${fixtureUrl} is not a loopback http URL (http://127.0.0.1:<port>)`,
+      );
+    return { provider: "generic" as const, url: fixtureUrl, channel: CHANNEL };
+  }
   if (repository === undefined || repository === "") {
     if (ci) {
       throw new Error(
         "GITHUB_REPOSITORY (owner/repo) is not set in CI: refusing to bake the placeholder update provider into a release build",
       );
     }
-    return { provider: "generic" as const, url: "https://updates.invalid/claudebot" };
+    return {
+      provider: "generic" as const,
+      url: "https://updates.invalid/claudebot",
+      channel: CHANNEL,
+    };
   }
   const match = /^([\w.-]+)\/([\w.-]+)$/.exec(repository);
   if (!match?.[1] || !match[2]) {
     throw new Error(`GITHUB_REPOSITORY "${repository}" is not owner/repo`);
   }
-  return { provider: "github" as const, owner: match[1], repo: match[2] };
+  return { provider: "github" as const, owner: match[1], repo: match[2], channel: CHANNEL };
 }
 
 /** The host inside a mac zip, hashed; `unzip -p` is on every macOS and Linux image. */

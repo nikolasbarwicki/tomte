@@ -31,7 +31,8 @@
     "icons:desktop": "bun scripts/make-tray-icons.ts",
     "smoke:desktop": "bun scripts/smoke-desktop.ts",
     "smoke:desktop:profiles": "bun scripts/smoke-desktop-profiles.ts",
-    "smoke:desktop:titlebar": "bun scripts/smoke-desktop-titlebar.ts"
+    "smoke:desktop:titlebar": "bun scripts/smoke-desktop-titlebar.ts",
+    "smoke:desktop:update": "bun scripts/smoke-desktop-update.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",

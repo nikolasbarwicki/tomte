@@ -67,6 +67,7 @@ describe("updateProvider", () => {
       provider: "github",
       owner: "acme",
       repo: "claudebot",
+      channel: "latest",
     });
   });
 
@@ -74,6 +75,22 @@ describe("updateProvider", () => {
     expect(updateProvider(undefined, false).provider).toBe("generic");
     expect(() => updateProvider(undefined, true)).toThrow("GITHUB_REPOSITORY");
     expect(() => updateProvider("", true)).toThrow("GITHUB_REPOSITORY");
+  });
+
+  test("a fixture URL replaces the provider, for loopback http outside CI only", () => {
+    expect(updateProvider(undefined, false, "http://127.0.0.1:4555")).toEqual({
+      provider: "generic",
+      url: "http://127.0.0.1:4555",
+      channel: "latest",
+    });
+    expect(updateProvider("acme/claudebot", false, "http://localhost:80/feed").provider).toBe(
+      "generic",
+    );
+    expect(() => updateProvider("acme/claudebot", true, "http://127.0.0.1:4555")).toThrow("CI");
+    expect(() => updateProvider(undefined, false, "https://updates.example.com")).toThrow(
+      "not a loopback http URL",
+    );
+    expect(() => updateProvider(undefined, false, "http://example.com:80")).toThrow("loopback");
   });
 
   test("refuses a value that is not owner/repo", () => {

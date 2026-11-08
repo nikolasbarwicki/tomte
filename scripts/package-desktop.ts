@@ -4,7 +4,7 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 // Packages the desktop app for this machine, unsigned and unnotarized, into dist/desktop/ (gitignored):
-//   bun run package:desktop [--out <dir>] [--version <semver>] [--arch <arm64|x64>]... [--host-dir <dir>]
+//   bun run package:desktop [--out <dir>] [--version <semver>] [--arch <arm64|x64>]... [--host-dir <dir>] [--update-url <http://127.0.0.1:port>]
 // Bundles the main process and runs electron-builder with asar on. It writes, into <out>/Claudebot-<os>-<archs>/, the
 // installers (macOS: dmg and zip; Windows: NSIS; Linux: AppImage and deb), the update metadata electron-updater reads
 // (latest-mac.yml, latest.yml, latest-linux.yml) and the unpacked app (mac-<arch>/Claudebot.app, win-unpacked/,
@@ -16,6 +16,7 @@ import { parseArgs } from "node:util";
 // builds none.
 // `--arch` (repeatable, default this machine's) packages several CPUs in one run, which is how the macOS release gets one
 // latest-mac.yml for both arm64 and x64 (electron-builder writes one file per OS and run). `--version` defaults to the host's VERSION.
+// `--update-url` bakes a loopback `http` feed into app-update.yml instead of GitHub Releases, for verifying auto-update on this machine; it is refused in CI.
 // It refuses, before building or deleting anything, when a process is running from the folder it would replace.
 // `--sign` (or CLAUDEBOT_REQUIRE_SIGNING=true) signs this OS's app with the certificates in the environment (names in
 // scripts/signing-kit.ts SIGNING_SECRETS): macOS Developer ID, hardened runtime and notarized, Windows Authenticode. It
@@ -54,6 +55,7 @@ const { values: flags } = parseArgs({
     arch: { type: "string", multiple: true },
     "host-dir": { type: "string" },
     sign: { type: "boolean" },
+    "update-url": { type: "string" },
   },
 });
 const OUT = resolve(flags.out ?? join(ROOT, "dist/desktop"));
@@ -173,7 +175,7 @@ async function main(): Promise<void> {
   const targets = INSTALLER_TARGETS[PLATFORM] as string[] | undefined;
   if (targets === undefined) throw new Error(`no installer is defined for ${process.platform}`);
   // Before anything is built: a CI build without repository coordinates fails here, not after the installers exist.
-  const publish = updateProvider(REPOSITORY, inCi(process.env));
+  const publish = updateProvider(REPOSITORY, inCi(process.env), flags["update-url"]);
   // Also before anything is built: a signed run without all of this OS's secrets, or a required one without --sign,
   // fails here, never after producing an unsigned installer.
   const signing = packagingSigning(PLATFORM, process.env, flags.sign ?? false);

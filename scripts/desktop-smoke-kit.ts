@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 
 import { _electron, type ElectronApplication, type Page } from "playwright-core";
 
+import { UPDATES_ENV } from "../packages/desktop/src/updates.ts";
 import {
   outsideLineage,
   type ProcessRow,
@@ -256,6 +257,8 @@ export async function createSmokeRun(
       CLAUDEBOT_SECRETS: "file",
       CLAUDEBOT_SECRETS_KEY_FILE: keyFile,
       CLAUDEBOT_DESKTOP_LOGIN_ITEM_FILE: loginItemFile,
+      // No smoke asks an update feed for anything; a launch that wants the check on says so through `extra`.
+      [UPDATES_ENV]: "off",
       ...extra,
     };
   }
