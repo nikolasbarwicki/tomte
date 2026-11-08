@@ -13,6 +13,7 @@ import {
   type SDKResultMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import { DEFAULT_EFFORT, DEFAULT_MODEL } from "@claudebot/contract/api";
 import type { MemoryScope } from "@claudebot/contract/events";
 import { z } from "zod";
 
@@ -140,15 +141,15 @@ export class Thread {
   private busy = false;
   /** Set when `close()` lands while `send()` is still opening the query, which `close()` alone cannot reach. */
   private closedMidSend = false;
-  private model?: string | undefined;
-  private effort?: EffortLevel;
+  private model: string;
+  private effort: EffortLevel = DEFAULT_EFFORT;
   private readonly roots: string[];
   private readonly log: (l: string) => void;
 
   constructor(private readonly o: ThreadOptions) {
     this.sessionId = o.sessionId ?? randomUUID();
     this.started = !!o.resume;
-    this.model = o.model;
+    this.model = o.model ?? DEFAULT_MODEL;
     this.roots = [o.cwd, ...(o.additionalDirectories ?? [])].map((d) => resolve(d));
     this.log = o.log ?? ((l) => console.error(l));
   }
@@ -272,7 +273,7 @@ export class Thread {
           canUseTool: this.canUseTool,
           mcpServers: { host: this.hostServer() },
           ...launch.options,
-          ...(this.model !== undefined && { model: this.model }),
+          model: this.model,
           env: this.o.claude.env(),
           stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
         },
@@ -283,7 +284,7 @@ export class Thread {
         q.close();
         throw e;
       }
-      if (this.effort) await q.applyFlagSettings({ effortLevel: this.effort });
+      await q.applyFlagSettings({ effortLevel: this.effort });
       this.started = true;
       this.live = { q, inbox, it: q[Symbol.asyncIterator](), expiresAt: session?.expiresAt, lease };
     } catch (e) {

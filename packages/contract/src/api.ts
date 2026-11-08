@@ -6,6 +6,10 @@ import { z } from "zod";
 export const EffortLevel = z.enum(["low", "medium", "high", "xhigh", "max"]);
 export type EffortLevel = z.infer<typeof EffortLevel>;
 
+/** The model and effort a session opens with until the user picks others. */
+export const DEFAULT_MODEL = "sonnet";
+export const DEFAULT_EFFORT: EffortLevel = "medium";
+
 /** Whether bots can get a browser on this host, and why not. */
 export const BrowserAvailability = z.discriminatedUnion("status", [
   z.object({ status: z.literal("available"), path: z.string(), source: z.string() }),
