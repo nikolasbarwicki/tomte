@@ -2,14 +2,12 @@ import { randomBytes } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { hostCommand } from "../platform/launch.ts";
 import type { SecretStore } from "../platform/secrets.ts";
 import { writeActionPolicy } from "./action-policy.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
 import {
   DEFAULT_CALL_TIMEOUT_MS,
   EngineError,
-  findChrome,
   listSessions,
   restoreStatePath,
   runEngine,
@@ -18,7 +16,7 @@ import {
   socketDir,
   type EngineLaunch,
 } from "./engine-cli.ts";
-import { resolveEngine } from "./engine.ts";
+import { engineStatus, findChrome, resolveEngine } from "./engine.ts";
 import { Lane } from "./lane.ts";
 import { chromePid, engineTree, isAlive, killTree, readPid, waitForExit } from "./process.ts";
 
@@ -44,6 +42,8 @@ export interface BrowserRuntimeOptions {
   /** How often idle browsers and orphaned sessions are swept. Default every minute. */
   sweepEveryMs?: number;
   now?: () => number;
+  /** Why no call can run while the engine or Chrome is missing. Default: `engineStatus`'s reason. */
+  unavailableReason?: () => string;
 }
 
 /** One bot's browser. It has no engine session until the first call. */
@@ -157,12 +157,14 @@ export function createBrowserRuntimes(
 
   async function launch(botId?: string): Promise<EngineLaunch> {
     const binary = resolveEngine(dataRoot)?.path;
-    if (!binary) throw new BrowserUnavailable("the browser engine is not installed");
     const chrome = findChrome();
-    if (!chrome)
+    if (!binary || !chrome) {
+      const status = engineStatus(dataRoot);
       throw new BrowserUnavailable(
-        `Chrome for Testing is not installed; run \`${hostCommand("install-browser", "--data-root", dataRoot)}\``,
+        o.unavailableReason?.() ??
+          (status.status === "unavailable" ? status.reason : "the browser is not installed"),
       );
+    }
     key ??= engineKey(secrets).catch((e) => {
       key = undefined;
       throw e;

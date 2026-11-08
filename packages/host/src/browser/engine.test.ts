@@ -4,9 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { hostCommand } from "../platform/launch.ts";
-import { engineStatus, installManagedEngine, resolveEngine } from "./engine.ts";
+import { engineStatus, findChrome, installManagedEngine, resolveEngine } from "./engine.ts";
 
-const envKeys = ["AGENT_BROWSER_PATH", "PATH"] as const;
+const envKeys = ["AGENT_BROWSER_PATH", "AGENT_BROWSER_EXECUTABLE_PATH", "PATH"] as const;
+const ENGINE = process.platform === "win32" ? "agent-browser.exe" : "agent-browser";
+const CHROME =
+  process.platform === "darwin"
+    ? ["Google Chrome for Testing.app", "Contents", "MacOS", "Google Chrome for Testing"]
+    : process.platform === "win32"
+      ? ["chrome.exe"]
+      : ["chrome"];
 
 describe("engine resolution", () => {
   let dir: string;
@@ -23,6 +30,7 @@ describe("engine resolution", () => {
     dir = mkdtempSync(join(tmpdir(), "engine-"));
     dataRoot = join(dir, "data");
     delete process.env.AGENT_BROWSER_PATH;
+    delete process.env.AGENT_BROWSER_EXECUTABLE_PATH;
     process.env.PATH = join(dir, "bin");
   });
   afterEach(() => {
@@ -33,11 +41,33 @@ describe("engine resolution", () => {
   });
 
   test("unavailable with an install hint when nothing resolves", () => {
-    const s = engineStatus(dataRoot);
+    const s = engineStatus(dataRoot, join(dir, "no-bundle"));
     expect(s.status).toBe("unavailable");
+    expect(s.status === "unavailable" && s.installable).toBe(true);
     expect(s.status === "unavailable" && s.reason).toContain(
       hostCommand("install-browser", "--data-root", dataRoot),
     );
+  });
+
+  test("a bundled engine and Chrome beat a managed install and make the browser available", () => {
+    const bundle = join(dir, "Resources", "browser-engine");
+    const managed = exe("data", "agent-browser", "0.41.2", ENGINE);
+    writeFileSync(join(dataRoot, "agent-browser", "current"), managed);
+    expect(resolveEngine(dataRoot, bundle)?.source).toBe("managed");
+
+    const bundled = exe("Resources", "browser-engine", ENGINE);
+    expect(resolveEngine(dataRoot, bundle)).toEqual({ path: bundled, source: "bundled" });
+
+    const chrome = exe("Resources", "browser-engine", "chrome", "chrome-platform", ...CHROME);
+    expect(findChrome(bundle)).toBe(chrome);
+    expect(engineStatus(dataRoot, bundle)).toEqual({
+      status: "available",
+      path: bundled,
+      source: "bundled",
+    });
+
+    process.env.AGENT_BROWSER_EXECUTABLE_PATH = exe("my-chrome");
+    expect(findChrome(bundle)).toBe(process.env.AGENT_BROWSER_EXECUTABLE_PATH);
   });
 
   test("prefers override env, then the data root's managed install, then PATH", () => {

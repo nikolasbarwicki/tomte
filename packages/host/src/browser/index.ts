@@ -6,10 +6,11 @@ import type { Credentials } from "../credentials/index.ts";
 import type { HostOrigin } from "../platform/config.ts";
 import type { SecretStore } from "../platform/secrets.ts";
 import type { TokenRegistry } from "../platform/tokens.ts";
+import { createAutoInstall } from "./auto-install.ts";
 import { removeBotBrowser } from "./cleanup.ts";
 import { createEgressProxy } from "./egress-proxy.ts";
 import { createBrowserEndpoint, type BrowserEndpoint } from "./endpoint.ts";
-import { engineStatus, type EngineStatus } from "./engine.ts";
+import { engineStatus, installManagedEngine, type EngineStatus } from "./engine.ts";
 import { createHumanWaits, type HumanWaitsOptions } from "./human-waits.ts";
 import { createLiveView, type LiveViewOptions } from "./live-view.ts";
 import { CREDENTIAL_EXCHANGE_PATH, createBrowserLogin } from "./login.ts";
@@ -55,6 +56,8 @@ export interface BrowserOptions extends HumanWaitsOptions {
   liveView?: Pick<LiveViewOptions, "maxFps" | "retryMs">;
   /** How long the user may hold a bot's browser without input before control ends. */
   takeoverInactivityMs?: number;
+  /** Install the browser in the background when it is missing, and say so instead of naming `install-browser` (the desktop sidecar). */
+  autoInstall?: boolean;
 }
 
 export interface Browser {
@@ -88,10 +91,22 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
   const sandboxOf = o.sandbox ?? (() => sandboxStatus());
   const egress = createEgressProxy();
   await egress.start();
+  const autoInstall = o.autoInstall
+    ? createAutoInstall(() => installManagedEngine(o.dataRoot))
+    : undefined;
+  const engineOf = () => {
+    const engine = engineStatus(o.dataRoot);
+    return autoInstall ? autoInstall.status(engine) : engine;
+  };
   const runtimes = createBrowserRuntimes(o.secrets, egress, o.dataRoot, {
     ...o.runtime,
     headed: (botId) => o.headedAllowed && (o.bot(botId)?.browser.headed ?? false),
+    unavailableReason: () => {
+      const engine = engineOf();
+      return engine.status === "unavailable" ? engine.reason : "the browser is not installed";
+    },
   });
+  if (autoInstall) engineOf();
   runtimes.start();
   const waits = createHumanWaits({ emit: o.emit, deliver: o.deliver });
   const takeover = new Takeover({
@@ -137,7 +152,7 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
     handleUi: ui,
     sandbox: sandboxOf,
     status() {
-      const engine = engineStatus(o.dataRoot);
+      const engine = engineOf();
       if (engine.status === "unavailable") return engine;
       const sandbox = sandboxOf();
       return sandbox.status === "unavailable" ? sandbox : engine;
