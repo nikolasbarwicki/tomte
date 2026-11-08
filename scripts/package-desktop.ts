@@ -5,10 +5,12 @@ import { parseArgs } from "node:util";
 // Packages the desktop app for this machine, unsigned and unnotarized, into dist/desktop/ (gitignored):
 //   bun run package:desktop [--out <dir>]
 // Builds the host binary for this machine, bundles the main process and runs @electron/packager with asar on.
-// The host binary goes in as the extra resource `claudebot-host`, next to the app's other resources.
+// The host binary goes in as the extra resource `claudebot-host`, next to the app's other resources, and the browser
+// (scripts/browser-bundle.ts) as `browser-engine` beside it, where the host looks for it.
 // It refuses, before building or deleting anything, when a process is running from the bundle it would replace.
 import { packager } from "@electron/packager";
 
+import { prepareBrowserBundle } from "./browser-bundle.ts";
 import { ASSETS_OUT, buildMain, MAIN_OUT } from "./build-desktop.ts";
 import { processes, processesUnder, refusal } from "./process-guard.ts";
 
@@ -63,6 +65,7 @@ async function main(): Promise<void> {
   );
   const resource = join(STAGE, `claudebot-host${HOST_EXE}`);
   await copyFile(hostBinary, resource);
+  const browser = await prepareBrowserBundle(STAGE);
 
   try {
     const [appPath] = await packager({
@@ -76,7 +79,7 @@ async function main(): Promise<void> {
       asar: true,
       prune: false,
       overwrite: true,
-      extraResource: [resource],
+      extraResource: [resource, browser],
       quiet: true,
     });
     console.log(`packaged ${relative(ROOT, appPath ?? OUT)}`);

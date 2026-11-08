@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -179,35 +178,4 @@ function spawnEngine(launch: EngineLaunch, args: string[], timeoutMs: number): P
     reject(new EngineError(reply.error || "the browser engine reported a failure"));
   });
   return promise;
-}
-
-/** Chrome for Testing as installed by the engine; `AGENT_BROWSER_EXECUTABLE_PATH` overrides it. */
-export function findChrome(): string | undefined {
-  const override = process.env.AGENT_BROWSER_EXECUTABLE_PATH;
-  if (override && existsSync(override)) return override;
-  const root = join(homedir(), ".agent-browser", "browsers");
-  if (!existsSync(root)) return undefined;
-  const relative =
-    process.platform === "darwin"
-      ? [["Google Chrome for Testing.app", "Contents", "MacOS", "Google Chrome for Testing"]]
-      : process.platform === "win32"
-        ? [["chrome.exe"]]
-        : [["chrome"]];
-  const versions = readdirSync(root)
-    .filter((d) => d.startsWith("chrome-"))
-    .sort()
-    .reverse();
-  for (const version of versions) {
-    const dir = join(root, version);
-    // Linux and Windows builds unpack into a platform folder such as chrome-linux64.
-    const bases = [
-      dir,
-      ...readdirSync(dir, { withFileTypes: true })
-        .filter((e) => e.isDirectory())
-        .map((e) => join(dir, e.name)),
-    ];
-    for (const base of bases)
-      for (const rel of relative) if (existsSync(join(base, ...rel))) return join(base, ...rel);
-  }
-  return undefined;
 }

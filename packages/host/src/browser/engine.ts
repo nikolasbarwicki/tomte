@@ -1,28 +1,29 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { delimiter, join } from "node:path";
+import { homedir } from "node:os";
+import { delimiter, dirname, join } from "node:path";
 
 import { isMusl } from "../harness/index.ts";
 import { hostCommand } from "../platform/launch.ts";
-import { findChrome } from "./engine-cli.ts";
 
 const isWin = process.platform === "win32";
 /** Where the managed engine is installed: `agent-browser/` in the data root. */
 const managedRoot = (dataRoot: string) => join(dataRoot, "agent-browser");
 
-const ENGINE_VERSION = "0.41.2";
+export const ENGINE_VERSION = "0.41.2";
 
 /** SHA-256 of each release binary, hashed locally from github.com/vercel-labs/agent-browser/releases/tag/v0.41.2. */
-const ENGINE_SHA256: Record<string, string> = {
+export const ENGINE_SHA256: Record<string, string> = {
   "darwin-arm64": "19680f06cf87d0095c318a2e80bea6b71523d95d3b651cd18d81885cd182477a",
   "darwin-x64": "fc55608c2222650e6e0d0154f9edebd203b63bf853b85d22240bfbddbb006ea1",
   "linux-arm64": "00d291f45e1c4d527b3aa08c70c54c7c3030fde0794f8d4575aaa3ca1680f728",
@@ -32,13 +33,27 @@ const ENGINE_SHA256: Record<string, string> = {
   "win32-x64": "c2eadee7b67e326dfff02d5dd51a16ce7673eb165699d134b3ea5f05b4a7a9d0",
 };
 
-export type ResolvedEngine = { path: string; source: "AGENT_BROWSER_PATH" | "managed" | "PATH" };
+/** The engine's file name on this platform. */
+export const ENGINE_BINARY = isWin ? "agent-browser.exe" : "agent-browser";
+
+/**
+ * The browser the desktop app ships: `browser-engine/` next to the host binary, holding the engine as `ENGINE_BINARY`
+ * and Chrome for Testing unpacked under `chrome/`. Only a packaged host has one; from source it never exists.
+ */
+export const BUNDLE_DIR = "browser-engine";
+const bundledRoot = () => join(dirname(process.execPath), BUNDLE_DIR);
+
+export type ResolvedEngine = {
+  path: string;
+  source: "AGENT_BROWSER_PATH" | "bundled" | "managed" | "PATH";
+};
 export type EngineStatus =
   | { status: "available"; path: string; source: ResolvedEngine["source"] }
-  | { status: "unavailable"; reason: string };
+  /** `installable`: `installManagedEngine` can fix it on this platform. */
+  | { status: "unavailable"; reason: string; installable?: boolean };
 
 /** Release asset name suffix for this machine, or undefined when upstream ships no binary for it. */
-function platformKey(): string | undefined {
+export function platformKey(): string | undefined {
   const arch = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x64" : undefined;
   if (!arch) return undefined;
   const os = process.platform === "linux" ? (isMusl() ? "linux-musl" : "linux") : process.platform;
@@ -54,38 +69,93 @@ function managedBinary(dataRoot: string): string | undefined {
 }
 
 function onPath(): string | undefined {
-  const name = isWin ? "agent-browser.exe" : "agent-browser";
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
-    const p = join(dir, name);
+    const p = join(dir, ENGINE_BINARY);
     if (dir && existsSync(p)) return p;
   }
   return undefined;
 }
 
-export function resolveEngine(dataRoot: string): ResolvedEngine | undefined {
+export function resolveEngine(
+  dataRoot: string,
+  bundle = bundledRoot(),
+): ResolvedEngine | undefined {
   const pick = (path: string | undefined, source: ResolvedEngine["source"]) =>
     path && existsSync(path) ? { path, source } : undefined;
   return (
     pick(process.env.AGENT_BROWSER_PATH, "AGENT_BROWSER_PATH") ??
+    pick(join(bundle, ENGINE_BINARY), "bundled") ??
     pick(managedBinary(dataRoot), "managed") ??
     pick(onPath(), "PATH")
   );
 }
 
-export function engineStatus(dataRoot: string): EngineStatus {
-  const e = resolveEngine(dataRoot);
+const CHROME_EXECUTABLE =
+  process.platform === "darwin"
+    ? ["Google Chrome for Testing.app", "Contents", "MacOS", "Google Chrome for Testing"]
+    : process.platform === "win32"
+      ? ["chrome.exe"]
+      : ["chrome"];
+
+/** Chrome in `dir` or in one of its folders (the zips unpack into a platform folder such as chrome-linux64). */
+function chromeIn(dir: string): string | undefined {
+  if (!existsSync(dir)) return undefined;
+  const bases = [
+    dir,
+    ...readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => join(dir, e.name)),
+  ];
+  return bases.map((b) => join(b, ...CHROME_EXECUTABLE)).find((p) => existsSync(p));
+}
+
+/** Chrome for Testing: `AGENT_BROWSER_EXECUTABLE_PATH`, else the bundled copy, else the newest one the engine installed. */
+export function findChrome(bundle = bundledRoot()): string | undefined {
+  const override = process.env.AGENT_BROWSER_EXECUTABLE_PATH;
+  if (override && existsSync(override)) return override;
+  const bundled = chromeIn(join(bundle, "chrome"));
+  if (bundled) return bundled;
+  const root = join(homedir(), ".agent-browser", "browsers");
+  if (!existsSync(root)) return undefined;
+  for (const version of readdirSync(root)
+    .filter((d) => d.startsWith("chrome-"))
+    .sort()
+    .reverse()) {
+    const found = chromeIn(join(root, version));
+    if (found) return found;
+  }
+  return undefined;
+}
+
+export function engineStatus(dataRoot: string, bundle = bundledRoot()): EngineStatus {
+  const e = resolveEngine(dataRoot, bundle);
+  const hint = `run \`${hostCommand("install-browser", "--data-root", dataRoot)}\``;
   if (e) {
-    if (!findChrome())
+    if (!findChrome(bundle))
       return {
         status: "unavailable",
-        reason: `Chrome for Testing is not installed; run \`${hostCommand("install-browser", "--data-root", dataRoot)}\``,
+        reason: `Chrome for Testing is not installed; ${hint}`,
+        installable: true,
       };
     return { status: "available", ...e };
   }
-  const reason = platformKey()
-    ? `browser engine not installed; run \`${hostCommand("install-browser", "--data-root", dataRoot)}\``
-    : `no agent-browser build for ${process.platform}/${process.arch}`;
-  return { status: "unavailable", reason };
+  return platformKey()
+    ? { status: "unavailable", reason: `browser engine not installed; ${hint}`, installable: true }
+    : {
+        status: "unavailable",
+        reason: `no agent-browser build for ${process.platform}/${process.arch}`,
+      };
+}
+
+/** Runs the engine's own Chrome for Testing installer; its output goes to stderr, never stdout (a sidecar's stdout is the ready line). */
+function installChrome(bin: string): Promise<void> {
+  const { promise, resolve, reject } = Promise.withResolvers<void>();
+  const child = spawn(bin, ["install"], { stdio: ["ignore", process.stderr, process.stderr] });
+  child.on("error", (e) => reject(new Error(`chrome for testing install failed: ${e.message}`)));
+  child.on("close", (code) =>
+    code === 0 ? resolve() : reject(new Error("chrome for testing install failed")),
+  );
+  return promise;
 }
 
 /** Download the pinned engine, verify its pinned SHA-256, install Chrome for Testing through the engine, and mark it current. */
@@ -109,15 +179,16 @@ export async function installManagedEngine(
     throw new Error(`checksum mismatch for ${asset}`);
   const dest = join(managedRoot(dataRoot), version);
   mkdirSync(dest, { recursive: true });
-  const bin = join(dest, isWin ? "agent-browser.exe" : "agent-browser");
+  const bin = join(dest, ENGINE_BINARY);
   const tmp = `${bin}.${process.pid}.tmp`;
   writeFileSync(tmp, bytes);
   if (!isWin) chmodSync(tmp, 0o755);
   renameSync(tmp, bin);
-  const r = spawnSync(bin, ["install"], { stdio: "inherit" });
-  if (r.status !== 0) {
+  try {
+    await installChrome(bin);
+  } catch (e) {
     rmSync(dest, { recursive: true, force: true });
-    throw new Error("chrome for testing install failed");
+    throw e;
   }
   writeFileSync(join(managedRoot(dataRoot), "current"), bin);
   return bin;
