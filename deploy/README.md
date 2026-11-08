@@ -26,7 +26,7 @@ Supported targets are systemd Linux on x86_64 and aarch64. The kit was run on Ub
 
 - A server with systemd, root access over SSH, and outbound internet access (the installer downloads the Claude CLI and the browser engine, and the host talks to Anthropic and to your integrations' providers).
 - `curl`, `sha256sum`, `systemctl`, `systemd-run`, `journalctl`, `runuser`, `useradd`, `getent`, `install`, `mktemp` and `head`. The installer stops before it changes anything when one is missing.
-- A host binary for the server, `claudebot-host-linux-x64` or `claudebot-host-linux-arm64`, that the server can download, and its SHA-256. Build it on your machine with `bun run build:host linux-x64` (or `linux-arm64`). The output is in `dist/host/`.
+- A host binary for the server: either a [GitHub Release](#install-from-a-github-release) of this project (the default, the installer downloads and verifies it), or a `claudebot-host-linux-x64` / `claudebot-host-linux-arm64` that you built with `bun run build:host linux-x64` (or `linux-arm64`, output in `dist/host/`) and host yourself ([Install your own binary](#install-your-own-binary)).
 - For HTTPS with Caddy: a domain name you control. For the Tailscale option: a tailnet.
 
 ### Ubuntu user namespaces
@@ -69,7 +69,29 @@ This is weaker. Every program on the server regains unprivileged user namespaces
 
 ## Run the installer
 
-Copy the `deploy/` directory of this repository and the binary to the server, so that `install.sh` and `claudebot.service` sit side by side. Print the binary's SHA-256 on your build machine (`shasum -a 256` on a Mac, `sha256sum` on Linux):
+### Install from a GitHub Release
+
+A release publishes the five host binaries, `SHA256SUMS` (the checksum of every other file), `install.sh` and `claudebot.service`. The `install.sh` attached to a release already knows its repository. Download it on the server, read it, and run it as root:
+
+```sh
+curl -fsSLO https://github.com/<owner>/<repo>/releases/latest/download/install.sh
+sudo bash install.sh --public-url https://claudebot.example.com
+```
+
+Without `--url`, the installer picks the binary for the server's CPU (`x86_64` becomes `linux-x64`, `aarch64` becomes `linux-arm64`, anything else is refused), downloads it and `SHA256SUMS` from the release over HTTPS (a redirect to plain HTTP is refused), and compares the binary's SHA-256 with the entry for its file name. It aborts before it changes anything when the checksum differs, the entry is missing or the download fails. A script that sits alone, as above, also downloads `claudebot.service` from the same release and checks it against `SHA256SUMS`. A script run from a checkout of this repository uses the `claudebot.service` next to it.
+
+`SHA256SUMS` comes from the same place as the binary, so it catches a corrupted or truncated download, not a compromised release. To check a release against something you trust, compare `SHA256SUMS` with a value published elsewhere, or build the binary yourself and use `--url`.
+
+| Flag                  | Meaning                                                                                                                                                                                                                |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--version <version>` | The release to install, such as `0.2.0` or `v0.2.0-rc.1`. Default: the latest release. Pins an install, and is how you go back to an older one.                                                                        |
+| `--repo <OWNER/REPO>` | The GitHub repository whose releases to use. Also read from `CLAUDEBOT_REPO`. The release's `install.sh` has it filled in. The script in this source tree has none and refuses to guess, so a checkout needs `--repo`. |
+
+GitHub's "latest release" never points at a pre-release. A tag such as `v0.2.0-rc.1` is a pre-release, so install it with `--version 0.2.0-rc.1`. Without `--version` the installer installs the newest release that is not a pre-release, and fails when there is none.
+
+### Install your own binary
+
+Use `--url` and `--sha256` for a binary you built or host yourself. They replace the GitHub download, so `--repo` and `--version` cannot be combined with them. Copy the `deploy/` directory of this repository and the binary to the server, so that `install.sh` and `claudebot.service` sit side by side. Print the binary's SHA-256 on your build machine (`shasum -a 256` on a Mac, `sha256sum` on Linux):
 
 ```sh
 scp -r deploy root@server:claudebot-deploy
@@ -86,17 +108,19 @@ bash claudebot-deploy/install.sh \
   --public-url https://claudebot.example.com
 ```
 
-Parameters:
+### Flags
 
-| Flag                    | Meaning                                                                                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--url <URL>`           | Required. Where the server downloads the binary: `https://`, `http://` or `file://`. `{target}` in the URL becomes `linux-x64` or `linux-arm64`. |
-| `--sha256 <hex>`        | Required. The expected SHA-256 of the download. On a mismatch the installer stops before it installs anything.                                   |
-| `--public-url <origin>` | The origin users type into the browser, such as `https://claudebot.example.com`. Written as `CLAUDEBOT_PUBLIC_URL`.                              |
-| `--host <addr>`         | The address the client listener binds. Default `127.0.0.1`. Written as `CLAUDEBOT_HOST`.                                                         |
-| `--port <n>`            | The port the client listener binds. Default `8417`. Written as `CLAUDEBOT_PORT`.                                                                 |
-| `--allow-plain-http`    | Writes `CLAUDEBOT_ALLOW_PLAIN_HTTP=1`. For a non-loopback bind without an `https://` public URL, on private networks only.                       |
-| `--unit <path>`         | The unit to install. Default: `claudebot.service` next to the script.                                                                            |
+| Flag                    | Meaning                                                                                                                                                  |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--url <URL>`           | Where the server downloads the binary: `https://`, `http://` or `file://`. `{target}` in the URL becomes `linux-x64` or `linux-arm64`. Needs `--sha256`. |
+| `--sha256 <hex>`        | The expected SHA-256 of the download. On a mismatch the installer stops before it installs anything. Needs `--url`.                                      |
+| `--public-url <origin>` | The origin users type into the browser, such as `https://claudebot.example.com`. Written as `CLAUDEBOT_PUBLIC_URL`.                                      |
+| `--host <addr>`         | The address the client listener binds. Default `127.0.0.1`. Written as `CLAUDEBOT_HOST`.                                                                 |
+| `--port <n>`            | The port the client listener binds. Default `8417`. Written as `CLAUDEBOT_PORT`.                                                                         |
+| `--allow-plain-http`    | Writes `CLAUDEBOT_ALLOW_PLAIN_HTTP=1`. For a non-loopback bind without an `https://` public URL, on private networks only.                               |
+| `--unit <path>`         | The unit to install. Default: `claudebot.service` next to the script, else the release's.                                                                |
+
+`--repo`, `--version` and the download-source rules are above. `CLAUDEBOT_RELEASE_BASE_URL` (default `https://github.com`) changes where release files are fetched from, as `<base>/<owner>/<repo>/releases/...`. It exists for testing the installer against a local fixture and for GitHub Enterprise.
 
 The host refuses to start when it binds a non-loopback address and the public URL is not `https://`, unless `CLAUDEBOT_ALLOW_PLAIN_HTTP=1` is set.
 
@@ -313,7 +337,7 @@ sudo systemctl restart claudebot
 
 After you edit `/etc/claudebot/claudebot.env`, restart the unit. `Restart=always` brings the host back after a crash (a `kill -9` was restarted in the Ubuntu 24.04 check) and after a reboot.
 
-**Upgrade.** Re-run the installer with the new binary's `--url` and `--sha256`. Your env file, key and data root stay. The service restarts.
+**Upgrade.** Re-run the installer: with no `--version` it installs the latest release, with `--version` a chosen one, with `--url` and `--sha256` your own binary. Your env file, key and data root stay. The service restarts.
 
 **Uninstall.** The installer has no uninstall mode. Remove the parts by hand. This keeps the data root:
 
@@ -342,5 +366,6 @@ What has been checked:
 - In the same VM, Caddy 2.6 with this Caddyfile (plus `local_certs`, so no real certificate) proxied the web UI, pairing and the event stream: events arrived immediately through the proxy, and a foreign `Origin` got 403.
 - The unit and installer were also checked statically and in local disposable environments only.
 - On a real VPS (OVH, Ubuntu 26.04 x86_64, systemd 259), with an existing `claudebot` user whose home was moved to the data root first: the installer, the AppArmor profile and the sandbox check passed, `auth-login` over SSH signed in with `claude/.credentials.json` at mode `0600`, and `tailscale serve` (Option B) served the UI, `/api/host-info` and pairing, including the desktop app as a remote profile. A running host reports `claude: "signed-out"` until it is restarted after the first sign-in. Before the musl check was fixed, this glibc system (its loader is `/lib64/ld-linux-x86-64.so.2`, with no `/lib/ld-linux-*`) got the musl Claude CLI, which fails to start with `ENOENT`.
+- The release download path ran against a local fixture laid out like a GitHub Release, in an Ubuntu 24.04 arm64 container with systemd: the `aarch64` pick, the `SHA256SUMS` check, `--version`, and the unit fetched from the release. A tampered binary, a `SHA256SUMS` without the entry, and a missing release each aborted before anything was installed. In that container the service never started, with the legacy `--url` path as well (systemd did not provide the credential there), so this covers the download and verification, not a running host. It has not run against GitHub Releases.
 
 What has not been checked: Caddy certificate issuance, an OAuth connection, live view and takeover through a proxy, the sysctl option and the `systemd-creds` key migration.

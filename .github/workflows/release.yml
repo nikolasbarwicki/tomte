@@ -205,6 +205,16 @@ jobs:
           merge-multiple: true
           path: release
 
+      # The self-hoster's installer and its unit, so `install.sh` runs on its own. The installer's DEFAULT_REPO is
+      # filled in with this repository; being in release/, both files are in SHA256SUMS (the installer checks the
+      # unit against it).
+      - name: Installer
+        run: |
+          set -euo pipefail
+          sed "s|^DEFAULT_REPO=\"\"\$|DEFAULT_REPO=\"$GITHUB_REPOSITORY\"|" deploy/install.sh >release/install.sh
+          grep -qxF "DEFAULT_REPO=\"$GITHUB_REPOSITORY\"" release/install.sh
+          cp deploy/claudebot.service release/claudebot.service
+
       # Fails unless all five host binaries and every supported OS's installers and update metadata are there; covers every
       # file in release/, SHA256SUMS excluded.
       - name: Checksums

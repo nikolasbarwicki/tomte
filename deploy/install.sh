@@ -24,19 +24,37 @@ STABLE_SECONDS=7
 
 DEFAULT_HOST=127.0.0.1
 DEFAULT_PORT=8417
+# GitHub repository (OWNER/REPO) whose Releases hold the host binaries. Empty in the source tree on purpose: the release
+# workflow fills it in on the copy it publishes as a release asset, and --repo or $CLAUDEBOT_REPO sets it otherwise.
+DEFAULT_REPO=""
+# Test seam (and GitHub Enterprise): where release downloads come from, as {base}/{repo}/releases/....
+RELEASE_BASE_URL=${CLAUDEBOT_RELEASE_BASE_URL:-https://github.com}
 
 usage() {
   cat <<'EOF'
-Usage: install.sh --url <URL> --sha256 <hex> [options]
+Usage: install.sh [--repo <OWNER/REPO>] [--version <version>] [options]
+       install.sh --url <URL> --sha256 <hex> [options]
 
 Installs the claudebot host as a systemd service running as the unprivileged
 "claudebot" user. Run as root on a systemd Linux server (x86_64 or aarch64).
 
-Required:
+By default the script downloads the host binary for this server's CPU from a GitHub
+Release, together with the release's SHA256SUMS, and aborts before installing anything
+when the checksum does not match or has no entry for the binary.
+
+Download source (the default):
+  --repo <OWNER/REPO>  GitHub repository that publishes the releases. Also read from
+                       $CLAUDEBOT_REPO. The copy of this script attached to a release
+                       has it filled in; a copy from the source tree needs it.
+  --version <version>  Release to install, e.g. 0.2.0 or v0.2.0-rc.1. Default: the
+                       latest release. GitHub's "latest" skips pre-releases, so
+                       installing a pre-release needs this flag.
+
+Download source (your own file; replaces the above):
   --url <URL>          Download URL of the host binary. "{target}" in the URL is
-                       replaced with linux-x64 or linux-arm64.
+                       replaced with linux-x64 or linux-arm64. Needs --sha256.
   --sha256 <hex>       Expected SHA-256 of the downloaded file. A mismatch aborts
-                       before anything is installed.
+                       before anything is installed. Needs --url.
 
 Options (written to /etc/claudebot/claudebot.env on the first run; a re-run keeps
 the file and only warns when a flag differs from it):
@@ -45,7 +63,8 @@ the file and only warns when a flag differs from it):
   --port <n>             Port the client listener binds (default 8417)
   --allow-plain-http     Allow a non-loopback bind without an https public URL (private networks only)
 
-  --unit <path>          The systemd unit to install (default: claudebot.service next to this script)
+  --unit <path>          The systemd unit to install (default: claudebot.service next to this
+                         script; a script that is not in a checkout takes it from the release)
   -h, --help             Show this help
 EOF
 }
@@ -59,6 +78,8 @@ die() {
 
 url=""
 sha256=""
+repo=""
+version=""
 public_url=""
 host=""
 port=""
@@ -76,7 +97,7 @@ while [[ $# -gt 0 ]]; do
       shift
       continue
       ;;
-    --url | --sha256 | --public-url | --host | --port | --unit)
+    --url | --sha256 | --repo | --version | --public-url | --host | --port | --unit)
       [[ $# -ge 2 ]] || die "$1 needs a value (see -h)"
       ;;
     *)
@@ -87,6 +108,8 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --url) url=$2 ;;
     --sha256) sha256=$2 ;;
+    --repo) repo=$2 ;;
+    --version) version=$2 ;;
     --public-url) public_url=$2 ;;
     --host) host=$2 ;;
     --port) port=$2 ;;
@@ -95,9 +118,20 @@ while [[ $# -gt 0 ]]; do
   shift 2
 done
 
-[[ -n $url ]] || die "--url is required (see -h)"
-[[ -n $sha256 ]] || die "--sha256 is required (see -h)"
-[[ $sha256 =~ ^[0-9a-fA-F]{64}$ ]] || die "--sha256 must be 64 hexadecimal characters"
+if [[ -n $url || -n $sha256 ]]; then
+  [[ -n $url ]] || die "--sha256 needs --url (see -h)"
+  [[ -n $sha256 ]] || die "--url needs --sha256 (see -h)"
+  [[ -z $repo && -z $version ]] || die "--repo and --version choose a GitHub release, which --url replaces; pass one or the other"
+  [[ $sha256 =~ ^[0-9a-fA-F]{64}$ ]] || die "--sha256 must be 64 hexadecimal characters"
+else
+  repo=${repo:-${CLAUDEBOT_REPO:-$DEFAULT_REPO}}
+  [[ -n $repo ]] || die "no GitHub repository to download from: pass --repo OWNER/REPO (or set CLAUDEBOT_REPO), or pass --url and --sha256"
+  [[ $repo =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || die "--repo must look like OWNER/REPO"
+  if [[ -n $version ]]; then
+    version=${version#v}
+    [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "--version must look like 1.2.0 or v1.2.0-rc.1"
+  fi
+fi
 # These values are written into an EnvironmentFile line, so only characters that cannot change its meaning are accepted.
 if [[ -n $host ]]; then
   [[ $host =~ ^[][A-Za-z0-9.:_-]+$ ]] || die "--host \"$host\" is not an address"
@@ -127,14 +161,17 @@ case $(uname -m) in
 esac
 url=${url//\{target\}/$target}
 
-if [[ -z $unit ]]; then
-  if [[ -f ${BASH_SOURCE[0]:-} ]]; then
-    unit=$(dirname -- "${BASH_SOURCE[0]}")/claudebot.service
-  else
-    die "this script is not running from a file, so there is no claudebot.service next to it: pass --unit <path>"
-  fi
+# The unit comes from --unit, else from next to this script, else (a script downloaded on its own) from the release.
+unit_from_release=""
+if [[ -z $unit && -f ${BASH_SOURCE[0]:-} && -r $(dirname -- "${BASH_SOURCE[0]}")/claudebot.service ]]; then
+  unit=$(dirname -- "${BASH_SOURCE[0]}")/claudebot.service
 fi
-[[ -r $unit ]] || die "unit file $unit not found or not readable (pass --unit <path>)"
+if [[ -z $unit ]]; then
+  [[ -z $url ]] || die "there is no claudebot.service next to this script: pass --unit <path>"
+  unit_from_release=1
+else
+  [[ -r $unit ]] || die "unit file $unit not found or not readable (pass --unit <path>)"
+fi
 
 # --- 2. Download and verify ------------------------------------------------------------------
 
@@ -146,15 +183,65 @@ cleanup() {
 }
 trap cleanup EXIT
 
-say "Downloading the host binary ($target)"
-curl --fail --location --silent --show-error --proto '=https,http,file' \
-  --output "$tmp/claudebot-host" -- "$url" || die "download failed: $url"
+# A redirect may only lead to https, so a downgrade cannot swap the checksum file and the binary together.
+redirect_protocols='=https,http,file'
+fetch() { # <url> <destination>
+  curl --fail --location --silent --show-error --proto '=https,http,file' --proto-redir "$redirect_protocols" \
+    --output "$2" -- "$1" || die "download failed: $1"
+}
 
-expected=$(printf '%s' "$sha256" | tr 'A-F' 'a-f')
-actual=$(sha256sum "$tmp/claudebot-host" | cut -d' ' -f1)
-if [[ $actual != "$expected" ]]; then
-  printf 'error: SHA-256 mismatch; nothing was installed\n  expected: %s\n  actual:   %s\n' "$expected" "$actual" >&2
-  exit 1
+verify() { # <file> <expected sha256> <what>
+  local actual
+  actual=$(sha256sum "$1" | cut -d' ' -f1)
+  if [[ $actual != "$2" ]]; then
+    printf 'error: SHA-256 mismatch for %s; nothing was installed\n  expected: %s\n  actual:   %s\n' "$3" "$2" "$actual" >&2
+    exit 1
+  fi
+}
+
+# Sets $listed to the checksum SHA256SUMS lists for <name>; a missing or repeated entry aborts.
+listed=""
+lookup_checksum() { # <SHA256SUMS file> <name>
+  local sum name matches=0
+  listed=""
+  while read -r sum name || [[ -n $sum ]]; do
+    if [[ ${name#\*} == "$2" ]]; then
+      matches=$((matches + 1))
+      listed=$(printf '%s' "$sum" | tr 'A-F' 'a-f')
+    fi
+  done <"$1"
+  ((matches > 0)) || die "SHA256SUMS has no entry for $2; nothing was installed"
+  ((matches == 1)) || die "SHA256SUMS lists $2 $matches times; nothing was installed"
+  [[ $listed =~ ^[0-9a-f]{64}$ ]] || die "SHA256SUMS has a malformed checksum for $2; nothing was installed"
+}
+
+if [[ -n $url ]]; then
+  say "Downloading the host binary ($target)"
+  fetch "$url" "$tmp/claudebot-host"
+  verify "$tmp/claudebot-host" "$(printf '%s' "$sha256" | tr 'A-F' 'a-f')" "$target host binary"
+else
+  redirect_protocols='=https'
+  if [[ $RELEASE_BASE_URL != https://* ]]; then redirect_protocols='=https,http,file'; fi
+  if [[ -n $version ]]; then
+    release_url=$RELEASE_BASE_URL/$repo/releases/download/v$version
+    say "Installing claudebot $version from $repo"
+  else
+    release_url=$RELEASE_BASE_URL/$repo/releases/latest/download
+    say "Installing the latest claudebot release of $repo (a pre-release needs --version)"
+  fi
+  asset=claudebot-host-$target
+  say "Downloading SHA256SUMS and the host binary ($target)"
+  fetch "$release_url/SHA256SUMS" "$tmp/SHA256SUMS"
+  fetch "$release_url/$asset" "$tmp/claudebot-host"
+  lookup_checksum "$tmp/SHA256SUMS" "$asset"
+  verify "$tmp/claudebot-host" "$listed" "$asset"
+  if [[ -n $unit_from_release ]]; then
+    say "Downloading claudebot.service"
+    fetch "$release_url/claudebot.service" "$tmp/claudebot.service"
+    lookup_checksum "$tmp/SHA256SUMS" claudebot.service
+    verify "$tmp/claudebot.service" "$listed" claudebot.service
+    unit=$tmp/claudebot.service
+  fi
 fi
 say "Checksum verified"
 

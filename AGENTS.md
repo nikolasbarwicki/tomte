@@ -84,7 +84,7 @@ The host's version is `VERSION` in `packages/host/src/harness/claude-access.ts` 
 1. Set `VERSION` to the version without the `v` (`0.2.0`, or `0.2.0-rc.1` for a pre-release; a pre-release suffix is part of `VERSION`), run `bun run check`, commit and merge to the default branch.
 2. Tag that commit and push the tag: `git tag v0.2.0 && git push origin v0.2.0`.
 3. Watch the `Release` run. A tag that does not match `VERSION` fails `verify` before anything is built; fix `VERSION` (or delete the tag), then tag again.
-4. Check the Release: five `claudebot-host-<os>-<arch>[.exe]` files and `SHA256SUMS`; `sha256sum --check SHA256SUMS` in the download folder passes.
+4. Check the Release: five `claudebot-host-<os>-<arch>[.exe]` files, `install.sh` (its `DEFAULT_REPO` filled in with the repository), `claudebot.service` and `SHA256SUMS`; `sha256sum --check SHA256SUMS` in the download folder passes. `deploy/install.sh` installs a release's Linux binary without `--url` (`--repo`, `--version`; see `deploy/README.md`).
 
 Run the two release steps locally with `bun scripts/release.ts tag v0.2.0` (prints `version=` and `prerelease=`; exits non-zero on a mismatch) `bun scripts/release.ts desktop <bundleDir> <hostDir> <outDir> <version> <arch>…` (the check and collection of one `package:desktop` run for this OS) and `bun scripts/release.ts checksums <folder> <version>` (the folder must hold the five binaries and every supported installer and metadata file); `scripts/release-kit.test.ts` and `scripts/desktop-kit.test.ts` cover the tag rules, the checksum format and the desktop host check.
 
