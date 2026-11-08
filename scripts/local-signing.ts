@@ -3,8 +3,17 @@
 // Every external command goes through the injected {@link Runner}; tests pass a recording fake.
 import { randomBytes } from "node:crypto";
 import { chmod, copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
+import {
+  type AscNotary,
+  appZipArgv,
+  ascLogArgv,
+  ascSubmitArgv,
+  type NotarySubmission,
+  notarizeWithAsc,
+  readSubmissionRecord,
+} from "./asc-notary.ts";
 import { CommandError, type Ran, type Runner } from "./command-runner.ts";
 import { collectDesktopRelease, hostBinaryName } from "./desktop-kit.ts";
 import {
@@ -25,7 +34,7 @@ import {
 } from "./local-signing-kit.ts";
 import { dmgCommands, macAppCommands, verifyDmg, verifyMacBundle } from "./mac-verify.ts";
 import { type ProcessRow, processesUnder, refusal } from "./process-guard.ts";
-import { writeChecksums } from "./release-kit.ts";
+import { sha256, writeChecksums } from "./release-kit.ts";
 import { sha512Base64, parseUpdateMetadata } from "./release-verify.ts";
 import { parseDeveloperIdIdentity } from "./signing-kit.ts";
 
@@ -48,9 +57,18 @@ interface Ctx {
   identity: string;
   teamId: string;
   state: LocalState;
+  /** Every notarization of the run so far, in order; `NOTARIZATION.json` and the final report list them. */
+  submissions: NotarySubmission[];
 }
 
 const IDENTITY_PLACEHOLDER = "<identity-sha1>";
+
+/** A command as the plan prints it: secrets as labels, an argument with a space (a profile name) in quotes. */
+const line = (args: readonly Arg[]) =>
+  args
+    .map((a) => show(a))
+    .map((a) => (/\s/.test(a) ? JSON.stringify(a) : a))
+    .join(" ");
 
 interface StepBase {
   title: string;
@@ -68,7 +86,7 @@ type Step = StepBase &
         kind: "command";
         argv: (c: Ctx) => Arg[];
         env?: (c: Ctx) => Record<string, Arg>;
-        after?: (c: Ctx, ran: Ran) => void | Promise<void>;
+        after?: (c: Ctx, ran: Ran, d: Deps) => void | Promise<void>;
       }
     | {
         kind: "internal";
@@ -110,8 +128,21 @@ async function writeState(c: Ctx): Promise<void> {
   await writeFile(c.config.paths.state, serializeState(c.state), { mode: 0o600 });
 }
 
+/** The asc profile of the run, `undefined` for the `notarytool` backend. */
+const ascOf = (c: Ctx): AscNotary | undefined =>
+  c.config.notary.kind === "asc"
+    ? { bin: c.config.notary.bin, profile: c.config.notary.profile }
+    : undefined;
+
 /** Notarizes the signed DMG; on a rejection, includes Apple's log (no credentials in it) in the error. */
 async function notarizeDmg(c: Ctx, d: Deps): Promise<void> {
+  const asc = ascOf(c);
+  if (asc !== undefined) {
+    c.submissions.push(
+      await notarizeWithAsc({ run: d.run, asc, file: c.config.paths.dmg, kind: "dmg", log: d.log }),
+    );
+    return;
+  }
   const submit = ["xcrun", "notarytool", "submit", c.config.paths.dmg, ...notaryAuth(c)];
   const args = [...submit, "--wait", "--output-format", "json"];
   let ran: Ran;
@@ -136,6 +167,38 @@ async function notarizeDmg(c: Ctx, d: Deps): Promise<void> {
     );
   }
   d.log(`notarized ${c.config.paths.dmg} (submission ${id})`);
+  c.submissions.push({
+    kind: "dmg",
+    file: basename(c.config.paths.dmg),
+    sha256: await sha256(c.config.paths.dmg),
+    id,
+    status,
+  });
+}
+
+/** Reads the app's submission that the asc backend's packaging run left behind, and reports it. */
+async function collectAppSubmission(c: Ctx, d: Deps): Promise<void> {
+  const submission = await readSubmissionRecord(c.config.paths.appSubmission);
+  c.submissions.push(submission);
+  d.log(`app notarized: submission ${submission.id ?? "(unreadable)"}, ${submission.status}`);
+}
+
+/** NOTARIZATION.json: what was uploaded and what Apple answered; no secret in it. */
+async function writeNotarization(c: Ctx): Promise<void> {
+  const notary = c.config.notary;
+  await writeFile(
+    c.config.paths.notarization,
+    `${JSON.stringify(
+      {
+        backend: notary.kind === "asc" ? "asc" : "notarytool",
+        ...(notary.kind === "asc" ? { profile: notary.profile } : {}),
+        version: c.config.version,
+        submissions: c.submissions,
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }
 
 /**
@@ -189,6 +252,7 @@ async function collectArtifacts(c: Ctx): Promise<void> {
     names.filter((n) => /\.(dmg|zip)$/.test(n)),
   );
   await writeChecksums(p.artifacts, names);
+  await writeNotarization(c);
 }
 
 /** The ordered operations of one local signing run. */
@@ -354,14 +418,27 @@ function buildSteps(config: LocalConfig): Step[] {
     },
     {
       kind: "command",
-      title: "Package, sign and notarize the app; build the DMG and the update zip",
-      touches: `${p.bundleDir}; electron-builder's own caches under ~/Library/Caches/electron-builder (downloads, as for any build); uploads the app zip to Apple`,
+      title:
+        config.notary.kind === "asc"
+          ? "Package and sign the app, notarize and staple it with asc (afterSign), then build the DMG and the update zip"
+          : "Package, sign and notarize the app; build the DMG and the update zip",
+      touches: `${p.bundleDir}; electron-builder's own caches under ~/Library/Caches/electron-builder (downloads, as for any build); uploads the app zip to Apple${config.notary.kind === "asc" ? `; leaves the app's submission in ${p.appSubmission}` : ""}`,
       nested: [
         "security find-identity -v <temporary keychain> (twice; lookups restricted to it)",
         "codesign --sign <identity SHA-1> --force --keychain <temporary keychain> --timestamp [--options runtime --entitlements ...] on every Mach-O in the app, then the app (@electron/osx-sign); the host is skipped (signIgnore)",
-        "ditto -c -k --sequesterRsrc --keepParent Claudebot.app <tmp>/Claudebot.zip (this zip is uploaded)",
-        "xcrun notarytool submit <tmp>/Claudebot.zip --key <api key> --key-id <id> --issuer <issuer> --wait --output-format json; xcrun notarytool log <id> on a rejection",
-        "xcrun stapler staple -v Claudebot.app",
+        ...(config.notary.kind === "asc"
+          ? [
+              "electron-builder's own notarization is off (notarize: false); its afterSign hook runs next, after signing and before the DMG and zip are built:",
+              `${line(appZipArgv(p.app, "<tmp>/Claudebot.zip"))} (this zip is uploaded)`,
+              `${line(ascSubmitArgv(config.notary, "<tmp>/Claudebot.zip"))}; on a rejection or an unreadable answer: ${line(ascLogArgv(config.notary, "<id>"))}`,
+              `xcrun stapler staple ${p.app}`,
+              `xcrun stapler validate ${p.app}`,
+            ]
+          : [
+              "ditto -c -k --sequesterRsrc --keepParent Claudebot.app <tmp>/Claudebot.zip (this zip is uploaded)",
+              "xcrun notarytool submit <tmp>/Claudebot.zip --key <api key> --key-id <id> --issuer <issuer> --wait --output-format json; xcrun notarytool log <id> on a rejection",
+              "xcrun stapler staple -v Claudebot.app",
+            ]),
         "hdiutil (builds the DMG from the stapled app), zip of the stapled app, blockmaps, latest-mac.yml",
       ],
       argv: (c) => [
@@ -380,12 +457,30 @@ function buildSteps(config: LocalConfig): Step[] {
         p.keychain,
         "--local-identity",
         c.identity,
+        ...(c.config.notary.kind === "asc"
+          ? [
+              "--local-notary",
+              "asc",
+              "--local-asc-profile",
+              c.config.notary.profile,
+              "--local-asc-bin",
+              c.config.notary.bin,
+              "--local-notary-record",
+              p.appSubmission,
+            ]
+          : []),
       ],
-      env: (c) => ({
-        APPLE_API_KEY: c.config.inputs.apiKeyFile ?? `<${LOCAL_ENV.apiKeyFile}>`,
-        APPLE_API_KEY_ID: c.config.secrets.apiKeyId,
-        APPLE_API_ISSUER: c.config.secrets.apiIssuer,
-      }),
+      env: (c) =>
+        c.config.notary.kind === "asc"
+          ? {}
+          : {
+              APPLE_API_KEY: c.config.inputs.apiKeyFile ?? `<${LOCAL_ENV.apiKeyFile}>`,
+              APPLE_API_KEY_ID: c.config.secrets.apiKeyId,
+              APPLE_API_ISSUER: c.config.secrets.apiIssuer,
+            },
+      ...(config.notary.kind === "asc"
+        ? { after: (c: Ctx, _ran: Ran, d: Deps) => collectAppSubmission(c, d) }
+        : {}),
     },
     {
       kind: "command",
@@ -413,18 +508,21 @@ function buildSteps(config: LocalConfig): Step[] {
       kind: "internal",
       title: "Notarize the DMG (uploads it to Apple)",
       touches: `uploads ${p.dmg} to Apple's notary service`,
-      commands: (c) => [
-        [
-          "xcrun",
-          "notarytool",
-          "submit",
-          p.dmg,
-          ...notaryAuth(c),
-          "--wait",
-          "--output-format",
-          "json",
-        ],
-      ],
+      commands: (c) =>
+        c.config.notary.kind === "asc"
+          ? [ascSubmitArgv(c.config.notary, p.dmg)]
+          : [
+              [
+                "xcrun",
+                "notarytool",
+                "submit",
+                p.dmg,
+                ...notaryAuth(c),
+                "--wait",
+                "--output-format",
+                "json",
+              ],
+            ],
       run: notarizeDmg,
     },
     {
@@ -470,7 +568,8 @@ function buildSteps(config: LocalConfig): Step[] {
     },
     {
       kind: "internal",
-      title: "Check the host is the signed one everywhere, check latest-mac.yml, write SHA256SUMS",
+      title:
+        "Check the host is the signed one everywhere, check latest-mac.yml, write SHA256SUMS and NOTARIZATION.json",
       touches: `creates ${p.artifacts}`,
       commands: () => [],
       run: (c) => collectArtifacts(c),
@@ -531,11 +630,7 @@ export async function cleanupLocal(out: string, d: Deps): Promise<void> {
 }
 
 /** Reads the password and generates the keychain's: the only place a secret value is created. */
-export async function loadSecrets(
-  inputs: LocalConfig["inputs"],
-  apiKeyId: string,
-  apiIssuer: string,
-): Promise<LocalSecrets> {
+export async function loadSecrets(inputs: LocalConfig["inputs"]): Promise<LocalSecrets> {
   const password =
     inputs.p12PasswordFile === undefined
       ? (inputs.p12Password as string)
@@ -543,8 +638,8 @@ export async function loadSecrets(
   return {
     keychainPassword: new Secret("keychain-password", randomBytes(24).toString("hex")),
     p12Password: new Secret("p12-password", password),
-    apiKeyId: new Secret("api-key-id", apiKeyId),
-    apiIssuer: new Secret("api-issuer", apiIssuer),
+    apiKeyId: new Secret("api-key-id", inputs.apiKeyId ?? ""),
+    apiIssuer: new Secret("api-issuer", inputs.apiIssuer ?? ""),
   };
 }
 
@@ -561,10 +656,18 @@ async function preflight(config: LocalConfig, d: Deps): Promise<void> {
   }
   const running = processesUnder(p.out, d.processes());
   if (running.length > 0) throw new Error(refusal("sign into", p.out, running));
-  for (const [name, path] of [
-    [LOCAL_ENV.p12File, config.inputs.p12File],
-    [LOCAL_ENV.apiKeyFile, config.inputs.apiKeyFile],
-  ] as const) {
+  const files =
+    config.notary.kind === "asc"
+      ? ([
+          [LOCAL_ENV.p12File, config.inputs.p12File],
+          // Only a path the user named is checked; a bare `asc` was resolved on PATH.
+          ...(config.inputs.ascBin === undefined ? [] : [[LOCAL_ENV.ascBin, config.inputs.ascBin]]),
+        ] as const)
+      : ([
+          [LOCAL_ENV.p12File, config.inputs.p12File],
+          [LOCAL_ENV.apiKeyFile, config.inputs.apiKeyFile],
+        ] as const);
+  for (const [name, path] of files) {
     if (
       !(await stat(path as string).then(
         (s) => s.isFile(),
@@ -583,6 +686,7 @@ export async function runLocalSigning(config: LocalConfig, d: Deps): Promise<voi
     config,
     identity: IDENTITY_PLACEHOLDER,
     teamId: "",
+    submissions: [],
     state: {
       runId: config.runId,
       pid: process.pid,
@@ -614,7 +718,7 @@ export async function runLocalSigning(config: LocalConfig, d: Deps): Promise<voi
             ? undefined
             : Object.fromEntries(Object.entries(env).map(([k, v]) => [k, reveal(v)])),
         );
-        await step.after?.(ctx, ran);
+        await step.after?.(ctx, ran, d);
       }
     }
   } finally {
@@ -629,6 +733,10 @@ export async function runLocalSigning(config: LocalConfig, d: Deps): Promise<voi
       `  update zip: ${join(p.artifacts, p.zip.slice(p.bundleDir.length + 1))}`,
       `  metadata:  ${join(p.artifacts, p.metadata.slice(p.bundleDir.length + 1))}`,
       `  checksums: ${join(p.artifacts, "SHA256SUMS")}`,
+      `  notarization: ${p.notarization}`,
+      ...ctx.submissions.map(
+        (s) => `    ${s.kind} ${s.file}: submission ${s.id ?? "(unreadable)"}, ${s.status}`,
+      ),
       `  app:       ${p.app}`,
       `  signed host: ${p.stagedHost}`,
     ].join("\n"),
@@ -647,11 +755,29 @@ const GLOBAL_SETTINGS = [
 const IDENTITY_RULE =
   "Exactly one valid 'Developer ID Application' identity must be in the temporary keychain (security find-identity -v -p codesigning <keychain>); it is then named to codesign and electron-builder by its SHA-1, never by name, and always with --keychain <temporary keychain>.";
 
-const NOTARY_UPLOADS = [
-  "Claudebot.zip: `ditto` of the signed Claudebot.app (Electron frameworks and helpers, app.asar, the signed host, resources), made by @electron/notarize in a temporary folder",
-  "the signed DMG Claudebot-<version>-arm64.dmg (the stapled app and the Applications link)",
-  "The update zip is not uploaded: it is made afterwards from the app whose ticket is already stapled.",
-];
+/** What goes to Apple, per backend. */
+function notaryUploads(config: LocalConfig): string[] {
+  const tail = [
+    "the signed DMG Claudebot-<version>-arm64.dmg (the stapled app and the Applications link)",
+    "The update zip is not uploaded: it is made afterwards from the app whose ticket is already stapled.",
+  ];
+  return config.notary.kind === "asc"
+    ? [
+        "Claudebot.zip: `ditto` of the signed Claudebot.app (Electron frameworks and helpers, app.asar, the signed host, resources), made by this route's afterSign hook in a temporary folder before electron-builder builds the DMG and the zip",
+        ...tail,
+      ]
+    : [
+        "Claudebot.zip: `ditto` of the signed Claudebot.app (Electron frameworks and helpers, app.asar, the signed host, resources), made by @electron/notarize in a temporary folder",
+        ...tail,
+      ];
+}
+
+/** The one paragraph about what the notary backend puts on a command line. */
+function notarySecrets(config: LocalConfig): string {
+  return config.notary.kind === "asc"
+    ? "the saved asc profile's API key is never exported: no key id, issuer or key material is on any command line, in the environment or in a file of this route; only the profile's name (not a secret) is an argument of asc"
+    : "the API key id and issuer (notarytool --key-id --issuer; for the length of a notarization). The .p8 contents are never on a command line";
+}
 
 /** The plan `sign-local.ts plan` prints: every operation in order with its arguments (secrets as `<labels>`), the paths, the identity rule and the global settings. It runs nothing and reads nothing. */
 export function renderPlan(config: LocalConfig): string {
@@ -660,6 +786,7 @@ export function renderPlan(config: LocalConfig): string {
     config,
     identity: IDENTITY_PLACEHOLDER,
     teamId: "",
+    submissions: [],
     state: {
       runId: config.runId,
       pid: 0,
@@ -668,8 +795,15 @@ export function renderPlan(config: LocalConfig): string {
       searchListBefore: undefined,
     },
   };
-  const line = (args: readonly Arg[]) => args.map((a) => show(a)).join(" ");
   const steps = buildSteps(config);
+  const notaryLines =
+    config.notary.kind === "asc"
+      ? [
+          `Notary backend: asc, saved profile ${JSON.stringify(config.notary.profile)}, binary ${config.notary.bin}`,
+          `  asc is only looked up on PATH when ${LOCAL_ENV.ascBin} is not set; \`asc notarization submit --file <zip|dmg> --wait --output json\` uploads, \`asc notarization log --id <id>\` runs on a failure, \`xcrun stapler\` staples and validates`,
+          "  asc reads the profile's API key itself, from wherever it stores it (UNVERIFIED: this route names no key location, exports no key and passes none on; the first use may ask you to allow access)",
+        ]
+      : ["Notary backend: xcrun notarytool with the API key inputs (key file, key id, issuer)"];
   const out: string[] = [
     "sign-local plan (this lists operations; nothing was run, no file was read)",
     `version ${config.version}, arch arm64, out ${p.out}`,
@@ -677,9 +811,13 @@ export function renderPlan(config: LocalConfig): string {
     "Inputs (names and paths; values never printed):",
     `  ${LOCAL_ENV.p12File} = ${config.inputs.p12File ?? "(not set)"}`,
     `  ${config.inputs.p12PasswordFile === undefined ? LOCAL_ENV.p12Password : LOCAL_ENV.p12PasswordFile} = ${config.inputs.p12PasswordFile ?? (config.inputs.p12Password === undefined ? "(not set)" : "<set, not shown>")}`,
+    `  ${LOCAL_ENV.ascProfile} = ${config.inputs.ascProfile === undefined ? "(not set)" : JSON.stringify(config.inputs.ascProfile)}`,
+    `  ${LOCAL_ENV.ascBin} = ${config.inputs.ascBin ?? "(not set)"}`,
     `  ${LOCAL_ENV.apiKeyFile} = ${config.inputs.apiKeyFile ?? "(not set)"}`,
     `  ${LOCAL_ENV.apiKeyId} = ${config.inputs.apiKeyId === undefined ? "(not set)" : "<set, not shown>"}`,
     `  ${LOCAL_ENV.apiIssuer} = ${config.inputs.apiIssuer === undefined ? "(not set)" : "<set, not shown>"}`,
+    "",
+    ...notaryLines,
     "",
     `Run refuses now because: ${config.problems.length === 0 ? "(nothing known; it also refuses a non-empty --out, a running process under --out and unreadable input files)" : ""}`,
     ...config.problems.map((m) => `  - ${m}`),
@@ -712,14 +850,14 @@ export function renderPlan(config: LocalConfig): string {
     `   rm -r ${p.signingDir}`,
     "",
     "Uploaded to Apple:",
-    ...NOTARY_UPLOADS.map((m) => `  - ${m}`),
+    ...notaryUploads(config).map((m) => `  - ${m}`),
     "",
     "Artifacts:",
-    `  ${p.artifacts}/ (DMG, update zip, the zip's blockmap, latest-mac.yml, SHA256SUMS; no DMG blockmap)`,
+    `  ${p.artifacts}/ (DMG, update zip, the zip's blockmap, latest-mac.yml, SHA256SUMS, NOTARIZATION.json with every submission id and status; no DMG blockmap)`,
     `  ${p.bundleDir}/ (electron-builder's output, including the unpacked app)`,
     `  ${p.stagedHost} (the signed host)`,
     "",
-    "Secrets that unavoidably appear on a command line (visible to the same user's `ps` while the command runs): the .p12 password (security import -P, about a second), the keychain's random password (create-keychain -p, unlock-keychain -p, set-key-partition-list -k; each under a second; the keychain is deleted at the end), the API key id and issuer (notarytool --key-id --issuer; for the length of a notarization). The .p8 and .p12 contents are never on a command line.",
+    `Secrets that unavoidably appear on a command line (visible to the same user's \`ps\` while the command runs): the .p12 password (security import -P, about a second), the keychain's random password (create-keychain -p, unlock-keychain -p, set-key-partition-list -k; each under a second; the keychain is deleted at the end), and for the notary: ${notarySecrets(config)}. The .p12 contents are never on a command line.`,
   );
   return `${out.join("\n")}\n`;
 }

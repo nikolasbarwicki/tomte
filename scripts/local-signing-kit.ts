@@ -16,6 +16,8 @@ export const LOCAL_ENV = {
   apiKeyFile: "CLAUDEBOT_LOCAL_API_KEY_FILE",
   apiKeyId: "CLAUDEBOT_LOCAL_API_KEY_ID",
   apiIssuer: "CLAUDEBOT_LOCAL_API_ISSUER",
+  ascProfile: "CLAUDEBOT_LOCAL_ASC_PROFILE",
+  ascBin: "CLAUDEBOT_LOCAL_ASC_BIN",
 } as const;
 
 /** A value that must never reach a log, a printed command line or a file: it prints as `<label>`, also through JSON and template strings. */
@@ -45,6 +47,9 @@ export interface LocalInputs {
   apiKeyFile: string | undefined;
   apiKeyId: string | undefined;
   apiIssuer: string | undefined;
+  /** Name of a saved profile of the `asc` CLI: the alternative notary backend to the three `api*` inputs. */
+  ascProfile: string | undefined;
+  ascBin: string | undefined;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -59,17 +64,42 @@ export function readLocalInputs(env: Env): LocalInputs {
     apiKeyFile: get(LOCAL_ENV.apiKeyFile),
     apiKeyId: get(LOCAL_ENV.apiKeyId),
     apiIssuer: get(LOCAL_ENV.apiIssuer),
+    ascProfile: get(LOCAL_ENV.ascProfile),
+    ascBin: get(LOCAL_ENV.ascBin),
   };
 }
 
-/** What stops a run on the inputs alone: names, not values. The password comes from exactly one of its two variables. */
+/**
+ * What stops a run on the inputs alone: names, not values. The password comes from exactly one of its two variables, and
+ * notarization from exactly one backend: the `asc` profile, or the API key file, key id and issuer together.
+ */
 export function inputProblems(inputs: LocalInputs): string[] {
-  const problems = [
-    [LOCAL_ENV.p12File, inputs.p12File],
+  const apiKey = [
     [LOCAL_ENV.apiKeyFile, inputs.apiKeyFile],
     [LOCAL_ENV.apiKeyId, inputs.apiKeyId],
     [LOCAL_ENV.apiIssuer, inputs.apiIssuer],
-  ].flatMap(([name, value]) => (value === undefined ? [`${name} is not set`] : []));
+  ] as const;
+  const problems = inputs.p12File === undefined ? [`${LOCAL_ENV.p12File} is not set`] : [];
+  const apiKeySet = apiKey.filter(([, value]) => value !== undefined).map(([name]) => name);
+  if (inputs.ascProfile !== undefined) {
+    if (apiKeySet.length > 0) {
+      problems.push(
+        `${LOCAL_ENV.ascProfile} and ${apiKeySet.join(", ")} are both set; use exactly one notary backend`,
+      );
+    }
+  } else {
+    if (inputs.ascBin !== undefined) {
+      problems.push(`${LOCAL_ENV.ascBin} is set without ${LOCAL_ENV.ascProfile}`);
+    }
+    if (apiKeySet.length === 0) {
+      problems.push(
+        `no notary backend: set ${LOCAL_ENV.ascProfile}, or all of ${apiKey.map(([name]) => name).join(", ")}`,
+      );
+    }
+    problems.push(
+      ...apiKey.flatMap(([name, value]) => (value === undefined ? [`${name} is not set`] : [])),
+    );
+  }
   const passwords = [inputs.p12PasswordFile, inputs.p12Password].filter((v) => v !== undefined);
   if (passwords.length !== 1) {
     problems.push(
@@ -80,6 +110,7 @@ export function inputProblems(inputs: LocalInputs): string[] {
     [LOCAL_ENV.p12File, inputs.p12File],
     [LOCAL_ENV.p12PasswordFile, inputs.p12PasswordFile],
     [LOCAL_ENV.apiKeyFile, inputs.apiKeyFile],
+    [LOCAL_ENV.ascBin, inputs.ascBin],
   ] as const) {
     if (value !== undefined && !isAbsolute(value))
       problems.push(`${name} must be an absolute path`);
@@ -122,6 +153,10 @@ interface LocalPaths {
   metadata: string;
   /** The finished installers, metadata and `SHA256SUMS`. */
   artifacts: string;
+  /** Where the asc backend's packaging run leaves the app's submission for this script to read. */
+  appSubmission: string;
+  /** Submission ids and statuses of every notarization of the run; written next to the artifacts. */
+  notarization: string;
   entitlements: string;
 }
 
@@ -143,6 +178,8 @@ function localPaths(out: string, runId: string, version: string): LocalPaths {
     zip: join(bundleDir, zip),
     metadata: join(bundleDir, desktopAssets("darwin", ["arm64"], version).metadata),
     artifacts: join(out, "artifacts"),
+    appSubmission: join(signingDir, "notary-app.json"),
+    notarization: join(out, "artifacts", "NOTARIZATION.json"),
     entitlements: MAC_ENTITLEMENTS,
   };
 }
@@ -155,12 +192,16 @@ export interface LocalFlags {
   addToSearchList: boolean;
 }
 
+/** Who notarizes: `notarytool` with the API key inputs (`p8`), or a saved profile of `asc` (`asc`). */
+type NotaryBackend = { kind: "p8" } | { kind: "asc"; profile: string; bin: string };
+
 export interface LocalConfig {
   repoRoot: string;
   version: string;
   runId: string;
   addToSearchList: boolean;
   inputs: LocalInputs;
+  notary: NotaryBackend;
   secrets: LocalSecrets;
   paths: LocalPaths;
   /** What makes `run` refuse on what is known without touching the disk; `plan` prints them and still plans. */
@@ -183,6 +224,8 @@ export function resolveLocalConfig(r: {
   hostVersion: string;
   runId: string;
   secrets: LocalSecrets;
+  /** Where an executable is on PATH, or `undefined`; only asked for `asc`. */
+  which: (name: string) => string | undefined;
 }): LocalConfig {
   const { flags } = r;
   if (flags.out === undefined) throw new UsageError("--out <staging folder> is required");
@@ -208,12 +251,21 @@ export function resolveLocalConfig(r: {
     problems.push("--confirm-keychain-and-notary-upload was not given");
   }
   problems.push(...inputProblems(r.inputs));
+  let notary: NotaryBackend = { kind: "p8" };
+  if (r.inputs.ascProfile !== undefined) {
+    const bin = r.inputs.ascBin ?? r.which("asc");
+    if (bin === undefined) {
+      problems.push(`asc was not found on PATH; set ${LOCAL_ENV.ascBin} to its absolute path`);
+    }
+    notary = { kind: "asc", profile: r.inputs.ascProfile, bin: bin ?? "asc" };
+  }
   return {
     repoRoot: r.repoRoot,
     version,
     runId: r.runId,
     addToSearchList: flags.addToSearchList,
     inputs: r.inputs,
+    notary,
     secrets: r.secrets,
     paths: localPaths(out, r.runId, version),
     problems,

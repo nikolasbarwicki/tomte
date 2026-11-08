@@ -321,23 +321,61 @@ describe("localMacSigning", () => {
     APPLE_API_KEY_ID: "SYNTHKEY",
     APPLE_API_ISSUER: "synthetic-issuer",
   };
-  const flags = { keychain: KEYCHAIN, identity: IDENTITY };
+  const flags = {
+    keychain: KEYCHAIN,
+    identity: IDENTITY,
+    notary: undefined,
+    ascProfile: undefined,
+    ascBin: undefined,
+    notaryRecord: undefined,
+  };
+  const ASC = {
+    ...flags,
+    notary: "asc",
+    ascProfile: "ASC API",
+    ascBin: "/opt/homebrew/bin/asc",
+    notaryRecord: "/tmp/synthetic/notary-app.json",
+  };
   const here = { platform: "darwin", sign: true, ci: false } as const;
 
   test("is off, and never reads the environment, when neither flag is given", () => {
-    expect(localMacSigning({ keychain: undefined, identity: undefined }, {}, here)).toBeUndefined();
+    expect(
+      localMacSigning({ ...flags, keychain: undefined, identity: undefined }, {}, here),
+    ).toBeUndefined();
   });
 
   test("returns the keychain, the identity hash and the notarization key", () => {
     expect(localMacSigning(flags, NOTARY, here)).toEqual({
       keychain: KEYCHAIN,
       identity: IDENTITY,
-      notary: { key: "/tmp/synthetic/key.p8", keyId: "SYNTHKEY", issuer: "synthetic-issuer" },
+      notary: {
+        kind: "p8",
+        key: "/tmp/synthetic/key.p8",
+        keyId: "SYNTHKEY",
+        issuer: "synthetic-issuer",
+      },
+    });
+  });
+
+  test("--local-notary p8 is the same as the default", () => {
+    expect(localMacSigning({ ...flags, notary: "p8" }, NOTARY, here)?.notary.kind).toBe("p8");
+  });
+
+  test("the asc backend returns the profile, the binary and the record path and reads no API key", () => {
+    expect(localMacSigning(ASC, {}, here)).toEqual({
+      keychain: KEYCHAIN,
+      identity: IDENTITY,
+      notary: {
+        kind: "asc",
+        profile: "ASC API",
+        bin: "/opt/homebrew/bin/asc",
+        record: "/tmp/synthetic/notary-app.json",
+      },
     });
   });
 
   test.each([
-    ["one flag alone", { keychain: KEYCHAIN, identity: undefined }, NOTARY, here],
+    ["one flag alone", { ...flags, identity: undefined }, NOTARY, here],
     ["no --sign", flags, NOTARY, { ...here, sign: false }],
     ["not macOS", flags, NOTARY, { ...here, platform: "linux" as const }],
     ["CI", flags, NOTARY, { ...here, ci: true }],
@@ -345,6 +383,14 @@ describe("localMacSigning", () => {
     ["an identity by name", { ...flags, identity: "Developer ID Application: Acme" }, NOTARY, here],
     ["a lower-case hash", { ...flags, identity: IDENTITY.toLowerCase() }, NOTARY, here],
     ["a half-named notarization key", flags, { ...NOTARY, APPLE_API_ISSUER: " " }, here],
+    ["an unknown notary backend", { ...flags, notary: "keychain-profile" }, NOTARY, here],
+    ["asc flags without --local-notary asc", { ...flags, ascProfile: "ASC API" }, NOTARY, here],
+    ["asc without a profile", { ...ASC, ascProfile: undefined }, {}, here],
+    ["asc without a binary", { ...ASC, ascBin: undefined }, {}, here],
+    ["asc without a record path", { ...ASC, notaryRecord: undefined }, {}, here],
+    ["asc with a relative binary", { ...ASC, ascBin: "asc" }, {}, here],
+    ["asc with a relative record path", { ...ASC, notaryRecord: "record.json" }, {}, here],
+    ["asc in CI", ASC, {}, { ...here, ci: true }],
   ])("refuses %s", (_name, f, env, where) => {
     expect(() => localMacSigning(f, env, where)).toThrow(SigningError);
   });

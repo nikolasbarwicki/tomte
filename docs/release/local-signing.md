@@ -1,6 +1,6 @@
 # Local macOS signing and notarization (personal test builds)
 
-`bun scripts/sign-local.ts` (alias `bun run sign:local`) signs and notarizes an **arm64** Claudebot build on this Mac, with a Developer ID Application certificate and an App Store Connect API key that you hold. It produces a signed, notarized, stapled DMG, a signed update zip and a signed bundled host. Nothing is installed, published or pushed.
+`bun scripts/sign-local.ts` (alias `bun run sign:local`) signs and notarizes an **arm64** Claudebot build on this Mac, with a Developer ID Application certificate and an App Store Connect API key (a `.p8` file, or a saved `asc` profile) that you hold. It produces a signed, notarized, stapled DMG, a signed update zip and a signed bundled host. Nothing is installed, published or pushed.
 
 It is a separate route from the release workflow. CI keeps using `scripts/signing.ts` and `package-desktop.ts --sign` with the `CSC_LINK` secrets exactly as before (AGENTS.md, "Signing and notarization"); this route never runs in CI and refuses when `CI` is set.
 
@@ -16,14 +16,14 @@ bun scripts/sign-local.ts cleanup --out dist/rel-ready-1108-signed-arm64        
 
 Other flags: `--version <semver>` (default: the host's `VERSION`), `--arch arm64` (the only accepted value) and `--add-to-search-list` (below).
 
-- `plan` prints every operation in order with its arguments (secrets as `<labels>`), every path, the identity rule, the global settings the route touches and the secrets that appear on a command line. It runs no command, reads no file and does not look at the keychain. It also lists what would make `run` refuse right now.
+- `plan` prints every operation in order with its arguments (secrets as `<labels>`), every path, the identity rule, the global settings the route touches and the secrets that appear on a command line. It runs no command, reads no file and does not look at the keychain; with the asc backend and no `CLAUDEBOT_LOCAL_ASC_BIN` it only looks `asc` up on `PATH` (a directory lookup, nothing is executed). It also lists what would make `run` refuse right now.
 - `run` does the work. It refuses, before running anything, when `CI` is set, when `--confirm-keychain-and-notary-upload` is missing, when this is not macOS, when an input is missing or names no file, when `--out` exists and is not empty, when a process runs from under `--out`, or when `--out` lies in a `Keychains` folder.
 - `--out` must not exist (or be empty). Use a new folder per run.
 
 ## Prerequisites (a person has to provide these)
 
 1. A **Developer ID Application** certificate with its private key, exported from Keychain Access as a `.p12` that also contains the **intermediate** certificate ("Developer ID Certification Authority") if you can include it, with a password. Exactly one valid Developer ID Application identity must be in it.
-2. An App Store Connect **team API key** (`AuthKey_<id>.p8`), its Key ID and the Issuer ID (Users and Access, Integrations, Team Keys; Developer role or higher).
+2. A notary credential, one of: an App Store Connect **team API key** (`AuthKey_<id>.p8`), its Key ID and the Issuer ID (Users and Access, Integrations, Team Keys; Developer role or higher); or the Rork ASC CLI (`asc`) with a profile saved beforehand (the route runs no `asc auth` command).
 3. Xcode command line tools (`xcrun notarytool`, `xcrun stapler`, `codesign`, `security`, `ditto`, `hdiutil`), network access, and the repository's own dependencies (`bun install`).
 4. Your explicit decision to let the route create a temporary keychain, upload to Apple's notary service and (optionally) change the keychain search list.
 
@@ -36,8 +36,12 @@ Credentials come **only** from these environment variables. The CI secret names 
 | `CLAUDEBOT_LOCAL_API_KEY_FILE`                                        | absolute path of the `.p8`                                                           |
 | `CLAUDEBOT_LOCAL_API_KEY_ID`                                          | the key's Key ID                                                                     |
 | `CLAUDEBOT_LOCAL_API_ISSUER`                                          | the issuer ID                                                                        |
+| `CLAUDEBOT_LOCAL_ASC_PROFILE`                                         | instead of the three above: the name of a saved `asc` profile, for example `ASC API` |
+| `CLAUDEBOT_LOCAL_ASC_BIN`                                             | optional, with the profile: absolute path of `asc` (default: `asc` found on `PATH`)  |
 
 `sign-local.ts` reads them once and removes them from its own environment, so the build, electron-builder and `notarytool` never inherit them. The `.p8` path is handed on as `APPLE_API_KEY`, the key ID and issuer as `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`, which is what `@electron/notarize` reads. Prefer `…_PASSWORD_FILE` so the password is not in your shell's environment or history.
+
+With the asc backend `sign-local.ts` passes nothing about the key on: the packaging run learns the profile name and the `asc` path from flags (`--local-notary asc --local-asc-profile … --local-asc-bin … --local-notary-record …`), and `asc` reads the profile's API key from wherever it keeps it (UNVERIFIED: whether that is a keychain and whether it asks you to allow access).
 
 ## What `run` does
 
@@ -63,6 +67,15 @@ Order (the exact argv is what `plan` prints): create the folders and state file;
 2. The signed DMG (the stapled app and the Applications link).
 
 The update zip is not uploaded: it is built afterwards from the app whose ticket is already stapled. Apple sees the file names and contents of those two archives and your team's identity; nothing else of this machine.
+
+### Notary backends
+
+Exactly one, chosen by the inputs (setting both is a refusal):
+
+- **`.p8` key** (`CLAUDEBOT_LOCAL_API_KEY_*`): `electron-builder` notarizes the app through `@electron/notarize` (`notarytool submit --wait`), and the route runs `xcrun notarytool submit --wait --output-format json` for the DMG.
+- **`asc` profile** (`CLAUDEBOT_LOCAL_ASC_PROFILE`): the Rork ASC CLI, with a profile you saved earlier. Every upload is `asc --profile "<name>" notarization submit --file <zip|dmg> --wait --output json`; no key file, key ID or issuer is given to the route. The packaging run gets `notarize: false` and an `afterSign` hook (`scripts/asc-notary.ts`): after electron-builder has signed the app and before it builds the DMG and the zip, the hook makes `Claudebot.zip` with `ditto -c -k --sequesterRsrc --keepParent`, submits it, and only on `Accepted` runs `xcrun stapler staple` and `xcrun stapler validate` on the app (stapling stays with `stapler` for both backends; the existing checks of the app in the update zip and of the DMG are unchanged). The DMG goes through the same `asc` call after it is signed. Anything but an explicit `Accepted` fails the run; the error carries the status, the submission ID, the sha256 of the uploaded file and the output of `asc --profile "<name>" notarization log --id <id>` (or says why it could not be fetched).
+
+Both backends write `<out>/artifacts/NOTARIZATION.json`: `{ backend, profile?, version, submissions: [{ kind: "app"|"dmg", file, sha256, id, status }] }`. With the asc backend it lists the app zip and the DMG; with `.p8` only the DMG (electron-builder's own app submission is not observable). It is not in `SHA256SUMS`. Submission IDs are also logged as they happen.
 
 ## Global settings
 
@@ -110,9 +123,11 @@ A secret on a command line is visible to the same user's `ps` while it runs. The
 | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------- |
 | `security import -P`                                                             | the `.p12` password                                                                                | about a second                        |
 | `security create-keychain -p`, `unlock-keychain -p`, `set-key-partition-list -k` | the keychain's random password (24 random bytes, never stored; the keychain is deleted at the end) | each under a second, twice for unlock |
-| `xcrun notarytool submit --key-id --issuer`                                      | the API key ID and issuer (not the key; the `.p8` is passed as a path)                             | the length of the notarization        |
+| `xcrun notarytool submit --key-id --issuer` (`.p8` backend only)                 | the API key ID and issuer (not the key; the `.p8` is passed as a path)                             | the length of the notarization        |
 
 The plan, logs, warnings and errors never contain a secret value: secrets are `Secret` objects that print as `<label>`, and `CommandError` messages name only a command's first two words. The `.p12` and `.p8` contents are never on a command line.
+
+With the asc backend there is no notary secret on any command line: the profile's name is the only argument that names an account, and `asc` reads the profile's key itself.
 
 ## Failure, signals and cleanup
 
@@ -143,8 +158,11 @@ The route runs the same checks itself. For a download-like test, copy the DMG th
 
 ## What is verified
 
-|                                                                                                                                                                                                                 | Status                                                                |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Operation order, arguments, redaction, refusals, cleanup (failure, SIGTERM, crash), search-list restore, identity rule, DMG sign, notarize, staple, `latest-mac.yml` rewrite, verification, artifact collection | **Tested against a recording fake** (`scripts/local-signing.test.ts`) |
-| CI verification unchanged by the refactor (`scripts/mac-verify.test.ts` pins the old argv sequence)                                                                                                             | **Tested**                                                            |
-| `security`, `codesign`, `notarytool`, `stapler`, `spctl` behavior; electron-builder keychain handling; Apple accepting the DMG                                                                                  | **Unobserved**: read from man pages and `node_modules` source only    |
+|                                                                                                                                                                                                                                                                                                                                                                                                                                | Status                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operation order, arguments, redaction, refusals, cleanup (failure, SIGTERM, crash), search-list restore, identity rule, DMG sign, notarize, staple, `latest-mac.yml` rewrite, verification, artifact collection                                                                                                                                                                                                                | **Tested against a recording fake** (`scripts/local-signing.test.ts`)                                                                                                                                                                                                                           |
+| CI verification unchanged by the refactor (`scripts/mac-verify.test.ts` pins the old argv sequence)                                                                                                                                                                                                                                                                                                                            | **Tested**                                                                                                                                                                                                                                                                                      |
+| `security`, `codesign`, `notarytool`, `stapler`, `spctl` behavior; electron-builder keychain handling; Apple accepting the DMG                                                                                                                                                                                                                                                                                                 | **Unobserved**: read from man pages and `node_modules` source only                                                                                                                                                                                                                              |
+| The asc backend: the shape of `asc notarization submit --output json` (the route reads `id` and `status` from the root, `data`, `submission` or their `attributes`), whether `asc` exits non-zero for a rejected submission (the route fails on anything but an explicit `Accepted`, whichever it does), the format of `asc notarization log --id`, and whether `asc` asks for keychain access when it reads the profile's key | **Unobserved**: read from `asc --help` only; the route has run no `asc` command                                                                                                                                                                                                                 |
+| The asc backend's order and argv, a rejection (non-zero exit, or exit 0 with another status), unreadable output, a failing log fetch, `NOTARIZATION.json`                                                                                                                                                                                                                                                                      | **Tested against a recording fake** (`scripts/asc-notary.test.ts`, `scripts/local-signing.test.ts`)                                                                                                                                                                                             |
+| That electron-builder's `afterSign` hook runs after signing and before the DMG and zip targets                                                                                                                                                                                                                                                                                                                                 | **Read from source** (`app-builder-lib` 26.18.0: `platformPackager.doPack` signs and awaits `emitAfterSign`, and only then does `pack` call `packageInDistributableFormat`; documented in `configuration.d.ts` as "run after pack and sign but before pack into distributable format"). Not run |

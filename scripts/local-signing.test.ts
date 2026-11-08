@@ -28,6 +28,9 @@ const KEY_ID = "SYNTHKEYID99";
 const ISSUER = "00000000-synthetic-issuer-0000";
 const IDENTITY = "A1B2C3D4E5F60718293A4B5C6D7E8F9011223344";
 const LOGIN = "/Users/someone/Library/Keychains/login.keychain-db";
+const ASC = "/opt/homebrew/bin/asc";
+const PROFILE = "ASC API";
+const hashOf = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
 
 const DETAILS = `Executable=/x/Claudebot
 CodeDirectory v=20500 size=1234 flags=0x10000(runtime) hashes=30+7 location=embedded
@@ -55,6 +58,10 @@ interface Behavior {
   /** Number of valid Developer ID identities `find-identity` reports. */
   identities?: number;
   notary?: "Accepted" | "Invalid";
+  /** With the asc backend, a rejection comes with exit 0 (what asc does is unknown) instead of a non-zero exit. */
+  ascRejectExitsZero?: boolean;
+  /** With the asc backend, `asc notarization log` fails. */
+  ascLogFails?: boolean;
   /** Runs before a command whose argv contains `when`. */
   before?: { when: string; run: (fake: FakeMac) => void | Promise<void> };
 }
@@ -91,6 +98,7 @@ class FakeMac {
       return ok();
     }
     if (bin === "xcrun" && sub === "notarytool") return this.notary(cmd, ok);
+    if (bin === ASC) return this.asc(cmd, ok);
     if (bin === "xcrun" && sub === "stapler" && cmd[2] === "staple") {
       await appendFile(last, "+stapled");
       return ok();
@@ -144,6 +152,18 @@ class FakeMac {
     return ok(json);
   }
 
+  private asc(cmd: readonly string[], ok: (a?: string, b?: string) => Ran): Ran {
+    if (cmd[3] === "notarization" && cmd[4] === "log") {
+      if (this.behavior.ascLogFails) throw new CommandError(ASC, 1, "", "log unavailable");
+      return ok("https://synthetic.invalid/developer-log/dmg-sub-9");
+    }
+    const status = this.behavior.notary ?? "Accepted";
+    const json = JSON.stringify({ data: { id: "dmg-sub-9", attributes: { status } } });
+    if (status !== "Accepted" && !this.behavior.ascRejectExitsZero)
+      throw new CommandError(ASC, 1, json, "rejected");
+    return ok(json);
+  }
+
   private async bun(cmd: readonly string[], ok: (a?: string, b?: string) => Ran): Promise<Ran> {
     const script = cmd[1] as string;
     if (script.endsWith("build-host.ts")) {
@@ -162,6 +182,19 @@ class FakeMac {
     const bundle = join(out, "Claudebot-darwin-arm64");
     const app = join(bundle, "mac-arm64/Claudebot.app");
     const host = join(app, "Contents/Resources/claudebot-host");
+    if (cmd.includes("--local-notary-record")) {
+      // The afterSign hook of the asc backend, as package-desktop.ts runs it before the dmg and zip exist.
+      await writeFile(
+        flag("--local-notary-record"),
+        JSON.stringify({
+          kind: "app",
+          file: "Claudebot.zip",
+          sha256: "a".repeat(64),
+          id: "app-sub-1",
+          status: "Accepted",
+        }),
+      );
+    }
     await mkdir(dirname(host), { recursive: true });
     await writeFile(
       host,
@@ -220,15 +253,33 @@ beforeEach(async () => {
     apiKeyFile: join(root, "synthetic.p8"),
     apiKeyId: KEY_ID,
     apiIssuer: ISSUER,
+    ascProfile: undefined,
+    ascBin: undefined,
   };
+});
+
+/** The inputs of the asc backend: the profile instead of the API key. */
+const ascInputs = (): LocalInputs => ({
+  ...inputs,
+  apiKeyFile: undefined,
+  apiKeyId: undefined,
+  apiIssuer: undefined,
+  ascProfile: PROFILE,
 });
 
 afterEach(() => rm(root, { recursive: true, force: true }));
 
 async function configure(
-  over: { confirm?: boolean; ci?: boolean; addToSearchList?: boolean; platform?: string } = {},
+  over: {
+    confirm?: boolean;
+    ci?: boolean;
+    addToSearchList?: boolean;
+    platform?: string;
+    asc?: boolean;
+  } = {},
 ): Promise<LocalConfig> {
-  const secrets = await loadSecrets(inputs, KEY_ID, ISSUER);
+  const chosen = over.asc ? ascInputs() : inputs;
+  const secrets = await loadSecrets(chosen);
   return resolveLocalConfig({
     flags: {
       out,
@@ -237,13 +288,14 @@ async function configure(
       confirm: over.confirm ?? true,
       addToSearchList: over.addToSearchList ?? false,
     },
-    inputs,
+    inputs: chosen,
     platform: over.platform ?? "darwin",
     ci: over.ci ?? false,
     repoRoot,
     hostVersion: "0.1.0",
     runId: "run42",
     secrets,
+    which: (name) => (name === "asc" ? ASC : undefined),
   });
 }
 
@@ -507,7 +559,187 @@ describe("runLocalSigning", () => {
   });
 });
 
+describe("runLocalSigning with the notarytool backend", () => {
+  test("records the DMG's submission in NOTARIZATION.json", async () => {
+    const h = harness();
+    const config = await configure();
+    await runLocalSigning(config, h.deps);
+    const record = JSON.parse(await readFile(config.paths.notarization, "utf8"));
+    expect(record).toEqual({
+      backend: "notarytool",
+      version: "0.1.0",
+      submissions: [
+        {
+          kind: "dmg",
+          file: "Claudebot-0.1.0-arm64.dmg",
+          sha256: hashOf("SYNTHETIC DMG+signed"),
+          id: "sub-123",
+          status: "Accepted",
+        },
+      ],
+    });
+    expect(h.logs.join("\n")).toContain("submission sub-123");
+    expect(h.fake.calls.some((c) => c[0] === ASC)).toBe(false);
+  });
+});
+
+describe("runLocalSigning with the asc backend", () => {
+  const dmgSubmit = (p: LocalConfig["paths"]) => [
+    ASC,
+    "--profile",
+    PROFILE,
+    "notarization",
+    "submit",
+    "--file",
+    p.dmg,
+    "--wait",
+    "--output",
+    "json",
+  ];
+
+  test("notarizes the app in the packaging run and the DMG with asc, never with notarytool or an API key", async () => {
+    const h = harness();
+    const config = await configure({ asc: true });
+    await runLocalSigning(config, h.deps);
+    const p = config.paths;
+
+    const pack = h.fake.calls.find((c) => c[1]?.endsWith("package-desktop.ts"))!;
+    const tail = pack.slice(pack.indexOf("--local-notary"));
+    expect(tail).toEqual([
+      "--local-notary",
+      "asc",
+      "--local-asc-profile",
+      PROFILE,
+      "--local-asc-bin",
+      ASC,
+      "--local-notary-record",
+      p.appSubmission,
+    ]);
+    const packEnv = h.fake.envs[h.fake.calls.indexOf(pack)]!;
+    expect(packEnv).toEqual({});
+    expect(h.fake.calls.some((c) => c.includes("notarytool"))).toBe(false);
+
+    const submit = h.fake.calls.filter((c) => c[0] === ASC && c.includes("submit"));
+    expect(submit).toEqual([dmgSubmit(p)]);
+    const heads = h.fake.heads;
+    expect(heads.indexOf(ASC)).toBeGreaterThan(heads.lastIndexOf("codesign", heads.indexOf(ASC)));
+    expect(h.fake.calls[heads.indexOf(ASC) + 1]).toEqual(["xcrun", "stapler", "staple", p.dmg]);
+    expect(await readFile(p.dmg, "utf8")).toBe("SYNTHETIC DMG+signed+stapled");
+  });
+
+  test("NOTARIZATION.json lists the app and the DMG with ids, statuses and the sha256 of what was uploaded", async () => {
+    const h = harness();
+    const config = await configure({ asc: true });
+    await runLocalSigning(config, h.deps);
+    expect(JSON.parse(await readFile(config.paths.notarization, "utf8"))).toEqual({
+      backend: "asc",
+      profile: PROFILE,
+      version: "0.1.0",
+      submissions: [
+        {
+          kind: "app",
+          file: "Claudebot.zip",
+          sha256: "a".repeat(64),
+          id: "app-sub-1",
+          status: "Accepted",
+        },
+        {
+          kind: "dmg",
+          file: "Claudebot-0.1.0-arm64.dmg",
+          sha256: hashOf("SYNTHETIC DMG+signed"),
+          id: "dmg-sub-9",
+          status: "Accepted",
+        },
+      ],
+    });
+    const log = h.logs.join("\n");
+    expect(log).toContain("app notarized: submission app-sub-1");
+    expect(log).toContain("dmg Claudebot-0.1.0-arm64.dmg: submission dmg-sub-9, Accepted");
+    expect(await readFile(join(config.paths.artifacts, "SHA256SUMS"), "utf8")).not.toContain(
+      "NOTARIZATION",
+    );
+  });
+
+  test.each([
+    ["a non-zero exit", false],
+    ["exit 0 with a rejected status", true],
+  ])(
+    "a rejection by asc (%s) fails with the log URL and never staples the DMG",
+    async (_n, exitsZero) => {
+      const h = harness({ notary: "Invalid", ascRejectExitsZero: exitsZero });
+      const config = await configure({ asc: true });
+      const error = await runLocalSigning(config, h.deps).catch((e: Error) => e);
+      expect((error as Error).message).toContain("dmg-sub-9");
+      expect((error as Error).message).toContain(
+        "https://synthetic.invalid/developer-log/dmg-sub-9",
+      );
+      expect(h.fake.calls.some((c) => c[1] === "stapler")).toBe(false);
+      expect(await exists(config.paths.artifacts)).toBe(false);
+      expect(await exists(config.paths.signingDir)).toBe(false);
+    },
+  );
+
+  test("a failing log fetch is reported without hiding the rejection", async () => {
+    const h = harness({ notary: "Invalid", ascLogFails: true });
+    const error = await runLocalSigning(await configure({ asc: true }), h.deps).catch(
+      (e: Error) => e,
+    );
+    expect((error as Error).message).toContain("status Invalid");
+    expect((error as Error).message).toContain("could not be fetched");
+  });
+
+  test("refuses before any command when the named asc binary is not a file", async () => {
+    const config = await configure({ asc: true });
+    const named = { ...config.inputs, ascBin: join(root, "missing-asc") };
+    const h = harness();
+    await expect(runLocalSigning({ ...config, inputs: named }, h.deps)).rejects.toThrow(
+      /CLAUDEBOT_LOCAL_ASC_BIN does not name a file/,
+    );
+    expect(h.fake.calls).toEqual([]);
+  });
+
+  test("a secret value is in no log line or error", async () => {
+    const h = harness({ notary: "Invalid" });
+    const config = await configure({ asc: true });
+    const error = await runLocalSigning(config, h.deps).catch((e: Error) => e);
+    const text = [...h.logs, ...h.warnings, (error as Error).message].join("\n");
+    for (const secret of [P12_PASSWORD, config.secrets.keychainPassword.value]) {
+      expect(text).not.toContain(secret);
+    }
+  });
+});
+
 describe("plan", () => {
+  test("with the asc backend shows the backend, the exact asc argv, the profile and what is uploaded", async () => {
+    const text = renderPlan(await configure({ asc: true }));
+    for (const word of [
+      `Notary backend: asc, saved profile "ASC API", binary ${ASC}`,
+      `$ ${ASC} --profile "ASC API" notarization submit --file ${out}/Claudebot-darwin-arm64/Claudebot-0.1.0-arm64.dmg --wait --output json`,
+      `inside: ${ASC} --profile "ASC API" notarization submit --file <tmp>/Claudebot.zip --wait --output json`,
+      `${ASC} --profile "ASC API" notarization log --id <id>`,
+      "inside: ditto -c -k --sequesterRsrc --keepParent",
+      "inside: xcrun stapler staple",
+      "inside: xcrun stapler validate",
+      '--local-notary asc --local-asc-profile "ASC API"',
+      "NOTARIZATION.json",
+      "Uploaded to Apple:",
+      "made by this route's afterSign hook",
+    ]) {
+      expect(text).toContain(word);
+    }
+    expect(text).not.toContain("notarytool submit");
+    expect(text).not.toContain("env APPLE_API_KEY");
+    expect(text).toContain("no key id, issuer or key material is on any command line");
+  });
+
+  test("with the p8 backend still shows notarytool and the API key variables", async () => {
+    const text = renderPlan(await configure());
+    expect(text).toContain("Notary backend: xcrun notarytool");
+    expect(text).toContain("env APPLE_API_KEY_ID=<api-key-id>");
+    expect(text).not.toContain("--local-notary asc");
+    expect(text).not.toContain(ASC);
+  });
+
   test("shows every operation, never a secret value, and is the same twice", async () => {
     const config = await configure();
     const text = renderPlan(config);

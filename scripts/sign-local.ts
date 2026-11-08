@@ -1,5 +1,6 @@
 // The local macOS signing route: signs and notarizes an arm64 build on this Mac for personal testing, from a certificate
-// and an App Store Connect API key you hold. Guide, prerequisites and the list of what is verified: docs/release/local-signing.md.
+// and an App Store Connect API key you hold: a `.p8` file, or a saved profile of the `asc` CLI (CLAUDEBOT_LOCAL_ASC_PROFILE).
+// Guide, prerequisites and the list of what is verified: docs/release/local-signing.md.
 //   bun scripts/sign-local.ts plan    --out <new folder> [--version <semver>] [--add-to-search-list]
 //       prints every operation in order with redacted arguments, all paths, the identity rule and the global settings
 //       touched. Runs nothing and reads no file. This is the default command.
@@ -94,15 +95,13 @@ async function main(): Promise<number> {
     hostVersion: HOST_VERSION,
     runId: command === "plan" ? "<run-id>" : crypto.randomUUID().replaceAll("-", ""),
     secrets: placeholderSecrets(),
+    which: (name) => Bun.which(name) ?? undefined,
   });
   if (command === "plan") {
     process.stdout.write(renderPlan(draft));
     return 0;
   }
-  const secrets =
-    draft.problems.length === 0
-      ? await loadSecrets(inputs, inputs.apiKeyId as string, inputs.apiIssuer as string)
-      : draft.secrets;
+  const secrets = draft.problems.length === 0 ? await loadSecrets(inputs) : draft.secrets;
   await runLocalSigning({ ...draft, secrets }, deps);
   return 0;
 }

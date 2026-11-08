@@ -275,24 +275,41 @@ export function checkSignedWindows(records: readonly AuthenticodeRecord[]): stri
 
 /**
  * The local route's way to sign (`scripts/sign-local.ts`, docs/release/local-signing.md): a keychain file and one
- * identity in it chosen by SHA-1 hash, and the App Store Connect API key under the names electron-builder reads. The
- * credentials themselves stay where `sign-local.ts` keeps them; here are only a keychain path, a hash and a key file path.
+ * identity in it chosen by SHA-1 hash, and who notarizes. The credentials themselves stay where `sign-local.ts` keeps
+ * them; here are only a keychain path, a hash, and either the App Store Connect API key under the names electron-builder
+ * reads (`p8`) or the name of a saved `asc` profile (`asc`, notarized by `asc-notary.ts` instead of electron-builder).
  */
 export interface LocalMacSigning {
   keychain: string;
   /** SHA-1 of the Developer ID Application certificate, 40 upper-case hex digits (as `security find-identity` prints it). */
   identity: string;
-  notary: { key: string; keyId: string; issuer: string };
+  notary:
+    | { kind: "p8"; key: string; keyId: string; issuer: string }
+    | { kind: "asc"; profile: string; bin: string; record: string };
+}
+
+/** The flags of `package-desktop.ts` that request the local route. */
+export interface LocalMacFlags {
+  keychain: string | undefined;
+  identity: string | undefined;
+  /** `p8` (the default) or `asc`. */
+  notary: string | undefined;
+  ascProfile: string | undefined;
+  ascBin: string | undefined;
+  /** Where the asc backend leaves the app's submission as JSON. */
+  notaryRecord: string | undefined;
 }
 
 /**
  * The local signing request of one packaging run, or `undefined` when neither `--local-keychain` nor `--local-identity`
  * is given (the CI path). Throws {@link SigningError} for anything that would make a half-local, half-CI run: one flag
  * without the other, no `--sign`, a platform other than macOS, a CI environment, a relative keychain path, an identity
- * that is not a SHA-1, or a notarization key that is not wholly named in `APPLE_API_KEY`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`.
+ * that is not a SHA-1, and, per backend: for `p8` a notarization key that is not wholly named in `APPLE_API_KEY`,
+ * `APPLE_API_KEY_ID` and `APPLE_API_ISSUER` or any asc flag; for `asc` a missing profile, binary or record path, or a
+ * relative one.
  */
 export function localMacSigning(
-  flags: { keychain: string | undefined; identity: string | undefined },
+  flags: LocalMacFlags,
   env: Env,
   where: { platform: SigningPlatform | "linux"; sign: boolean; ci: boolean },
 ): LocalMacSigning | undefined {
@@ -313,6 +330,28 @@ export function localMacSigning(
       "--local-identity must be a certificate's SHA-1 (40 upper-case hex digits)",
     );
   }
+  const base = { keychain: flags.keychain, identity: flags.identity };
+  const ascFlags = [flags.ascProfile, flags.ascBin, flags.notaryRecord];
+  if (flags.notary === "asc") {
+    const [profile, bin, record] = ascFlags;
+    if (!profile || !bin || !record) {
+      throw new SigningError(
+        "--local-notary asc needs --local-asc-profile, --local-asc-bin and --local-notary-record",
+      );
+    }
+    if (!bin.startsWith("/") || !record.startsWith("/")) {
+      throw new SigningError("--local-asc-bin and --local-notary-record must be absolute paths");
+    }
+    return { ...base, notary: { kind: "asc", profile, bin, record } };
+  }
+  if (flags.notary !== undefined && flags.notary !== "p8") {
+    throw new SigningError(`--local-notary ${flags.notary}: expected p8 or asc`);
+  }
+  if (ascFlags.some((f) => f !== undefined)) {
+    throw new SigningError(
+      "--local-asc-profile, --local-asc-bin and --local-notary-record need --local-notary asc",
+    );
+  }
   const [key, keyId, issuer] = ["APPLE_API_KEY", "APPLE_API_KEY_ID", "APPLE_API_ISSUER"].map((n) =>
     (env[n] ?? "").trim(),
   );
@@ -321,5 +360,5 @@ export function localMacSigning(
       "local signing needs APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER",
     );
   }
-  return { keychain: flags.keychain, identity: flags.identity, notary: { key, keyId, issuer } };
+  return { ...base, notary: { kind: "p8", key, keyId, issuer } };
 }

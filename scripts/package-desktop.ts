@@ -25,12 +25,17 @@ import { parseArgs } from "node:util";
 // `--local-keychain <file> --local-identity <sha1>` (with `--sign`, macOS, never in CI) signs with one identity in that keychain
 // instead of the CI secrets, taking the notarization key from APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER; it is what
 // `scripts/sign-local.ts` passes (docs/release/local-signing.md) and is not meant to be run by hand.
-import { archFromString, build, Platform } from "electron-builder";
+// `--local-notary asc --local-asc-profile <name> --local-asc-bin <path> --local-notary-record <file>` replaces the API key
+// with a saved profile of the `asc` CLI: electron-builder signs but does not notarize, and an `afterSign` hook (scripts/
+// asc-notary.ts) notarizes and staples the app before the dmg and zip are built, then writes the submission to the record file.
+import { type AfterPackContext, archFromString, build, Platform } from "electron-builder";
 
 import { BUNDLE_DIR } from "../packages/host/src/browser/engine.ts";
 import { VERSION as HOST_VERSION } from "../packages/host/src/harness/claude-access.ts";
+import { notarizeSignedApp } from "./asc-notary.ts";
 import { prepareBrowserBundle } from "./browser-bundle.ts";
 import { ASSETS_OUT, buildMain, MAIN_OUT } from "./build-desktop.ts";
+import { spawnRunner } from "./command-runner.ts";
 import {
   APP_NAME,
   bundleDirName,
@@ -65,6 +70,10 @@ const { values: flags } = parseArgs({
     "update-url": { type: "string" },
     "local-keychain": { type: "string" },
     "local-identity": { type: "string" },
+    "local-notary": { type: "string" },
+    "local-asc-profile": { type: "string" },
+    "local-asc-bin": { type: "string" },
+    "local-notary-record": { type: "string" },
   },
 });
 const OUT = resolve(flags.out ?? join(ROOT, "dist/desktop"));
@@ -182,6 +191,18 @@ function refuseWhileRunning(bundleDir: string): void {
   if (running.length > 0) throw new Error(refusal("package", bundleDir, running));
 }
 
+/** The `afterSign` hook of the asc backend: notarize the signed app, staple it and record the submission (scripts/asc-notary.ts). */
+function ascAfterSign(notary: { profile: string; bin: string; record: string }) {
+  return (context: AfterPackContext) =>
+    notarizeSignedApp({
+      run: spawnRunner,
+      asc: { bin: notary.bin, profile: notary.profile },
+      app: join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`),
+      recordFile: notary.record,
+      log: console.log,
+    });
+}
+
 async function main(): Promise<void> {
   const archs = REQUESTED_ARCHS.map((a) => {
     if (!isDesktopArch(a)) throw new Error(`--arch ${a}: expected arm64 or x64`);
@@ -196,7 +217,14 @@ async function main(): Promise<void> {
   // Also before anything is built: a signed run without all of this OS's secrets, or a required one without --sign,
   // fails here, never after producing an unsigned installer. The local route's request is read before the scrub below.
   const local = localMacSigning(
-    { keychain: flags["local-keychain"], identity: flags["local-identity"] },
+    {
+      keychain: flags["local-keychain"],
+      identity: flags["local-identity"],
+      notary: flags["local-notary"],
+      ascProfile: flags["local-asc-profile"],
+      ascBin: flags["local-asc-bin"],
+      notaryRecord: flags["local-notary-record"],
+    },
     process.env,
     { platform: PLATFORM, sign: flags.sign ?? false, ci: inCi(process.env) },
   );
@@ -260,12 +288,14 @@ async function main(): Promise<void> {
   let secretsDir: string | undefined;
   try {
     if (local !== undefined) {
-      Object.assign(process.env, {
-        CSC_KEYCHAIN: local.keychain,
-        APPLE_API_KEY: local.notary.key,
-        APPLE_API_KEY_ID: local.notary.keyId,
-        APPLE_API_ISSUER: local.notary.issuer,
-      });
+      process.env.CSC_KEYCHAIN = local.keychain;
+      if (local.notary.kind === "p8") {
+        Object.assign(process.env, {
+          APPLE_API_KEY: local.notary.key,
+          APPLE_API_KEY_ID: local.notary.keyId,
+          APPLE_API_ISSUER: local.notary.issuer,
+        });
+      }
     } else if (signing.signed && signing.platform === "darwin") {
       secretsDir = await mkdtemp(join(tmpdir(), "claudebot-notary-"));
       const key = join(secretsDir, "AuthKey.p8");
@@ -306,8 +336,16 @@ async function main(): Promise<void> {
           signing.signed && signing.platform === "darwin"
             ? local === undefined
               ? SIGNED_MAC
-              : { ...SIGNED_MAC, identity: local.identity }
+              : {
+                  ...SIGNED_MAC,
+                  identity: local.identity,
+                  // The asc backend notarizes in `afterSign`, so electron-builder must not.
+                  ...(local.notary.kind === "asc" ? { notarize: false } : {}),
+                }
             : UNSIGNED_MAC,
+        // After the app is signed and before the dmg and zip targets are built (electron-builder runs `afterSign` between
+        // them), so both contain the stapled app.
+        ...(local?.notary.kind === "asc" ? { afterSign: ascAfterSign(local.notary) } : {}),
         // The local route names its identity, so a build that could not sign with it must fail, not ship unsigned.
         ...(local === undefined ? {} : { forceCodeSigning: true }),
         ...(signing.signed && signing.platform === "win32" ? { win: SIGNED_WIN } : {}),

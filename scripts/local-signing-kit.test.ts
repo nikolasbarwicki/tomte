@@ -26,6 +26,16 @@ const FULL: LocalInputs = {
   apiKeyFile: "/synthetic/key.p8",
   apiKeyId: "SYNTHKEY",
   apiIssuer: "synthetic-issuer",
+  ascProfile: undefined,
+  ascBin: undefined,
+};
+
+const ASC_ONLY: LocalInputs = {
+  ...FULL,
+  apiKeyFile: undefined,
+  apiKeyId: undefined,
+  apiIssuer: undefined,
+  ascProfile: "ASC API",
 };
 
 const resolve = (
@@ -48,6 +58,7 @@ const resolve = (
     hostVersion: "0.3.0",
     runId: "r1",
     secrets: placeholderSecrets(),
+    which: (name: string) => (name === "asc" ? "/opt/homebrew/bin/asc" : undefined),
     ...rest,
   });
 
@@ -96,6 +107,58 @@ describe("readLocalInputs and inputProblems", () => {
     ).toEqual([]);
   });
 
+  test("reads the asc profile and binary", () => {
+    const inputs = readLocalInputs({
+      [LOCAL_ENV.ascProfile]: " ASC API ",
+      [LOCAL_ENV.ascBin]: "/opt/homebrew/bin/asc",
+    });
+    expect(inputs.ascProfile).toBe("ASC API");
+    expect(inputs.ascBin).toBe("/opt/homebrew/bin/asc");
+  });
+
+  test("the asc profile alone is a complete notary backend", () => {
+    expect(inputProblems(ASC_ONLY)).toEqual([]);
+    expect(inputProblems({ ...ASC_ONLY, ascBin: "/opt/homebrew/bin/asc" })).toEqual([]);
+  });
+
+  test("the asc profile together with any API key input is refused, naming the inputs", () => {
+    for (const extra of [
+      { apiKeyFile: "/synthetic/key.p8" },
+      { apiKeyId: "SYNTHKEY" },
+      { ...FULL, ascProfile: "ASC API" },
+    ]) {
+      const problems = inputProblems({ ...ASC_ONLY, ...extra });
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain(`${LOCAL_ENV.ascProfile} and `);
+      expect(problems[0]).toContain("exactly one notary backend");
+    }
+  });
+
+  test("no backend at all is refused and says what to set", () => {
+    const problems = inputProblems({
+      ...FULL,
+      apiKeyFile: undefined,
+      apiKeyId: undefined,
+      apiIssuer: undefined,
+    });
+    expect(problems[0]).toContain(`no notary backend: set ${LOCAL_ENV.ascProfile}, or all of`);
+  });
+
+  test("a half-set API key is refused by name", () => {
+    expect(inputProblems({ ...FULL, apiIssuer: undefined })).toEqual([
+      `${LOCAL_ENV.apiIssuer} is not set`,
+    ]);
+  });
+
+  test("the asc binary needs the profile and an absolute path", () => {
+    expect(inputProblems({ ...FULL, ascBin: "/opt/homebrew/bin/asc" })).toEqual([
+      `${LOCAL_ENV.ascBin} is set without ${LOCAL_ENV.ascProfile}`,
+    ]);
+    expect(inputProblems({ ...ASC_ONLY, ascBin: "asc" })).toEqual([
+      `${LOCAL_ENV.ascBin} must be an absolute path`,
+    ]);
+  });
+
   test("a relative path is refused", () => {
     expect(inputProblems({ ...FULL, apiKeyFile: "key.p8" })).toEqual([
       `${LOCAL_ENV.apiKeyFile} must be an absolute path`,
@@ -133,6 +196,40 @@ describe("resolveLocalConfig", () => {
     ["an --out in a Keychains folder", { out: "/Users/x/Library/Keychains/out" }],
   ])("is a usage error for %s", (_name, flags) => {
     expect(() => resolve(flags)).toThrow(UsageError);
+  });
+
+  test("the API key inputs select the notarytool backend", () => {
+    expect(resolve().notary).toEqual({ kind: "p8" });
+  });
+
+  test("the asc profile selects the asc backend with the binary found on PATH", () => {
+    const config = resolve({}, { inputs: ASC_ONLY });
+    expect(config.notary).toEqual({
+      kind: "asc",
+      profile: "ASC API",
+      bin: "/opt/homebrew/bin/asc",
+    });
+    expect(config.problems).toEqual([]);
+    expect(config.paths.appSubmission).toBe("/work/out/.signing/notary-app.json");
+    expect(config.paths.notarization).toBe("/work/out/artifacts/NOTARIZATION.json");
+  });
+
+  test("an explicit CLAUDEBOT_LOCAL_ASC_BIN wins over PATH", () => {
+    const inputs = { ...ASC_ONLY, ascBin: "/custom/asc" };
+    expect(resolve({}, { inputs, which: () => "/opt/homebrew/bin/asc" }).notary).toMatchObject({
+      bin: "/custom/asc",
+    });
+  });
+
+  test("asc missing from PATH is a problem, not a usage error", () => {
+    const config = resolve({}, { inputs: ASC_ONLY, which: () => undefined });
+    expect(config.problems).toEqual([expect.stringContaining("asc was not found on PATH")]);
+    expect(config.notary).toMatchObject({ kind: "asc", bin: "asc" });
+  });
+
+  test("both backends at once is a problem", () => {
+    const config = resolve({}, { inputs: { ...FULL, ascProfile: "ASC API" } });
+    expect(config.problems.join()).toContain("exactly one notary backend");
   });
 
   test("accepts a pre-release version", () => {
