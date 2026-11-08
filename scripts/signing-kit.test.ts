@@ -9,6 +9,7 @@ import {
   parseCodesignDetails,
   parseDeveloperIdIdentity,
   planSigning,
+  localMacSigning,
   SIGNING_SECRETS,
   SigningError,
   signingRequired,
@@ -309,5 +310,42 @@ describe("Authenticode", () => {
 
   test("rejects an empty check", () => {
     expect(checkSignedWindows([])).toEqual(["no signed Windows files were checked"]);
+  });
+});
+
+describe("localMacSigning", () => {
+  const KEYCHAIN = "/tmp/synthetic/run.keychain-db";
+  const IDENTITY = "0123456789ABCDEF0123456789ABCDEF01234567";
+  const NOTARY = {
+    APPLE_API_KEY: "/tmp/synthetic/key.p8",
+    APPLE_API_KEY_ID: "SYNTHKEY",
+    APPLE_API_ISSUER: "synthetic-issuer",
+  };
+  const flags = { keychain: KEYCHAIN, identity: IDENTITY };
+  const here = { platform: "darwin", sign: true, ci: false } as const;
+
+  test("is off, and never reads the environment, when neither flag is given", () => {
+    expect(localMacSigning({ keychain: undefined, identity: undefined }, {}, here)).toBeUndefined();
+  });
+
+  test("returns the keychain, the identity hash and the notarization key", () => {
+    expect(localMacSigning(flags, NOTARY, here)).toEqual({
+      keychain: KEYCHAIN,
+      identity: IDENTITY,
+      notary: { key: "/tmp/synthetic/key.p8", keyId: "SYNTHKEY", issuer: "synthetic-issuer" },
+    });
+  });
+
+  test.each([
+    ["one flag alone", { keychain: KEYCHAIN, identity: undefined }, NOTARY, here],
+    ["no --sign", flags, NOTARY, { ...here, sign: false }],
+    ["not macOS", flags, NOTARY, { ...here, platform: "linux" as const }],
+    ["CI", flags, NOTARY, { ...here, ci: true }],
+    ["a relative keychain", { ...flags, keychain: "run.keychain-db" }, NOTARY, here],
+    ["an identity by name", { ...flags, identity: "Developer ID Application: Acme" }, NOTARY, here],
+    ["a lower-case hash", { ...flags, identity: IDENTITY.toLowerCase() }, NOTARY, here],
+    ["a half-named notarization key", flags, { ...NOTARY, APPLE_API_ISSUER: " " }, here],
+  ])("refuses %s", (_name, f, env, where) => {
+    expect(() => localMacSigning(f, env, where)).toThrow(SigningError);
   });
 });

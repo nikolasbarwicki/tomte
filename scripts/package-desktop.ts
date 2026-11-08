@@ -22,6 +22,9 @@ import { parseArgs } from "node:util";
 // scripts/signing-kit.ts SIGNING_SECRETS): macOS Developer ID, hardened runtime and notarized, Windows Authenticode. It
 // exits before building when one of them is missing. Without it the build is unsigned, whatever the environment holds,
 // and no keychain identity is ever looked up. The bundled host must already be signed (`scripts/signing.ts sign-host`).
+// `--local-keychain <file> --local-identity <sha1>` (with `--sign`, macOS, never in CI) signs with one identity in that keychain
+// instead of the CI secrets, taking the notarization key from APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER; it is what
+// `scripts/sign-local.ts` passes (docs/release/local-signing.md) and is not meant to be run by hand.
 import { archFromString, build, Platform } from "electron-builder";
 
 import { BUNDLE_DIR } from "../packages/host/src/browser/engine.ts";
@@ -43,9 +46,11 @@ import {
 } from "./desktop-kit.ts";
 import { processes, processesUnder, refusal } from "./process-guard.ts";
 import {
+  localMacSigning,
   packagingSigning,
   MAC_ENTITLEMENTS,
   SIGNING_SECRETS,
+  type SigningDecision,
   TIMESTAMP_URL,
 } from "./signing-kit.ts";
 
@@ -58,6 +63,8 @@ const { values: flags } = parseArgs({
     "host-dir": { type: "string" },
     sign: { type: "boolean" },
     "update-url": { type: "string" },
+    "local-keychain": { type: "string" },
+    "local-identity": { type: "string" },
   },
 });
 const OUT = resolve(flags.out ?? join(ROOT, "dist/desktop"));
@@ -187,11 +194,19 @@ async function main(): Promise<void> {
   // Before anything is built: a CI build without repository coordinates fails here, not after the installers exist.
   const publish = updateProvider(REPOSITORY, inCi(process.env), flags["update-url"]);
   // Also before anything is built: a signed run without all of this OS's secrets, or a required one without --sign,
-  // fails here, never after producing an unsigned installer.
-  const signing = packagingSigning(PLATFORM, process.env, flags.sign ?? false);
+  // fails here, never after producing an unsigned installer. The local route's request is read before the scrub below.
+  const local = localMacSigning(
+    { keychain: flags["local-keychain"], identity: flags["local-identity"] },
+    process.env,
+    { platform: PLATFORM, sign: flags.sign ?? false, ci: inCi(process.env) },
+  );
+  const signing: SigningDecision =
+    local === undefined
+      ? packagingSigning(PLATFORM, process.env, flags.sign ?? false)
+      : { signed: true, platform: "darwin" };
   console.log(
     signing.signed
-      ? `signing: ${signing.platform}, signed`
+      ? `signing: ${signing.platform}, signed${local === undefined ? "" : " (local keychain)"}`
       : `signing: unsigned (${signing.reason})`,
   );
   const hostBinaries = await hostBinariesFor(archs);
@@ -237,12 +252,21 @@ async function main(): Promise<void> {
   for (const name of [...SIGNING_AND_PUBLISH_ENV, ...Object.values(SIGNING_SECRETS).flat()]) {
     delete process.env[name];
   }
-  // Unsigned: no identity is ever looked up. Signed: electron-builder imports the certificate into a keychain of its
-  // own (CSC_LINK) and looks only there.
-  process.env.CSC_IDENTITY_AUTO_DISCOVERY = signing.signed ? "true" : "false";
+  // Unsigned: no identity is ever looked up. Signed (CI): electron-builder imports the certificate into a keychain of
+  // its own (CSC_LINK) and looks only there. Local: CSC_KEYCHAIN names the keychain `sign-local.ts` made and the
+  // identity is given by hash, so electron-builder creates no keychain and never looks anywhere else.
+  process.env.CSC_IDENTITY_AUTO_DISCOVERY =
+    signing.signed && local === undefined ? "true" : "false";
   let secretsDir: string | undefined;
   try {
-    if (signing.signed && signing.platform === "darwin") {
+    if (local !== undefined) {
+      Object.assign(process.env, {
+        CSC_KEYCHAIN: local.keychain,
+        APPLE_API_KEY: local.notary.key,
+        APPLE_API_KEY_ID: local.notary.keyId,
+        APPLE_API_ISSUER: local.notary.issuer,
+      });
+    } else if (signing.signed && signing.platform === "darwin") {
       secretsDir = await mkdtemp(join(tmpdir(), "claudebot-notary-"));
       const key = join(secretsDir, "AuthKey.p8");
       await writeFile(key, credentials.APPLE_API_KEY_P8 ?? "", { mode: 0o600 });
@@ -278,7 +302,14 @@ async function main(): Promise<void> {
           { from: join(STAGE, "browser", "${arch}", BUNDLE_DIR), to: BUNDLE_DIR },
         ],
         publish,
-        mac: signing.signed && signing.platform === "darwin" ? SIGNED_MAC : UNSIGNED_MAC,
+        mac:
+          signing.signed && signing.platform === "darwin"
+            ? local === undefined
+              ? SIGNED_MAC
+              : { ...SIGNED_MAC, identity: local.identity }
+            : UNSIGNED_MAC,
+        // The local route names its identity, so a build that could not sign with it must fail, not ship unsigned.
+        ...(local === undefined ? {} : { forceCodeSigning: true }),
         ...(signing.signed && signing.platform === "win32" ? { win: SIGNED_WIN } : {}),
         nsis: { artifactName: "${productName}-Setup-${version}.${ext}" },
         // Named without an arch: only linux x64 is released, and `${arch}` would spell it x86_64 and amd64 per target.

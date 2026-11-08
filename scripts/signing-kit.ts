@@ -272,3 +272,54 @@ export function checkSignedWindows(records: readonly AuthenticodeRecord[]): stri
   }
   return problems;
 }
+
+/**
+ * The local route's way to sign (`scripts/sign-local.ts`, docs/release/local-signing.md): a keychain file and one
+ * identity in it chosen by SHA-1 hash, and the App Store Connect API key under the names electron-builder reads. The
+ * credentials themselves stay where `sign-local.ts` keeps them; here are only a keychain path, a hash and a key file path.
+ */
+export interface LocalMacSigning {
+  keychain: string;
+  /** SHA-1 of the Developer ID Application certificate, 40 upper-case hex digits (as `security find-identity` prints it). */
+  identity: string;
+  notary: { key: string; keyId: string; issuer: string };
+}
+
+/**
+ * The local signing request of one packaging run, or `undefined` when neither `--local-keychain` nor `--local-identity`
+ * is given (the CI path). Throws {@link SigningError} for anything that would make a half-local, half-CI run: one flag
+ * without the other, no `--sign`, a platform other than macOS, a CI environment, a relative keychain path, an identity
+ * that is not a SHA-1, or a notarization key that is not wholly named in `APPLE_API_KEY`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`.
+ */
+export function localMacSigning(
+  flags: { keychain: string | undefined; identity: string | undefined },
+  env: Env,
+  where: { platform: SigningPlatform | "linux"; sign: boolean; ci: boolean },
+): LocalMacSigning | undefined {
+  if (flags.keychain === undefined && flags.identity === undefined) return undefined;
+  if (flags.keychain === undefined || flags.identity === undefined) {
+    throw new SigningError("--local-keychain and --local-identity go together");
+  }
+  if (!where.sign) throw new SigningError("--local-keychain and --local-identity need --sign");
+  if (where.platform !== "darwin") throw new SigningError("local keychain signing is macOS only");
+  if (where.ci) {
+    throw new SigningError("local keychain signing is for a developer machine, not CI");
+  }
+  if (!flags.keychain.startsWith("/")) {
+    throw new SigningError("--local-keychain must be an absolute path");
+  }
+  if (!/^[0-9A-F]{40}$/.test(flags.identity)) {
+    throw new SigningError(
+      "--local-identity must be a certificate's SHA-1 (40 upper-case hex digits)",
+    );
+  }
+  const [key, keyId, issuer] = ["APPLE_API_KEY", "APPLE_API_KEY_ID", "APPLE_API_ISSUER"].map((n) =>
+    (env[n] ?? "").trim(),
+  );
+  if (!key || !keyId || !issuer) {
+    throw new SigningError(
+      "local signing needs APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER",
+    );
+  }
+  return { keychain: flags.keychain, identity: flags.identity, notary: { key, keyId, issuer } };
+}

@@ -18,19 +18,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { spawnRunner } from "./command-runner.ts";
+import { bundledAppPath, bundledHostPath, desktopAssets, isDesktopArch } from "./desktop-kit.ts";
+import { verifyMacBundle } from "./mac-verify.ts";
 import {
-  bundledAppPath,
-  bundledHostPath,
-  desktopAssets,
-  type DesktopArch,
-  isDesktopArch,
-} from "./desktop-kit.ts";
-import {
-  checkSignedMac,
   checkSignedWindows,
   MAC_ENTITLEMENTS,
   parseAuthenticodeLines,
-  parseCodesignDetails,
   parseDeveloperIdIdentity,
   planSigning,
   type SigningDecision,
@@ -44,28 +38,7 @@ import {
 const USAGE =
   "usage: bun scripts/signing.ts plan | sign-host <binary> | verify <bundleDir> <version> <arch>...";
 
-interface Ran {
-  stdout: string;
-  stderr: string;
-}
-
-/** Runs a command and returns its output; on failure throws with stderr but never with the arguments (they may hold a secret). */
-async function run(command: readonly string[], env?: Record<string, string>): Promise<Ran> {
-  const child = Bun.spawn([...command], {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: env === undefined ? process.env : { ...process.env, ...env },
-  });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  if (code !== 0) {
-    throw new Error(`${command.slice(0, 2).join(" ")} failed (exit ${code}): ${stderr.trim()}`);
-  }
-  return { stdout, stderr };
-}
+const run = spawnRunner;
 
 function plan(): number {
   const required = signingRequired(process.env);
@@ -206,44 +179,6 @@ async function signHost(binary: string): Promise<void> {
   }
 }
 
-/** One mac app and the host inside it: valid, notarized, stapled, and the host signed by the app's identity. */
-async function verifyMacApp(app: string): Promise<void> {
-  const host = join(app, "Contents", "Resources", "claudebot-host");
-  await run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app]);
-  await run(["spctl", "--assess", "--type", "execute", "--verbose=4", app]);
-  await run(["xcrun", "stapler", "validate", app]);
-  await run(["codesign", "--verify", "--strict", "--verbose=2", host]);
-  const appInfo = parseCodesignDetails((await run(["codesign", "-dvv", app])).stderr);
-  const hostInfo = parseCodesignDetails((await run(["codesign", "-dvv", host])).stderr);
-  const entitlements = (await run(["codesign", "-d", "--entitlements", ":-", host])).stdout;
-  const problems = checkSignedMac(
-    { label: "the app", info: appInfo },
-    { label: "the host", info: hostInfo },
-    entitlements,
-  );
-  if (problems.length > 0) throw new SigningError(`${app}:\n- ${problems.join("\n- ")}`);
-  console.log(`ok ${app} (Team ID ${appInfo.teamId}, host signed by ${hostInfo.authorities[0]})`);
-}
-
-async function verifyMac(bundleDir: string, version: string, archs: DesktopArch[]): Promise<void> {
-  const tmp = await mkdtemp(join(tmpdir(), "claudebot-verify-"));
-  try {
-    for (const arch of archs) {
-      await verifyMacApp(join(bundleDir, bundledAppPath("darwin", arch)));
-      // The update zip is what electron-updater applies: the app inside it must hold up on its own.
-      const zip = desktopAssets("darwin", [arch], version).installers.find((n) =>
-        n.endsWith("-mac.zip"),
-      );
-      if (zip === undefined) throw new Error(`no update zip is expected for ${arch}`);
-      const out = join(tmp, arch);
-      await run(["ditto", "-x", "-k", join(bundleDir, zip), out]);
-      await verifyMacApp(join(out, "Claudebot.app"));
-    }
-  } finally {
-    await rm(tmp, { recursive: true, force: true });
-  }
-}
-
 const AUTHENTICODE_SCRIPT = `
 $ErrorActionPreference = 'Stop'
 foreach ($p in $args) {
@@ -296,7 +231,7 @@ async function main(): Promise<number> {
       console.error("arch is arm64 or x64");
       return 2;
     }
-    if (process.platform === "darwin") await verifyMac(bundleDir, version, archs);
+    if (process.platform === "darwin") await verifyMacBundle(run, bundleDir, version, archs);
     else if (process.platform === "win32") await verifyWindows(bundleDir, version);
     else throw new Error(`there is nothing to verify on ${process.platform}`);
     return 0;

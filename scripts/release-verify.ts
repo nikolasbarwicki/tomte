@@ -80,7 +80,7 @@ export function parseUpdateMetadata(text: string): UpdateMetadata {
   return meta;
 }
 
-function sha512Base64(path: string): Promise<string> {
+export function sha512Base64(path: string): Promise<string> {
   const { promise, resolve, reject } = Promise.withResolvers<string>();
   const hash = createHash("sha512");
   const stream = Bun.file(path).stream();
