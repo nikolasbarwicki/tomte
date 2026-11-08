@@ -137,29 +137,36 @@ function electronVersion(): string {
   return (require(manifest) as { version: string }).version;
 }
 
-/** The host binary an arch's app bundles: from `--host-dir` as it is, or built for this run. */
-async function hostBinaryFor(arch: DesktopArch): Promise<string> {
-  const name = hostBinaryName(PLATFORM, arch);
-  if (HOST_DIR !== undefined) {
-    const path = join(HOST_DIR, name);
+/**
+ * The host binary each arch's app bundles: from `--host-dir` as they are, or built for this run. All archs are built by
+ * one build-host run, since each run starts by emptying dist/host.
+ */
+async function hostBinariesFor(archs: readonly DesktopArch[]): Promise<Map<DesktopArch, string>> {
+  const dir = HOST_DIR ?? join(ROOT, "dist/host");
+  if (HOST_DIR === undefined) {
+    const targets = archs.map((arch) => hostTarget(PLATFORM, arch));
+    const host = Bun.spawn(["bun", "scripts/build-host.ts", ...targets], {
+      cwd: ROOT,
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    if ((await host.exited) !== 0)
+      throw new Error(`building the ${targets.join(", ")} host failed`);
+  }
+  const binaries = new Map<DesktopArch, string>();
+  for (const arch of archs) {
+    const path = join(dir, hostBinaryName(PLATFORM, arch));
     if (
       !(await stat(path).then(
         (s) => s.isFile(),
         () => false,
       ))
     ) {
-      throw new Error(`--host-dir ${HOST_DIR} has no ${name}`);
+      throw new Error(`${dir} has no ${hostBinaryName(PLATFORM, arch)}`);
     }
-    return path;
+    binaries.set(arch, path);
   }
-  const target = hostTarget(PLATFORM, arch);
-  const host = Bun.spawn(["bun", "scripts/build-host.ts", target], {
-    cwd: ROOT,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  if ((await host.exited) !== 0) throw new Error(`building the ${target} host failed`);
-  return join(ROOT, "dist/host", name);
+  return binaries;
 }
 
 /** Stops, before anything is built or deleted, when a process runs from the folder that packaging would replace. */
@@ -187,8 +194,7 @@ async function main(): Promise<void> {
       ? `signing: ${signing.platform}, signed`
       : `signing: unsigned (${signing.reason})`,
   );
-  const hostBinaries = new Map<DesktopArch, string>();
-  for (const arch of archs) hostBinaries.set(arch, await hostBinaryFor(arch));
+  const hostBinaries = await hostBinariesFor(archs);
   await buildMain();
 
   await rm(bundleDir, { recursive: true, force: true });
