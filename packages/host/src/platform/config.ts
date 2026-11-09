@@ -26,6 +26,8 @@ export interface HostConfig {
   allowPlainHttp: boolean;
   /** The secrets backend: keychain in local mode, file in remote mode; `--secrets`, `--secrets-key-file`, `CLAUDEBOT_SECRETS`, `CLAUDEBOT_SECRETS_KEY_FILE`. */
   secrets: SecretsConfig;
+  /** The operator's relay configuration file (ADR-0008): absolute; `relay.json` in the data root unless `--relay-config` or `CLAUDEBOT_RELAY_CONFIG` names another. The file need not exist: without it no answer is relayed. */
+  relayConfig: string;
   /** Whether a bot may run headed Chrome; local mode only. */
   headedBrowser: boolean;
   /** Whether the host can reveal a folder in the user's file manager; local mode only. */
@@ -51,6 +53,7 @@ const FLAGS = {
   sidecar: { type: "boolean" },
   secrets: { type: "string" },
   "secrets-key-file": { type: "string" },
+  "relay-config": { type: "string" },
 } as const;
 
 const MODES: readonly string[] = ["local", "remote"] satisfies HostMode[];
@@ -177,8 +180,8 @@ function parseFlags(argv: readonly string[]) {
 
 /**
  * Reads the host's configuration from command-line flags (`--mode`, `--data-root`, `--host`, `--port`, `--public-url`, `--allow-plain-http`,
- * `--secrets`, `--secrets-key-file`, `--vite`, `--sidecar`) and
- * `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|ALLOW_PLAIN_HTTP|SECRETS|SECRETS_KEY_FILE|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
+ * `--secrets`, `--secrets-key-file`, `--relay-config`, `--vite`, `--sidecar`) and
+ * `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|ALLOW_PLAIN_HTTP|SECRETS|SECRETS_KEY_FILE|RELAY_CONFIG|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
  * Without a data root the OS application-data directory is used. Remote mode parses on Linux only (ADR-0006).
  */
 export function parseHostConfig(
@@ -216,12 +219,16 @@ export function parseHostConfig(
   const rawPort = values.port ?? get("CLAUDEBOT_PORT");
   const rawVite = get("CLAUDEBOT_VITE");
   const rawAskApproval = get("CLAUDEBOT_ASK_APPROVAL");
+  const rawRelayConfig = values["relay-config"] ?? get("CLAUDEBOT_RELAY_CONFIG");
+  if (rawRelayConfig !== undefined && !isAbsolute(rawRelayConfig))
+    throw new InvalidConfig(`invalid relay config "${rawRelayConfig}": expected an absolute path`);
+  const dataRoot =
+    rawDataRoot === undefined ? defaultDataRoot(env, system) : parseDataRoot(rawDataRoot);
 
   return {
     config: {
       mode: mode as HostMode,
-      dataRoot:
-        rawDataRoot === undefined ? defaultDataRoot(env, system) : parseDataRoot(rawDataRoot),
+      dataRoot,
       bind: {
         address: bare(address),
         port: rawPort === undefined ? DEFAULT_BIND.port : parsePort(rawPort),
@@ -233,6 +240,8 @@ export function parseHostConfig(
         values.secrets ?? get("CLAUDEBOT_SECRETS"),
         values["secrets-key-file"] ?? get("CLAUDEBOT_SECRETS_KEY_FILE"),
       ),
+      relayConfig:
+        rawRelayConfig === undefined ? join(dataRoot, "relay.json") : normalize(rawRelayConfig),
       headedBrowser: mode === "local",
       reveal: mode === "local",
       isolateAllBots: mode === "remote",

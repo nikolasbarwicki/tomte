@@ -6,6 +6,7 @@ const HOST = "^packages/host/src/";
 const WEB = "^packages/web/";
 const CONTRACT = "^packages/contract/";
 const DESKTOP = "^packages/desktop/";
+const NOTIFY = "^packages/notify/";
 const WEB_FEATURES = `${WEB}features/`;
 const WEB_SHARED = `${WEB}(components|hooks|lib|host)/`;
 const WEB_UI = `${WEB}components/ui/`;
@@ -17,7 +18,7 @@ const REACT = "node_modules/(@types/)?(react|react-dom)/";
 const TESTS = `(\\.test\\.tsx?$|${HOST}testing/)`;
 /** Folders under packages/host/src whose files are private behind index.ts. */
 const MODULES =
-  "(bots|browser|credentials|device-auth|handoffs|harness|host-mcp|host-server|integrations|routines|ui)";
+  "(bots|browser|credentials|device-auth|events|handoffs|harness|host-mcp|host-server|integrations|routines|ui)";
 const PRIVATE = `${HOST}${MODULES}/(?!index\\.ts$)`;
 const HOST_SMOKE = `${HOST}browser/smoke\\.ts$`;
 const HOST_CLI = `${HOST}host\\.ts$`;
@@ -44,6 +45,8 @@ module.exports = {
           `${HOST}testing/pretend-linux\\.ts$`,
           // The desktop app's main process: bundled by scripts/build-desktop.ts and run by Electron, never imported.
           `${DESKTOP}src/main\\.ts$`,
+          // The notify sender's entry: run as the `claudebot-notify` bin, never imported.
+          `${NOTIFY}src/main\\.ts$`,
         ],
       },
       to: {},
@@ -77,6 +80,14 @@ module.exports = {
       severity: "error",
       from: { path: DESKTOP },
       to: { path: "^packages/", pathNot: `${DESKTOP}|${CONTRACT}` },
+    },
+    {
+      name: "notify-only-to-contract",
+      comment:
+        "The notify sender imports no other workspace package than the contract: it is a standalone CLI that talks to a host over HTTP, never runs host code.",
+      severity: "error",
+      from: { path: NOTIFY },
+      to: { path: "^packages/", pathNot: `${NOTIFY}|${CONTRACT}` },
     },
     {
       name: "web-only-to-contract",

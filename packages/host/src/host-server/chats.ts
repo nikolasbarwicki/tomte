@@ -9,6 +9,7 @@ import type {
   HostEvent,
   RoutinesEvent,
   ServerEvent,
+  WorkEvent,
 } from "@claudebot/contract/events";
 
 import {
@@ -23,6 +24,7 @@ import {
   type ThreadEnv,
   type TurnResult,
 } from "../bots/index.ts";
+import type { Events, ExternalRow } from "../events/index.ts";
 import type { Handoffs, Mention } from "../handoffs/index.ts";
 import type { Executor } from "../routines/index.ts";
 import { createRoutineTurns } from "./routine-turns.ts";
@@ -33,18 +35,37 @@ import { botsEvent, filesEvent, memoryEvents } from "./views.ts";
 export interface ChatsDeps extends ThreadEnv {
   db: Database;
   handoffs: Pick<Handoffs, "receivedCards" | "startDelivered">;
+  events: Pick<Events, "split" | "needsYou">;
+  /** External needs-you items, so chats can tie an answer to the one it answers. `acted` closes an item the user answered, with the answer to relay to the sender. */
+  items: {
+    isOpen(botId: string, id: string): boolean;
+    acted(botId: string, id: string, answer: string): void;
+  };
   transcript: (bot: Bot) => Promise<Transcript>;
   /** Human-wait cards still open for a bot, replayed into a rebuilt chat. */
   pendingWaits: (botId: string) => ServerEvent[];
   routinesEvent(botId: string): RoutinesEvent;
+  workEvent(botId: string): WorkEvent;
   broadcast: (e: HostEvent) => void;
 }
 
 /** The chat the page shows, with what the user can do in it. */
 export interface OpenChat {
   bot: Bot;
-  /** Queues the user's message while the bot is busy, returning the entry's id; otherwise shows it and returns `start` to run the turn, so the caller can reply first. */
-  send(text: string, shown: string, mentions: Mention[]): { queued: string } | { start(): void };
+  /**
+   * Gives the user's message to the bot, or resolves a question it asked, and returns what happened. With `eventId` the message answers that needs-you item, and the host decides where the answer goes:
+   * - `answered`: the bot has a pending question linked to this item; it receives `answer` (the message when omitted) as the question's answer, and the item is closed as acted. No chat message is created, and queued answers to the item are cancelled.
+   * - `queued`: the bot is busy; the item is closed only when the entry is delivered, never on queueing.
+   * - `start`: shows the message and runs the turn; the item is closed as it starts.
+   * - `refused`: the item is not open for this bot any more, or an answer to it is already queued.
+   */
+  send(
+    text: string,
+    shown: string,
+    mentions: Mention[],
+    eventId?: string,
+    answer?: string,
+  ): { answered: string } | { queued: string } | { start(): void } | { refused: string };
   setModel(model: string): Promise<void>;
   setEffort(effort: EffortLevel): Promise<void>;
   /** Starts a new session; false while a turn is running. */
@@ -58,6 +79,8 @@ export interface Chats {
   deliver(botId: string, text: string): Promise<void>;
   /** Shows an event in a bot's chat if it has one. */
   emitTo(botId: string, e: ServerEvent): void;
+  /** Gives the external-event rows already in a bot's chat their new state, shown live when the chat is. */
+  updateExternal(botId: string, rows: ExternalRow[]): void;
   isWorking(botId: string): boolean;
   /** True while no human is watching the bot's turn: a routine turn or a headless run. */
   unattended(botId: string): boolean;
@@ -69,8 +92,10 @@ export interface Chats {
   switchTo(bot: Bot): Promise<void>;
   /** Closes and forgets a deleted bot's chat; when it was the shown one, shows the most recently active bot, or nothing. */
   drop(botId: string): Promise<void>;
-  /** Answers a question or approval; false when there is no such question. */
+  /** Answers a question or approval, and acknowledges the external event the question was linked to; false when there is no such question. */
   answer(id: string, value: string): boolean;
+  /** The id of the bot's oldest pending question that was asked about this external event, if any. */
+  pendingAskFor(botId: string, eventId: string): string | undefined;
   /** Takes back a queued user message; false when it already reached the bot. */
   cancelQueued(id: string): boolean;
   /** Reopens a bot's thread, or every bot's, to pick up changed settings; a busy chat reopens after its turn. */
@@ -80,8 +105,16 @@ export interface Chats {
   close(): void;
 }
 
-/** A message waiting for its bot to be free. `text` is what the bot receives. A user entry also keeps what the page shows, so it can be listed and cancelled until it runs. */
-type UserEntry = { source: "user"; id: string; text: string; shown: string; mentions: Mention[] };
+/** A message waiting for its bot to be free. `text` is what the bot receives. A user entry also keeps what the page shows, so it can be listed and cancelled until it runs, and the needs-you item it answers, closed when it is delivered, with `said` as the answer to relay. */
+type UserEntry = {
+  source: "user";
+  id: string;
+  text: string;
+  shown: string;
+  mentions: Mention[];
+  eventId?: string;
+  said?: string;
+};
 type InboxEntry = { source: "host"; text: string } | UserEntry;
 
 /** A bot's conversation with a live thread; it exists while the bot is open or still running a turn in the background. */
@@ -93,8 +126,10 @@ type Chat = {
   busy: boolean;
   /** True while a routine turn runs, so its questions and approvals are answered without the user. */
   routineTurn: boolean;
-  /** Questions and approvals waiting for the user, by id. */
-  pending: Map<string, (value: string) => void>;
+  /** Questions and approvals waiting for the user, by id. A question asked about an external event keeps its id. */
+  pending: Map<string, { resolve: (value: string) => void; eventId?: string }>;
+  /** External events that reached the bot's current session; the only ones a question may claim to be about. */
+  delivered: Set<string>;
   /** Integration or bot settings changed during a turn; the thread reopens once the turn ends. */
   configStale: boolean;
   /** Messages for the bot that start the next turn once it is free: the user's sends while it was busy, and host messages (a human wait's outcome). */
@@ -128,7 +163,8 @@ export function createChats(deps: ChatsDeps): Chats {
     if (chat === current) broadcast(e);
   };
   const isWorking = (botId: string) => !!chats.get(botId)?.busy || headless(botId);
-  const announceBots = () => broadcast(botsEvent(dataRoot, db, isWorking));
+  const chatsBotsEvent = () => botsEvent(dataRoot, db, isWorking, deps.events.needsYou);
+  const announceBots = () => broadcast(chatsBotsEvent());
 
   const queuedEvent = (e: UserEntry): ServerEvent =>
     e.mentions.length
@@ -169,8 +205,15 @@ export function createChats(deps: ChatsDeps): Chats {
         if (e.source === "user") {
           emit(chat, { type: "dequeued", id: e.id });
           userSaid(chat, e.shown, e.mentions);
-        } else
+          if (e.eventId) deps.items.acted(chat.bot.id, e.eventId, e.said ?? e.shown);
+        } else {
+          for (const piece of deps.events.split(chat.bot.id, e.text))
+            if (typeof piece !== "string") {
+              chat.delivered.add(piece.id);
+              emit(chat, piece);
+            }
           for (const card of deps.handoffs.receivedCards(e.text, chat.bot.id)) emit(chat, card);
+        }
       }
       void turn(chat, entries.map((e) => e.text).join("\n\n"));
     }
@@ -227,6 +270,7 @@ export function createChats(deps: ChatsDeps): Chats {
     } finally {
       chat.busy = false;
       chat.routineTurn = false;
+      dropLinkedAsks(chat);
       if (chat.configStale) {
         chat.configStale = false;
         chat.thread.close("integrations changed");
@@ -238,10 +282,61 @@ export function createChats(deps: ChatsDeps): Chats {
     return out;
   }
 
-  const waitForUser = (chat: Chat, event: (id: string) => ServerEvent) => {
+  /** A turn's end leaves no tool call waiting, so a question linked to an event can no longer reach the bot: answering it later must not acknowledge the event. */
+  function dropLinkedAsks(chat: Chat) {
+    for (const [id, p] of chat.pending)
+      if (p.eventId !== undefined) {
+        console.error(`[chat] question ${id} about event ${p.eventId} outlived its turn; dropped`);
+        chat.pending.delete(id);
+        emit(chat, { type: "ask_expired", id });
+      }
+  }
+
+  /** Resolves a pending question, then closes the external event it was linked to, relaying `said` (the answer when omitted) to its sender, and cancels queued answers to that event, which the question's answer replaces. */
+  function answerAsk(id: string, value: string, said = value): boolean {
+    for (const c of chats.values()) {
+      const asked = c.pending.get(id);
+      if (!asked) continue;
+      c.pending.delete(id);
+      asked.resolve(value);
+      emit(c, { type: "answered", id, value });
+      if (asked.eventId !== undefined) {
+        const answers = c.inbox.filter(
+          (e): e is UserEntry => e.source === "user" && e.eventId === asked.eventId,
+        );
+        for (const e of answers) cancelEntry(c, e);
+        deps.items.acted(c.bot.id, asked.eventId, said);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function cancelEntry(chat: Chat, entry: UserEntry) {
+    chat.inbox.splice(chat.inbox.indexOf(entry), 1);
+    emit(chat, { type: "dequeued", id: entry.id });
+  }
+
+  /** The id of the bot's oldest pending question that was asked about this external event, if any. */
+  function pendingAskFor(botId: string, eventId: string): string | undefined {
+    return [...(chats.get(botId)?.pending ?? [])].find(([, p]) => p.eventId === eventId)?.[0];
+  }
+
+  /** The external events in the bot's current session: the rows after the last session marker of a transcript. */
+  function deliveredIn(history: ServerEvent[]): Set<string> {
+    const ids = new Set<string>();
+    for (let i = history.length - 1; i >= 0; i--) {
+      const e = history[i];
+      if (e?.type === "session") break;
+      if (e?.type === "external") ids.add(e.id);
+    }
+    return ids;
+  }
+
+  const waitForUser = (chat: Chat, event: (id: string) => ServerEvent, eventId?: string) => {
     const id = randomUUID();
     const { promise, resolve } = Promise.withResolvers<string>();
-    chat.pending.set(id, resolve);
+    chat.pending.set(id, eventId === undefined ? { resolve } : { resolve, eventId });
     emit(chat, event(id));
     return promise;
   };
@@ -254,7 +349,16 @@ export function createChats(deps: ChatsDeps): Chats {
           broadcast({ type: "memory", scope, text });
       },
       unattended: () => chat().routineTurn,
-      ask: (event) => waitForUser(chat(), event),
+      ownedEvent(claimed) {
+        if (claimed === undefined) return undefined;
+        const { bot: owner, delivered } = chat();
+        if (delivered.has(claimed) && deps.items.isOpen(owner.id, claimed)) return claimed;
+        console.error(
+          `[chat] ask_user named event ${JSON.stringify(claimed.slice(0, 80))}, which bot ${owner.id} was not given or is closed; unlinked`,
+        );
+        return undefined;
+      },
+      ask: (event, eventId) => waitForUser(chat(), event, eventId),
     });
 
   function createChat(
@@ -276,6 +380,7 @@ export function createChats(deps: ChatsDeps): Chats {
       busy: false,
       routineTurn: false,
       pending: new Map(),
+      delivered: deliveredIn(history),
       configStale: false,
       inbox,
       thread: openThread(bot, hasSession, () => chat),
@@ -296,6 +401,7 @@ export function createChats(deps: ChatsDeps): Chats {
     );
     broadcast(filesEvent(dataRoot, chat.bot.id));
     broadcast(deps.routinesEvent(chat.bot.id));
+    broadcast(deps.workEvent(chat.bot.id));
   }
 
   async function switchTo(bot: Bot) {
@@ -347,15 +453,36 @@ export function createChats(deps: ChatsDeps): Chats {
   function openChat(chat: Chat): OpenChat {
     return {
       bot: chat.bot,
-      send(text, shown, mentions) {
+      send(text, shown, mentions, eventId, answer) {
+        if (eventId !== undefined) {
+          if (!deps.items.isOpen(chat.bot.id, eventId))
+            return { refused: "that item is already handled" };
+          const ask = pendingAskFor(chat.bot.id, eventId);
+          if (ask !== undefined && answerAsk(ask, answer ?? text, answer ?? shown))
+            return { answered: ask };
+          if (chat.inbox.some((e) => e.source === "user" && e.eventId === eventId))
+            return { refused: "an answer to that item is already queued" };
+        }
         if (chat.busy || headless(chat.bot.id)) {
-          const entry: UserEntry = { source: "user", id: randomUUID(), text, shown, mentions };
+          const entry: UserEntry = {
+            source: "user",
+            id: randomUUID(),
+            text,
+            shown,
+            mentions,
+            ...(eventId !== undefined && { eventId, said: answer ?? shown }),
+          };
           chat.inbox.push(entry);
           emit(chat, queuedEvent(entry));
           return { queued: entry.id };
         }
         userSaid(chat, shown, mentions);
-        return { start: () => void turn(chat, text) };
+        return {
+          start() {
+            void turn(chat, text);
+            if (eventId !== undefined) deps.items.acted(chat.bot.id, eventId, answer ?? shown);
+          },
+        };
       },
       async setModel(model) {
         await chat.thread.setModel(model);
@@ -369,6 +496,7 @@ export function createChats(deps: ChatsDeps): Chats {
         if (chat.busy || headless(chat.bot.id)) return false;
         chat.thread.close("new session");
         newSession(dataRoot, chat.bot);
+        chat.delivered.clear();
         chat.thread = openThread(chat.bot, false, () => chat);
         emit(chat, { type: "session" });
         return true;
@@ -383,31 +511,37 @@ export function createChats(deps: ChatsDeps): Chats {
       const chat = chats.get(botId);
       if (chat) emit(chat, e);
     },
+    updateExternal(botId, rows) {
+      const chat = chats.get(botId);
+      if (!chat) return;
+      for (const row of rows) {
+        const at = chat.history.findIndex((e) => e.type === "external" && e.id === row.id);
+        if (at < 0) continue;
+        chat.history[at] = row;
+        if (chat === current)
+          broadcast({
+            type: "external_state",
+            id: row.id,
+            state: row.state,
+            ...(row.relay && { relay: row.relay }),
+          });
+      }
+    },
     isWorking,
     unattended: (botId) => !!chats.get(botId)?.routineTurn || headless(botId),
-    botsEvent: () => botsEvent(dataRoot, db, isWorking),
+    botsEvent: chatsBotsEvent,
     announceBots,
     currentBotId: () => current?.bot.id,
     open: () => current && openChat(current),
     switchTo,
     drop,
-    answer(id, value) {
-      for (const c of chats.values()) {
-        const resolve = c.pending.get(id);
-        if (!resolve) continue;
-        c.pending.delete(id);
-        resolve(value);
-        emit(c, { type: "answered", id, value });
-        return true;
-      }
-      return false;
-    },
+    answer: answerAsk,
+    pendingAskFor,
     cancelQueued(id) {
       for (const c of chats.values()) {
-        const i = c.inbox.findIndex((e) => e.source === "user" && e.id === id);
-        if (i < 0) continue;
-        c.inbox.splice(i, 1);
-        emit(c, { type: "dequeued", id });
+        const entry = c.inbox.find((e): e is UserEntry => e.source === "user" && e.id === id);
+        if (!entry) continue;
+        cancelEntry(c, entry);
         return true;
       }
       return false;
@@ -423,6 +557,7 @@ export function createChats(deps: ChatsDeps): Chats {
       current
         ? [
             deps.routinesEvent(current.bot.id),
+            deps.workEvent(current.bot.id),
             { type: "reset", botId: current.bot.id },
             ...current.history,
           ]

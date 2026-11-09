@@ -10,6 +10,7 @@ import {
 import { z } from "zod";
 
 import { currentSession, listBots, markSeen, getActivity, recordMessage } from "../bots/index.ts";
+import type { Events } from "../events/index.ts";
 import { parseMentions, type Handoffs } from "../handoffs/index.ts";
 
 export type Transcript = { history: ServerEvent[]; hasSession: boolean };
@@ -32,11 +33,13 @@ export function createTranscripts({
   dataRoot,
   db,
   handoffs,
+  events,
 }: {
   cwd: string;
   dataRoot: string;
   db: Database;
   handoffs: Pick<Handoffs, "receivedCards" | "sentCards">;
+  events: Pick<Events, "split">;
 }) {
   /** Rebuild the UI transcript of a bot's session from Claude Code's own session file. */
   async function replay(sessionId: string, ownerId: string): Promise<ServerEvent[]> {
@@ -52,17 +55,26 @@ export function createTranscripts({
             : Array.isArray(content)
               ? content.flatMap((b) => (b.type === "text" ? [b.text] : []))
               : [];
-        for (const text of texts) {
-          const routine = text.match(ROUTINE_TAG);
-          if (routine)
-            out.push({ type: "routine", name: routine[1], trigger: RunTrigger.parse(routine[2]) });
-          else if (/^<handoff(-update)? /.test(text))
-            out.push(...handoffs.receivedCards(text, ownerId));
-          else if (!text.startsWith("<") || text.startsWith("<mention ")) {
-            const { text: typed, mentions } = parseMentions(text);
-            out.push(
-              mentions.length ? { type: "user", text: typed, mentions } : { type: "user", text },
-            );
+        for (const piece of texts.flatMap((t) => events.split(ownerId, t))) {
+          if (typeof piece !== "string") out.push(piece);
+          else {
+            const routine = piece.match(ROUTINE_TAG);
+            if (routine)
+              out.push({
+                type: "routine",
+                name: routine[1] ?? "",
+                trigger: RunTrigger.parse(routine[2]),
+              });
+            else if (/^<handoff(-update)? /.test(piece))
+              out.push(...handoffs.receivedCards(piece, ownerId));
+            else if (!piece.startsWith("<") || piece.startsWith("<mention ")) {
+              const { text: typed, mentions } = parseMentions(piece);
+              out.push(
+                mentions.length
+                  ? { type: "user", text: typed, mentions }
+                  : { type: "user", text: piece },
+              );
+            }
           }
         }
       } else if (m.type === "assistant" && Array.isArray(content)) {

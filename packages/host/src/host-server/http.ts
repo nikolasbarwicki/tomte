@@ -7,6 +7,7 @@ import {
   LIVE_VIEW_PATH,
   type Browser,
 } from "../browser/index.ts";
+import { eventsRouteBot } from "../events/index.ts";
 import { BOTS_ENDPOINT_PATH, type Handoffs } from "../handoffs/index.ts";
 import { HOST_INFO_PATH, PAIR_PATH } from "./boundary.ts";
 
@@ -57,6 +58,7 @@ export function clientRoutes(o: {
   oauthCallback: Handler;
   pair: Handler;
   hostInfo: Handler;
+  externalEvents: Handler;
   api: Handler;
 }): Route[] {
   const { browser } = o;
@@ -71,6 +73,11 @@ export function clientRoutes(o: {
       label: "[host] pairing failed:",
     },
     { match: (p, req) => p === HOST_INFO_PATH && req.method === "GET", handler: o.hostInfo },
+    {
+      match: (p, req) => eventsRouteBot(p) !== undefined && req.method === "POST",
+      handler: o.externalEvents,
+      label: "[events] post failed:",
+    },
     {
       match: (p) => p === LIVE_VIEW_PATH,
       handler: (req, res) => browser.handleLiveView(req, res),

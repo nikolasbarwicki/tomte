@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { newSession } from "./api.ts";
 import { Composer } from "./composer.tsx";
 import { ContextMeter } from "./context-meter.tsx";
+import { NeedsYou } from "./needs-you.tsx";
 import { Transcript } from "./transcript.tsx";
 
 const PANEL_KEY = "claudebot:panel";
@@ -120,6 +121,7 @@ export function ChatView({
             <TooltipContent>Memory, files, routines and browser</TooltipContent>
           </Tooltip>
         </AppBar>
+        <NeedsYou bot={bot} />
         <Transcript bot={bot} bots={bots} items={items} busy={busy} onShowBrowser={showBrowser} />
         <Composer bot={bot} bots={bots} />
       </div>

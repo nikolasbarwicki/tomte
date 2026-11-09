@@ -9,13 +9,19 @@ import { chatRoutes } from "./chat.ts";
 import type { ApiContext, ApiRequest } from "./context.ts";
 import { credentialApi } from "./credentials.ts";
 import { deviceApi } from "./devices.ts";
+import { eventSourceRoutes, eventTokenRoutes, needsYouRoutes } from "./external-events.ts";
 import { fileRoutes } from "./files.ts";
 import { integrationApi } from "./integrations.ts";
 import { routineApi } from "./routines.ts";
 
 /** The `/api/*` routes. A malformed body answers 400 with `{ error }`; any other failure answers 500 with the error as the body, without logging. */
 export function createApi(ctx: ApiContext): Handler {
-  const anyBot = botRoutes(ctx);
+  const anyBot = {
+    ...botRoutes(ctx),
+    ...eventTokenRoutes(ctx),
+    ...eventSourceRoutes(ctx),
+    ...needsYouRoutes(ctx),
+  };
   const openBot = { ...chatRoutes(ctx), ...fileRoutes(ctx) };
 
   async function api(

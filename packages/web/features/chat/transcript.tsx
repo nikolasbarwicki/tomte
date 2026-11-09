@@ -7,6 +7,7 @@ import {
   BotIcon,
   CircleAlertIcon,
   CircleCheckIcon,
+  CircleOffIcon,
   GlobeIcon,
   HandIcon,
   MessageCircleQuestionIcon,
@@ -18,6 +19,7 @@ import { useState, useTransition } from "react";
 import { Streamdown } from "streamdown";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
+import { RelayStatus } from "@/components/relay-status.tsx";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -64,6 +66,7 @@ import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
 import { answer, answerWait, cancelSend } from "./api.ts";
+import { EXTERNAL_ICONS } from "./external-icons.ts";
 import { bindMentions } from "./mentions.ts";
 
 type ToolItem = Extract<Item, { kind: "tool" }>;
@@ -135,6 +138,7 @@ export function Transcript({
               >
                 <RowView
                   row={row}
+                  botId={bot.id}
                   running={busy && i === rows.length - 1}
                   bots={bots}
                   onShowBrowser={onShowBrowser}
@@ -168,11 +172,13 @@ export function Transcript({
 function RowView({
   row,
   running,
+  botId,
   bots,
   onShowBrowser,
 }: {
   row: Row;
   running: boolean;
+  botId: string;
   bots: BotSummary[];
   onShowBrowser: () => void;
 }) {
@@ -228,6 +234,29 @@ function RowView({
           </MarkerContent>
         </Marker>
       );
+    case "external": {
+      const Icon = EXTERNAL_ICONS[row.eventKind];
+      return (
+        <div className="grid gap-1">
+          <Marker>
+            <MarkerIcon>
+              <Icon />
+            </MarkerIcon>
+            <MarkerContent className="truncate">
+              <span className="text-foreground font-semibold">{row.source}</span> · {row.title}
+            </MarkerContent>
+            <span className="ml-auto shrink-0 text-xs">
+              {row.state === "open" ? "in Needs you" : "handled"}
+            </span>
+          </Marker>
+          {row.relay && (
+            <p className="text-muted-foreground px-1 text-xs break-words">
+              <RelayStatus botId={botId} id={row.id} relay={row.relay} />
+            </p>
+          )}
+        </div>
+      );
+    }
     case "handoff":
       return <HandoffCard item={row} other={bots.find((b) => b.id === row.botId)} />;
     case "wait":
@@ -345,6 +374,7 @@ function Request({
   title,
   description,
   answer,
+  expired,
   actions,
   footer,
 }: {
@@ -352,10 +382,12 @@ function Request({
   title: React.ReactNode;
   description?: React.ReactNode;
   answer: string | undefined;
+  /** Nobody is waiting for an answer any more. */
+  expired?: boolean | undefined;
   actions?: React.ReactNode;
   footer?: React.ReactNode;
 }) {
-  const open = answer === undefined;
+  const open = answer === undefined && !expired;
   return (
     <ItemRow variant={open ? "outline" : "muted"} size="sm">
       <ItemMedia variant="icon" className={cn(open && "text-primary")}>
@@ -373,7 +405,15 @@ function Request({
         actions && <ItemActions className="flex-wrap">{actions}</ItemActions>
       ) : (
         <ItemActions className="text-muted-foreground text-xs">
-          <CircleCheckIcon className="size-3.5" /> {answer}
+          {expired && answer === undefined ? (
+            <>
+              <CircleOffIcon className="size-3.5" /> No longer waiting: its turn ended
+            </>
+          ) : (
+            <>
+              <CircleCheckIcon className="size-3.5" /> {answer}
+            </>
+          )}
         </ItemActions>
       )}
       {footer && <ItemFooter>{footer}</ItemFooter>}
@@ -436,36 +476,58 @@ function WaitCard({
 
 function AskCard({ item }: { item: Extract<Item, { kind: "ask" }> }) {
   const [reply, setReply] = useState("");
-  const [pending, start] = useTransition();
+  const { pending, pressed, press } = useCardCommand();
+  const form = (
+    <form
+      className="flex w-full gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        press("answer", () => answer(item.id, reply));
+      }}
+    >
+      <Input
+        autoFocus={!item.options?.length}
+        placeholder="Your answer"
+        value={reply}
+        onChange={(e) => setReply(e.target.value)}
+      />
+      <Button type="submit" disabled={pending || !reply.trim()}>
+        {pending && pressed === "answer" && <Spinner data-icon="inline-start" />}
+        Answer
+      </Button>
+    </form>
+  );
   return (
     <Request
       icon={<MessageCircleQuestionIcon />}
       title="The bot asks"
       description={item.question}
       answer={item.answer}
+      expired={item.expired}
       footer={
-        item.answer === undefined && (
-          <form
-            className="flex w-full gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              start(async () => {
-                await answer(item.id, reply);
-              });
-            }}
-          >
-            <Input
-              autoFocus
-              placeholder="Your answer"
-              value={reply}
-              onChange={(e) => setReply(e.target.value)}
-            />
-            <Button type="submit" disabled={pending || !reply.trim()}>
-              {pending && <Spinner data-icon="inline-start" />}
-              Answer
-            </Button>
-          </form>
-        )
+        item.answer === undefined &&
+        !item.expired &&
+        (item.options?.length ? (
+          <div className="flex w-full flex-col gap-2">
+            <div className="flex flex-wrap gap-2">
+              {item.options.map((option, i) => (
+                <Button
+                  key={i}
+                  size="sm"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => press(`option-${i}`, () => answer(item.id, option))}
+                >
+                  {pending && pressed === `option-${i}` && <Spinner data-icon="inline-start" />}
+                  {option}
+                </Button>
+              ))}
+            </div>
+            {form}
+          </div>
+        ) : (
+          form
+        ))
       }
     />
   );

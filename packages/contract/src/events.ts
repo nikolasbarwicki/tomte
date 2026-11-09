@@ -31,6 +31,66 @@ export const HandoffStatus = z.enum([
 ]);
 export type HandoffStatus = z.infer<typeof HandoffStatus>;
 
+/**
+ * What an external process reports about one event source. `progress` only refreshes the source's work snapshot and
+ * never wakes the bot; every other kind does and, until the user acts on it or the source resolves it, needs the user.
+ * `blocked`: the sender cannot go on until someone unblocks it; unlike `question` it offers no answers to pick from.
+ */
+export const ExternalEventKind = z.enum([
+  "question",
+  "blocked",
+  "failed",
+  "done",
+  "stopped",
+  "progress",
+]);
+export type ExternalEventKind = z.infer<typeof ExternalEventKind>;
+
+/** Where an external event stands: `open` needs the user; `info` is a `progress` event, which never does. */
+export const ExternalEventState = z.enum(["open", "acted", "dismissed", "resolved", "info"]);
+export type ExternalEventState = z.infer<typeof ExternalEventState>;
+
+/**
+ * Whether the user's answer to an event that names a reply target reached it (ADR-0008). `pending`: the host's relay adapter
+ * is running. `relayed`: it exited 0. `failed`: it did not run, failed or timed out, or the host stopped meanwhile; `error`
+ * says why, in a line, and the user can retry. `attempts` counts the times it was started.
+ */
+export const RelayState = z.enum(["pending", "relayed", "failed"]);
+export type RelayState = z.infer<typeof RelayState>;
+export const Relay = z.object({
+  state: RelayState,
+  attempts: z.number(),
+  error: z.string().exactOptional(),
+});
+export type Relay = z.infer<typeof Relay>;
+
+/** The sender an external event names, for example one feature's coordinator. */
+export const EventSource = z.object({
+  id: z.string().min(1).max(200),
+  label: z.string().min(1).max(200),
+});
+export type EventSource = z.infer<typeof EventSource>;
+
+export const WorkItemState = z.enum(["queued", "running", "review", "needs_you", "done", "failed"]);
+export type WorkItemState = z.infer<typeof WorkItemState>;
+
+/** One unit of an event source's work, such as a ticket; `group` clusters items, such as a wave. */
+export const WorkItem = z.object({
+  id: z.string().min(1).max(200),
+  label: z.string().max(200),
+  group: z.string().max(200).optional(),
+  summary: z.string().max(2000).optional(),
+  state: WorkItemState,
+});
+export type WorkItem = z.infer<typeof WorkItem>;
+
+/** The latest step and items an event source reported; each new `work` replaces the previous one. */
+export const WorkSnapshot = z.object({
+  step: z.string().max(200),
+  items: z.array(WorkItem).max(200),
+});
+export type WorkSnapshot = z.infer<typeof WorkSnapshot>;
+
 export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("user"), text: z.string(), mentions: Mentions.exactOptional() }),
   /** A user message sent while the bot was busy; it waits as pending until `dequeued`, then shows as `user` if it ran. */
@@ -44,7 +104,14 @@ export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text_start") }),
   z.object({ type: z.literal("delta"), text: z.string() }),
   z.object({ type: z.literal("tool"), name: z.string(), input: z.string() }),
-  z.object({ type: z.literal("ask"), id: z.string(), question: z.string() }),
+  /** The bot is waiting for an answer. `eventId` names the external needs-you item the bot asked about; answering resolves it. */
+  z.object({
+    type: z.literal("ask"),
+    id: z.string(),
+    question: z.string(),
+    options: z.array(z.string()).exactOptional(),
+    eventId: z.string().exactOptional(),
+  }),
   z.object({
     type: z.literal("approve"),
     id: z.string(),
@@ -53,6 +120,8 @@ export const ServerEvent = z.discriminatedUnion("type", [
     input: z.string(),
   }),
   z.object({ type: z.literal("answered"), id: z.string(), value: z.string() }),
+  /** A question linked to an external event can no longer be answered, because its turn ended; the card stops offering answers. */
+  z.object({ type: z.literal("ask_expired"), id: z.string() }),
   /** The bot asked the user for something and is waiting for an answer; `wait_resolved` closes the card. */
   z.object({
     type: z.literal("wait"),
@@ -80,6 +149,26 @@ export const ServerEvent = z.discriminatedUnion("type", [
     title: z.string(),
     status: HandoffStatus,
     text: z.string(),
+  }),
+  /**
+   * A delivered external event, as one compact row. `progress` events never wake the bot, so they never show. `source` is the
+   * event source's label; `state` is what the stored event says now.
+   */
+  z.object({
+    type: z.literal("external"),
+    id: z.string(),
+    kind: ExternalEventKind.exclude(["progress"]),
+    source: z.string(),
+    title: z.string(),
+    state: ExternalEventState,
+    relay: Relay.exactOptional(),
+  }),
+  /** A row shown earlier left `open`, or its relay moved: the user acted on or dismissed the event, its source resolved it, or the answer's relay started, finished or failed. */
+  z.object({
+    type: z.literal("external_state"),
+    id: z.string(),
+    state: ExternalEventState,
+    relay: Relay.exactOptional(),
   }),
   z.object({
     type: z.literal("compacted"),
@@ -117,7 +206,18 @@ export type LastMessage = z.infer<typeof LastMessage>;
 /** `unseen`: the bot finished a turn the user has not looked at yet. */
 export const BotStatus = z.enum(["idle", "working", "unseen"]);
 export type BotStatus = z.infer<typeof BotStatus>;
-export const BotSummary = Bot.extend({ last: LastMessage.nullable(), status: BotStatus });
+/**
+ * `needsYou`: how many of the bot's external-event items are open, waiting for the user. `needsYouSources`: the labels of
+ * the sources they came from, the source of the newest open item first. `needsYouAt`: when the newest open item arrived
+ * (epoch ms), 0 when none is open. The desktop app's banner reads only these.
+ */
+export const BotSummary = Bot.extend({
+  last: LastMessage.nullable(),
+  status: BotStatus,
+  needsYou: z.number().int().nonnegative(),
+  needsYouSources: z.array(z.string()),
+  needsYouAt: z.number().nonnegative(),
+});
 export type BotSummary = z.infer<typeof BotSummary>;
 /** Every bot for the sidebar, most recently active first; lives outside chat history. */
 export const BotsEvent = z.object({ type: z.literal("bots"), bots: z.array(BotSummary) });
@@ -190,6 +290,52 @@ export const RoutinesEvent = z.object({
   routines: z.array(Routine),
 });
 export type RoutinesEvent = z.infer<typeof RoutinesEvent>;
+
+/** Where an event source stands, derived on the host from what it stored: a source never reports it. */
+export const FeatureStatus = z.enum([
+  "needs_you",
+  "blocked",
+  "failed",
+  "running",
+  "stopped",
+  "done",
+]);
+export type FeatureStatus = z.infer<typeof FeatureStatus>;
+
+/** One stored external event of a source, as the timeline shows it. */
+export const SourceEvent = z.object({
+  id: z.string(),
+  kind: ExternalEventKind,
+  title: z.string(),
+  body: z.string().exactOptional(),
+  options: z.array(z.string()).exactOptional(),
+  receivedAt: z.number(),
+  state: ExternalEventState,
+  relay: Relay.exactOptional(),
+});
+export type SourceEvent = z.infer<typeof SourceEvent>;
+
+/**
+ * One event source of a bot: its latest work snapshot (`null` until an event carries one), the status the host derives
+ * and its recent events, oldest first, with every open event whatever its age.
+ */
+export const WorkSource = z.object({
+  id: z.string(),
+  label: z.string(),
+  status: FeatureStatus,
+  lastEventAt: z.number(),
+  work: WorkSnapshot.nullable(),
+  events: z.array(SourceEvent),
+});
+export type WorkSource = z.infer<typeof WorkSource>;
+
+/** The open bot's live event sources, most recent first; lives outside chat history. */
+export const WorkEvent = z.object({
+  type: z.literal("work"),
+  botId: z.string(),
+  sources: z.array(WorkSource),
+});
+export type WorkEvent = z.infer<typeof WorkEvent>;
 
 export const ToolPolicy = z.enum(["off", "ask", "auto"]);
 export type ToolPolicy = z.infer<typeof ToolPolicy>;
@@ -336,6 +482,7 @@ export const HostEvent = z.union([
   MemoryEvent,
   FilesEvent,
   RoutinesEvent,
+  WorkEvent,
   BotsEvent,
   IntegrationsEvent,
   CredentialsEvent,

@@ -2,6 +2,8 @@
 // an event stream (`Bot`, `Routine`, `Integration`, ...) lives in events.ts, whichever endpoint returns it.
 import { z } from "zod";
 
+import { EventSource, ExternalEventKind, WorkSnapshot } from "./events.ts";
+
 /** The reasoning effort levels the host accepts at `/api/effort`; the Claude Agent SDK's `EffortLevel`. */
 export const EffortLevel = z.enum(["low", "medium", "high", "xhigh", "max"]);
 export type EffortLevel = z.infer<typeof EffortLevel>;
@@ -89,3 +91,78 @@ export type RevokeDeviceRequest = z.infer<typeof RevokeDeviceRequest>;
 /** The `/api/devices/pairing-code` response: a new single-use code, in groups of four, which is shown only here. */
 export const PairingCodeResponse = z.object({ code: z.string() });
 export type PairingCodeResponse = z.infer<typeof PairingCodeResponse>;
+
+/** The largest `/api/bots/<botId>/events` request body in bytes; a larger one gets 413. */
+export const MAX_EVENT_BODY_BYTES = 64 * 1024;
+
+/**
+ * A name that is safe to place in a program's argument list as an element of its own: letters, digits and `. _ : -`,
+ * 1 to 128 characters, not starting with `-` so it can never read as an option. Question ids, agents and sessions are these.
+ */
+export const SlotName = z
+  .string()
+  .regex(
+    /^[A-Za-z0-9._:][A-Za-z0-9._:-]{0,127}$/,
+    "letters, digits and . _ : - only, 1 to 128 characters, not starting with -",
+  );
+
+/**
+ * Where the answer to an event should go: `kind` names a relay adapter in the host's trusted configuration (ADR-0008),
+ * `agent` and `session` fill its slots. It names no command, argument or environment, and no other key is accepted.
+ */
+export const ReplyTarget = z
+  .object({
+    kind: z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/, "a lowercase name of up to 32 characters"),
+    agent: SlotName,
+    session: SlotName.optional(),
+  })
+  .strict();
+export type ReplyTarget = z.infer<typeof ReplyTarget>;
+
+/**
+ * The `/api/bots/<botId>/events` request: one external event. `key` dedupes per bot, so a retried post reaches the
+ * bot once. `options` are suggested answers to a `question`. `resolves` names keys of this source's open events to
+ * close. `work` replaces the source's work snapshot. `questionId` is the sender's id for the question; `reply` is where
+ * the user's answer is relayed to, when the host's operator configured a relay for its kind.
+ */
+export const ExternalEventInput = z
+  .object({
+    kind: ExternalEventKind,
+    key: z.string().min(1).max(200),
+    source: EventSource,
+    title: z.string().max(200),
+    body: z.string().max(8192).optional(),
+    options: z.array(z.string().min(1).max(200)).max(6).optional(),
+    resolves: z.array(z.string().min(1).max(200)).max(50).optional(),
+    work: WorkSnapshot.optional(),
+    questionId: SlotName.optional(),
+    reply: ReplyTarget.optional(),
+  })
+  .refine((e) => e.options === undefined || e.kind === "question", {
+    path: ["options"],
+    message: "only a question carries options",
+  });
+export type ExternalEventInput = z.infer<typeof ExternalEventInput>;
+
+/** The events route's answer: 202 with `duplicate: false` for a new event, 200 with `duplicate: true` for a key already seen. */
+export const ExternalEventPosted = z.object({ id: z.string(), duplicate: z.boolean() });
+export type ExternalEventPosted = z.infer<typeof ExternalEventPosted>;
+
+/** The `/api/bots/events-token` and `/api/bots/events-token/rotate` request. */
+export const EventTokenRequest = z.object({ botId: z.string().min(1) });
+export type EventTokenRequest = z.infer<typeof EventTokenRequest>;
+
+/** The `/api/bots/events/archive` request: one of the bot's event sources, by the id its events name. */
+export const ArchiveSourceRequest = z.object({
+  botId: z.string().min(1),
+  sourceId: z.string().min(1),
+});
+export type ArchiveSourceRequest = z.infer<typeof ArchiveSourceRequest>;
+
+/** The `/api/bots/events/dismiss` and `/api/bots/events/relay/retry` requests: one needs-you item of a bot, by its event id. */
+export const EventItemRequest = z.object({ botId: z.string().min(1), id: z.string().min(1) });
+export type EventItemRequest = z.infer<typeof EventItemRequest>;
+
+/** How an external process posts to one bot: the events route's URL and the bot's event token. */
+export const EventAccess = z.object({ url: z.string(), token: z.string() });
+export type EventAccess = z.infer<typeof EventAccess>;

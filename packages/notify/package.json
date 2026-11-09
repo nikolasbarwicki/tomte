@@ -1,0 +1,19 @@
+{
+  "name": "@claudebot/notify",
+  "private": true,
+  "bin": {
+    "claudebot-notify": "src/main.ts"
+  },
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@claudebot/contract": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/node": "^26.6.6"
+  }
+}

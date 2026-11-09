@@ -7,6 +7,7 @@ import type { z } from "zod";
 import type { Browser } from "../../browser/index.ts";
 import type { Credentials } from "../../credentials/index.ts";
 import type { DeviceAuth } from "../../device-auth/index.ts";
+import type { Events as ExternalEvents } from "../../events/index.ts";
 import type { ResolvedCli } from "../../harness/index.ts";
 import type { Integrations } from "../../integrations/index.ts";
 import type { Routines } from "../../routines/index.ts";
@@ -37,6 +38,8 @@ export interface ApiContext {
   /** Which device each request came from, and the responses still open for it. */
   sessions: DeviceSessions;
   events: EventStream;
+  /** External events and event tokens; `events` above is the page's own stream. */
+  externalEvents: ExternalEvents;
   /** Shows a path in the OS file manager; absent when the host cannot (`config.reveal` is off), so no request can spawn one. */
   reveal: ((path: string, log: (line: string) => void) => void) | undefined;
   /** Everything a page receives when it connects. */

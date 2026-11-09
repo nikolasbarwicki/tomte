@@ -16,6 +16,7 @@ export const useChat = () => useHost((s) => s.chat);
 export const useMemory = () => useHost((s) => s.memory);
 export const useFiles = () => useHost((s) => s.files);
 export const useRoutines = () => useHost((s) => s.routines);
+export const useWork = () => useHost((s) => s.work);
 export const useIntegrations = () => useHost((s) => s.integrations);
 export const useCredentials = () => useHost((s) => s.credentials);
 

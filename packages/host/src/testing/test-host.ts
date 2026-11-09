@@ -49,6 +49,8 @@ export interface HandoffHost {
   dataRoot: string;
   /** Creates a bot; its first session id is its bot id. */
   createBot(name: string, purpose?: string): string;
+  /** Names of the secrets the host holds in its (in-memory) secret store. */
+  secretNames(): string[];
   /** An MCP client connected to the bots endpoint with a token from a fresh bots lease for `botId`. */
   actAs(botId: string): Promise<{ call: BotCaller; token: string; url: string; revoke(): void }>;
   /** Texts the fake CLI received for the bot's first session, oldest first. */
@@ -61,10 +63,25 @@ export interface HandoffHost {
     env: Record<string, string>;
     argv: string[];
   }[];
+  /** The `set_model` and `apply_flag_settings` control requests the fake CLI received, oldest first. */
+  controls(): { subtype: string; model?: string; settings?: { effortLevel?: string } }[];
   /** The browser engine invocations the fake engine recorded, oldest first. */
   engineCalls(): { argv: string[] }[];
   /** From now on, every message the fake CLI receives makes it call the host's `remember` tool with this line. */
   rememberOnMessage(scope: "user" | "bot", line: string): void;
+  /**
+   * From now on, every message the fake CLI receives makes it call the host's `ask_user` tool with these arguments.
+   * `claim.eventId` is the `event_id` it passes, `claim.delivered` makes it pass the external event wrapped in the message that triggered the call (as a bot following the host's instructions would), `claim.afterHold` makes the call wait until `release()`, and `claim.crash` makes the CLI exit with the question unanswered.
+   */
+  askOnMessage(
+    question: string,
+    options?: string[],
+    claim?: { eventId?: string; delivered?: boolean; afterHold?: boolean; crash?: boolean },
+  ): void;
+  /** From now on, messages the fake CLI receives no longer make it call `ask_user`. */
+  stopAsking(): void;
+  /** The text of each `ask_user` or `remember` result the fake CLI got back from the host, oldest first. */
+  toolResults(): string[];
   /** The executable the host runs as its Claude CLI, and what its `auth status` reports from now on. */
   readonly cliPath: string;
   setSignedIn(signedIn: boolean): void;
@@ -176,6 +193,7 @@ export async function startHandoffHost(
       return server.agentUrl;
     },
     deviceToken,
+    secretNames: () => [...secrets.entries.keys()],
     authHeaders: asDevice(deviceToken),
     cwd,
     dataRoot: config.dataRoot,
@@ -202,9 +220,27 @@ export async function startHandoffHost(
         .filter((m: { sessionId: string }) => m.sessionId === botId)
         .map((m: { text: string }) => m.text),
     launches: () => lines(join(claudeDir, "launches.jsonl")),
+    controls: () => lines(join(claudeDir, "controls.jsonl")),
     engineCalls: () => lines(join(fakeDir, "calls.jsonl")),
     rememberOnMessage: (scope, line) =>
       writeFileSync(join(claudeDir, "remember.json"), JSON.stringify({ scope, line })),
+    askOnMessage: (question, options, claim) =>
+      writeFileSync(
+        join(claudeDir, "ask.json"),
+        JSON.stringify({
+          question,
+          ...(options && { options }),
+          ...(claim?.eventId !== undefined && { event_id: claim.eventId }),
+          ...(claim?.delivered && { linkDelivered: true }),
+          ...(claim?.afterHold && { afterHold: true }),
+          ...(claim?.crash && { crash: true }),
+        }),
+      ),
+    stopAsking: () => rmSync(join(claudeDir, "ask.json"), { force: true }),
+    toolResults: () =>
+      lines(join(claudeDir, "tool-results.jsonl")).map(
+        (m: { result: { content: { text: string }[] } }) => m.result.content[0]?.text ?? "",
+      ),
     cliPath,
     setSignedIn: (signedIn) =>
       signedIn

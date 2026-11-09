@@ -31,7 +31,8 @@ import { appendMemory, readMemory, writeMemory, type MemoryPaths } from "./memor
 
 /** Decisions the host (its UI/user) owns. */
 export interface HostDelegate {
-  askUser(question: string): Promise<string>;
+  /** `eventId` is the external event the bot says the question is about; the host decides whether to believe it. */
+  askUser(question: string, options?: string[], eventId?: string): Promise<string>;
   /** Bash, or file writes outside the thread's roots. */
   approve(
     toolName: string,
@@ -51,6 +52,8 @@ export interface ThreadEnv {
   claude: ClaudeAccess;
   integrations: IntegrationsSource;
   hostServers: HostServersSource;
+  /** Extra environment variables for the Claude CLI of one bot, such as where it posts external events. Read whenever a session opens. */
+  botEnv: (botId: string) => Promise<Record<string, string>>;
   /** Approve every tool call instead of asking the user; off when `HostConfig.askApproval` is set. */
   approveAll: boolean;
 }
@@ -67,6 +70,8 @@ export interface ThreadOptions {
   integrations?: IntegrationsSource;
   /** Leases the host servers (such as the browser endpoint) for each live query; released when that query closes. */
   hostServers?: () => HostServerLease;
+  /** Extra environment variables for the CLI, added to `claude.env()`; read whenever a live query opens. */
+  env?: () => Promise<Record<string, string>>;
   model?: string;
   idleMs?: number;
   /** Run every tool without asking the delegate. */
@@ -83,6 +88,7 @@ export interface ThreadOptions {
 const HOST_INSTRUCTIONS = [
   "You are embedded in a local host application.",
   "When you need a decision or information from the user, call the mcp__host__ask_user tool instead of guessing.",
+  "When you ask because of an external event delivered to you (an <<<EXTERNAL_EVENT ... id=ID ...>>> message), pass that ID as event_id so the user's answer closes the event.",
   "",
   "## Memory",
   "Two memory files are loaded into this prompt whenever the session opens:",
@@ -204,11 +210,24 @@ export class Thread {
       tools: [
         tool(
           "ask_user",
-          "Ask the human user a question and wait for their answer.",
-          { question: z.string() },
-          async ({ question }) => {
+          "Ask the human user a question and wait for their answer. The user can always answer in free text; options adds up to 6 suggested answers they can pick with one click.",
+          {
+            question: z.string(),
+            options: z
+              .array(z.string().min(1))
+              .max(6)
+              .optional()
+              .describe("Suggested answers, shown as buttons; a click answers with the label"),
+            event_id: z
+              .string()
+              .optional()
+              .describe(
+                "The id of the external event this question is about, from its <<<EXTERNAL_EVENT>>> header; answering then closes that event",
+              ),
+          },
+          async ({ question, options, event_id }) => {
             log(`[host] ask_user invoked in-process: ${JSON.stringify(question)}`);
-            const answer = await delegate.askUser(question);
+            const answer = await delegate.askUser(question, options, event_id);
             return { content: [{ type: "text", text: answer }] };
           },
         ),
@@ -274,7 +293,7 @@ export class Thread {
           mcpServers: { host: this.hostServer() },
           ...launch.options,
           model: this.model,
-          env: this.o.claude.env(),
+          env: { ...this.o.claude.env(), ...(await this.o.env?.()) },
           stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
         },
       });

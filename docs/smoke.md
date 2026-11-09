@@ -1,0 +1,50 @@
+# Browser smokes of the answer path
+
+Unit and host-seam tests passed while the real answer workflows were broken, so the answer path (ADR-0007 events, ADR-0008 relay) also has smokes that drive the built web UI in a real browser. They are scripts, not part of `bun run check`: they need Chrome and a web build.
+
+| Command                      | What it runs                                                                                                                                                                              |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run smoke:answers`      | The end-to-end round trip (below): the real `claudebot-notify`, the real UI, a fake `herdr`.                                                                                              |
+| `bun run smoke:answer-ui`    | Needs you `Answer…` → edit → Send: the draft, the item's close, a failed and a queued send, replaced and emptied drafts.                                                                  |
+| `bun run smoke:needs-you-ui` | Needs you chips, keyboard triage and free text while the bot waits on a question about the item; idle and busy bots; a turn that died; a second page racing the first.                    |
+| `bun run smoke:blocked-ui`   | A `blocked` report from the sender: Needs you, Work, `Unblock…` and `Status`.                                                                                                             |
+| `bun run smoke:ui`           | The four above in that order, with one web build. It stops at the first failing smoke and exits with that smoke's status; nothing after a failure runs and nothing is reported as passed. |
+
+## Prerequisites
+
+- Google Chrome (or Chromium). macOS's `/Applications/Google Chrome.app` is the default; `CHROME_PATH` names another binary. Playwright drives it headless in a fresh profile; no browser download is involved.
+- `bun install` has been run. Each smoke runs `vite build` of `packages/web` into its own run directory (`smoke:ui` builds once and shares it through `SMOKE_WEB_DIST`).
+- No network, model, keychain, Herdr, OMP or Claudebot app is needed, and none is touched.
+
+## The round trip (`smoke:answers`)
+
+One fresh run directory under the OS temp folder holds everything: a temporary data root with an in-memory database and secrets, the fake Claude CLI (`packages/host/src/testing/fake-claude.ts`), the web build, a `relay.json` whose only adapter `herdr` runs a fake `herdr` executable, and that executable's log. The fake appends `{ "argv": [...], "exit": N }` to a JSON-lines file for every call and exits with the status the smoke sets. The adapter's arguments are `agent prompt {agent} {message} --session {session}`, the shape of `herdr agent prompt <agent> "<answer> (<question id>)" --session <session>`. The reports are posted by the real `claudebot-notify` (`packages/notify/src/main.ts`) as a subprocess with the bot's events URL and token in its environment, a reply target and a question id.
+
+| Flow                                                                                              | Proven in the browser and in the recorded argument lists                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1. A report, then `Answer…` → edit → Send                                                         | The report shows in Needs you, in Work and in the transcript; Send is accepted as an answer to that item; both badges and the bar clear; one call `agent prompt coord "<answer> (Q-1)" --session default`; the item stays handled and delivered after a reload.                                                                      |
+| 2. A transcript ask chip for an ask the bot raised about the report; 3. free text on such an ask  | The ask receives the value, the item closes on the page and after a reload, one call per answer, with an explicit session (`--reply-session`) and with the default one.                                                                                                                                                              |
+| 4. An ordinary ask, answered while an unrelated question is open                                  | The unrelated question stays open and nothing is relayed.                                                                                                                                                                                                                                                                            |
+| 5. A Needs-you answer (free text, and an option chip) while the bot holds a genuinely pending ask | The host resolves the ask; no chat message is created or queued; the draft's `<source> · <title>: ` prefix is not part of the relayed text; one call each.                                                                                                                                                                           |
+| 6. A busy bot                                                                                     | The answer is reported as queued, the item and badges stay open, the page shows no relay result and the fake `herdr` is not called until the answer reaches the bot; then exactly one call.                                                                                                                                          |
+| 7. `blocked`                                                                                      | Needs you, Work "Blocked", `Unblock…` → Send closes it; with no question id the message is the answer alone.                                                                                                                                                                                                                         |
+| 8. A failing relay                                                                                | The fake exits 3: the page says "Reply not delivered" with the exit status, also after a reload; after Retry there is exactly one more call, it succeeds, and a Retry replayed afterwards runs nothing.                                                                                                                              |
+| 9. Duplicates                                                                                     | A double click and two raw requests at once (a second device): exactly one is accepted and the fake is called once; the second tab sees the item close; a late replay is 409, a replayed ask answer 404, a repeated report `ok (duplicate)`.                                                                                         |
+| 10. Injection                                                                                     | An answer with quotes, newlines, `$(touch …)`, backticks, `;`, `&&`, `\|`, `$HOME`, `*` and a line starting with `-` arrives as one argument, byte for byte, and the canary files do not exist (they are in the run directory, never in `/tmp`). The sender and the events route refuse a reply target or session with shell syntax. |
+| 11. An adapter kind that is not configured; an item without a target                              | The first shows its failure and runs nothing; the second runs nothing and shows no relay line.                                                                                                                                                                                                                                       |
+
+The smoke ends by printing every recorded argument list.
+
+## Failures and artifacts
+
+A failed check throws, the smoke exits non-zero (and `smoke:ui` exits with the same status), and the **run directory is kept**; its path is the last line printed. It holds `checks.log` (every step and check), `page-console.log` (console, page errors and failed requests of every page), `host.log` (what the host wrote to stderr), `failure-page<N>.png` for every open page, `shots/` (screenshots taken at key steps), `error.txt`, and the smoke's own files: for `smoke:answers`, `herdr-argv.jsonl`, `relay.json` and the fake. A passing smoke removes its run directory and nothing else: it never touches a process or a file it did not start or create. `SMOKE_KEEP=1` keeps the directory of a passing run too, with the same logs.
+
+The harness shared by the four smokes is `scripts/smoke-kit.ts`; add a new browser smoke on top of it instead of repeating the build, host and browser setup.
+
+## What they do not cover
+
+- No Electron shell, tray, desktop notification, login item or OS dialog: the page is served by the host's client listener and driven in plain headless Chrome.
+- No real `herdr`, OMP, coordinator or model: the relay runs a fake program, the bot is the fake Claude CLI. That an actual agent receives and understands the prompt is not proven.
+- Remote mode and the Origin/token boundaries are covered by the host tests, not here. Timeouts and a host that dies mid-relay (delivery unknown) are covered by `packages/host/src/events/relay*.test.ts`.
+- The sender is run as a Bun subprocess by path with the route in its environment. Its config-file and project-routing modes are covered by `packages/notify` tests.
+- Only desktop Chrome at 1400×900; no mobile layout.

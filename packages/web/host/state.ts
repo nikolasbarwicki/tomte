@@ -9,6 +9,7 @@ import type {
   MemoryScope,
   RoutinesEvent,
   ServerEvent,
+  WorkEvent,
 } from "@claudebot/contract/events";
 
 import { reduce, type Item } from "./transcript.ts";
@@ -26,12 +27,13 @@ export type HostState = {
   publicInfo: PublicHostInfo | undefined;
   /** Undefined until the host's first bots event arrives. */
   bots: BotSummary[] | undefined;
-  /** The bot whose chat the host is streaming; `chat`, `memory`, `files` and `routines` describe it. */
+  /** The bot whose chat the host is streaming; `chat`, `memory`, `files`, `routines` and `work` describe it. */
   openBotId: string | undefined;
   chat: { items: Item[]; busy: boolean; context: ContextEvent | undefined };
   memory: Record<MemoryScope, string>;
   files: FilesEvent;
   routines: RoutinesEvent | undefined;
+  work: WorkEvent | undefined;
   integrations: Integration[];
   credentials: CredentialEntry[];
 };
@@ -45,6 +47,7 @@ export const initialHostState: HostState = {
   memory: { user: "", bot: "" },
   files: { type: "files", dir: "", files: [] },
   routines: undefined,
+  work: undefined,
   integrations: [],
   credentials: [],
 };
@@ -66,6 +69,8 @@ export function applyEvent(s: HostState, e: HostEvent): HostState {
       return { ...s, files: e };
     case "routines":
       return { ...s, routines: e };
+    case "work":
+      return { ...s, work: e };
     case "bots":
       return { ...s, bots: e.bots };
     case "reset":
@@ -85,6 +90,7 @@ function applyChatEvent(
   const busy =
     e.type === "user" ||
     e.type === "routine" ||
+    e.type === "external" ||
     (e.type === "handoff" && e.direction === "received")
       ? true
       : e.type === "done" || e.type === "error"

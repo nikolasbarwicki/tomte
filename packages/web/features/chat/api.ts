@@ -1,8 +1,5 @@
 import { act } from "@/host/api.ts";
 
-export const sendMessage = (text: string, mentions: string[]) =>
-  act("/api/send", { text, mentions });
-
 export const cancelSend = (id: string) => act("/api/send/cancel", { id });
 
 export const newSession = () => act("/api/session/new", {});
@@ -16,3 +13,7 @@ export const answerWait = (id: string, action: string) => act("/api/waits/answer
 
 /** Answers a question or permission prompt: free text, or "allow" / "deny". */
 export const answer = (id: string, value: string) => act("/api/answer", { id, value });
+
+/** Drops a needs-you item without acting on it. */
+export const dismissItem = (botId: string, id: string) =>
+  act("/api/bots/events/dismiss", { botId, id });
