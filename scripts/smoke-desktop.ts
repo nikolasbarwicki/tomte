@@ -12,6 +12,7 @@ import { join } from "node:path";
 //      fixture, a running bot turn, then `kill -9` of the Electron main process;
 //   3. background (DESK-03): closing the window leaves the host running and a routine fires; the tray's state and menu
 //      handlers; the host killed alone and restarted from the tray; the tray's Quit with a real engine and Chrome running;
+//      the needs-you banner (EE-08): events posted while the window is hidden, with the notifier stubbed;
 //   4. relaunch on the same data root started with `--hidden`, then a graceful `app.quit()`.
 // Start at login is recorded through CLAUDEBOT_DESKTOP_LOGIN_ITEM_FILE (a file, not the OS: nothing is ever registered).
 // The tray and its menu are read from the main process (`process.mainModule.exports.desktop`), and menu items are
@@ -507,6 +508,200 @@ async function main(): Promise<void> {
       alive(bgHost.pid) && !(await trayView(bg)).visible,
       "the host is still alive and the window is still hidden after the run",
     );
+
+    // ---- 3b. desktop banner (EE-08): needs-you rises while the window is hidden -------------------------------------
+    console.log(
+      "\n[3b] desktop banner: notes are recorded through a stub of the banner's notifier (no OS banner, no OS permission)",
+    );
+    // The recorder replaces `desktop.banner.notifier.show`, the one place the app hands a note to Electron's Notification.
+    // The real OS banner path and its permission prompt are never exercised here; a click is a call of the `onClick`
+    // handler the app attached to the note.
+    const stubbed = await bg.app.evaluate(() => {
+      type Note = { title: string; body: string; onClick: () => void };
+      type Recorded = Note & { closed: boolean };
+      const d = (
+        process as unknown as {
+          mainModule: {
+            exports: {
+              desktop: { banner?: { notifier: { show: (n: Note) => { close: () => void } } } };
+            };
+          };
+        }
+      ).mainModule.exports.desktop;
+      const g = globalThis as unknown as { notes: Recorded[] };
+      g.notes = [];
+      if (!d.banner) return false;
+      d.banner.notifier.show = (note) => {
+        const recorded: Recorded = { ...note, closed: false };
+        g.notes.push(recorded);
+        return { close: () => void (recorded.closed = true) };
+      };
+      return true;
+    });
+    check(stubbed, "the banner's notifier is replaced by a recording stub in the main process");
+    const notes = () =>
+      bg.app.evaluate(() =>
+        (
+          globalThis as unknown as { notes: { title: string; body: string; closed: boolean }[] }
+        ).notes.map(({ title, body, closed }) => ({ title, body, closed })),
+      );
+    const clickNote = (index: number) =>
+      bg.app.evaluate(
+        (_electron, i) =>
+          (globalThis as unknown as { notes: { onClick: () => void }[] }).notes[i]!.onClick(),
+        index,
+      );
+    const pagePost = <T>(page: typeof bg.page, path: string, body: object) =>
+      page.evaluate(
+        async ([p, b]) => {
+          const r = await fetch(p as string, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(b),
+          });
+          return (await r.json()) as T;
+        },
+        [path, body] as const,
+      );
+    const builder = await pagePost<{ id: string }>(bg.page, "/api/bots/new", {
+      name: "builder",
+      purpose: "",
+      face: "tuft",
+      stroke: "ink",
+    });
+    const tokens = new Map<string, string>();
+    for (const id of [setup.botId, builder.id])
+      tokens.set(
+        id,
+        (await pagePost<{ token: string }>(bg.page, "/api/bots/events-token", { botId: id })).token,
+      );
+    // Posted from this process like a coordinator would, with the bot's event token and no device credentials.
+    const postEvent = async (botId: string, over: Record<string, unknown>) => {
+      const res = await fetch(`${new URL(bg.page.url()).origin}/api/bots/${botId}/events`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${tokens.get(botId)}`,
+        },
+        body: JSON.stringify({
+          kind: "question",
+          source: { id: "auth-sso", label: "auth-sso" },
+          title: "Which database?",
+          ...over,
+        }),
+      });
+      return res.status;
+    };
+    const live = async () => (await notes()).filter((n) => !n.closed);
+    // The page's own count for a bot (sidebar badge), to know the host's slice reached the app before judging silence.
+    const badge = (botId: string) =>
+      bg.page.evaluate(
+        (id) =>
+          document
+            .querySelector(`a[href$="/bots/${id}"] [data-needs-you]`)
+            ?.getAttribute("data-needs-you") ?? "0",
+        botId,
+      );
+
+    const hiddenNow = await trayView(bg);
+    check(!hiddenNow.visible, "the window is hidden before the first event is posted");
+    check(
+      (await postEvent(setup.botId, { key: "q1" })) === 202,
+      "a question event posted to ticker was accepted",
+    );
+    await until("one banner for ticker", 15_000, async () => (await notes()).length === 1);
+    const firstNote = (await notes())[0]!;
+    check(
+      firstNote.title === "ticker: 1 thing needs you" &&
+        firstNote.body === "auth-sso" &&
+        !firstNote.closed,
+      `a rise while the window is hidden shows "${firstNote.title}" with the source label as body (${firstNote.body})`,
+    );
+    await postEvent(builder.id, {
+      key: "f1",
+      kind: "failed",
+      source: { id: "export-csv", label: "export-csv" },
+    });
+    await until("the banner to be replaced", 15_000, async () => (await notes()).length === 2);
+    const afterTwo = await notes();
+    check(
+      afterTwo[0]!.closed &&
+        !afterTwo[1]!.closed &&
+        afterTwo[1]!.title === "builder: 1 thing needs you" &&
+        afterTwo[1]!.body === "export-csv",
+      `a later rise replaced the banner, naming the bot with the newest item: "${afterTwo[1]!.title}" (the first was closed, ${(await live()).length} live)`,
+    );
+    check(
+      (await postEvent(builder.id, {
+        key: "f1",
+        kind: "failed",
+        source: { id: "export-csv", label: "export-csv" },
+      })) === 200,
+      "the same key posted again is a duplicate",
+    );
+    await sleep(1500);
+    check(
+      (await notes()).length === 2,
+      "a duplicate does not raise the count, so it shows no banner",
+    );
+
+    console.log("  no banner while the window is visible; showing the window closes the banner");
+    await clickTray(bg, "Open Claudebot");
+    await until("the window to show", 10_000, async () => (await trayView(bg)).visible);
+    await until(
+      "the banner to close with the window",
+      5_000,
+      async () => (await live()).length === 0,
+    );
+    check(true, "showing the window closed the banner (no live banner)");
+    await postEvent(setup.botId, { key: "q2", kind: "failed" });
+    await until(
+      "the page to count ticker's two items",
+      15_000,
+      async () => (await badge(setup.botId)) === "2",
+    );
+    await sleep(1500);
+    check(
+      (await notes()).length === 2,
+      "a rise while the window is visible showed no banner (the page itself counts it)",
+    );
+
+    console.log("  click: the banner reveals the window and opens the bot with the newest item");
+    await bg.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close());
+    await until("the window to be hidden", 10_000, async () => !(await trayView(bg)).visible);
+    await postEvent(builder.id, {
+      key: "q3",
+      source: { id: "export-csv", label: "export-csv" },
+    });
+    await until(
+      "the banner after the window was hidden again",
+      15_000,
+      async () => (await notes()).length === 3,
+    );
+    const thirdNote = (await notes())[2]!;
+    check(
+      thirdNote.title === "builder: 2 things need you" && (await live()).length === 1,
+      `one live banner: "${thirdNote.title}"`,
+    );
+    await clickNote(2);
+    await until("the window to be revealed on builder", 15_000, async () => {
+      const v = await trayView(bg);
+      return v.visible && bg.page.url().endsWith(`/bots/${builder.id}`);
+    });
+    check(
+      true,
+      "clicking the banner showed the window and navigated it to /bots/<builder>, the bot with the newest open item",
+    );
+    // The page was just loaded by the click, so a probe that lands mid-navigation is asked again.
+    const permission = await until("the reloaded page to answer", 15_000, () =>
+      bg.page.evaluate(() => Notification.requestPermission()).catch(() => undefined),
+    );
+    check(
+      permission === "denied",
+      `the web page still gets no notification permission (${permission}): no browser-tab notifications`,
+    );
+    await bg.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close());
+    await until("the window to be hidden again", 10_000, async () => !(await trayView(bg)).visible);
 
     console.log(
       "  tray menu handlers (invoked by calling the items' click, not by clicking the menu bar)",

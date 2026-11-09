@@ -25,6 +25,9 @@ const ALLOWED = [
   "CLAUDE_CODE_ENTRYPOINT",
   "CLAUDE_AGENT_SDK_VERSION",
   "CLAUDE_CODE_SDK_READS_SESSION_STATE",
+  // The bot's own events route and token (ADR-0007), added on top of the allowlist for that bot only.
+  "CLAUDEBOT_EVENTS_URL",
+  "CLAUDEBOT_EVENTS_TOKEN",
   // Added by the test host's /bin/sh wrapper around the fake CLI.
   "PWD",
   "SHLVL",

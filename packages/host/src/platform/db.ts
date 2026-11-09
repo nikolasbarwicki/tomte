@@ -147,6 +147,72 @@ ALTER TABLE devices ADD COLUMN launch INTEGER NOT NULL DEFAULT 0;  -- 1 for the 
 CREATE UNIQUE INDEX devices_one_launch ON devices(launch) WHERE launch = 1;
 `;
 
+const SCHEMA_V10 = `
+CREATE TABLE IF NOT EXISTS event_sources (
+  bot_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  work TEXT,                           -- JSON WorkSnapshot; each event that carries one replaces it
+  last_event_at INTEGER NOT NULL,
+  archived INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (bot_id, source_id)
+);
+CREATE TABLE IF NOT EXISTS external_events (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL,
+  key TEXT NOT NULL,                   -- the sender's dedupe key
+  source_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('question','failed','done','stopped','progress')),
+  title TEXT NOT NULL,
+  body TEXT,
+  options TEXT,                        -- JSON array of suggested answers; questions only
+  received_at INTEGER NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('open','acted','dismissed','resolved','info')),
+  UNIQUE (bot_id, key)
+);
+CREATE INDEX IF NOT EXISTS external_events_by_source ON external_events(bot_id, source_id, received_at);
+`;
+
+// The sidebar counts open items on every bots broadcast; this index holds only those rows.
+const SCHEMA_V11 = `
+CREATE INDEX IF NOT EXISTS external_events_open ON external_events(bot_id) WHERE state = 'open';
+`;
+
+// `blocked` joins the kinds of external event. SQLite cannot change a CHECK, so the table is rebuilt with its rows and
+// rowids (arrival order) kept; the indexes went with the old table and are made again.
+const SCHEMA_V12 = `
+CREATE TABLE external_events_v12 (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL,
+  key TEXT NOT NULL,                   -- the sender's dedupe key
+  source_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('question','blocked','failed','done','stopped','progress')),
+  title TEXT NOT NULL,
+  body TEXT,
+  options TEXT,                        -- JSON array of suggested answers; questions only
+  received_at INTEGER NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('open','acted','dismissed','resolved','info')),
+  UNIQUE (bot_id, key)
+);
+INSERT INTO external_events_v12 (rowid, id, bot_id, key, source_id, kind, title, body, options, received_at, state)
+  SELECT rowid, id, bot_id, key, source_id, kind, title, body, options, received_at, state FROM external_events ORDER BY rowid;
+DROP TABLE external_events;
+ALTER TABLE external_events_v12 RENAME TO external_events;
+CREATE INDEX external_events_by_source ON external_events(bot_id, source_id, received_at);
+CREATE INDEX external_events_open ON external_events(bot_id) WHERE state = 'open';
+`;
+
+// An answer's relay (ADR-0008): where it goes, the sender's question id and the relay's state, kept on the event so that
+// once-only survives retries and restarts. `relay_answer` is the accepted answer text, kept until a retry might need it.
+const SCHEMA_V13 = `
+ALTER TABLE external_events ADD COLUMN question_id TEXT;
+ALTER TABLE external_events ADD COLUMN reply TEXT;                 -- JSON ReplyTarget
+ALTER TABLE external_events ADD COLUMN relay_state TEXT NOT NULL DEFAULT 'none' CHECK (relay_state IN ('none','pending','relayed','failed'));
+ALTER TABLE external_events ADD COLUMN relay_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE external_events ADD COLUMN relay_error TEXT;
+ALTER TABLE external_events ADD COLUMN relay_answer TEXT;
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -162,6 +228,10 @@ export function migrate(db: Database): Database {
     SCHEMA_V7,
     SCHEMA_V8,
     SCHEMA_V9,
+    SCHEMA_V10,
+    SCHEMA_V11,
+    SCHEMA_V12,
+    SCHEMA_V13,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

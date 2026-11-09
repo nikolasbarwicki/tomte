@@ -140,6 +140,16 @@ export function AppSidebar({
                         <span className={cn("truncate", b.status === "unseen" && "font-semibold")}>
                           {b.name}
                         </span>
+                        {b.needsYou > 0 && (
+                          <span
+                            className="shrink-0 rounded-full bg-amber-500/15 px-1.5 text-[11px] font-medium text-amber-700 tabular-nums dark:text-amber-400"
+                            title={`${b.needsYou} ${b.needsYou === 1 ? "item needs" : "items need"} you`}
+                            aria-label={`${b.needsYou} ${b.needsYou === 1 ? "item needs" : "items need"} you`}
+                            data-needs-you={b.needsYou}
+                          >
+                            {b.needsYou}
+                          </span>
+                        )}
                         {b.last && (
                           <time
                             className={cn(

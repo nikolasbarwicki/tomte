@@ -22,11 +22,14 @@ import {
 } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
+import { sendMessage } from "@/host/api.ts";
+import { useWork } from "@/host/hooks.ts";
 import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
-import { sendMessage, setEffort, setModel } from "./api.ts";
+import { setEffort, setModel } from "./api.ts";
 import { bindMentions, type MentionTarget } from "./mentions.ts";
+import { needsYouItems } from "./model.ts";
 
 const botRoute = getRouteApi("/bots/$botId");
 
@@ -89,21 +92,43 @@ const MODELS = ["opus", "sonnet", "haiku"];
 export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] }) {
   const navigate = botRoute.useNavigate();
   const draft = botRoute.useSearch({ select: (s) => s.draft });
+  const draftEvent = botRoute.useSearch({ select: (s) => s.draftEvent });
   const [input, setInput] = useState(draft ?? "");
+  // The needs-you item the text answers: set with a draft from "Answer…", kept while it is edited, dropped when the draft is
+  // replaced or the text emptied. The host closes the item when the message reaches the bot, not before.
+  const [answering, setAnswering] = useState(draft === undefined ? undefined : draftEvent);
   const [caret, setCaret] = useState(input.length);
   const [picked, setPicked] = useState<MentionTarget[]>([]);
+  // The item still open: one handled elsewhere meanwhile is no longer answered, so the text goes out as a plain message.
+  const answered = needsYouItems(useWork(), bot.id).find((i) => i.id === answering);
   const [highlight, setHighlight] = useState(0);
   const [sending, startSending] = useTransition();
   const textarea = useRef<HTMLTextAreaElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
 
+  // A draft that arrives while the composer is open (the Needs you bar's "Answer…") replaces what was typed.
+  const [takenDraft, setTakenDraft] = useState(draft);
+  if (draft !== takenDraft) {
+    setTakenDraft(draft);
+    if (draft !== undefined) {
+      setInput(draft);
+      setCaret(draft.length);
+      setPicked([]);
+      setAnswering(draftEvent);
+    }
+  }
   // The draft is now this composer's own text; leave the caret after it so the user can edit or send.
-  const takeDraft = useEffectEvent(() => {
-    if (draft === undefined) return;
-    textarea.current?.setSelectionRange(draft.length, draft.length);
-    void navigate({ search: (prev) => ({ ...prev, draft: undefined }), replace: true });
+  const takeDraft = useEffectEvent((text: string) => {
+    textarea.current?.focus();
+    textarea.current?.setSelectionRange(text.length, text.length);
+    void navigate({
+      search: (prev) => ({ ...prev, draft: undefined, draftEvent: undefined }),
+      replace: true,
+    });
   });
-  useEffect(() => takeDraft(), []);
+  useEffect(() => {
+    if (draft !== undefined) takeDraft(draft);
+  }, [draft]);
 
   // A bot is mentioned only if it was picked from the menu and its `@Name` is still in the text; names are not unique, so the id
   // comes from the pick, and a hand-typed `@Name` stays plain text.
@@ -140,18 +165,22 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
     const text = input.trim();
     if (!text || sending) return;
     const sent = mentions;
+    const eventId = answered?.id;
     setInput("");
     setPicked([]);
     setCaret(0);
+    setAnswering(undefined);
     startSending(async () => {
       if (
         !(await sendMessage(
           text,
           sent.map((m) => m.id),
+          eventId,
         ))
       ) {
         setInput(text);
         setPicked(sent);
+        setAnswering(eventId);
       }
     });
   };
@@ -193,6 +222,11 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
               </button>
             ))}
           </div>
+        )}
+        {answered && (
+          <p className="text-muted-foreground truncate px-4 pb-1 text-xs">
+            Answering <span className="font-medium">{answered.source}</span> · {answered.title}
+          </p>
         )}
         <form
           className="@container"
@@ -248,6 +282,7 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
                 }}
                 onChange={(e) => {
                   setInput(e.target.value);
+                  if (!e.target.value.trim()) setAnswering(undefined);
                   setPicked(bindMentions(e.target.value, picked).mentions);
                   syncCaret(e.target);
                   setHighlight(0);

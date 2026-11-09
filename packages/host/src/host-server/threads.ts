@@ -7,8 +7,10 @@ export interface ThreadHooks {
   onMemory: (scope: MemoryScope, text: string) => void;
   /** True while a routine turn runs: questions and approvals are then answered without the user. */
   unattended(): boolean;
-  /** Shows the user a question or approval card and resolves with their answer. */
-  ask(event: (id: string) => ServerEvent): Promise<string>;
+  /** The external event a question is about: `claimed` when this bot's session was given it and it is still open, else undefined. */
+  ownedEvent(claimed: string | undefined): string | undefined;
+  /** Shows the user a question or approval card and resolves with their answer. `eventId` links the card to the external event its answer closes. */
+  ask(event: (id: string) => ServerEvent, eventId?: string): Promise<string>;
 }
 
 /** Opens a bot's Claude Code thread in the host. */
@@ -24,10 +26,20 @@ export function openBotThread(
     log: (l) => console.error(l),
     onMemory: hooks.onMemory,
     delegate: {
-      askUser: (question) =>
-        hooks.unattended()
-          ? headlessDelegate.askUser(question)
-          : hooks.ask((id) => ({ type: "ask", id, question })),
+      askUser: (question, options, claimed) => {
+        if (hooks.unattended()) return headlessDelegate.askUser(question);
+        const eventId = hooks.ownedEvent(claimed);
+        return hooks.ask(
+          (id) => ({
+            type: "ask",
+            id,
+            question,
+            ...(options && { options }),
+            ...(eventId && { eventId }),
+          }),
+          eventId,
+        );
+      },
       approve: async (tool, input, reason): Promise<PermissionResult> => {
         if (hooks.unattended()) return headlessDelegate.approve(tool, input, reason);
         const v = await hooks.ask((id) => ({

@@ -4,7 +4,7 @@ import { net, type BrowserWindow } from "electron";
 
 import { createConnectionsPages } from "./connections-page.ts";
 import { createConnectionsWindow } from "./connections-window.ts";
-import { createConnections, type ProfileView } from "./connections.ts";
+import { createConnections, type HostCredentials, type ProfileView } from "./connections.ts";
 import { createHostClient } from "./host-api.ts";
 import type { Navigation } from "./navigation.ts";
 import { createProfileStore } from "./profile-store.ts";
@@ -23,6 +23,8 @@ export interface DesktopConnections {
   start(): Promise<void>;
   /** The local host started, stopped or restarted: when `local` is the connection shown, shows it again as it now is. */
   localChanged(): Promise<void>;
+  /** What the event stream of the connection shown needs; see `Connections.credentials`. */
+  credentials(): Promise<HostCredentials | undefined>;
   onChange(listener: () => void): void;
 }
 
@@ -61,6 +63,7 @@ export function setupConnections(options: {
     list: () => connections.list(),
     openConnections: () => manager.open(),
     localChanged: () => connections.localChanged(),
+    credentials: () => connections.credentials(),
     onChange: (listener) => connections.onChange(listener),
     async connect(id) {
       try {

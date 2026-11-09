@@ -7,6 +7,7 @@ import { app } from "electron";
 import { installAppMenu } from "./app-menu.ts";
 import { keepInTray, type Background } from "./background.ts";
 import { registerConnectionsScheme } from "./connections-window.ts";
+import { setupBanner, type Notifier } from "./desktop-banner.ts";
 import { setupConnections } from "./desktop-connections.ts";
 import { createLoginItem } from "./electron-login-item.ts";
 import { hostBinaryPath } from "./host-binary.ts";
@@ -23,12 +24,13 @@ const REPO_ROOT = join(__dirname, "../../..");
 /** Quitting stops the host first: `before-quit` is held back until it has exited, then the app exits for real. Every way of quitting (tray, app menu, Cmd+Q, the OS) ends in `before-quit`. */
 let quit: "running" | "stopping" | "stopped" = "running";
 
-/** What a smoke test of the packaged app reads through this module's exports. Nothing in the app uses it. */
+/** What a smoke test of the packaged app reads through this module's exports; the one thing it changes is `banner.notifier.show`, to record notes instead of raising OS banners. */
 export const desktop: {
   supervisor?: Supervisor;
   tray?: DesktopTray;
   background?: Background;
   startAtLogin?: StartAtLogin;
+  banner?: { notifier: Notifier };
 } = {};
 
 function start(): void {
@@ -56,6 +58,7 @@ function start(): void {
     userData: app.getPath("userData"),
   });
   installAppMenu(connections);
+  const banner = setupBanner({ window, background, connections, log });
 
   const tray = createTray(join(__dirname, "assets"), {
     open: () => background.reveal(),
@@ -91,7 +94,7 @@ function start(): void {
   connections.onChange(render);
   render();
 
-  Object.assign(desktop, { supervisor, tray, background, startAtLogin });
+  Object.assign(desktop, { supervisor, tray, background, startAtLogin, banner });
   app.on("second-instance", () => background.reveal());
   app.on("activate", () => background.reveal());
   // The host starts first so the window shows "Starting" rather than "not running" while the saved connection is chosen.

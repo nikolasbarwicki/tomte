@@ -5,6 +5,7 @@
     { "path": "./packages/contract" },
     { "path": "./packages/desktop" },
     { "path": "./packages/host" },
+    { "path": "./packages/notify" },
     { "path": "./packages/web" }
   ]
 }

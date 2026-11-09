@@ -5,6 +5,7 @@ import { BotPanel } from "@/features/bots/index.ts";
 import { BrowserTab } from "@/features/browser/index.ts";
 import { ChatView } from "@/features/chat/index.ts";
 import { Routines } from "@/features/routines/index.ts";
+import { Work } from "@/features/work/index.ts";
 import { markSeen, openBot } from "@/host/api.ts";
 import { useBots, useOpenBotId } from "@/host/hooks.ts";
 
@@ -47,6 +48,7 @@ export const Route = createLazyRoute("/bots/$botId")({
         panel={({ onClose }) => (
           <BotPanel
             bot={bot}
+            work={<Work botId={bot.id} />}
             routines={<Routines botId={bot.id} />}
             browser={<BrowserTab bot={bot} />}
             onClose={onClose}

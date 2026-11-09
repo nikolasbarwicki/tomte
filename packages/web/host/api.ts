@@ -60,6 +60,34 @@ export async function act(path: string, body: unknown): Promise<boolean> {
   return false;
 }
 
+/** What the host did with a message: `answered` a question the bot was waiting on, `sent` it to the bot, or `queued` it until the bot is free. */
+export type SendOutcome = "answered" | "sent" | "queued";
+
+/**
+ * Sends a chat message to the open bot, as the composer does; `mentions` are the ids of bots it hands off to. `eventId` is the
+ * needs-you item the message answers: the host resolves the bot's pending question about it (with `answer`, or the text), or
+ * sends the message, and closes the item once the bot has it, never while the message only waits in the queue.
+ * Resolves to what happened, or `undefined` when the host refused it (shown as a toast).
+ */
+export async function sendMessage(
+  text: string,
+  mentions: string[],
+  eventId?: string,
+  answer?: string,
+): Promise<SendOutcome | undefined> {
+  const res = await post("/api/send", {
+    text,
+    mentions,
+    ...(eventId !== undefined && { eventId }),
+    ...(answer !== undefined && { answer }),
+  });
+  if (!res.ok) {
+    toast.error(await errorOf(res));
+    return undefined;
+  }
+  return ((await res.json()) as { outcome: SendOutcome }).outcome;
+}
+
 /** Asks the host to stream `botId`'s chat; a no-op when it already is. */
 export function openBot(botId: string): void {
   if (botId !== hostStore.get().openBotId) void act("/api/open", { botId });

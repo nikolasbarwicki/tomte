@@ -29,13 +29,13 @@ import {
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useFiles, useMemory, usePublicHostInfo, useRoutines } from "@/host/hooks.ts";
+import { useFiles, useMemory, usePublicHostInfo, useRoutines, useWork } from "@/host/hooks.ts";
 import { dateTime, fileSize } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
 
 import { deleteFile, downloadUrl, revealFile } from "./api.ts";
 
-export const PANEL_TABS = ["memory", "files", "routines", "browser"] as const;
+export const PANEL_TABS = ["work", "memory", "files", "routines", "browser"] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
 const isPanelTab = (v: unknown): v is PanelTab => PANEL_TABS.some((t) => t === v);
 
@@ -46,17 +46,37 @@ const useCanReveal = () => usePublicHostInfo()?.capabilities.reveal === true;
 
 export function BotPanel({
   bot,
+  work,
   routines,
   browser,
   onClose,
 }: {
   bot: BotSummary;
+  work: ReactNode;
   routines: ReactNode;
   browser: ReactNode;
   onClose: () => void;
 }) {
   const navigate = botRoute.useNavigate();
-  const tab = botRoute.useSearch({ select: (s) => s.panel ?? "memory" });
+  const explicitTab = botRoute.useSearch({ select: (s) => s.panel });
+  const botWork = useWork();
+  // Work leads once the bot has sources; before that it comes last, so the events URL stays one tab away.
+  const hasSources = botWork?.botId === bot.id && botWork.sources.length > 0;
+  const tab = explicitTab ?? (hasSources ? "work" : "memory");
+  const workTrigger = (
+    <TabsTrigger value="work">
+      Work
+      {bot.needsYou > 0 && (
+        <span
+          className="rounded-full bg-amber-500/15 px-1.5 text-xs font-medium text-amber-700 tabular-nums dark:text-amber-400"
+          aria-label={`${bot.needsYou} need you`}
+          data-needs-you={bot.needsYou}
+        >
+          {bot.needsYou}
+        </span>
+      )}
+    </TabsTrigger>
+  );
   const files = useFiles();
   const routineList = useRoutines();
   const botRoutines = routineList?.botId === bot.id ? routineList.routines : undefined;
@@ -70,6 +90,7 @@ export function BotPanel({
     >
       <div className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
         <TabsList className="min-w-0 flex-1">
+          {hasSources && workTrigger}
           <TabsTrigger value="memory">Memory</TabsTrigger>
           <TabsTrigger value="files">
             Files <Count n={files.files.length} />
@@ -83,11 +104,15 @@ export function BotPanel({
               <span className="size-1.5 rounded-full bg-emerald-500" aria-label="on" />
             )}
           </TabsTrigger>
+          {!hasSources && workTrigger}
         </TabsList>
         <Button variant="ghost" size="icon-sm" aria-label="Close panel" onClick={onClose}>
           <XIcon />
         </Button>
       </div>
+      <TabsContent value="work" className="min-h-0 overflow-y-auto p-4">
+        {work}
+      </TabsContent>
       <TabsContent value="memory" className="min-h-0 overflow-y-auto p-4">
         <Memory bot={bot} />
       </TabsContent>

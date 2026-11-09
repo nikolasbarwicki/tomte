@@ -3,18 +3,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { BROWSER_FILES_DIR } from "../bots/index.ts";
+import { stripInvisible } from "../platform/untrusted-text.ts";
 
 /** About how much page text one result may carry. */
 const RESULT_LIMIT = 20_000;
 const PREVIEW_CHARS = 6_000;
 const OUTLINE_CHARS = 3_000;
-
-/** Zero-width, bidirectional-control, tag and other control characters pages use to hide or reorder text. */
-const INVISIBLE =
-  // oxlint-disable-next-line no-control-regex -- matching control characters is this pattern's purpose
-  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\uFFF9-\uFFFB]|[\u{E0000}-\u{E007F}]/gu;
-
-const stripInvisible = (s: string) => s.replace(INVISIBLE, "");
 
 const cleanOrigin = (origin: string | undefined) =>
   stripInvisible(origin ?? "unknown")

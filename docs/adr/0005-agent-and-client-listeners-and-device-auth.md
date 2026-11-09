@@ -28,12 +28,13 @@ An agent and a person never share a listener. A request cannot reach the other s
 3. **Content type, mutating methods only.** The `Content-Type` must be `application/json`, with or without parameters. Otherwise the response is 415. A browser must send a CORS preflight to set this type cross-origin, so a plain form or `text/plain` POST fails.
 4. **Device token.** The request must present a valid device token. Otherwise the response is 401 `pair this device first`.
 
-These paths skip the device token check only. Host, Origin and content type still apply to them.
+These paths skip the device token check only, except where an entry below says more. Host, Origin and content type still apply to them.
 
 - `POST /api/pair`, the pairing exchange.
 - `GET /api/host-info`, which says what this host is and can do so the UI can hide actions it cannot perform. It returns the host version, the API version, the mode, the Claude sign-in state in remote mode only, and the reveal, headed-browser and browser-sandbox capabilities, and nothing else: no bot, path, device or secret. The Claude sign-in state is the one piece of host state a request without a token can read, a deliberate exception. Any other method on this path needs a device token. It is never served on the agent listener.
 - `/oauth/callback`, which its OAuth `state` parameter protects.
 - Every path outside `/api/*`: the static UI assets and the login page, which must load before a device has a token.
+- `POST /api/bots/<botId>/events`, which skips the Origin check as well, and is protected by the bot's event token instead. See [ADR 0007](0007-external-events-route-and-event-token.md).
 
 The boundary check replaces `guardUiRequest`. The body-reading half of that guard remains as `readUiBody` in `packages/host/src/browser/ui-request.ts`.
 
@@ -113,7 +114,7 @@ The shell can show a second host, such as a remote-mode server, through a connec
 
 ### Decisions kept on purpose
 
-- **Origin is required on every mutating request, bearer clients included.** The boundary check does not exempt a request because it carries `Authorization: Bearer`. One rule for every caller keeps the check simple and leaves no path where a missing `Origin` is trusted. Scripts send the host's origin, and so does the desktop main process on its mutating calls (see "Connection profiles"); the desktop app did not need the rule revisited.
+- **Origin is required on every mutating request, bearer clients included.** The boundary check does not exempt a request because it carries `Authorization: Bearer`. One rule for every caller keeps the check simple and leaves no path where a missing `Origin` is trusted. Scripts send the host's origin, and so does the desktop main process on its mutating calls (see "Connection profiles"); the desktop app did not need the rule revisited. The one exception is the events route, which has no device token to protect; see [ADR 0007](0007-external-events-route-and-event-token.md).
 - **A wrong content type gets 415, not 403.** Host and Origin failures are 403 because they identify a caller the host refuses. A wrong content type is a malformed request from a caller that may be allowed, so it gets the status that names the problem. A cross-origin `text/plain` POST still gets 403, because the Origin check runs first.
 - **One global pairing lockout counter, reset when a code is created.** The host counts failed exchanges in one database row, not per address, so `host pair` in another process and a restarted host see the same count. Creating a code, from `host pair` or the Devices page, resets the count, and so does the lockout itself. A successful exchange does not. Each code therefore gets at most 10 guesses, and old typos cannot lock out a fresh code. The cost is that anyone who reaches the client listener can lock out the current code with 10 bad requests, and the user creates a new one. Locked-out attempts get the same 401 as a wrong code.
 - **Revoke ends every open response for the device, not only event streams.** Live view and takeover streams stay open as long as an event stream does, and in-flight requests started before the revoke would otherwise finish with the revoked device's access. Ending all of them makes revocation take effect at once.

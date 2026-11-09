@@ -191,7 +191,7 @@ export const headlessDelegate: HostDelegate = {
 
 /** Opens a Claude Code thread bound to a bot in the host's shared thread environment. */
 export function openThread(
-  { cwd, dataRoot, cli, claude, integrations, hostServers, approveAll }: ThreadEnv,
+  { cwd, dataRoot, cli, claude, integrations, hostServers, botEnv, approveAll }: ThreadEnv,
   bot: Bot,
   opts: {
     resume?: boolean;
@@ -209,6 +209,7 @@ export function openThread(
     approveAll,
     integrations,
     hostServers: () => hostServers(bot.id),
+    env: () => botEnv(bot.id),
     ...opts,
   });
 }

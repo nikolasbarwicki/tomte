@@ -6,7 +6,14 @@ import { withMentions, type Mention } from "../../handoffs/index.ts";
 import { json } from "../http.ts";
 import type { ApiContext, OpenChatRoutes } from "./context.ts";
 
-const Send = z.object({ text: z.string(), mentions: z.array(z.string()).default([]) });
+const Send = z.object({
+  text: z.string(),
+  mentions: z.array(z.string()).default([]),
+  /** The needs-you item this message answers. The host resolves the bot's pending question about it, or else sends the message and closes the item once it reaches the bot. */
+  eventId: z.string().min(1).optional(),
+  /** With `eventId`: what a pending question about the item receives, when it is not the message itself (a chip's option). */
+  answer: z.string().optional(),
+});
 const Id = z.object({ id: z.string() });
 const Answer = Id.extend({ value: z.string() });
 const Model = z.object({ model: z.string() });
@@ -16,7 +23,7 @@ const Effort = z.object({ effort: EffortLevel });
 export function chatRoutes({ dataRoot, chats, browser }: ApiContext): OpenChatRoutes {
   return {
     "/api/send": async ({ res, parse }, chat) => {
-      const { text, mentions: ids } = parse(Send);
+      const { text, mentions: ids, eventId, answer } = parse(Send);
       const mentions: Mention[] = [];
       for (const id of ids) {
         const target = id !== chat.bot.id ? getBot(dataRoot, id) : undefined;
@@ -25,9 +32,11 @@ export function chatRoutes({ dataRoot, chats, browser }: ApiContext): OpenChatRo
         if (!mentions.some((m) => m.id === target.id))
           mentions.push({ id: target.id, name: target.name });
       }
-      const sent = chat.send(withMentions(text, mentions), text, mentions);
-      if ("queued" in sent) return json(res, { ok: true, queued: sent.queued });
-      json(res, { ok: true });
+      const sent = chat.send(withMentions(text, mentions), text, mentions, eventId, answer);
+      if ("refused" in sent) return json(res, { error: sent.refused }, 409);
+      if ("answered" in sent) return json(res, { ok: true, outcome: "answered" });
+      if ("queued" in sent) return json(res, { ok: true, outcome: "queued", queued: sent.queued });
+      json(res, { ok: true, outcome: "sent" });
       sent.start();
     },
     "/api/send/cancel": async ({ res, parse }) => {

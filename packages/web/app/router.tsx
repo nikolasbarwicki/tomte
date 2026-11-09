@@ -5,10 +5,14 @@ import { PANEL_TABS } from "@/features/bots/index.ts";
 
 import { Shell } from "./shell.tsx";
 
-/** `panel` and `draft` are optional hints: a value that does not parse is dropped, never an error. */
+/**
+ * `panel`, `draft` and `draftEvent` are optional hints: a value that does not parse is dropped, never an error. `draftEvent` is
+ * the needs-you item a `draft` answers; the composer takes both at once, and the host checks the item is still open.
+ */
 const botSearch = z.object({
   panel: z.enum(PANEL_TABS).optional().catch(undefined),
   draft: z.string().optional().catch(undefined),
+  draftEvent: z.string().optional().catch(undefined),
 });
 
 const rootRoute = createRootRoute({

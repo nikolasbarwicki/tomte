@@ -18,6 +18,7 @@ import {
 } from "../browser/index.ts";
 import { createCredentials } from "../credentials/index.ts";
 import { createDeviceAuth, type DeviceAuth } from "../device-auth/index.ts";
+import { createEvents, eventsPath } from "../events/index.ts";
 import { createHandoffs, type BotsEndpoint } from "../handoffs/index.ts";
 import {
   combineLeases,
@@ -34,6 +35,7 @@ import { TokenRegistry } from "../platform/tokens.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
 import { createRoutines } from "../routines/index.ts";
 import { serveUi, type UiAssets } from "../ui/index.ts";
+import { externalEventsRoute } from "./api/external-events.ts";
 import { hostInfoRoute } from "./api/host-info.ts";
 import { createApi } from "./api/index.ts";
 import { oauthCallback } from "./api/integrations.ts";
@@ -162,6 +164,24 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
         .deliver(botId, text)
         .catch((e) => console.error(`[bots] delivery to ${botId} failed: ${(e as Error).message}`)),
   });
+  const externalEvents = createEvents({
+    db,
+    secrets,
+    botExists: (botId) => getBot(dataRoot, botId) !== undefined,
+    relay: { configPath: o.config.relayConfig, remote: o.config.mode === "remote" },
+    routeUrl: (botId) => `${clientAt.localUrl}${eventsPath(botId)}`,
+    onChange: (botId, changed) => {
+      chats.updateExternal(botId, changed);
+      if (botId === chats.currentBotId()) broadcast(externalEvents.work(botId));
+    },
+    onNeedsYou: () => chats.announceBots(),
+    deliver: (botId, text) =>
+      void chats
+        .deliver(botId, text)
+        .catch((e) =>
+          console.error(`[events] delivery to ${botId} failed: ${(e as Error).message}`),
+        ),
+  });
   const isolation = createHostIsolation({ config: o.config, sandbox });
   const hostServers: HostServersSource = (botId) =>
     combineLeases([
@@ -180,6 +200,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     // After the trash move the bot no longer exists, so messages the browser cleanup sends it (a cancelled takeover) go nowhere.
     trashBot(dataRoot, botId);
     deleteActivity(db, botId);
+    await externalEvents.removeBot(botId);
     await chats.drop(botId);
     await browser.removeBot(botId);
     botsChanged();
@@ -194,7 +215,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       chats.reconfigure(undefined, "integrations changed");
     },
   });
-  const transcripts = createTranscripts({ cwd, dataRoot, db, handoffs });
+  const transcripts = createTranscripts({ cwd, dataRoot, db, handoffs, events: externalEvents });
   const claude = createClaudeAccess(o.config, cli);
   const chats = createChats({
     cwd,
@@ -204,11 +225,18 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     db,
     integrations,
     hostServers,
+    botEnv: (botId) => externalEvents.env(botId),
     approveAll: !o.config.askApproval,
     handoffs,
+    events: externalEvents,
+    items: {
+      isOpen: (botId, id) => externalEvents.isOpen(botId, id),
+      acted: (botId, id, answer) => void externalEvents.answer(botId, id, answer),
+    },
     transcript: (bot) => transcripts.transcript(bot),
     pendingWaits: browser.pendingWaits,
     routinesEvent: (botId) => routinesEvent(botId),
+    workEvent: (botId) => externalEvents.work(botId),
     broadcast,
   });
   const routines = createRoutines({
@@ -269,6 +297,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     credentials,
     devices,
     sessions,
+    externalEvents,
     events,
     reveal: o.config.reveal ? (o.reveal ?? reveal) : undefined,
     snapshot: () => {
@@ -291,6 +320,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       signInState: () => claude.signInState(),
       sandbox: () => browser.sandbox(),
     }),
+    externalEvents: externalEventsRoute(externalEvents),
     pair: pairRoute(devices, clientAt.publicUrl),
     api,
   });
@@ -324,6 +354,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       clientListener.pause();
       agentListener.pause();
       chats.close();
+      await externalEvents.stop();
       routines.stop();
       await browser.close();
       await vite?.close();

@@ -33,6 +33,12 @@ export interface ConnectionsDeps {
 
 type ForgetResult = "forgotten" | { unreachable: string };
 
+/** What a connection's host accepts from this app: its client origin and this device's token. Never log the token. */
+export interface HostCredentials {
+  origin: string;
+  token: string;
+}
+
 export interface Connections {
   /** `This computer` first, then the stored profiles in the order they were added. */
   list(): Promise<ProfileView[]>;
@@ -45,6 +51,8 @@ export interface Connections {
   start(): Promise<string | undefined>;
   /** The local host's state changed (it started, stopped or restarted): when `local` is shown, shows it again as it now is. */
   localChanged(): Promise<void>;
+  /** The credentials of the connection the window shows; undefined while that is this computer and its host is not running. */
+  credentials(): Promise<HostCredentials | undefined>;
   /** Calls `listener` after every change to the list or the active profile. */
   onChange(listener: () => void): void;
 }
@@ -220,6 +228,17 @@ export function createConnections(deps: ConnectionsDeps): Connections {
         if (current === LOCAL_ID) await showLocal();
         changed();
       }),
+
+    async credentials() {
+      if (current === LOCAL_ID) {
+        const state = deps.local();
+        return state.status === "running"
+          ? { origin: new URL(state.sidecar.clientUrl).origin, token: state.sidecar.token }
+          : undefined;
+      }
+      const profile = (await store.read()).profiles.find((p) => p.id === current);
+      return profile && { origin: profile.origin, token: await store.token(profile.id) };
+    },
 
     onChange: (listener) => void listeners.push(listener),
   };

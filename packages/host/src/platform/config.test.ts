@@ -89,6 +89,7 @@ describe("flags and environment", () => {
       CLAUDEBOT_ASK_APPROVAL: "1",
       CLAUDEBOT_VITE: "true",
       CLAUDEBOT_DATA_ROOT: "/srv/claudebot",
+      CLAUDEBOT_RELAY_CONFIG: "/etc/claudebot/relay.json",
     });
     expect(config).toEqual({
       mode: "remote",
@@ -103,6 +104,7 @@ describe("flags and environment", () => {
       vite: true,
       askApproval: true,
       dataRoot: "/srv/claudebot",
+      relayConfig: "/etc/claudebot/relay.json",
     });
   });
 
@@ -118,6 +120,18 @@ describe("flags and environment", () => {
   test("an environment variable can switch Vite off", () => {
     const { config } = parse([], { CLAUDEBOT_VITE: "false" });
     expect(config.vite).toBe(false);
+  });
+
+  test("the relay configuration is relay.json in the data root unless a flag or the environment names another", () => {
+    expect(parse(["--data-root", "/srv/c"]).config.relayConfig).toBe("/srv/c/relay.json");
+    expect(
+      parse(["--relay-config", "/etc/r.json"], { CLAUDEBOT_RELAY_CONFIG: "/x.json" }).config
+        .relayConfig,
+    ).toBe("/etc/r.json");
+  });
+
+  test("a relay configuration path must be absolute", () => {
+    expect(() => parse(["--relay-config", "relay.json"])).toThrow(/absolute path/);
   });
 
   test("empty environment variables count as unset", () => {

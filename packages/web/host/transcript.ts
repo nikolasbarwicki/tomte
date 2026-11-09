@@ -1,4 +1,10 @@
-import type { HandoffStatus, ServerEvent, WaitAction } from "@claudebot/contract/events";
+import type {
+  ExternalEventState,
+  HandoffStatus,
+  Relay,
+  ServerEvent,
+  WaitAction,
+} from "@claudebot/contract/events";
 
 import { kTokens } from "@/lib/format.ts";
 
@@ -13,7 +19,15 @@ export type Item =
     }
   | { kind: "assistant" | "error" | "info"; text: string }
   | { kind: "tool"; name: string; input: string }
-  | { kind: "ask"; id: string; question: string; answer?: string }
+  | {
+      kind: "ask";
+      id: string;
+      question: string;
+      options?: string[];
+      answer?: string;
+      /** Its turn ended before an answer: nobody is waiting for one any more. */
+      expired?: true;
+    }
   | { kind: "approve"; id: string; tool: string; reason: string; input: string; answer?: string }
   | {
       kind: "wait";
@@ -34,6 +48,16 @@ export type Item =
       title: string;
       status: HandoffStatus;
       text: string;
+    }
+  | {
+      kind: "external";
+      id: string;
+      source: string;
+      eventKind: Extract<ServerEvent, { type: "external" }>["kind"];
+      title: string;
+      state: ExternalEventState;
+      /** Whether the answer reached the sender's agent; only for items that name a reply target. */
+      relay?: Relay | undefined;
     };
 
 export function reduce(items: Item[], e: ServerEvent): Item[] {
@@ -69,7 +93,15 @@ function reduceLive(
     case "tool":
       return [...items, { kind: "tool", name: e.name, input: e.input }];
     case "ask":
-      return [...items, { kind: "ask", id: e.id, question: e.question }];
+      return [
+        ...items,
+        {
+          kind: "ask",
+          id: e.id,
+          question: e.question,
+          ...(e.options && { options: e.options }),
+        },
+      ];
     case "approve":
       return [
         ...items,
@@ -79,6 +111,8 @@ function reduceLive(
       return items.map((i) =>
         (i.kind === "ask" || i.kind === "approve") && i.id === e.id ? { ...i, answer: e.value } : i,
       );
+    case "ask_expired":
+      return items.map((i) => (i.kind === "ask" && i.id === e.id ? { ...i, expired: true } : i));
     case "wait":
       return [
         ...items,
@@ -116,6 +150,23 @@ function reduceLive(
           text: e.text,
         },
       ];
+    case "external":
+      return [
+        ...items,
+        {
+          kind: "external",
+          id: e.id,
+          source: e.source,
+          eventKind: e.kind,
+          title: e.title,
+          state: e.state,
+          relay: e.relay,
+        },
+      ];
+    case "external_state":
+      return items.map((i) =>
+        i.kind === "external" && i.id === e.id ? { ...i, state: e.state, relay: e.relay } : i,
+      );
     case "compacted":
       return [
         ...items,
