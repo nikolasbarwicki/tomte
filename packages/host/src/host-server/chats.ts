@@ -119,6 +119,8 @@ export interface Chats {
   isWorking(botId: string): boolean;
   /** The routine run the bot's unattended turn belongs to, if one is running now: a chat-hosted or headless routine turn, including a double-loop bot's run in a session of its own. */
   runOf(botId: string): { runId: string; sessionId: string | undefined } | undefined;
+  /** Whether the bot is in a scheduled run now: a chat-hosted routine turn or a headless run, in the bot's session or one of its own. */
+  unattended(botId: string): boolean;
   botsEvent(): BotsEvent;
   currentBotId: () => string | undefined;
   announceBots: () => void;
@@ -214,6 +216,10 @@ export function createChats(deps: ChatsDeps): Chats {
       (chat !== undefined && chat.presence !== "idle") ||
       routineTurns.headlessRun(botId) !== undefined
     );
+  };
+  const runOf = (botId: string) => {
+    const runId = chats.get(botId)?.routineRun;
+    return runId === undefined ? routineTurns.headlessRun(botId) : { runId, sessionId: undefined };
   };
   const chatsBotsEvent = () =>
     botsEvent(dataRoot, db, isWorking, deps.events.needsYou, {
@@ -852,12 +858,8 @@ export function createChats(deps: ChatsDeps): Chats {
     },
     isWorking,
 
-    runOf(botId) {
-      const runId = chats.get(botId)?.routineRun;
-      return runId === undefined
-        ? routineTurns.headlessRun(botId)
-        : { runId, sessionId: undefined };
-    },
+    runOf,
+    unattended: (botId) => runOf(botId) !== undefined,
     botsEvent: chatsBotsEvent,
     announceBots,
     currentBotId: () => current?.bot.id,

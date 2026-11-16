@@ -14,7 +14,7 @@ Bots and people are different callers. A bot is untrusted: a prompt-injected pag
 
 The host opens two sockets.
 
-- **Agent listener.** It binds `127.0.0.1` on a free port. It serves the browser endpoint, the bots endpoint and the credential exchange, and nothing else. Its checks are the ones in ADR-0001: Host names this listener, the request carries no `Origin`, and every request has the per-session bearer token. The MCP config written for each harness points at this listener. Any other path answers 404.
+- **Agent listener.** It binds `127.0.0.1` on a free port. It serves the browser endpoint, the bots endpoint, the routines endpoint and the credential exchange, and nothing else. Its checks are the ones in ADR-0001: Host names this listener, the request carries no `Origin`, and every request has the per-session bearer token. The MCP config written for each harness points at this listener. Any other path answers 404.
 - **Client listener.** It binds the address and port from `HostConfig`. It serves the web UI, `/api/*` (including the event stream, live view, takeover input and wait answers), `/oauth/callback` and the pairing route `/api/pair`. It never serves the agent listener's routes and answers 404 for them.
 
 An agent and a person never share a listener. A request cannot reach the other side's routes by choosing a different path or header, because the routes are not registered on that socket. Neither side's rules can be weakened to make the other work.

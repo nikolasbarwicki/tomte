@@ -124,8 +124,8 @@ describe("a double-loop bot's front session", () => {
     expect(launch.argv).toContain(`--session-id=${bot}`);
     expect(launch.env.CLAUDE_CODE_RESUME_INTERRUPTED_TURN).toBe("1");
     expect(launch.appendSystemPrompt).toContain("You are the chat voice of an assistant");
-    // The front only hands off: no browser server.
-    expect(Object.keys(launch.mcpServers)).toEqual(["bots"]);
+    // The front hands off and manages routines: no browser server.
+    expect(Object.keys(launch.mcpServers)).toEqual(["bots", "routines"]);
     await settled(bot);
   });
 

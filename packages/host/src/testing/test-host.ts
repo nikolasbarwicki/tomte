@@ -53,8 +53,11 @@ export interface HandoffHost {
   createBot(name: string, purpose?: string): string;
   /** Names of the secrets the host holds in its (in-memory) secret store. */
   secretNames(): string[];
-  /** An MCP client connected to the bots endpoint with a token from a fresh bots lease for `botId`. */
-  actAs(botId: string): Promise<{ call: BotCaller; token: string; url: string; revoke(): void }>;
+  /** An MCP client connected to the `bots` (default) or `routines` endpoint with a token from a fresh lease of it for `botId`. */
+  actAs(
+    botId: string,
+    server?: "bots" | "routines",
+  ): Promise<{ call: BotCaller; token: string; url: string; revoke(): void }>;
   /** Texts the fake CLI received for the bot's first session, oldest first. */
   messagesOf(botId: string): string[];
   /** The user messages the fake CLI received for the bot's first session, with the flags the host sent them with. */
@@ -94,11 +97,20 @@ export interface HandoffHost {
   ): void;
   /** From now on, messages the fake CLI receives no longer make it call `ask_user`. */
   stopAsking(): void;
+  /**
+   * From now on, every message the fake CLI receives makes it call `tool` with `args` on the HTTP MCP server `server` of its own MCP config (`routines`, `bots`, `browser`), with the URL and bearer token that config holds, and record the result text in `toolResults()`.
+   * Unlike `actAs`, this goes through what the host wrote for the CLI, so a passing call proves the lease carries the server and its token.
+   */
+  callOnMessage(server: string, tool: string, args?: Record<string, unknown>): void;
+  /** From now on, messages the fake CLI receives no longer make it call an HTTP MCP server. */
+  stopCalling(): void;
+  /** An MCP client for server `server` of the launch-th CLI launch's own MCP config: the token that session was given. Closed on `restart()` and `stop()`. */
+  asLaunched(launch: number, server: string): Promise<BotCaller>;
   /** From now on, every message the fake CLI receives makes it ask the host for permission to run `tool` with `input`, and record the host's answer (see `permissionResults`). */
   approveOnMessage(tool: string, input?: Record<string, unknown>): void;
   /** From now on, messages the fake CLI receives no longer ask for a tool permission. */
   stopApproving(): void;
-  /** The text of each `ask_user` or `remember` result the fake CLI got back from the host, oldest first. */
+  /** The text of each `ask_user`, `remember` or `callOnMessage` result the fake CLI got back from the host, oldest first. */
   toolResults(): string[];
   /**
    * Scripts what the fake CLI emits per user message, as the double-loop front's query would (see the header of `fake-claude.ts`
@@ -233,6 +245,20 @@ export async function startHandoffHost(
           .filter(Boolean)
           .map((l) => JSON.parse(l))
       : [];
+  const connect = async (url: string, authorization: string): Promise<BotCaller> => {
+    const client = new Client({ name: "test", version: "1.0.0" });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(url), {
+        requestInit: { headers: { Authorization: authorization } },
+      }),
+    );
+    clients.push(client);
+    return (name, args = {}) =>
+      client.callTool({ name, arguments: args }).then((r) => ({
+        isError: r.isError === true,
+        text: (r.content as { text: string }[]).map((c) => c.text).join("\n"),
+      }));
+  };
 
   const host: HandoffHost = {
     get server() {
@@ -251,22 +277,18 @@ export async function startHandoffHost(
     dataRoot: config.dataRoot,
     db,
     createBot: (name, purpose) => createBot(config.dataRoot, name, purpose).id,
-    async actAs(botId) {
-      const lease = server.bots.lease(botId);
+    async actAs(botId, endpoint = "bots") {
+      const lease = server[endpoint].lease(botId);
       const s = defined(lease.servers[0], "server");
-      const client = new Client({ name: "test", version: "1.0.0" });
-      await client.connect(
-        new StreamableHTTPClientTransport(new URL(s.url), {
-          requestInit: { headers: { Authorization: `Bearer ${s.token}` } },
-        }),
-      );
-      clients.push(client);
-      const call: BotCaller = (name, args = {}) =>
-        client.callTool({ name, arguments: args }).then((r) => ({
-          isError: r.isError === true,
-          text: (r.content as { text: string }[]).map((c) => c.text).join("\n"),
-        }));
+      const call = await connect(s.url, `Bearer ${s.token}`);
       return { call, token: s.token, url: s.url, revoke: lease.release };
+    },
+    async asLaunched(launch, name) {
+      const entry = defined(
+        defined(host.launches()[launch], "launch").mcpServers[name],
+        `${name} server`,
+      );
+      return connect(entry.url, entry.headers.Authorization);
     },
     messagesOf: (botId) =>
       lines(join(claudeDir, "messages.jsonl"))
@@ -294,6 +316,9 @@ export async function startHandoffHost(
         }),
       ),
     stopAsking: () => rmSync(join(claudeDir, "ask.json"), { force: true }),
+    callOnMessage: (server, tool, args = {}) =>
+      writeFileSync(join(claudeDir, "call.json"), JSON.stringify({ server, tool, args })),
+    stopCalling: () => rmSync(join(claudeDir, "call.json"), { force: true }),
     approveOnMessage: (tool, input = {}) =>
       writeFileSync(join(claudeDir, "approve.json"), JSON.stringify({ tool, input })),
     stopApproving: () => rmSync(join(claudeDir, "approve.json"), { force: true }),

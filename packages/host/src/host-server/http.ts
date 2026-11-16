@@ -9,6 +9,7 @@ import {
 } from "../browser/index.ts";
 import { eventsRouteBot } from "../events/index.ts";
 import { BOTS_ENDPOINT_PATH, type Handoffs } from "../handoffs/index.ts";
+import { ROUTINES_ENDPOINT_PATH, type RoutinesEndpoint } from "../routines/index.ts";
 import { HOST_INFO_PATH, PAIR_PATH } from "./boundary.ts";
 
 export type Handler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
@@ -30,9 +31,13 @@ function safe(handler: Handler, label: string): Handler {
     });
 }
 
-/** What the agent listener serves: the browser endpoint, the bots endpoint and the credential exchange. */
-export function agentRoutes(o: { browser: Browser; handoffs: Handoffs }): Route[] {
-  const { browser, handoffs } = o;
+/** What the agent listener serves: the browser endpoint, the bots endpoint, the routines endpoint and the credential exchange. */
+export function agentRoutes(o: {
+  browser: Browser;
+  handoffs: Handoffs;
+  routines: RoutinesEndpoint;
+}): Route[] {
+  const { browser, handoffs, routines } = o;
   return [
     {
       match: (p) => p === BROWSER_ENDPOINT_PATH,
@@ -43,6 +48,11 @@ export function agentRoutes(o: { browser: Browser; handoffs: Handoffs }): Route[
       match: (p) => p === BOTS_ENDPOINT_PATH,
       handler: (req, res) => handoffs.endpoint.handle(req, res),
       label: "[bots] endpoint failed:",
+    },
+    {
+      match: (p) => p === ROUTINES_ENDPOINT_PATH,
+      handler: (req, res) => routines.handle(req, res),
+      label: "[routines] endpoint failed:",
     },
     {
       match: (p) => p === CREDENTIAL_EXCHANGE_PATH,
