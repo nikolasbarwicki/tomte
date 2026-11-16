@@ -1,6 +1,6 @@
-# Browser smokes of the answer path
+# Browser smokes
 
-Unit and host-seam tests passed while the real answer workflows were broken, so the answer path (ADR-0007 events, ADR-0008 relay) also has smokes that drive the built web UI in a real browser. They are scripts, not part of `bun run check`: they need Chrome and a web build.
+Unit and host-seam tests passed while the real answer workflows were broken, so the answer path (ADR-0007 events, ADR-0008 relay) and the double-loop chat mode (ADR-0011) also have smokes that drive the built web UI in a real browser. They are scripts, not part of `bun run check`: they need Chrome and a web build.
 
 | Command                      | What it runs                                                                                                                                                                              |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -8,7 +8,8 @@ Unit and host-seam tests passed while the real answer workflows were broken, so 
 | `bun run smoke:answer-ui`    | Needs you `Answer…` → edit → Send: the draft, the item's close, a failed and a queued send, replaced and emptied drafts.                                                                  |
 | `bun run smoke:needs-you-ui` | Needs you chips, keyboard triage and free text while the bot waits on a question about the item; idle and busy bots; a turn that died; a second page racing the first.                    |
 | `bun run smoke:blocked-ui`   | A `blocked` report from the sender: Needs you, Work, `Unblock…` and `Status`.                                                                                                             |
-| `bun run smoke:ui`           | The four above in that order, with one web build. It stops at the first failing smoke and exits with that smoke's status; nothing after a failure runs and nothing is reported as passed. |
+| `bun run smoke:loop-ui`      | The double-loop chat mode on the fake CLI's `loop.json` (below): toggle, never-blocking sends, tasks, report, approval, rate limits.                                                      |
+| `bun run smoke:ui`           | The five above in that order, with one web build. It stops at the first failing smoke and exits with that smoke's status; nothing after a failure runs and nothing is reported as passed. |
 
 ## Prerequisites
 
@@ -35,16 +36,33 @@ One fresh run directory under the OS temp folder holds everything: a temporary d
 
 The smoke ends by printing every recorded argument list.
 
+## The double-loop chat mode (`smoke:loop-ui`)
+
+The host runs with `CLAUDEBOT_ASK_APPROVAL` on (`startSmoke(name, { env })`) and the fake CLI plays the front's long-lived query from one `loop.json`: per user message it streams the front's text, starts, progresses, ends or stops background agents through the host's real PreToolUse and SubagentStop hooks and its in-process `loop` MCP server, and asks the host for an agent's tool approval. Steps that wait for a file (`host.allow(name)`) let the smoke say when an agent ends. The model is never called.
+
+| Flow                                                | Proven in the browser and on the host                                                                                                                                                                                                                                             |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. The toggle                                       | A standard bot has no Tasks tab or rate-limit indicator; the real chat-settings toggle and its confirm dialog switch it, starting a new session.                                                                                                                                  |
+| 2. Two messages a second apart                      | Both answered `sent`, none queued; the composer stays enabled; the presence line says "typing…" while the front's turn is open.                                                                                                                                                   |
+| 3. Rate limits                                      | The front's `rate_limit_event` shows beside the context meter as the most pressing window, with every window and its reset on hover.                                                                                                                                              |
+| 4. A research task, a second one, a steer, a cancel | The Tasks tab shows the task running with its status line moving and a finding; two run in parallel and the presence line says "working…"; the steer is counted in the front's next work state; the cancelled task moves to Recent.                                               |
+| 5. A mode switch while a task runs                  | `/api/bots/chat-mode` answers 409 "stop the running tasks first"; the chat settings are disabled meanwhile.                                                                                                                                                                       |
+| 6. A queued task                                    | It waits for its blocker, nothing is asked of the front; when the blocker ends the app sends the front a synthetic "Start queued task q-…" message, the agent replaces the queue entry and later reports.                                                                         |
+| 7. The report                                       | Posted once as the bot's message with the task in its tooltip, however many signals announce it.                                                                                                                                                                                  |
+| 8. A worker's approval                              | The card "Allow Bash?" names the task and stays open while the front answers another message; allowing it lets the agent continue and report. It is a transcript card, not an item of the Needs you bar (that bar holds external events only).                                    |
+| 9. A page reload, and a chat rebuilt from disk      | A session file shaped like the real CLI's (work state appended, app messages marked by origin) is written; after a reload and after leaving the bot and coming back, every report is shown once, the typed messages and tasks are back and no `<work_state>` text is on the page. |
+| 10. Leaving double-loop mode once nothing runs      | The toggle switches back; the Tasks tab and the rate-limit indicator go.                                                                                                                                                                                                          |
+
 ## Failures and artifacts
 
 A failed check throws, the smoke exits non-zero (and `smoke:ui` exits with the same status), and the **run directory is kept**; its path is the last line printed. It holds `checks.log` (every step and check), `page-console.log` (console, page errors and failed requests of every page), `host.log` (what the host wrote to stderr), `failure-page<N>.png` for every open page, `shots/` (screenshots taken at key steps), `error.txt`, and the smoke's own files: for `smoke:answers`, `herdr-argv.jsonl`, `relay.json` and the fake. A passing smoke removes its run directory and nothing else: it never touches a process or a file it did not start or create. `SMOKE_KEEP=1` keeps the directory of a passing run too, with the same logs.
 
-The harness shared by the four smokes is `scripts/smoke-kit.ts`; add a new browser smoke on top of it instead of repeating the build, host and browser setup.
+The harness shared by the smokes is `scripts/smoke-kit.ts`; add a new browser smoke on top of it instead of repeating the build, host and browser setup.
 
 ## What they do not cover
 
 - No Electron shell, tray, desktop notification, login item or OS dialog: the page is served by the host's client listener and driven in plain headless Chrome.
-- No real `herdr`, OMP, coordinator or model: the relay runs a fake program, the bot is the fake Claude CLI. That an actual agent receives and understands the prompt is not proven.
+- No real `herdr`, OMP, coordinator or model: the relay runs a fake program, the bot is the fake Claude CLI. That an actual agent receives and understands the prompt is not proven. That the real front routes a message to the right action is what the manual `eval:loop-routing` measures; the real CLI's message shapes and timings are checked by hand (AGENTS.md, "Double-loop chat mode").
 - Remote mode and the Origin/token boundaries are covered by the host tests, not here. Timeouts and a host that dies mid-relay (delivery unknown) are covered by `packages/host/src/events/relay*.test.ts`.
 - The sender is run as a Bun subprocess by path with the route in its environment. Its config-file and project-routing modes are covered by `packages/notify` tests.
 - Only desktop Chrome at 1400×900; no mobile layout.

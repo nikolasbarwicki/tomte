@@ -1,4 +1,4 @@
-import type { BotSummary } from "@claudebot/contract/events";
+import type { BotSummary, Presence } from "@claudebot/contract/events";
 import { getRouteApi } from "@tanstack/react-router";
 import { MessageSquarePlusIcon, PanelRightIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useState, useTransition, type ReactNode } from "react";
@@ -15,9 +15,11 @@ import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
 import { newSession } from "./api.ts";
+import { ChatModeMenu } from "./chat-mode.tsx";
 import { Composer } from "./composer.tsx";
 import { ContextMeter } from "./context-meter.tsx";
 import { NeedsYou } from "./needs-you.tsx";
+import { RateLimitMeter } from "./rate-limit-meter.tsx";
 import { Transcript } from "./transcript.tsx";
 
 const PANEL_KEY = "claudebot:panel";
@@ -31,7 +33,11 @@ export function ChatView({
   bot: BotSummary;
   panel: (controls: { onClose: () => void }) => ReactNode;
 }) {
-  const { items, busy, context } = useChat();
+  const { items, busy: turnRunning, presence, context, rateLimits } = useChat();
+  // A double-loop bot never has a turn that blocks the chat: its one presence line says what it is doing.
+  const live: Presence =
+    bot.chatMode === "double_loop" ? presence : turnRunning ? "working" : "idle";
+  const busy = live !== "idle";
   const bots = useBots() ?? [];
   const wide = useMediaQuery("(min-width: 1024px)");
   const [pinned, setPinned] = useState(() => localStorage.getItem(PANEL_KEY) !== "closed");
@@ -86,6 +92,7 @@ export function ChatView({
             <h1 className="truncate text-sm font-medium">{bot.name}</h1>
             {bot.purpose && <p className="text-muted-foreground truncate text-xs">{bot.purpose}</p>}
           </div>
+          {bot.chatMode === "double_loop" && <RateLimitMeter limits={rateLimits} />}
           <ContextMeter context={context} />
           <Tooltip>
             <TooltipTrigger
@@ -103,6 +110,7 @@ export function ChatView({
             </TooltipTrigger>
             <TooltipContent>New session</TooltipContent>
           </Tooltip>
+          <ChatModeMenu bot={bot} busy={busy} />
           <Tooltip>
             <TooltipTrigger
               render={
@@ -122,7 +130,13 @@ export function ChatView({
           </Tooltip>
         </AppBar>
         <NeedsYou bot={bot} />
-        <Transcript bot={bot} bots={bots} items={items} busy={busy} onShowBrowser={showBrowser} />
+        <Transcript
+          bot={bot}
+          bots={bots}
+          items={items}
+          presence={live}
+          onShowBrowser={showBrowser}
+        />
         <Composer bot={bot} bots={bots} />
       </div>
       {wide ? (

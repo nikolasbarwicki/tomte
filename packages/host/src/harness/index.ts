@@ -77,6 +77,9 @@ export interface IsolationProfile {
 /** The Claude Code tools that run a shell command, or start or stop one in the background. */
 const SHELL_TOOLS = ["Bash", "PowerShell", "Monitor", "TaskStop"];
 
+/** What `TaskStop` stops: a background shell, or a background agent, which a double-loop session needs even with no shell. */
+const TASK_STOP = "TaskStop";
+
 /** The deny rules that keep the Read tool out of `path`, whether it is a file or a directory. */
 const readDenies = (path: string) => [`Read(/${path})`, `Read(/${path}/**)`];
 
@@ -94,6 +97,11 @@ interface HarnessLaunchInput {
   systemPromptAppend: string;
   /** How the bot's shell is confined; absent for an unconfined bot. */
   isolation?: IsolationProfile | undefined;
+  /**
+   * True for a session whose agents run in the background (the double-loop front): `TaskStop` stops those, so it stays
+   * available when the shell is disabled.
+   */
+  stopsAgents?: boolean;
 }
 
 interface HarnessLaunch {
@@ -109,7 +117,7 @@ export interface Harness {
 const APP_PREFIX = "claudebot";
 
 export const claudeHarness: Harness = {
-  launch({ hostServers, integrations, systemPromptAppend, isolation }) {
+  launch({ hostServers, integrations, systemPromptAppend, isolation, stopsAgents }) {
     const mcpServers: Record<string, McpServerConfig> = { ...integrations?.mcpServers };
     for (const s of hostServers) {
       mcpServers[s.name] = {
@@ -136,7 +144,9 @@ export const claudeHarness: Harness = {
         disallowedTools: [
           ...(integrations?.disallowedTools ?? []),
           ...(isolation?.denyRead.flatMap(readDenies) ?? []),
-          ...(isolation?.shell === "disabled" ? SHELL_TOOLS : []),
+          ...(isolation?.shell === "disabled"
+            ? SHELL_TOOLS.filter((t) => !(stopsAgents && t === TASK_STOP))
+            : []),
         ],
         ...(isolation?.shell === "sandboxed"
           ? {

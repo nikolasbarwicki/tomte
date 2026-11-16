@@ -213,6 +213,45 @@ ALTER TABLE external_events ADD COLUMN relay_error TEXT;
 ALTER TABLE external_events ADD COLUMN relay_answer TEXT;
 `;
 
+// The double-loop chat mode's task log (ADR-0011), keyed by bot and Claude Code session. `loop_tasks` holds each background
+// task's current state; `loop_events` is the append-only log beside it: progress and findings, activity, steers and the reports
+// that never enter the front's CLI session, so a transcript replay reads them from here.
+const SCHEMA_V14 = `
+CREATE TABLE IF NOT EXISTS loop_tasks (
+  bot_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,               -- the id Claude Code gives the background agent
+  agent_type TEXT,
+  model TEXT,
+  effort TEXT,
+  goal TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued','running','interrupted','done','failed','cancelled')),
+  started_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  ended_at INTEGER,
+  PRIMARY KEY (bot_id, session_id, task_id)
+);
+CREATE INDEX IF NOT EXISTS loop_tasks_active ON loop_tasks(bot_id) WHERE status IN ('queued','running');
+CREATE TABLE IF NOT EXISTS loop_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bot_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('progress','activity','steer','report')),
+  data TEXT NOT NULL                   -- JSON; the shape depends on kind
+);
+CREATE INDEX IF NOT EXISTS loop_events_by_session ON loop_events(bot_id, session_id, at);
+CREATE INDEX IF NOT EXISTS loop_events_by_task ON loop_events(bot_id, session_id, task_id, kind);
+`;
+
+/** A queued task's `after_task` is the task it waits for, null for "when a slot frees". SQLite cannot add a column only when it is missing, so a database that already has it (one migrated again after its version was set back) is left alone. */
+const SCHEMA_V15 = (db: Database) => {
+  const columns = db.query<{ name: string }, []>("PRAGMA table_info(loop_tasks)").all();
+  if (!columns.some((c) => c.name === "after_task"))
+    db.run("ALTER TABLE loop_tasks ADD COLUMN after_task TEXT");
+};
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -232,11 +271,14 @@ export function migrate(db: Database): Database {
     SCHEMA_V11,
     SCHEMA_V12,
     SCHEMA_V13,
+    SCHEMA_V14,
+    SCHEMA_V15,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;
     db.transaction(() => {
-      db.run(schema);
+      if (typeof schema === "string") db.run(schema);
+      else schema(db);
       db.run(`PRAGMA user_version = ${i + 1}`);
     })();
   }
