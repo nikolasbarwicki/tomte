@@ -13,9 +13,9 @@ An auto-pause or an absence pause is not a notice in this sense. Feature 13 make
 
 **Status:** ready-for-agent
 
-- [ ] A run that ends `failed` sends `run_failed`: "Routine <name> failed: <error>", the error cut to about 300 characters, and a URL button to `<public URL>/bots/<botId>?panel=routines` (no button on a loopback public URL, as for cards). A run that ends `interrupted` (the host stopped during it, found at the next start) sends the same notice worded as interrupted. A `succeeded` run sends nothing here. A skipped run ("previous run is waiting for you", "missed while offline") sends nothing
-- [ ] A park that reaches 24 hours sends `park_expired` ("<routine>: <wait title> expired, so the run failed") and not also `run_failed` for the same run
-- [ ] With no linked account, with no running channel and while the channel is down, `notify` neither throws nor blocks the run: the run's final status and `onChange` happen as before
-- [ ] `onRunEnded` is called exactly once per run, and for a manual test run (`RunTrigger` `manual`), which is reported like any other. A run stopped by `removeRoutine` is not reported: the cascade owns its row (`entry.removed` in `routines/index.ts`)
-- [ ] A bot that no longer exists has its failure recorded but sends no notice
-- [ ] Host seam tests with the fake Telegram server and the fake Claude CLI: a failing routine run sends one notice; a run interrupted by `restart()` sends one after the restart; an expired park (clock moved, as `routines/index.test.ts` does with `now`) sends `park_expired` only; a run that succeeds, and a skipped one, send nothing. `bun run check` passes
+- [x] A run that ends `failed` sends `run_failed`: "Routine <name> failed: <error>", the error cut to about 300 characters, and a URL button to `<public URL>/bots/<botId>?panel=routines` (no button on a loopback public URL, as for cards). A run that ends `interrupted` (the host stopped during it, found at the next start) sends the same notice worded as interrupted. A `succeeded` run sends nothing here. A skipped run ("previous run is waiting for you", "missed while offline") sends nothing
+- [x] A park that reaches 24 hours sends `park_expired` ("<routine>: <wait title> expired, so the run failed") and not also `run_failed` for the same run
+- [x] With no linked account, with no running channel and while the channel is down, `notify` neither throws nor blocks the run: the run's final status and `onChange` happen as before
+- [x] `onRunEnded` is called exactly once per run, and for a manual test run (`RunTrigger` `manual`), which is reported like any other. A run stopped by `removeRoutine` is not reported: the cascade owns its row (`entry.removed` in `routines/index.ts`)
+- [x] A bot that no longer exists has its failure recorded but sends no notice
+- [x] Host seam tests with the fake Telegram server and the fake Claude CLI: a failing routine run sends one notice; a run interrupted by `restart()` sends one after the restart; an expired park (clock moved, as `routines/index.test.ts` does with `now`) sends `park_expired` only; a run that succeeds, and a skipped one, send nothing. `bun run check` passes
