@@ -7,6 +7,7 @@ import { serveMcpRequest } from "../host-mcp/index.ts";
 import type { HostOrigin } from "../platform/config.ts";
 import type { TokenRegistry } from "../platform/tokens.ts";
 import type { RoutinesPort, RoutinesToolContext } from "./tools/context.ts";
+import { registerCreateRoutine } from "./tools/create-routine.ts";
 import { registerListRoutines } from "./tools/list-routines.ts";
 
 export const ROUTINES_ENDPOINT_PATH = "/mcp/routines";
@@ -36,8 +37,12 @@ export interface RoutinesEndpointDeps extends Pick<RoutinesToolContext, "unatten
 export interface RoutinesEndpoint {
   /** Serves a request to `ROUTINES_ENDPOINT_PATH`. */
   handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
-  /** A token and URL for one live harness session; every bot gets one. */
-  lease(botId: string): HostServerLease;
+  /**
+   * A token and URL for one live harness session; every bot gets one. An `attended` lease belongs to a session that is never a
+   * scheduled run (a double-loop bot's front), so `unattended` is not asked for its calls: the bot's routine runs go headless in
+   * sessions of their own, with leases that are not attended, and must not stop the owner creating routines from the front's chat.
+   */
+  lease(botId: string, o?: { attended?: boolean }): HostServerLease;
 }
 
 /** One MCP server per request, exposing the routines tools for the bot the request's token belongs to. Each tool lives in its own file under `tools/`. */
@@ -47,26 +52,30 @@ function createRoutinesMcpServer(ctx: RoutinesToolContext): McpServer {
     { instructions: ROUTINES_INSTRUCTIONS },
   );
   registerListRoutines(mcp, ctx);
+  registerCreateRoutine(mcp, ctx);
   return mcp;
 }
 
 export function createRoutinesEndpoint(deps: RoutinesEndpointDeps): RoutinesEndpoint {
+  /** Tokens of attended leases, until released. */
+  const attended = new Set<string>();
   return {
     handle: (req, res) =>
       serveMcpRequest(req, res, {
         host: deps.host,
         tokens: deps.tokens,
-        server: (botId) =>
+        server: (botId, token) =>
           createRoutinesMcpServer({
             botId,
             routines: deps.routines,
-            unattended: deps.unattended,
+            unattended: (id) => !attended.has(token) && deps.unattended(id),
             now: deps.now,
           }),
       }),
 
-    lease(botId) {
+    lease(botId, o) {
       const { token, revoke } = deps.tokens.issue(botId);
+      if (o?.attended) attended.add(token);
       return {
         servers: [
           {
@@ -76,7 +85,10 @@ export function createRoutinesEndpoint(deps: RoutinesEndpointDeps): RoutinesEndp
           },
         ],
         instructions: ROUTINES_INSTRUCTIONS,
-        release: revoke,
+        release: () => {
+          attended.delete(token);
+          revoke();
+        },
       };
     },
   };

@@ -260,11 +260,15 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       routinesEndpoint.lease(botId),
       isolation(botId),
     ]);
-  /** A double-loop front only talks, hands off and manages routines: no browser, and the same isolation as the bot's own thread. */
+  /**
+   * A double-loop front only talks, hands off and manages routines: no browser, and the same isolation as the bot's own thread.
+   * It is never a scheduled run, so its routines lease is attended: a routine run of the bot (headless, in a session of its own)
+   * does not stop the owner creating routines from the front's chat.
+   */
   const frontServers: HostServersSource = (botId) =>
     combineLeases([
       handoffs.endpoint.lease(botId),
-      routinesEndpoint.lease(botId),
+      routinesEndpoint.lease(botId, { attended: true }),
       isolation(botId),
     ]);
   /** Other bots' directories are on every bot's deny-read list, so a bot that appears or goes reaches the open sessions. */

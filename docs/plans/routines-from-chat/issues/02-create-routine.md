@@ -15,14 +15,14 @@ Contradiction to note in the PR: `RoutineInput.schedule` is `z.unknown()`, so th
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `create_routine` with a cron schedule creates an active routine for the calling bot with `catch_up` true unless given. The result has the routine, `next_runs` and `now`. `/api/routines/list` for that bot returns it
-- [ ] With that bot open, the event stream carries a `routines` event holding the new routine, without any UI call
-- [ ] A `once` schedule with an ISO `at` in the future creates a routine that fires once. An `at` without an offset is refused by the schema. An `at` in the past is refused with "time is in the past"
-- [ ] A bad cron, an unknown time zone, a schedule that never fires and a cron that runs more often than every 5 minutes each return an error result that carries the route's message (for example "minimum interval is 5 minutes") and create nothing
-- [ ] A name over 80 characters, an instruction over 8 KiB and an empty name or instruction return error results
-- [ ] The 21st routine of one bot is refused with a message that names the cap. Another bot is not affected. The panel and `/api/routines/create` are not capped by it
-- [ ] While the bot runs a routine turn or a headless run, `create_routine` is refused with the "scheduled runs cannot create or change routines" message and nothing is created. `list_routines` still answers
-- [ ] The tool has no argument for a bot id, a tool policy, a grant or an integration. A routine it creates has the same tool policies as one created in the panel
-- [ ] Host HTTP-seam tests cover all of the above through `actAs(botId, "routines")` (prior art: `handoffs/guardrails.test.ts`, `routines/index.test.ts`; the unattended case holds a routine turn open the way `hold()` does). `bun run check` passes
+- [x] `create_routine` with a cron schedule creates an active routine for the calling bot with `catch_up` true unless given. The result has the routine, `next_runs` and `now`. `/api/routines/list` for that bot returns it
+- [x] With that bot open, the event stream carries a `routines` event holding the new routine, without any UI call
+- [x] A `once` schedule with an ISO `at` in the future creates a routine that fires once. An `at` without an offset is refused by the schema. An `at` in the past is refused with "time is in the past"
+- [x] A bad cron, an unknown time zone, a schedule that never fires and a cron that runs more often than every 5 minutes each return an error result that carries the route's message (for example "minimum interval is 5 minutes") and create nothing
+- [x] A name over 80 characters, an instruction over 8 KiB and an empty name or instruction return error results
+- [x] The 21st routine of one bot is refused with a message that names the cap. Another bot is not affected. The panel and `/api/routines/create` are not capped by it
+- [x] While the bot runs a routine turn or a headless run, `create_routine` is refused with the "scheduled runs cannot create or change routines" message and nothing is created. `list_routines` still answers
+- [x] The tool has no argument for a bot id, a tool policy, a grant or an integration. A routine it creates has the same tool policies as one created in the panel
+- [x] Host HTTP-seam tests cover all of the above through `actAs(botId, "routines")` (prior art: `handoffs/guardrails.test.ts`, `routines/index.test.ts`; the unattended case holds a routine turn open the way `hold()` does). `bun run check` passes

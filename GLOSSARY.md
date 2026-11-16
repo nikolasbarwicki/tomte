@@ -6,7 +6,7 @@
 - **Browser session**: one bot's browser: an engine session named after the bot, with its own cookies, storage, tabs and saved login state.
 - **Browser tools**: the MCP tools exposed to bots at the browser endpoint.
 - **Browser endpoint**: the host's Streamable HTTP MCP route that serves the browser tools.
-- **Routine tools**: the MCP tools exposed to bots at the routines endpoint (`mcp__routines__*`); a bot reads and manages only its own routines with them.
+- **Routine tools**: the MCP tools exposed to bots at the routines endpoint (`mcp__routines__*`); a bot reads and manages only its own routines with them. A scheduled run (a routine turn or a headless run, including a double-loop bot's own-session run) may read its routines but not create or change them; a double-loop bot's front is never a scheduled run, so it may.
 - **Routines endpoint**: the host's Streamable HTTP MCP route that serves the routine tools, on the agent listener.
 - **Snapshot**: a text accessibility view of the current page with element references (refs).
 - **Live view**: the user's real-time view of a bot's browser in the web UI.
