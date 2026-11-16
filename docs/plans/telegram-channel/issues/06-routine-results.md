@@ -8,7 +8,7 @@ The routine prompt already asks each run to end with a summary of at most 5 line
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A schema step adds `notify_result INTEGER NOT NULL DEFAULT 0` to `routines` with `ALTER TABLE ... ADD COLUMN` (no CHECK is changed, so no table rebuild). Existing routines stay off
 - [x] `Routine` in the contract gains `notifyResult: boolean`. `RoutineInput` and `RoutinePatch` accept it and the HTTP routes (`host-server/api/routines.ts`) pass it through, for create and update. Absent on create means off. A patch that omits it keeps it

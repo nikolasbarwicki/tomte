@@ -8,7 +8,7 @@ Approval values are `allow`, `allow_always` and `deny` (`docs/plans/unattended-p
 
 **Blocked by:** 03, `docs/plans/unattended-parking/issues/01-durable-human-waits.md`, `docs/plans/unattended-parking/issues/02-parked-runs.md`, `docs/plans/unattended-parking/issues/07-always-allow-and-deny-note.md`
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] Each open human wait is sent once as a card (a `channel_cards` row of kind `wait`, from ticket 03), including waits that opened while Telegram or the host was down and waits that survive `restart()`. A wait that is already closed is never sent
 - [x] An approval card shows the tool, the reason and the exact stored input as plain text, with Allow and Deny (and `allow_always`, "Always allow <tool> for this bot", when the wait carries it) as buttons `w:<waitId>:<index>`, an index into the wait's stored actions and never the action's text

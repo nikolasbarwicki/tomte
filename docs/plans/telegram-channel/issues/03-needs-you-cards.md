@@ -10,7 +10,7 @@ Three seams change:
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A schema step adds `channel_cards` (channel, item kind `event` or `wait`, item id, bot id, message ref, sent at, closed at; unique on channel, kind and item id). A new open item is sent once as a card: title `<source> · <title>`, the body, buttons from the contract function, and a URL button to `<public URL>/bots/<botId>?panel=work`. The public URL is `clientAt.publicUrl` (`host-server/index.ts`); when it is loopback http the card has no URL button
 - [x] A restart sends nothing twice. At host start and right after linking, every open item with no `channel_cards` row is sent, oldest first. An item that arrived while Telegram was down is sent once it is back

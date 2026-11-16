@@ -11,7 +11,7 @@ An auto-pause or an absence pause is not a notice in this sense. Feature 13 make
 
 **Blocked by:** 03, `docs/plans/unattended-parking/issues/02-parked-runs.md`
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A run that ends `failed` sends `run_failed`: "Routine <name> failed: <error>", the error cut to about 300 characters, and a URL button to `<public URL>/bots/<botId>?panel=routines` (no button on a loopback public URL, as for cards). A run that ends `interrupted` (the host stopped during it, found at the next start) sends the same notice worded as interrupted. A `succeeded` run sends nothing here. A skipped run ("previous run is waiting for you", "missed while offline") sends nothing
 - [x] A park that reaches 24 hours sends `park_expired` ("<routine>: <wait title> expired, so the run failed") and not also `run_failed` for the same run

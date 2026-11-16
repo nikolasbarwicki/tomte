@@ -34,7 +34,7 @@ type Reply = {
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A schema step in `platform/db.ts` (append `SCHEMA_V14`, or the next free number; do not edit an earlier step and keep `PRAGMA user_version` in step) adds `channel_links` (one row per channel: account id, label, linked at) and `channel_link_codes` with its failure count. Only a digest of a code is stored
 - [x] `/api/channels/link-code` (body `{channel}`) returns a new code in groups of four, valid 10 minutes and once. `/api/channels/list` returns each registered channel with its link (account label and time, or none). `/api/channels/unlink` deletes the link. All three are device-authenticated and dispatched by the `/api/channels/` prefix in `host-server/api/index.ts`, like `/api/devices/`. Request and response shapes are Zod schemas in `packages/contract/src/api.ts`

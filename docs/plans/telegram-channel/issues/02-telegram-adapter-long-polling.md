@@ -8,7 +8,7 @@ The adapter splits into a transport (`getUpdates`, `sendMessage`, `editMessageTe
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The bot token is stored in the secrets backend under its own name in `platform/secrets.ts`, set by `/api/channels/telegram/token` (device-authenticated, body `{token}`), validated with `getMe` before it is stored, and never returned by any route, never in the event stream and never logged. A rejected token is not stored. Deleting the link does not delete the token; a second route call replaces it
 - [x] With a token the host starts one long-polling loop (`getUpdates`, `timeout=50`, `allowed_updates` of `message` and `callback_query`) and aborts it on `stop()` and on `close()` of the host. The adapter takes its API base URL as an option (default `https://api.telegram.org`) and the poll timeout as an option, so tests are fast
