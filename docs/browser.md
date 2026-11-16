@@ -92,6 +92,8 @@ A routine can request a takeover, and that parks the run: it shows "Waiting for 
 
 A routine that needs an approval or an answer does not fail. A tool on the `ask` policy, or a question to you, parks the run: it shows "Waiting for you", you answer on the usual card (open the bot), and the run continues in the same session. A park that stays unanswered for 24 hours fails the run with "approval expired". While a run waits, the routine's next occurrences are skipped and "Run now" is unavailable.
 
+A double-loop bot's routine runs are the same kind of run: always headless, in a session of their own (not the front's), whether or not its chat is open. They park and resume as above, and report through the run output and the Routines panel, not the front chat; the front never sees the routine's prompt, its questions or its answers. The run uses the bot's model and effort and has the browser, which the front's background agents do not.
+
 ## Page walls
 
 Every browser tool that returns a snapshot (`browser_open`, `browser_snapshot`, the actions, `browser_tabs`) checks the page for two kinds of wall. The checks read the snapshot's visible text and, after `browser_open`, the page title, and know vendors and sign-in forms, never sites. A snapshot that carries only interactive elements (the actions return one) has little text to read, so a wall is most reliably caught on `browser_open` and `browser_snapshot`.
