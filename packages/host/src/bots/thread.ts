@@ -30,6 +30,7 @@ import {
   memorySections,
   type HostDelegate,
 } from "./session-kit.ts";
+import { TurnError, type TurnUsage, type UsageMeter } from "./usage.ts";
 
 /** What every bot thread the host opens shares, whether in a chat or in a headless routine run. */
 export interface ThreadEnv {
@@ -48,6 +49,8 @@ export interface ThreadEnv {
   approveAll: boolean;
   /** Whether the owner always allows this bot a tool (`allow_always`); asked before the delegate. */
   allows: (botId: string, tool: string) => boolean;
+  /** Sees every result of every thread, to tell each turn's usage from the session's running totals. */
+  meter: UsageMeter;
 }
 
 export interface ThreadOptions {
@@ -78,6 +81,8 @@ export interface ThreadOptions {
   memory: MemoryPaths;
   /** Called with a scope's full memory file after the agent changes it. */
   onMemory?: (scope: MemoryScope, text: string) => void;
+  /** Sees every result this thread's turns end in; without it a turn's usage is unknown (null). */
+  meter?: UsageMeter;
 }
 
 const HOST_INSTRUCTIONS = `${ASK_INSTRUCTIONS}\n\n${MEMORY_INSTRUCTIONS}`;
@@ -86,6 +91,8 @@ export interface TurnResult {
   result: SDKResultMessage & { subtype: "success" };
   text: string;
   toolsUsed: string[];
+  /** What this turn used; null when the host cannot tell (a resumed session it had no mark for). */
+  usage: TurnUsage | null;
 }
 
 export class Thread {
@@ -229,12 +236,13 @@ export class Thread {
           }
         }
         if (m.type === "result") {
+          const usage = this.o.meter?.record(this.sessionId, m, !!this.o.resume) ?? null;
           if (m.subtype !== "success" || m.is_error) {
             const detail = "errors" in m ? m.errors.join("; ") : m.result;
-            throw new Error(`turn failed (${m.subtype}): ${detail}`);
+            throw new TurnError(`turn failed (${m.subtype}): ${detail}`, usage);
           }
           await this.reconcileIntegrations();
-          return { result: m, text: m.result || out, toolsUsed };
+          return { result: m, text: m.result || out, toolsUsed, usage };
         }
       }
     } catch (e) {

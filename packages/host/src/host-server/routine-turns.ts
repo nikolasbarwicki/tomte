@@ -1,13 +1,19 @@
 import type { Database } from "bun:sqlite";
 
 import { recordMessage, type ThreadEnv, type TurnResult } from "../bots/index.ts";
-import { parkingDelegate, runHeadless, type Executor, type RoutineJob } from "../routines/index.ts";
+import {
+  parkingDelegate,
+  runHeadless,
+  type Executor,
+  type RoutineJob,
+  type RoutineTurnResult,
+} from "../routines/index.ts";
 import type { Waits } from "../waits/index.ts";
 
 /** A routine turn waiting for its bot; it runs in the bot's chat once that is idle, or headless if the bot has no chat or the run has a session of its own. */
 type QueuedRoutine = {
   job: RoutineJob;
-  resolve(text: string): void;
+  resolve(result: RoutineTurnResult): void;
   reject: (e: Error) => void;
   stop?: (reason: string) => void;
 };
@@ -54,11 +60,11 @@ export function createRoutineTurns(deps: RoutineTurnsDeps): RoutineTurns {
     headlessRuns.set(bot.id, { routine: routine.name, runId, ownSession });
     deps.announceBots();
     h.done
-      .then((text) => {
+      .then((result) => {
         // A run in a session of its own reports through its run output; the bot's chat has no message from it.
-        if (text.trim() && ownSession === undefined)
-          recordMessage(db, bot.id, { from: "bot", text, at: Date.now() });
-        item.resolve(text);
+        if (result.text.trim() && ownSession === undefined)
+          recordMessage(db, bot.id, { from: "bot", text: result.text, at: Date.now() });
+        item.resolve(result);
       }, item.reject)
       .finally(() => {
         headlessRuns.delete(bot.id);
@@ -70,7 +76,7 @@ export function createRoutineTurns(deps: RoutineTurnsDeps): RoutineTurns {
 
   return {
     execute(job) {
-      const { promise, resolve, reject } = Promise.withResolvers<string>();
+      const { promise, resolve, reject } = Promise.withResolvers<RoutineTurnResult>();
       const item: QueuedRoutine = { job, resolve, reject };
       routineQueue.push(item);
       deps.wake();
@@ -103,7 +109,9 @@ export function createRoutineTurns(deps: RoutineTurnsDeps): RoutineTurns {
         }
         const turn = runInChat(chat, item.job);
         item.stop = turn.stop;
-        void turn.done.then((r) => (r instanceof Error ? item.reject(r) : item.resolve(r.text)));
+        void turn.done.then((r) =>
+          r instanceof Error ? item.reject(r) : item.resolve({ text: r.text, usage: r.usage }),
+        );
       }
     },
   };

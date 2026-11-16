@@ -101,9 +101,11 @@ export function NeedsYou({ bot }: { bot: BotSummary }) {
     if (e.key === "j") setCursor(Math.min(at + 1, rows.length - 1));
     else if (e.key === "k") setCursor(Math.max(at - 1, 0));
     else if (e.key === "Enter") {
-      // An event's first button is safe to run from the keyboard. A request's are not: Enter only shows its card.
-      if (row.type === "event") void run(row.item, itemActions(row.item)[0]!);
-      else showCard(row.request);
+      // An event's first button is safe to run from the keyboard (a notice has none). A request's are not: Enter only shows its card.
+      if (row.type === "event") {
+        const first = itemActions(row.item)[0];
+        if (first) void run(row.item, first);
+      } else showCard(row.request);
     } else if (e.key === "e" && row.type === "event") dismiss(row.item);
     else return;
     e.preventDefault();

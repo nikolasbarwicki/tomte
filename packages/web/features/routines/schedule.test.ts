@@ -24,6 +24,7 @@ const routine = (schedule: Schedule, over: Partial<Routine> = {}): Routine => ({
   instruction: "Summarise",
   schedule,
   active: true,
+  pausedReason: null,
   catchUp: false,
   notifyResult: false,
   createdAt: 0,

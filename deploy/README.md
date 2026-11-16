@@ -6,17 +6,17 @@ Remote mode is Linux-only ([ADR-0006](../docs/adr/0006-remote-mode-is-linux-only
 
 ## What the kit sets up
 
-| Part             | Where                                                                                                                                                                |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| System user      | `claudebot` (user and group), home `/var/lib/claudebot`, shell `/usr/sbin/nologin`                                                                                   |
-| Data root        | `/var/lib/claudebot`, owner `claudebot:claudebot`, mode `0700`                                                                                                       |
-| Binary           | `/usr/local/bin/claudebot-host`, `root:root`, mode `0755`                                                                                                            |
-| Settings         | `/etc/claudebot/claudebot.env`, `root:root`, mode `0644`. Non-secret only: `CLAUDEBOT_HOST`, `CLAUDEBOT_PORT`, `CLAUDEBOT_PUBLIC_URL`, `CLAUDEBOT_ALLOW_PLAIN_HTTP`. |
-| Secrets key      | A systemd credential named `secrets-key`: 32 random bytes in `/etc/credstore.encrypted/claudebot.secrets-key`, encrypted with `systemd-creds`                        |
-| Unit             | `/etc/systemd/system/claudebot.service`, enabled, `Restart=always`                                                                                                   |
-| Claude CLI       | Installed by `claudebot-host install-cli` into the data root                                                                                                         |
-| Browser engine   | Installed by `claudebot-host install-browser` into the data root (x86_64 only, see below)                                                                            |
-| Sandbox packages | `bubblewrap` and `socat`, installed with `apt-get` or `dnf` when missing                                                                                             |
+| Part             | Where                                                                                                                                                                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| System user      | `claudebot` (user and group), home `/var/lib/claudebot`, shell `/usr/sbin/nologin`                                                                                                                                                                                          |
+| Data root        | `/var/lib/claudebot`, owner `claudebot:claudebot`, mode `0700`                                                                                                                                                                                                              |
+| Binary           | `/usr/local/bin/claudebot-host`, `root:root`, mode `0755`                                                                                                                                                                                                                   |
+| Settings         | `/etc/claudebot/claudebot.env`, `root:root`, mode `0644`. Non-secret only: `CLAUDEBOT_HOST`, `CLAUDEBOT_PORT`, `CLAUDEBOT_PUBLIC_URL`, `CLAUDEBOT_ALLOW_PLAIN_HTTP`, and, if you add it, `CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS` ([below](#pause-routines-when-you-are-away)). |
+| Secrets key      | A systemd credential named `secrets-key`: 32 random bytes in `/etc/credstore.encrypted/claudebot.secrets-key`, encrypted with `systemd-creds`                                                                                                                               |
+| Unit             | `/etc/systemd/system/claudebot.service`, enabled, `Restart=always`                                                                                                                                                                                                          |
+| Claude CLI       | Installed by `claudebot-host install-cli` into the data root                                                                                                                                                                                                                |
+| Browser engine   | Installed by `claudebot-host install-browser` into the data root (x86_64 only, see below)                                                                                                                                                                                   |
+| Sandbox packages | `bubblewrap` and `socat`, installed with `apt-get` or `dnf` when missing                                                                                                                                                                                                    |
 
 The unit starts the host as `claudebot` with fixed flags: `--mode remote --data-root /var/lib/claudebot --secrets-key-file %d/secrets-key`. `%d` is the credentials directory systemd creates for the service, `/run/credentials/claudebot.service`. The host reads the key from that file only. It never reads the key from the environment.
 
@@ -326,6 +326,21 @@ These directives are left out on purpose, because the sandbox needs what they bl
 - `PrivateUsers=` lets bubblewrap start, but it remaps every other uid, including root's ownership of the credential. It was not checked with the Claude CLI and Chrome.
 
 The sandbox runtime started and applied its deny-read list under every directive in the first table on Ubuntu 24.04 with systemd 255.
+
+## Pause routines when you are away
+
+A host nobody uses should not keep running routines. Set `CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS` in `/etc/claudebot/claudebot.env` (the unit reads it through `EnvironmentFile`; `--pause-after-absence-days` on the command line wins) to a whole number of days, then run `sudo systemctl restart claudebot`:
+
+```sh
+CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS=14
+```
+
+The default is `0`: the pause is off. A negative or non-integer value stops the host from starting.
+
+- **What counts as you being here.** Any request from one of your paired devices, except the event stream: opening the UI, a click, a message. A tab or the desktop app that only keeps the event stream open does not count. The clock is in the database, so a restart does not reset it, and turning the setting on starts the clock now.
+- **The warning.** Two days before the pause (with a setting above 2) each bot that has an active routine gets a needs-you item: "Routines will pause in 2 days unless you open claudebot".
+- **The pause.** After that many days without you, every active routine is paused with the reason "no activity for N days", and each affected bot gets a needs-you item naming them. A routine that failed five runs in a row, or that you switched off, is left as it is. A run already working finishes.
+- **Your return.** Your first request after a pause resumes the routines the absence stopped, without catching up on the occurrences you missed, and closes the two items. Routines paused for failures or by you stay paused.
 
 ## Operate the service
 

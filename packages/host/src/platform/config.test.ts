@@ -90,6 +90,7 @@ describe("flags and environment", () => {
       CLAUDEBOT_VITE: "true",
       CLAUDEBOT_DATA_ROOT: "/srv/claudebot",
       CLAUDEBOT_RELAY_CONFIG: "/etc/claudebot/relay.json",
+      CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS: "14",
     });
     expect(config).toEqual({
       mode: "remote",
@@ -101,6 +102,7 @@ describe("flags and environment", () => {
       reveal: false,
       isolateAllBots: true,
       sidecar: false,
+      pauseAfterAbsenceDays: 14,
       vite: true,
       askApproval: true,
       dataRoot: "/srv/claudebot",
@@ -120,6 +122,26 @@ describe("flags and environment", () => {
   test("an environment variable can switch Vite off", () => {
     const { config } = parse([], { CLAUDEBOT_VITE: "false" });
     expect(config.vite).toBe(false);
+  });
+
+  test("the absence pause is off unless a flag or the environment sets a number of days, and a flag wins", () => {
+    expect(parse().config.pauseAfterAbsenceDays).toBe(0);
+    expect(
+      parse([], { CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS: "14" }).config.pauseAfterAbsenceDays,
+    ).toBe(14);
+    expect(
+      parse(["--pause-after-absence-days", "7"], { CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS: "14" })
+        .config.pauseAfterAbsenceDays,
+    ).toBe(7);
+    expect(
+      parse(["--pause-after-absence-days", "0"], { CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS: "14" })
+        .config.pauseAfterAbsenceDays,
+    ).toBe(0);
+  });
+
+  test.each([["-1"], ["1.5"], ["two"], ["1e3"], ["0x10"]])("rejects %s days of absence", (days) => {
+    expect(() => parse(["--pause-after-absence-days", days])).toThrow(InvalidConfig);
+    expect(() => parse([], { CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS: days })).toThrow(InvalidConfig);
   });
 
   test("the relay configuration is relay.json in the data root unless a flag or the environment names another", () => {

@@ -19,7 +19,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { readJson } from "@/host/api.ts";
-import { dateTime } from "@/lib/format.ts";
+import { useHostInfo } from "@/host/hooks.ts";
+import { dateTime, duration, tokenCount } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
 
 import { deleteRoutine, routineRuns, runRoutine, setRoutineActive } from "./api.ts";
@@ -49,6 +50,7 @@ function RunBadge({ status }: { status: RunStatus }) {
 
 export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   const [open, setOpen] = useState(false);
+  const absenceDays = useHostInfo()?.pauseAfterAbsenceDays ?? 0;
   const [toggling, toggle] = useTransition();
   const [starting, startRun] = useTransition();
   const [removing, startRemoving] = useTransition();
@@ -64,7 +66,13 @@ export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   const status = r.running ? "running" : r.lastRun?.status;
   const parked = !r.running && r.lastRun?.status === "waiting";
   const next = !r.active
-    ? "Paused"
+    ? r.pausedReason === "failures"
+      ? "Paused after 5 failed runs"
+      : r.pausedReason === "absence"
+        ? absenceDays > 0
+          ? `Paused: no activity for ${absenceDays} ${absenceDays === 1 ? "day" : "days"}`
+          : "Paused: no activity"
+        : "Paused"
     : r.nextRunAt
       ? `Next run ${dateTime(r.nextRunAt)}`
       : "No runs left";
@@ -178,20 +186,43 @@ export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   );
 }
 
+function runUsage(run: RoutineRun) {
+  const u = run.usage;
+  const cached = u ? u.cacheReadTokens + u.cacheCreationTokens : 0;
+  return [
+    u && u.inputTokens + u.outputTokens + cached > 0
+      ? `${tokenCount(u.inputTokens)} in · ${tokenCount(u.outputTokens)} out${cached > 0 ? ` · ${tokenCount(cached)} cached` : ""}`
+      : undefined,
+    run.costUsd ? `est. $${run.costUsd.toFixed(2)}` : undefined,
+    run.parkedMs > 0 ? `parked ${duration(run.parkedMs)}` : undefined,
+  ].filter((s) => s !== undefined);
+}
+
 function RunRow({ run }: { run: RoutineRun }) {
   const hasBody = !!(run.error || run.output);
+  const used = runUsage(run);
   return (
     <Collapsible disabled={!hasBody}>
-      <CollapsibleTrigger className="group/run hover:bg-muted/60 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-xs disabled:hover:bg-transparent">
+      <CollapsibleTrigger className="group/run hover:bg-muted/60 flex w-full items-start gap-2 rounded-md px-1 py-1 text-left text-xs disabled:hover:bg-transparent">
         <ChevronRightIcon
           className={cn(
-            "size-3 shrink-0 text-muted-foreground transition-transform group-data-panel-open/run:rotate-90",
+            "mt-0.5 size-3 shrink-0 text-muted-foreground transition-transform group-data-panel-open/run:rotate-90",
             !hasBody && "invisible",
           )}
         />
         <RunBadge status={run.status} />
-        <span className="text-muted-foreground truncate">
-          {dateTime(run.startedAt)} · {run.trigger === "manual" ? "test run" : "scheduled"}
+        <span className="grid min-w-0 gap-0.5">
+          <span className="text-muted-foreground truncate">
+            {dateTime(run.startedAt)} · {run.trigger === "manual" ? "test run" : "scheduled"}
+          </span>
+          {used.length > 0 && (
+            <span
+              className="text-muted-foreground/80 text-[11px]"
+              title="Estimated at API prices; not money spent on a Claude plan"
+            >
+              {used.join(" · ")}
+            </span>
+          )}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent>

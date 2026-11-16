@@ -7,11 +7,18 @@ import { join } from "node:path";
 import type { Schedule } from "@claudebot/contract/events";
 import { z } from "zod";
 
-import { createBot } from "../bots/index.ts";
+import { createBot, TurnError, type TurnUsage } from "../bots/index.ts";
+import type { Events } from "../events/index.ts";
 import { migrate } from "../platform/db.ts";
 import { defined } from "../testing/defined.ts";
-import { createWaits, type Waits } from "../waits/index.ts";
-import { Conflict, createRoutines, type Executor, type RunEnd } from "./index.ts";
+import { createWaits, type Wait, type Waits } from "../waits/index.ts";
+import {
+  Conflict,
+  createRoutines,
+  type Executor,
+  type RoutineTurnResult,
+  type RunEnd,
+} from "./index.ts";
 import * as store from "./store.ts";
 
 const at = (iso: string) => Date.parse(iso);
@@ -24,7 +31,7 @@ let jobs: {
   prompt: string;
   runId: string;
   resumed: boolean;
-  resolve(text: string): void;
+  resolve(text: string, usage?: TurnUsage | null): void;
   reject(e: Error): void;
 }[];
 let routines: ReturnType<typeof createRoutines>;
@@ -36,10 +43,31 @@ let told: string[];
 let notices: string[];
 /** Every run `onRunEnded` was told about. */
 let ended: RunEnd[];
+/** Extra routine hosts a test made; stopped after it. */
+let onTestEnd: (() => void)[];
+/** The host's own needs-you items the routines raised. */
+let raised: { botId: string; key: string; title: string; body?: string }[];
+/** Who hears a wait of a run close: the default routine host, or the one a test makes with its own cap. */
+let waitClosed: (w: Wait) => void;
+
+/** The host's own needs-you items, recorded in `raised`. */
+const events: Pick<Events, "notice" | "resolveNotices"> = {
+  notice: (bot, n) => {
+    raised.push({ botId: bot, ...n });
+    return { id: n.key, duplicate: false };
+  },
+  resolveNotices() {},
+};
 
 const execute: Executor = ({ prompt, runId, resumed }) => {
-  const { promise, resolve, reject } = Promise.withResolvers<string>();
-  jobs.push({ prompt, runId, resumed, resolve, reject });
+  const { promise, resolve, reject } = Promise.withResolvers<RoutineTurnResult>();
+  jobs.push({
+    prompt,
+    runId,
+    resumed,
+    resolve: (text, usage = null) => resolve({ text, usage }),
+    reject,
+  });
   return { done: promise, stop: (reason) => reject(new Error(reason)) };
 };
 
@@ -48,9 +76,11 @@ beforeEach(() => {
   db = migrate(new Database(":memory:"));
   clock = at("2026-01-01T10:00:00Z");
   jobs = [];
+  onTestEnd = [];
   told = [];
   notices = [];
   ended = [];
+  raised = [];
   changed = Promise.withResolvers();
   botId = createBot(cwd, "Bot").id;
   waits = createWaits({
@@ -67,15 +97,18 @@ beforeEach(() => {
     waits,
     notice: async (_bot, text) => void notices.push(text),
     deliver: async (_bot, text) => void told.push(text),
+    events,
     onChange: (id) => changed.resolve(id),
     onRunEnded: (end) => void ended.push(end),
   });
+  waitClosed = (w) => routines.waitClosed(w);
   waits.subscribe((e) => {
-    if (e.type === "closed") routines.waitClosed(e.wait);
+    if (e.type === "closed") waitClosed(e.wait);
   });
 });
 
 afterEach(() => {
+  for (const stop of onTestEnd) stop();
   routines.stop();
   waits.close();
   rmSync(cwd, { recursive: true, force: true });
@@ -145,6 +178,9 @@ test("a run left running by a previous process becomes interrupted", () => {
     error: null,
     startedAt: clock,
     finishedAt: null,
+    usage: null,
+    costUsd: null,
+    parkedMs: 0,
   });
   routines.start();
   expect(runsOf(r.id)).toMatchObject([
@@ -399,6 +435,9 @@ test("what a run that the last process left running asked the owner is cancelled
     error: null,
     startedAt: clock,
     finishedAt: null,
+    usage: null,
+    costUsd: null,
+    parkedMs: 0,
   });
   askApproval("stale");
   routines.start();
@@ -439,6 +478,7 @@ test("a database made before parked runs keeps its runs and their order, and tak
     ["r2", "second"],
     ["r1", "first"],
   ]);
+  expect(runsOf(r.id)[0]).toMatchObject({ usage: null, costUsd: null, parkedMs: 0 });
   store.insertRun(db, {
     id: "parked",
     routineId: r.id,
@@ -450,6 +490,9 @@ test("a database made before parked runs keeps its runs and their order, and tak
     error: null,
     startedAt: 3,
     finishedAt: null,
+    usage: null,
+    costUsd: null,
+    parkedMs: 0,
   });
   expect(routines.get(r.id).lastRun).toMatchObject({ id: "parked", status: "waiting" });
   // A parked run answered after the upgrade resumes with the answer, and the wait counts as delivered.
@@ -500,6 +543,9 @@ test("a run left running by a previous process is reported as interrupted at sta
     error: null,
     startedAt: clock,
     finishedAt: null,
+    usage: null,
+    costUsd: null,
+    parkedMs: 0,
   });
   routines.start();
   routines.start();
@@ -564,6 +610,7 @@ test("a run stopped by shutdown is left running, and the next start reports it a
     notice: async () => {},
     deliver: async () => {},
     onChange: () => {},
+    events,
     onRunEnded: (end) => void ended.push(end),
   });
   again.start();
@@ -582,6 +629,7 @@ test("a failing onRunEnded is logged and the run's final status stands", async (
     notice: async () => {},
     deliver: async () => {},
     onChange: () => {},
+    events,
     onRunEnded: () => {
       throw new Error("no channel");
     },
@@ -593,4 +641,417 @@ test("a failing onRunEnded is logged and the run's final status stands", async (
   expect(quiet).toHaveBeenCalledWith(expect.stringContaining("no channel"));
   quiet.mockRestore();
   failing.stop();
+});
+
+const CAP = 40;
+
+/** A routine host with a small cap over the same database; `stopped` counts the executor's stops. */
+function capped(
+  exited = "Claude Code exited before the turn produced a result",
+  exitedWith?: TurnUsage,
+) {
+  const turns: { resolve(text: string): void; reject(e: Error): void }[] = [];
+  const stopped: string[] = [];
+  const timed = createRoutines({
+    db,
+    dataRoot: cwd,
+    now: () => clock,
+    runCapMs: CAP,
+    execute: () => {
+      const { promise, resolve, reject } = Promise.withResolvers<RoutineTurnResult>();
+      turns.push({ resolve: (text) => resolve({ text, usage: null }), reject });
+      return {
+        done: promise,
+        stop: (reason) => {
+          stopped.push(reason);
+          reject(exitedWith ? new TurnError(exited, exitedWith) : new Error(exited));
+        },
+      };
+    },
+    waits,
+    notice: async () => {},
+    deliver: async () => {},
+    events,
+    onChange: (id) => changed.resolve(id),
+    onRunEnded: () => {},
+  });
+  onTestEnd.push(() => timed.stop());
+  return { timed, turns, stopped };
+}
+
+test("a run that works past the cap fails with the limit, not the stopped executor's error, and frees the routine", async () => {
+  const { timed, turns, stopped } = capped();
+  const r = timed.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  timed.testRun(r.id);
+  changed = Promise.withResolvers();
+  await changed.promise;
+  await until(() => timed.get(r.id).lastRun?.status === "failed");
+  expect(timed.get(r.id)).toMatchObject({
+    running: false,
+    lastRun: { status: "failed", error: "run exceeded the 40 ms time limit" },
+  });
+  expect(stopped).toEqual(["run exceeded the 40 ms time limit"]);
+  // The next occurrence starts normally.
+  timed.testRun(r.id);
+  expect(turns).toHaveLength(2);
+  expect(timed.get(r.id).running).toBe(true);
+});
+
+test("a run whose executor never settles after stop still fails at the cap", async () => {
+  const hung = createRoutines({
+    db,
+    dataRoot: cwd,
+    now: () => clock,
+    runCapMs: CAP,
+    execute: () => ({ done: new Promise<RoutineTurnResult>(() => {}), stop() {} }),
+    waits,
+    notice: async () => {},
+    deliver: async () => {},
+    events,
+    onChange: () => {},
+    onRunEnded: () => {},
+  });
+  onTestEnd.push(() => hung.stop());
+  const r = hung.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  hung.testRun(r.id);
+  await until(() => hung.get(r.id).lastRun?.status === "failed");
+  expect(hung.get(r.id)).toMatchObject({
+    running: false,
+    lastRun: { error: expect.stringContaining("time limit") },
+  });
+});
+
+test("a scheduled run has the same cap", async () => {
+  const { timed } = capped();
+  clock = at("2026-01-01T10:30:00Z");
+  const r = timed.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  clock = at("2026-01-01T11:00:30Z");
+  timed.start();
+  expect(timed.get(r.id).lastRun).toMatchObject({ trigger: "schedule", status: "running" });
+  await until(() => timed.get(r.id).lastRun?.status === "failed");
+  expect(timed.get(r.id).lastRun).toMatchObject({ error: "run exceeded the 40 ms time limit" });
+});
+
+test("a run that finishes or fails before the cap is unaffected and its clock never fires", async () => {
+  const { timed, turns, stopped } = capped();
+  const r = timed.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  timed.testRun(r.id);
+  defined(turns[0]).resolve("done in time");
+  await until(() => timed.get(r.id).lastRun?.status === "succeeded");
+  timed.testRun(r.id);
+  defined(turns[1]).reject(new Error("boom"));
+  await until(() => timed.get(r.id).lastRun?.status === "failed");
+  await Bun.sleep(CAP * 3);
+  expect(stopped).toEqual([]);
+  expect(runsOf(r.id).map((x) => [x.status, x.error])).toEqual([
+    ["failed", "boom"],
+    ["succeeded", null],
+  ]);
+});
+
+test("deleting a running routine and shutting down leave no clock to fire", async () => {
+  const { timed, stopped } = capped();
+  const gone = timed.create(botId, { name: "a", instruction: "i", schedule: hourly });
+  timed.testRun(gone.id);
+  await timed.remove(gone.id);
+  const open = timed.create(botId, { name: "b", instruction: "i", schedule: hourly });
+  timed.testRun(open.id);
+  timed.stop();
+  await Bun.sleep(CAP * 3);
+  expect(stopped).toEqual(["routine deleted", "shutdown"]);
+});
+
+/** Runs the routine by hand and fails its turn; resolves once the run has ended. */
+async function failRun(id: string, error = "the CLI crashed") {
+  routines.testRun(id);
+  defined(jobs.at(-1), "job").reject(new Error(error));
+  await until(() => !routines.get(id).running);
+  expect(routines.get(id).lastRun).toMatchObject({ status: "failed", error });
+}
+
+async function succeedRun(id: string) {
+  routines.testRun(id);
+  defined(jobs.at(-1), "job").resolve("fine");
+  await until(() => !routines.get(id).running);
+  expect(routines.get(id).lastRun?.status).toBe("succeeded");
+}
+
+const interrupted = (routineId: string, n: number) =>
+  store.insertRun(db, {
+    id: `int-${n}`,
+    routineId,
+    trigger: "manual",
+    scheduledFor: null,
+    status: "interrupted",
+    sessionId: null,
+    output: null,
+    error: "app stopped during run",
+    startedAt: clock,
+    finishedAt: clock,
+    usage: null,
+    costUsd: null,
+    parkedMs: 0,
+  });
+
+test("the fifth failed run in a row pauses the routine and tells its owner once, the fourth does not", async () => {
+  const r = routines.create(botId, { name: "digest", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 4; i++) await failRun(r.id);
+  expect(routines.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  expect(raised).toEqual([]);
+
+  await failRun(r.id, "the page is gone");
+  expect(routines.get(r.id)).toMatchObject({
+    active: false,
+    pausedReason: "failures",
+    nextRunAt: null,
+  });
+  expect(raised).toMatchObject([
+    { botId, title: "digest paused after 5 failed runs", body: "the page is gone" },
+  ]);
+});
+
+test("a succeeded run between failures resets the count", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 4; i++) await failRun(r.id);
+  await succeedRun(r.id);
+  for (let i = 0; i < 4; i++) await failRun(r.id);
+  expect(routines.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  await failRun(r.id);
+  expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: "failures" });
+});
+
+test("interrupted and skipped runs are neither failures nor a reset", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 4; i++) await failRun(r.id);
+  interrupted(r.id, 1);
+  clock = at("2026-01-01T10:30:00Z");
+  routines.start();
+  expect(routines.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  await failRun(r.id);
+  expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: "failures" });
+});
+
+test("a pause stands until the switch is turned on, which clears the reason and does not catch up", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 5; i++) await failRun(r.id);
+
+  routines.update(r.id, { name: "renamed", instruction: "new", schedule: hourly });
+  routines.update(r.id, { schedule: { kind: "cron", expr: "30 * * * *", tz: "UTC" } });
+  expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: "failures" });
+
+  clock = at("2026-01-01T15:10:00Z");
+  routines.update(r.id, { active: true });
+  expect(routines.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  const before = jobs.length;
+  routines.start();
+  expect(jobs).toHaveLength(before);
+});
+
+test("a routine its owner paused has no reason, and a failed manual run of a paused routine does not pause it again", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.update(r.id, { active: false });
+  expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: null });
+  for (let i = 0; i < 5; i++) await failRun(r.id);
+  expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: null });
+  expect(raised).toEqual([]);
+});
+
+test("a run that exceeds the time limit is a failed run and counts toward the pause", async () => {
+  const { timed, turns } = capped();
+  const r = timed.create(botId, { name: "slow", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 4; i++) {
+    timed.testRun(r.id);
+    defined(turns[i]).reject(new Error("boom"));
+    await until(() => !timed.get(r.id).running);
+  }
+  expect(timed.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+
+  timed.testRun(r.id);
+  await until(() => !timed.get(r.id).running);
+  expect(timed.get(r.id)).toMatchObject({
+    active: false,
+    pausedReason: "failures",
+    lastRun: { error: "run exceeded the 40 ms time limit" },
+  });
+  expect(raised).toMatchObject([
+    { title: "slow paused after 5 failed runs", body: "run exceeded the 40 ms time limit" },
+  ]);
+});
+
+const turnUsage = (costUsd: number, inputTokens = 100): TurnUsage => ({
+  inputTokens,
+  outputTokens: 20,
+  cacheReadTokens: 300,
+  cacheCreationTokens: 40,
+  costUsd,
+});
+
+test("a run that succeeds records what its turn used", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  defined(jobs[0], "job").resolve("done", turnUsage(0.25));
+  await until(() => runsOf(r.id)[0]?.status === "succeeded");
+  expect(runsOf(r.id)[0]).toMatchObject({
+    usage: { inputTokens: 100, outputTokens: 20, cacheReadTokens: 300, cacheCreationTokens: 40 },
+    costUsd: 0.25,
+    parkedMs: 0,
+  });
+});
+
+test("a run whose turn failed keeps what the turn cost", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  defined(jobs[0], "job").reject(
+    new TurnError("turn failed (error_during_execution)", turnUsage(1.5)),
+  );
+  await until(() => runsOf(r.id)[0]?.status === "failed");
+  expect(runsOf(r.id)[0]).toMatchObject({
+    error: "turn failed (error_during_execution)",
+    usage: { inputTokens: 100 },
+    costUsd: 1.5,
+  });
+});
+
+test("a run with no usage to report, succeeded or failed, has none", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  defined(jobs[0], "job").resolve("done", null);
+  await until(() => runsOf(r.id)[0]?.status === "succeeded");
+  expect(runsOf(r.id)[0]).toMatchObject({ usage: null, costUsd: null });
+
+  routines.testRun(r.id);
+  defined(jobs[1], "job").reject(new Error("the CLI crashed"));
+  await until(() => runsOf(r.id)[0]?.status === "failed");
+  expect(runsOf(r.id)[0]).toMatchObject({ usage: null, costUsd: null });
+});
+
+test("a run that parks and resumes adds up the usage of its turns", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  const first = defined(jobs[0], "job");
+  const ask = askApproval(first.runId);
+  first.resolve("asked", turnUsage(0.1, 100));
+  await until(() => routines.get(r.id).lastRun?.status === "waiting");
+  expect(runsOf(r.id)[0]).toMatchObject({ costUsd: 0.1, usage: { inputTokens: 100 } });
+
+  waits.answer(ask, "allow");
+  await until(() => jobs.length === 2);
+  defined(jobs[1], "job").resolve("done", turnUsage(0.2, 50));
+  await until(() => runsOf(r.id)[0]?.status === "succeeded");
+  const run = defined(runsOf(r.id)[0]);
+  expect(run.usage).toMatchObject({ inputTokens: 150, outputTokens: 40 });
+  expect(run.costUsd).toBeCloseTo(0.3);
+});
+
+test("a run stopped at the cap keeps the usage its stopped turn still reported", async () => {
+  const { timed } = capped("turn failed (error_during_execution): interrupted", {
+    inputTokens: 700,
+    outputTokens: 70,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    costUsd: 0.6,
+  });
+  const r = timed.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  timed.testRun(r.id);
+  await until(() => timed.get(r.id).lastRun?.status === "failed");
+  await until(() => timed.get(r.id).lastRun?.costUsd === 0.6);
+  expect(timed.get(r.id).lastRun).toMatchObject({
+    error: "run exceeded the 40 ms time limit",
+    usage: { inputTokens: 700, outputTokens: 70 },
+  });
+});
+
+const HOUR = 60 * 60_000;
+
+/** A run on a capped host that works for `workMs` of real time, then ends its turn on a request to the owner; resolves once it is waiting. */
+async function parkCapped(
+  timed: ReturnType<typeof capped>["timed"],
+  turns: ReturnType<typeof capped>["turns"],
+  workMs: number,
+) {
+  const r = timed.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  const run = timed.testRun(r.id);
+  await Bun.sleep(workMs);
+  const ask = askApproval(run.id);
+  defined(turns[0], "turn").resolve("asked");
+  await until(() => timed.get(r.id).lastRun?.status === "waiting");
+  return { r, run, ask };
+}
+
+test("a run parked for hours keeps its whole cap: the park is recorded and the run succeeds", async () => {
+  const { timed, turns, stopped } = capped();
+  waitClosed = (w) => timed.waitClosed(w);
+  const { r, ask } = await parkCapped(timed, turns, 0);
+
+  // The park outlasts the cap several times over in real time, and lasts two hours on the clock.
+  await Bun.sleep(CAP * 3);
+  clock += 2 * HOUR;
+  expect(timed.get(r.id).lastRun).toMatchObject({ status: "waiting", parkedMs: 2 * HOUR });
+
+  waits.answer(ask, "allow");
+  defined(turns[1], "resume turn").resolve("done");
+  await until(() => timed.get(r.id).lastRun?.status === "succeeded");
+  expect(timed.get(r.id).lastRun).toMatchObject({ parkedMs: 2 * HOUR, output: "done" });
+  expect(stopped).toEqual([]);
+});
+
+test("after a park the run has only the active time it had left: a hung resume fails before a fresh cap would", async () => {
+  const { timed, turns, stopped } = capped();
+  waitClosed = (w) => timed.waitClosed(w);
+  const { r, ask } = await parkCapped(timed, turns, CAP * 0.6);
+  clock += HOUR;
+  const resumedAt = performance.now();
+  waits.answer(ask, "allow");
+  expect(turns).toHaveLength(2);
+
+  await until(() => timed.get(r.id).lastRun?.status === "failed");
+  expect(performance.now() - resumedAt).toBeLessThan(CAP);
+  expect(timed.get(r.id).lastRun).toMatchObject({
+    error: "run exceeded the 40 ms time limit",
+    parkedMs: HOUR,
+  });
+  expect(stopped).toEqual(["run exceeded the 40 ms time limit"]);
+});
+
+test("a park open at a restart keeps its parked time and the active time used before it", async () => {
+  const first = capped();
+  const { r, run, ask } = await parkCapped(first.timed, first.turns, CAP * 0.6);
+  clock += HOUR;
+  first.timed.stop();
+
+  const second = capped();
+  waitClosed = (w) => second.timed.waitClosed(w);
+  second.timed.start();
+  expect(second.timed.get(r.id).lastRun).toMatchObject({ status: "waiting", parkedMs: HOUR });
+  clock += HOUR;
+  const resumedAt = performance.now();
+  waits.answer(ask, "allow");
+  expect(second.turns).toHaveLength(1);
+
+  const parked = () => second.timed.runs(r.id).find((x) => x.id === run.id);
+  await until(() => parked()?.status === "failed");
+  expect(performance.now() - resumedAt).toBeLessThan(CAP);
+  expect(parked()).toMatchObject({ parkedMs: 2 * HOUR });
+});
+
+test("a park that expires adds its time to the failed run, and the failure counts toward the pause", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 4; i++) await failRun(r.id);
+
+  routines.testRun(r.id);
+  const job = defined(jobs.at(-1), "job");
+  askApproval(job.runId);
+  job.resolve("asked");
+  await until(() => routines.get(r.id).lastRun?.status === "waiting");
+  // A waiting run is not a failure: the routine is still on.
+  expect(routines.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+
+  clock += DAY;
+  waits.start();
+  expect(runsOf(r.id)[0]).toMatchObject({
+    status: "failed",
+    error: "approval expired",
+    parkedMs: DAY,
+  });
+  expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: "failures" });
 });

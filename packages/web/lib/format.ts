@@ -1,5 +1,19 @@
 export const kTokens = (n: number) => `${Math.round(n / 1000)}k`;
 
+const compact = new Intl.NumberFormat([], { notation: "compact", maximumFractionDigits: 1 });
+
+/** A token count as people read it: 840, 12k, 1.2M. */
+export const tokenCount = (n: number) => compact.format(n);
+
+/** A span of time to the unit that matters: "45 s", "12 min", "3 h 5 min". */
+export const duration = (ms: number) => {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} s`;
+  const min = Math.round(s / 60);
+  if (min < 60) return `${min} min`;
+  return min % 60 === 0 ? `${min / 60} h` : `${Math.floor(min / 60)} h ${min % 60} min`;
+};
+
 export const fileSize = (n: number) =>
   n < 1024
     ? `${n} B`

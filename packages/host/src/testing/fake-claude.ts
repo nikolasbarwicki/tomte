@@ -2,6 +2,7 @@
 // Fake Claude Code speaking just enough of the stream-json control protocol for a Thread turn. Point `cli.path` at this file, or at a wrapper script that passes the directory below as its first argument, which keeps the host's environment out of the fake's.
 // The directory comes from FAKE_CLAUDE_DIR, or else from the first argument. It holds: `messages.jsonl` (one line per user message received: `{ sessionId, text }`, plus the message's `isSynthetic`, `priority` and `origin` when it has them; the session taken from the CLI's argv) and an optional `hold` file:
 // while it exists, a received user message is not answered, which keeps the turn running. An optional `result.txt` is the text each turn answers with (default "ok").
+// An optional `usage.json` (`{ total_cost_usd?, modelUsage?, error? }`, the SDK's own shapes) is what every result message carries, read when the result is emitted: a test rewrites it between turns to set the session's cumulative cost and per-model token counts (`modelUsage` maps a model to `{ inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens, costUSD }`); with `error` the turn ends in an `error_during_execution` result that carries that text and the same usage. Without it a result carries a zero cost and no models.
 // An optional `remember.json` (`{ scope, line }`) makes each user message call the host's in-process `remember` tool over the control protocol before the turn is answered. An optional `ask.json` (`{ question, options?, event_id?, linkDelivered?, afterHold?, crash? }`) does the same with `ask_user`; `linkDelivered` makes the call pass the id of the external event wrapped in the message it answers, as a bot following the host's instructions would, `afterHold` makes the calls (and the file's content they use) wait until `hold` is gone, and `crash` makes the process exit shortly after calling, with the question unanswered.
 // An optional `approve.json` (`{ tool, input? }`) makes each user message send a `can_use_tool` control request for that tool and input, as the CLI does when a tool call needs the host's permission, wait for the host's answer and append `{ tool_name, agent_id, response }` to `permission-results.jsonl` (`response` is `{ behavior: "allow" | "deny", ... }`, or `{ error }`). Like a pending `ask_user`, an approval keeps the turn running for as long as the user takes; the turn is answered once the host has answered.
 // A turn is answered only once every tool it called has its result, as with the real CLI: a pending `ask_user` keeps the turn running.
@@ -115,21 +116,33 @@ const subst = <T>(value: T, vars: Substitutions): T => {
     return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, subst(v, vars)])) as T;
   return value;
 };
-const resultMessage = (result: string) => ({
-  type: "result",
-  subtype: "success",
-  is_error: false,
-  result,
-  session_id: session,
-  duration_ms: 1,
-  duration_api_ms: 1,
-  num_turns: 1,
-  total_cost_usd: 0,
-  usage: {},
-  modelUsage: {},
-  permission_denials: [],
-  uuid: crypto.randomUUID(),
-});
+/** The cumulative `total_cost_usd` and `modelUsage` the next result carries, and whether it is an error: from `usage.json`, which a test rewrites between turns. */
+const resultUsage = (): {
+  total_cost_usd?: number;
+  modelUsage?: Record<string, unknown>;
+  error?: string;
+} =>
+  existsSync(join(dir, "usage.json"))
+    ? JSON.parse(readFileSync(join(dir, "usage.json"), "utf8"))
+    : {};
+const resultMessage = (result: string) => {
+  const { total_cost_usd = 0, modelUsage = {}, error } = resultUsage();
+  return {
+    type: "result",
+    ...(error === undefined
+      ? { subtype: "success", is_error: false, result }
+      : { subtype: "error_during_execution", is_error: true, errors: [error] }),
+    session_id: session,
+    duration_ms: 1,
+    duration_api_ms: 1,
+    num_turns: 1,
+    total_cost_usd,
+    usage: {},
+    modelUsage,
+    permission_denials: [],
+    uuid: crypto.randomUUID(),
+  };
+};
 const defaultResult = () =>
   existsSync(join(dir, "result.txt")) ? readFileSync(join(dir, "result.txt"), "utf8") : "ok";
 

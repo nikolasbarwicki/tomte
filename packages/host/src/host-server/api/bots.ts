@@ -38,6 +38,7 @@ export function botRoutes({
   browser,
   routines,
   headedBrowser,
+  pauseAfterAbsenceDays,
   hasActiveTasks,
   botsChanged,
   removeBot,
@@ -55,6 +56,7 @@ export function botRoutes({
         cwd,
         cli: `${cli.path} (${cli.source})`,
         browser: browser.status(),
+        pauseAfterAbsenceDays,
       }),
     "/api/seen": async ({ res, parse }) => {
       const bot = getBot(dataRoot, parse(BotId).botId);

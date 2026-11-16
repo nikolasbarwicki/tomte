@@ -84,7 +84,15 @@ async function watch() {
   };
 }
 
-type Run = { id: string; status: string; error: string | null; output: string | null };
+type Run = {
+  id: string;
+  status: string;
+  error: string | null;
+  output: string | null;
+  costUsd: number | null;
+  usage: { inputTokens: number; outputTokens: number } | null;
+  parkedMs: number;
+};
 
 describe.each([
   ["chat-hosted", true],
@@ -181,6 +189,28 @@ describe.each([
     await host.until(() => host.permissionResults().length === 2);
     expect(host.permissionResults()[1]).toMatchObject({ response: { behavior: "allow" } });
     expect(await runs(routineId)).toHaveLength(1);
+  });
+
+  test("a run that parks and resumes adds both turns' usage to one row and records how long it waited", async () => {
+    const { botId, other, routineId } = await setup();
+    const page = await watch();
+    host.approveOnMessage(TOOL, INPUT);
+    host.setUsage({ cost: 0.5, input: 1000, output: 100 });
+    await startRun(routineId);
+    await untilRun(routineId, "waiting");
+    const id = await cardOf(botId, other, page, "approvals");
+    await Bun.sleep(40);
+    expect((await latest(routineId))?.parkedMs).toBeGreaterThanOrEqual(40);
+
+    host.setUsage({ cost: 0.8, input: 1600, output: 160 });
+    expect((await answer(id, "allow")).status).toBe(200);
+    await untilRun(routineId, "succeeded");
+
+    const [run, ...rest] = await runs(routineId);
+    expect(rest).toEqual([]);
+    expect(run?.costUsd).toBeCloseTo(0.8);
+    expect(run?.usage).toMatchObject({ inputTokens: 1600, outputTokens: 160 });
+    expect(run?.parkedMs).toBeGreaterThanOrEqual(40);
   });
 
   test("Deny reaches the bot and the run finishes", async () => {
