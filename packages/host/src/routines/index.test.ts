@@ -8,6 +8,7 @@ import type { Schedule } from "@claudebot/contract/events";
 import { z } from "zod";
 
 import { createBot } from "../bots/index.ts";
+import type { Events } from "../events/index.ts";
 import { migrate } from "../platform/db.ts";
 import { defined } from "../testing/defined.ts";
 import { createWaits, type Waits } from "../waits/index.ts";
@@ -42,7 +43,7 @@ let onTestEnd: (() => void)[];
 let raised: { botId: string; key: string; title: string; body?: string }[];
 
 /** The host's own needs-you items, recorded in `raised`. */
-const events: Parameters<typeof createRoutines>[0]["events"] = {
+const events: Pick<Events, "notice" | "resolveNotices"> = {
   notice: (bot, n) => {
     raised.push({ botId: bot, ...n });
     return { id: n.key, duplicate: false };
