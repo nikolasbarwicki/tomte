@@ -72,6 +72,7 @@ import { openListener } from "./listener.ts";
 import { runNotice } from "./run-notices.ts";
 import { createTranscripts } from "./transcript.ts";
 import { filesEvent, memoryEvents } from "./views.ts";
+import { createWaitCards } from "./wait-cards.ts";
 
 export interface HostServerOptions {
   /** Deployment choices parsed once at startup: the data root, where to listen and what URL users reach, and Vite. */
@@ -272,6 +273,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     void cards.sync();
     await chats.drop(botId);
     await browser.removeBot(botId);
+    // Its waits are gone with it, and so are their cards.
+    void cards.sync();
     botsChanged();
   };
   const integrations = createIntegrations({
@@ -395,7 +398,10 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const cards = createCards({
     db,
     channels,
-    sources: [createEventCards({ events: externalEvents, chats })],
+    sources: [
+      createEventCards({ events: externalEvents, chats }),
+      createWaitCards({ waits, chats, botName: (botId) => getBot(dataRoot, botId)?.name }),
+    ],
     publicUrl: clientAt.publicUrl,
     ...(o.now !== undefined && { now: o.now }),
     ...(o.cards?.retryMs !== undefined && { retryMs: o.cards.retryMs }),
@@ -403,6 +409,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   channels.handle((kind, inbound) => cards.receive(kind, inbound));
   // A newly linked account gets the cards that waited for one.
   channels.onLinked(() => void cards.sync());
+  // A wait opening gets its card, and one closing any way gets its card edited.
+  waits.subscribe(() => void cards.sync());
   const sessions = createDeviceSessions();
   const api = createApi({
     botsChanged,

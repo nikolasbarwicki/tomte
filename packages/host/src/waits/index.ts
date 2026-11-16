@@ -93,6 +93,8 @@ export interface Waits {
   cancelBot(botId: string, reason: string): number;
   /** The open wait with this id. */
   find(id: string): Wait | undefined;
+  /** The wait with this id in any state, open or closed; undefined once its bot is deleted. A channel reads a closed wait to edit its card. */
+  get(id: string): Wait | undefined;
   /** Open waits, oldest first; every bot's when `botId` is omitted. */
   list(botId?: string): Wait[];
   /** Told when a wait opens and when it closes. */
@@ -324,6 +326,7 @@ export function createWaits(o: WaitsOptions): Waits {
         waits.map((w) => w.id),
         now(),
       ),
+    get: (id) => store.get(id),
     find(id) {
       const w = store.get(id);
       return w?.state === "open" ? w : undefined;
