@@ -23,7 +23,7 @@ export async function buildMain(): Promise<void> {
     naming: "main.cjs",
   });
   if (!result.success) {
-    for (const log of result.logs) console.error(String(log));
+    for (const log of result.logs) console.error(`${log.name}: ${log.message}`);
     throw new Error("bundling the desktop main process failed");
   }
   await cp(ASSETS, ASSETS_OUT, { recursive: true });

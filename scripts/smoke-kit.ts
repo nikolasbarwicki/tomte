@@ -261,13 +261,13 @@ export async function runNotify(
 
 interface SendCall {
   body: { text: string; eventId?: string; answer?: string };
-  status?: number;
+  status?: number | undefined;
   json?: { outcome?: string; queued?: string; error?: string };
 }
 /** Every `/api/send` and `/api/answer` the page makes, with what the host answered. */
 export function recordRequests(page: Page) {
   const sends: SendCall[] = [];
-  const answers: { body: { id?: string; value?: string }; status?: number }[] = [];
+  const answers: { body: { id?: string; value?: string }; status?: number | undefined }[] = [];
   page.on("requestfinished", async (req) => {
     const url = req.url();
     if (!url.endsWith("/api/send") && !url.endsWith("/api/answer")) return;

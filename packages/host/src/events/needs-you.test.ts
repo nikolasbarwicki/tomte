@@ -480,7 +480,7 @@ describe("needs-you counts in the bots slice", () => {
     await post(b, tb, { key: "q1" });
     await host.until(() => page.bots()[a]?.needsYou === 1 && page.bots()[b]?.needsYou === 1);
     // The event woke both bots; a working bot cannot be deleted.
-    await host.until(() => host.messagesOf(a).length === 1 && page.bots()[a]?.status !== "working");
+    await host.until(() => host.messagesOf(a).length === 1 && !host.server.isWorking(a));
 
     expect((await host.ui("/api/bots/delete", { botId: a })).status).toBe(200);
     await host.until(() => page.bots()[a] === undefined);

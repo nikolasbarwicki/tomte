@@ -104,6 +104,8 @@ export interface HostServer {
   /** Pairing codes and device tokens, so a caller can pair a device without going through the exchange. */
   devices: DeviceAuth;
   currentBotId: () => string | undefined;
+  /** Whether the bot is working (a turn, a busy double-loop front or a headless run): deleting it, a new session and a mode switch are refused then. */
+  isWorking: (botId: string) => boolean;
   /** Whether the Claude CLI is signed in, as the last `auth status` reported; always `unknown` in local mode, which never checks. */
   signInState: () => SignInState;
   /** Closes every thread and browser, then stops listening. */
@@ -412,6 +414,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     bots: handoffs.endpoint,
     devices,
     currentBotId: chats.currentBotId,
+    isWorking: (botId) => chats.isWorking(botId),
     signInState: () => claude.signInState(),
     removeBot,
     async close() {

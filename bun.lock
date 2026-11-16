@@ -5,9 +5,12 @@
     "": {
       "name": "claudebot",
       "devDependencies": {
+        "@claudebot/contract": "workspace:*",
         "@commitlint/cli": "^21.2.4",
         "@commitlint/config-conventional": "^21.2.4",
         "@swc/core": "^1.16.22",
+        "@types/bun": "^1.4.4",
+        "@types/node": "^26.6.6",
         "dependency-cruiser": "^18.7.2",
         "electron-builder": "^26.18.0",
         "knip": "^6.44.1",

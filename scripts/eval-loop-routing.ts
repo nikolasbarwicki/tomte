@@ -219,7 +219,8 @@ const { values: args } = parseArgs({
 
 /** Writes the seeded session's tasks and findings to a fresh store, the way the host's observer would have left them. */
 function seed(log: SessionLog, scenario: keyof typeof SCENARIOS, now: number) {
-  for (const t of SCENARIOS[scenario]) {
+  const tasks: readonly SeedTask[] = SCENARIOS[scenario];
+  for (const t of tasks) {
     log.putTask(
       {
         taskId: t.taskId,

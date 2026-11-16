@@ -216,9 +216,9 @@ async function main(): Promise<void> {
     info(`session cookie (value withheld) ${JSON.stringify(cookie)}`);
     check(
       cookie.length === 1 &&
-        cookie[0]!.httpOnly &&
+        cookie[0]!.httpOnly === true &&
         cookie[0]!.sameSite === "strict" &&
-        cookie[0]!.session,
+        cookie[0]!.session === true,
       "the session cookie is HttpOnly, SameSite=Strict and a session cookie (no expiry, never persisted)",
     );
     const denied = await second.page.evaluate(async () => {
@@ -377,7 +377,7 @@ async function main(): Promise<void> {
       processes().find((p) => p.command.includes(FAKE_CLAUDE) && p.command.includes(fakeStateDir)),
     );
     info(`cli    ${describeProcess(cli)}`);
-    const engine2 = await startEngine(fakeStateDir, needles, landingServer.port);
+    const engine2 = await startEngine(fakeStateDir, needles, landingServer.port!);
 
     console.log("\n[5] crash cleanup: kill -9 of the Electron main process");
     const host2 = hostOf(second.pid) ?? fail("no host process is a child of the app");
@@ -775,7 +775,7 @@ async function main(): Promise<void> {
       processes().find((p) => p.command.includes(FAKE_CLAUDE) && p.command.includes(fakeStateDir)),
     );
     info(`cli    ${describeProcess(cli3)}`);
-    const engine3 = await startEngine(fakeStateDir, needles, landingServer.port);
+    const engine3 = await startEngine(fakeStateDir, needles, landingServer.port!);
 
     await clickTray(bg, "Start at login");
     check(

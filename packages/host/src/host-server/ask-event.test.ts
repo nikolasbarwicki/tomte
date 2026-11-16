@@ -316,7 +316,8 @@ describe("asks that are not about an external question", () => {
     const page = await watch();
     const old = await post(botId);
     await host.until(() => host.messagesOf(botId).length === 1);
-    await host.until(() => page.events().some((e) => e.type === "done"));
+    // `done` is shown before the turn ends; a new session is refused until it has.
+    await host.until(() => !host.server.isWorking(botId));
 
     expect((await host.ui("/api/session/new", {})).status).toBe(200);
     host.askOnMessage("Which database?", ["Postgres"], { eventId: old });
