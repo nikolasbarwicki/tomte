@@ -1,4 +1,4 @@
-// Runs the browser smokes of the answer path one after another and stops at the first one that fails, exiting with its status
+// Runs the browser smokes (the answer path and the double-loop chat mode) one after another and stops at the first one that fails, exiting with its status
 // (a smoke killed by a signal counts as 1): no failure is swallowed into an overall pass.
 //   bun run smoke:ui                      all of them
 //   bun scripts/smoke-ui.ts a.ts b.ts     only these (paths relative to the working directory)
@@ -15,6 +15,7 @@ const SMOKES = [
   "scripts/smoke-needs-you-ui.ts",
   "scripts/smoke-blocked-ui.ts",
   "scripts/smoke-answers.ts",
+  "scripts/smoke-loop-ui.ts",
 ];
 const scripts = process.argv.length > 2 ? process.argv.slice(2) : SMOKES;
 

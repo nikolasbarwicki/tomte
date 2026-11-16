@@ -13,9 +13,15 @@ export interface SessionLine {
 
 /**
  * Writes a bot's Claude Code session file as the real CLI would have, one line per message. It goes under the CLAUDE_CONFIG_DIR
- * of the process, which is where the host reads sessions from; the fake CLI writes none.
+ * of the process, which is where the host reads sessions from; the fake CLI writes none. `sessionId` is the bot's id, its first
+ * session, unless a later session is meant.
  */
-export function writeSession(host: Pick<HandoffHost, "cwd">, botId: string, lines: SessionLine[]) {
+export function writeSession(
+  host: Pick<HandoffHost, "cwd">,
+  botId: string,
+  lines: SessionLine[],
+  sessionId = botId,
+) {
   const dir = join(
     process.env.CLAUDE_CONFIG_DIR!,
     "projects",
@@ -23,9 +29,9 @@ export function writeSession(host: Pick<HandoffHost, "cwd">, botId: string, line
   );
   mkdirSync(dir, { recursive: true });
   const rows = lines.map((m, i) => ({
-    uuid: `${botId}-${i}`,
-    parentUuid: i ? `${botId}-${i - 1}` : null,
-    sessionId: botId,
+    uuid: `${sessionId}-${i}`,
+    parentUuid: i ? `${sessionId}-${i - 1}` : null,
+    sessionId,
     timestamp: new Date(m.at ?? 1_700_000_000_000 + i * 1000).toISOString(),
     cwd: host.cwd,
     isSidechain: false,
@@ -36,5 +42,8 @@ export function writeSession(host: Pick<HandoffHost, "cwd">, botId: string, line
         : { role: "assistant", content: [{ type: "text", text: m.text }] },
     ...m.extra,
   }));
-  writeFileSync(join(dir, `${botId}.jsonl`), rows.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  writeFileSync(
+    join(dir, `${sessionId}.jsonl`),
+    rows.map((l) => JSON.stringify(l)).join("\n") + "\n",
+  );
 }
