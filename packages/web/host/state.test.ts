@@ -97,6 +97,7 @@ test("snapshot events replace their slice and host-info sets the info", () => {
     cwd: "/",
     cli: "claude",
     browser: { status: "unavailable", reason: "none" },
+    pauseAfterAbsenceDays: 0,
   } as const;
   expect(applyEvent(s, { type: "host-info", info }).info).toBe(info);
 });

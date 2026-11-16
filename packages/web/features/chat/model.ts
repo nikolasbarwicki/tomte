@@ -1,7 +1,7 @@
 import type {
   ChatMode,
   Presence,
-  ServerEvent,
+  SourceEvent,
   WaitAction,
   WorkEvent,
 } from "@claudebot/contract/events";
@@ -14,9 +14,9 @@ export const livePresence = (
   chat: { busy: boolean; presence: Presence },
 ): Presence => (mode === "double_loop" ? chat.presence : chat.busy ? "working" : "idle");
 
-type ItemKind = Extract<ServerEvent, { type: "external" }>["kind"];
+type ItemKind = Exclude<SourceEvent["kind"], "progress">;
 
-/** An open `question`, `blocked`, `failed`, `done` or `stopped` event of one source: something that waits for the user. */
+/** An open `question`, `blocked`, `failed`, `done`, `stopped` or `notice` event of one source: something that waits for the user. */
 export type NeedsYouItem = {
   id: string;
   kind: ItemKind;

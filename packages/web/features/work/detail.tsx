@@ -7,6 +7,7 @@ import {
   CircleAlertIcon,
   CircleCheckIcon,
   HandIcon,
+  InfoIcon,
   MessageCircleQuestionIcon,
   OctagonXIcon,
   type LucideIcon,
@@ -42,6 +43,7 @@ const EVENT_ICONS: Record<SourceEvent["kind"], LucideIcon> = {
   done: CircleCheckIcon,
   stopped: OctagonXIcon,
   progress: ActivityIcon,
+  notice: InfoIcon,
 };
 
 const EVENT_STATE: Record<SourceEvent["state"], string | undefined> = {

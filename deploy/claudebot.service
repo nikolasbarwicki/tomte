@@ -8,6 +8,7 @@ Type=simple
 User=claudebot
 Group=claudebot
 EnvironmentFile=/etc/claudebot/claudebot.env
+# Optional settings in that file beyond the installer's: CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS=14 pauses every routine after 14 days without you (0, the default, is off).
 LoadCredentialEncrypted=secrets-key:/etc/credstore.encrypted/claudebot.secrets-key
 ExecStart=/usr/local/bin/claudebot-host --mode remote --data-root /var/lib/claudebot --secrets-key-file %d/secrets-key
 WorkingDirectory=/var/lib/claudebot

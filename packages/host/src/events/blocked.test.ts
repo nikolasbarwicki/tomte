@@ -176,4 +176,46 @@ describe("the external events table", () => {
         .sort(),
     ).toEqual(["external_events_by_source", "external_events_open"]);
   });
+  test("a database made before notices keeps its events with their relay state, and takes notices", () => {
+    const db = migrate(new Database(":memory:"));
+    db.run("DROP TABLE external_events");
+    db.run(`CREATE TABLE external_events (
+      id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, key TEXT NOT NULL, source_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('question','blocked','failed','done','stopped','progress')),
+      title TEXT NOT NULL, body TEXT, options TEXT, received_at INTEGER NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('open','acted','dismissed','resolved','info')),
+      question_id TEXT, reply TEXT,
+      relay_state TEXT NOT NULL DEFAULT 'none' CHECK (relay_state IN ('none','pending','relayed','failed')),
+      relay_attempts INTEGER NOT NULL DEFAULT 0, relay_error TEXT, relay_answer TEXT,
+      UNIQUE (bot_id, key))`);
+    db.run(
+      "INSERT INTO external_events (id, bot_id, key, source_id, kind, title, received_at, state, question_id, reply, relay_state, relay_attempts) VALUES ('e1', 'a', 'k1', 's', 'question', 'first', 1, 'acted', 'Q-1', '{\"kind\":\"herdr\",\"agent\":\"coord\"}', 'relayed', 1)",
+    );
+    db.run("PRAGMA user_version = 18");
+
+    migrate(db);
+
+    db.run(
+      "INSERT INTO external_events (id, bot_id, key, source_id, kind, title, received_at, state) VALUES ('e2', 'a', 'k2', 'claudebot', 'notice', 'paused', 2, 'open')",
+    );
+    expect(
+      db
+        .query(
+          "SELECT id, kind, question_id, relay_state, relay_attempts FROM external_events ORDER BY rowid",
+        )
+        .all(),
+    ).toEqual([
+      { id: "e1", kind: "question", question_id: "Q-1", relay_state: "relayed", relay_attempts: 1 },
+      { id: "e2", kind: "notice", question_id: null, relay_state: "none", relay_attempts: 0 },
+    ]);
+    expect(
+      db
+        .query(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'external_events_%'",
+        )
+        .all()
+        .map((r) => (r as { name: string }).name)
+        .sort(),
+    ).toEqual(["external_events_by_source", "external_events_open"]);
+  });
 });

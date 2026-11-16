@@ -64,6 +64,14 @@ export interface Events {
    */
   post(botId: string, event: ExternalEventInput): ExternalEventPosted;
   /**
+   * Raises a notice: a needs-you item the host has about itself, from the source "Claudebot". It is stored and shown like any
+   * open item (the sidebar count, the Needs-you bar, the banner) but never delivered to the bot, and the user can only dismiss
+   * it. `key` dedupes per bot, so posting a key again changes nothing; `title` and `body` are cut to what the events route allows.
+   */
+  notice(botId: string, notice: { key: string; title: string; body?: string }): ExternalEventPosted;
+  /** Closes the bot's open notices whose key starts with `keyPrefix` as `resolved`, because what they report is undone. Dismissed or already closed ones stay as they are. */
+  resolveNotices(botId: string, keyPrefix: string): void;
+  /**
    * The user answered an open needs-you item with `said`: it becomes `acted` and, when the event names a reply target,
    * the answer is relayed once (ADR-0008). `said` is what the user sent; the `<source> · <title>: ` a draft starts with is
    * not part of the answer. `unchanged` when the item is not open any more, and then nothing is relayed; `unknown` for an id
@@ -125,6 +133,10 @@ function answerText(row: ExternalRow | undefined, said: string): string {
   return rest.trim() === "" ? said : rest;
 }
 
+/** The events route's limits on a title and a body, which a notice is cut to as well. */
+const MAX_NOTICE_TITLE = 200;
+const MAX_NOTICE_BODY = 8192;
+
 export function createEvents(o: EventsOptions): Events {
   const store = createEventStore(o.db);
   const tokens = createEventTokens(o.secrets);
@@ -169,6 +181,28 @@ export function createEvents(o: EventsOptions): Events {
         o.deliver(botId, wrapExternalEvent(posted.id, event));
       }
       return posted;
+    },
+    notice(botId, { key, title, body }) {
+      const posted = store.recordNotice(
+        botId,
+        {
+          key,
+          title: title.slice(0, MAX_NOTICE_TITLE),
+          ...(body !== undefined && { body: body.slice(0, MAX_NOTICE_BODY) }),
+        },
+        now(),
+      );
+      if (!posted.duplicate) {
+        o.onChange(botId, []);
+        o.onNeedsYou(botId);
+      }
+      return posted;
+    },
+    resolveNotices(botId, keyPrefix) {
+      const resolved = store.resolveNotices(botId, keyPrefix);
+      if (resolved.length === 0) return;
+      o.onChange(botId, []);
+      o.onNeedsYou(botId);
     },
     answer(botId, id, said) {
       const text = answerText(store.row(botId, id), said);

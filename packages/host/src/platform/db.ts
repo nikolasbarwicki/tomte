@@ -371,6 +371,100 @@ const SCHEMA_V21 = (db: Database) => {
     db.run("ALTER TABLE routines ADD COLUMN notify_result INTEGER NOT NULL DEFAULT 0");
 };
 
+// A routine the host stopped says why (`paused_reason`), and `notice` joins the kinds of external event: the host's own needs-you
+// items. SQLite cannot change a CHECK, so `external_events` is rebuilt as step 12 did, with its rows, rowids and the columns the
+// relay steps added kept; the indexes went with the old table and are made again. A database migrated again after its version was
+// set back (the old-database tests do) already has the column and the wider table; each is changed only when it needs it.
+const REBUILD_EXTERNAL_EVENTS = `
+CREATE TABLE external_events_v22 (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL,
+  key TEXT NOT NULL,                   -- the sender's dedupe key
+  source_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('question','blocked','failed','done','stopped','progress','notice')),
+  title TEXT NOT NULL,
+  body TEXT,
+  options TEXT,                        -- JSON array of suggested answers; questions only
+  received_at INTEGER NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('open','acted','dismissed','resolved','info')),
+  question_id TEXT,
+  reply TEXT,                          -- JSON ReplyTarget
+  relay_state TEXT NOT NULL DEFAULT 'none' CHECK (relay_state IN ('none','pending','relayed','failed')),
+  relay_attempts INTEGER NOT NULL DEFAULT 0,
+  relay_error TEXT,
+  relay_answer TEXT,
+  UNIQUE (bot_id, key)
+);
+INSERT INTO external_events_v22 (rowid, id, bot_id, key, source_id, kind, title, body, options, received_at, state, question_id, reply, relay_state, relay_attempts, relay_error, relay_answer)
+  SELECT rowid, id, bot_id, key, source_id, kind, title, body, options, received_at, state, question_id, reply, relay_state, relay_attempts, relay_error, relay_answer FROM external_events ORDER BY rowid;
+DROP TABLE external_events;
+ALTER TABLE external_events_v22 RENAME TO external_events;
+CREATE INDEX external_events_by_source ON external_events(bot_id, source_id, received_at);
+CREATE INDEX external_events_open ON external_events(bot_id) WHERE state = 'open';
+`;
+
+const SCHEMA_V22 = (db: Database) => {
+  const routines = db.query<{ name: string }, []>("PRAGMA table_info(routines)").all();
+  if (routines.length > 0 && !routines.some((c) => c.name === "paused_reason"))
+    db.run(
+      "ALTER TABLE routines ADD COLUMN paused_reason TEXT CHECK (paused_reason IN ('failures','absence'))",
+    );
+  const sql = db
+    .query<{ sql: string }, []>(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'external_events'",
+    )
+    .get()?.sql;
+  if (sql !== undefined && !sql.includes("'notice'")) db.run(REBUILD_EXTERNAL_EVENTS);
+};
+
+// Run usage: what the host last saw of each session's cumulative cost and tokens (a run's usage is the difference), and what each run
+// used. A column is added only when missing, as in V15: SQLite has no ADD COLUMN IF NOT EXISTS.
+const SCHEMA_V23 = (db: Database) => {
+  db.run(`
+CREATE TABLE IF NOT EXISTS session_usage_marks (
+  session_id TEXT PRIMARY KEY,
+  cost_usd REAL NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  cache_read_tokens INTEGER NOT NULL,
+  cache_creation_tokens INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);`);
+  const have = db.query<{ name: string }, []>("PRAGMA table_info(routine_runs)").all();
+  for (const [name, type] of [
+    ["input_tokens", "INTEGER"],
+    ["output_tokens", "INTEGER"],
+    ["cache_read_tokens", "INTEGER"],
+    ["cache_creation_tokens", "INTEGER"],
+    ["total_cost_usd", "REAL"],
+    ["parked_ms", "INTEGER NOT NULL DEFAULT 0"],
+  ] as const)
+    if (have.length > 0 && !have.some((c) => c.name === name))
+      db.run(`ALTER TABLE routine_runs ADD COLUMN ${name} ${type}`);
+};
+
+// Parked time: when a waiting run's park began and how long it had worked before it, so the park survives a restart and the run's
+// clock goes on from its active time. Columns are added only when missing, as in V23.
+const SCHEMA_V24 = (db: Database) => {
+  const have = db.query<{ name: string }, []>("PRAGMA table_info(routine_runs)").all();
+  for (const [name, type] of [
+    ["parked_at", "INTEGER"],
+    ["active_ms", "INTEGER NOT NULL DEFAULT 0"],
+  ] as const)
+    if (have.length > 0 && !have.some((c) => c.name === name))
+      db.run(`ALTER TABLE routine_runs ADD COLUMN ${name} ${type}`);
+};
+
+// The owner's presence (the absence pause): one row with the time of the last action and the time of the last warning. It is in the
+// database so a restart does not reset the clock.
+const SCHEMA_V25 = `
+CREATE TABLE IF NOT EXISTS presence (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  last_action_at INTEGER NOT NULL,
+  last_warned_at INTEGER                -- when the warning of this absence was raised; null once the owner is back
+);
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -398,6 +492,10 @@ export function migrate(db: Database): Database {
     SCHEMA_V19,
     SCHEMA_V20,
     SCHEMA_V21,
+    SCHEMA_V22,
+    SCHEMA_V23,
+    SCHEMA_V24,
+    SCHEMA_V25,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;
