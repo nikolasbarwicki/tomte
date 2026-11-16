@@ -113,6 +113,14 @@ Chat mode dispatch lives in `host-server/chats.ts` (`send`, `deliver`, `reconfig
 - A card for an agent stopped meanwhile stays until answered (no expiry), and `ProgressAttribution` keeps its name though it now also attributes `ask_user`.
 - The front's prompt routes hands-on work to `subagent_type "worker"` and web research to `"researcher"`, and no longer says it cannot run scripts or edit files.
 
+**M7 decisions (tests, smoke, rate limits, docs).** Beyond the spec above:
+
+- The rate limit rides on one ephemeral `ServerEvent`, `rate_limit{status, window?, utilization?, resetsAt?}`, not on the `context` event: the context meter is read after a front turn, while the CLI reports a limit whenever it changes, mid-turn or between turns. `observe.ts` forwards the front's `rate_limit_event` (`rateLimitEvent`), the chat keeps the newest report of each window for the account (the limit is the user's subscription's, so it outlives a new session and a rebuilt chat), broadcasts it to the shown chat and sends the kept ones after `presence` to a page that connects; it is never in the replayed history and only a double-loop chat has a front to report one. `window` is the CLI's `rateLimitType` as a string, so a window a newer CLI adds still parses.
+- `utilization` is taken as the used fraction (0 to 1) and `resetsAt` as epoch seconds, which the host turns into milliseconds (a value already in milliseconds is kept). The SDK's type documents neither unit; this is an assumption to confirm against a real CLI run (see Evaluation).
+- The web keeps `chat.rateLimits` by window (a reset clears it, a new session keeps it) and `RateLimitMeter` renders beside the context meter for a double-loop bot only: the most pressing window (rejected, then warned, then most used) as the button, every window with its used share and reset on hover. Nothing shows until the CLI reports a limit.
+- `smoke:loop-ui` is the browser smoke of the mode on the fake CLI's `loop.json`; it needs `CLAUDEBOT_ASK_APPROVAL` for the worker's approval card, so `startSmoke` takes an `env` option for the host's configuration. A worker's approval is a transcript card, not an item of the Needs you bar, which holds external events only; the smoke asserts the card.
+- The routing eval, its usage and cost stay documented in the header of `scripts/eval-loop-routing.ts` and summarised in `AGENTS.md` ("Double-loop chat mode"), with the manual real-CLI scenarios.
+
 ## Consequences
 
 - Both modes stay supported: the standard chat and its tests are unchanged, and every `chats.ts` path that touches `busy`, `inbox` or `drain` needs a mode branch.
