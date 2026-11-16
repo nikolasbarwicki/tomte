@@ -10,7 +10,8 @@ Unit and host-seam tests passed while the real answer workflows were broken, so 
 | `bun run smoke:blocked-ui`   | A `blocked` report from the sender: Needs you, Work, `Unblock…` and `Status`.                                                                                                                                                                                                     |
 | `bun run smoke:loop-ui`      | The double-loop chat mode on the fake CLI's `loop.json` (below): toggle, never-blocking sends, tasks, report, approval, rate limits.                                                                                                                                              |
 | `bun run smoke:scroll-ui`    | The transcript following streamed replies (below): wheel turns at the end, scrolling up, the scroll-to-end button, a send while scrolled up, a reload.                                                                                                                            |
-| `bun run smoke:ui`           | The six above in that order, with one web build. It stops at the first failing smoke and exits with that smoke's status; nothing after a failure runs and nothing is reported as passed.                                                                                          |
+| `bun run smoke:channels-ui`  | The Channels page against a fake Telegram Bot API (below): token rejected and accepted, the link code and `t.me` link, linking through the fake server, a stranger ignored, the linked state, Unlink.                                                                             |
+| `bun run smoke:ui`           | The seven above in that order, with one web build. It stops at the first failing smoke and exits with that smoke's status; nothing after a failure runs and nothing is reported as passed.                                                                                        |
 
 ## Prerequisites
 
@@ -65,6 +66,19 @@ The fake CLI streams long replies word by word from `loop.json`. While one strea
 | 3. Scrolling up while a reply streams        | The view stays where the reader put it, the stream goes on under the fold, the scroll-to-end button shows and resumes it.  |
 | 4. A message sent while scrolled up          | The view jumps to the end and follows the reply.                                                                           |
 | 5. A reload                                  | The page opens at the end.                                                                                                 |
+
+## The Channels page (`smoke:channels-ui`)
+
+The host's Telegram adapter is pointed at `packages/host/src/testing/fake-telegram.ts` (`HostServerOptions.telegram.baseUrl`, passed through `startSmoke("channels-ui", { timing })`), a loopback Bot API with real long-poll behaviour that records every call. `api.telegram.org` is never contacted and the token is the fake `123:fake-token`. The smoke plays Telegram: it sends updates to the fake and reads what the host sent back.
+
+| Flow                          | Proven in the browser and on the fake server                                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1. No token                   | The page says "No bot token yet" and Link account is disabled.                                                                                                                 |
+| 2. A token Telegram rejects   | The page shows the refusal, the token is not stored, and nothing polls.                                                                                                        |
+| 3. A token Telegram accepts   | The page shows "Running as @bot", the field is empty again, the token is nowhere in the page, it is in the secrets store, and the host long polls with the configured timeout. |
+| 4. Link account               | The dialog shows the code and a link `https://t.me/<bot>?start=<code>`.                                                                                                        |
+| 5. A stranger, then the owner | A stranger's `/start` with something that is not a code gets no call back at all; the owner's `/start <code>` links, and the confirmation arrives in the owner's chat.         |
+| 6. Linked, then Unlink        | The page shows Linked with the account's name; Unlink (with its confirm dialog) clears it, the bot token stays and the bot keeps running.                                      |
 
 ## Failures and artifacts
 
