@@ -4,7 +4,6 @@ import { useActionState, useCallback, useEffect, useState, useTransition } from 
 import { toast } from "sonner";
 
 import { confirmAction } from "@/components/confirm.tsx";
-import { Page } from "@/components/page.tsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,7 +28,7 @@ const nameOf = (kind: string) => NAMES[kind] ?? kind;
 /** How often the page asks again, so a link made in the chat app or a bot token Telegram turns down shows without a reload. */
 const REFRESH_MS = 3000;
 
-/** The Channels screen: every channel the host runs, whether it is running, the account linked to it, and one-time codes to link or relink. */
+/** The Channels section of Settings: every channel the host runs, whether it is running, the account linked to it, and one-time codes to link or relink. */
 export function Channels() {
   const [channels, setChannels] = useState<ChannelEntry[]>();
   const [error, setError] = useState<string>();
@@ -53,10 +52,7 @@ export function Channels() {
   }, [refresh]);
 
   return (
-    <Page
-      title="Channels"
-      description="Where the host reaches you outside the web UI. Link your account with a one-time code; messages from any other account are ignored."
-    >
+    <div className="flex flex-col gap-3">
       <LinkCodeDialog
         link={code}
         channel={code ? nameOf(code.kind) : ""}
@@ -83,7 +79,7 @@ export function Channels() {
           </CardContent>
         </Card>
       )}
-    </Page>
+    </div>
   );
 }
 

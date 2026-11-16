@@ -10,6 +10,7 @@ export {
   adoptClaudeConfigDir,
   claudeConfigDir,
   createClaudeAccess,
+  remoteLoginCommand,
   type ClaudeAccess,
   type SignInState,
 } from "./claude-access.ts";

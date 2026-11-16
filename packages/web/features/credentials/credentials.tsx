@@ -3,7 +3,6 @@ import { KeyRound, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { useActionState, useState, useTransition } from "react";
 
 import { confirmAction } from "@/components/confirm.tsx";
-import { Page } from "@/components/page.tsx";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -46,7 +45,7 @@ import { addCredential, removeCredential, revokeCredential, updateCredential } f
 /** Which form the dialog shows: a new credential, or an existing one being edited. */
 type Editing = { entry?: CredentialEntry } | null;
 
-/** The global Credentials screen; passwords are write-only and never shown or pre-filled. */
+/** The Credentials section of Settings; passwords are write-only and never shown or pre-filled. */
 export function Credentials({
   credentials,
   bots,
@@ -61,16 +60,13 @@ export function Credentials({
   for (const c of credentials)
     for (const g of c.grants) byBot.set(g.botId, [...(byBot.get(g.botId) ?? []), c]);
   return (
-    <Page
-      title="Credentials"
-      description="Website logins your bots can use. Passwords stay in the OS keychain and are never shown again."
-      actions={
-        <Button size="sm" onClick={() => setEditing({})}>
+    <div className="flex flex-col gap-6">
+      {credentials.length > 0 && (
+        <Button size="sm" className="self-end" onClick={() => setEditing({})}>
           <Plus data-icon="inline-start" />
           Add credential
         </Button>
-      }
-    >
+      )}
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -111,7 +107,7 @@ export function Credentials({
           </EmptyContent>
         </Empty>
       ) : (
-        <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid items-start gap-4 sm:grid-cols-2">
           {credentials.map((c) => (
             <CredentialCard
               key={c.id}
@@ -144,7 +140,7 @@ export function Credentials({
           </Card>
         </section>
       )}
-    </Page>
+    </div>
   );
 }
 

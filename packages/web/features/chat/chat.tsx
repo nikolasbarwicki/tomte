@@ -125,7 +125,7 @@ export function ChatView({
             >
               <PanelRightIcon />
             </TooltipTrigger>
-            <TooltipContent>Tasks, memory, files, routines and settings</TooltipContent>
+            <TooltipContent>Work, tasks, files, browser and settings</TooltipContent>
           </Tooltip>
         </AppBar>
         <NeedsYou bot={bot} />
@@ -154,7 +154,7 @@ export function ChatView({
           >
             <SheetTitle className="sr-only">{bot.name}</SheetTitle>
             <SheetDescription className="sr-only">
-              Tasks, memory, files, routines and settings
+              Work, tasks, files, browser and settings
             </SheetDescription>
             {panelContent}
           </SheetContent>

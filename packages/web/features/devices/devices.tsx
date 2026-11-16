@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { confirmAction } from "@/components/confirm.tsx";
-import { Page } from "@/components/page.tsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,7 +22,7 @@ import { dateTime } from "@/lib/format.ts";
 
 import { createPairingCode, listDevices, revokeDevice } from "./api.ts";
 
-/** The Devices screen: every paired device, with revoking and new pairing codes. */
+/** The paired devices section of Settings: every paired device, with revoking and new pairing codes. */
 export function Devices() {
   const [devices, setDevices] = useState<DeviceEntry[]>();
   const [error, setError] = useState<string>();
@@ -55,16 +54,19 @@ export function Devices() {
     });
 
   return (
-    <Page
-      title="Devices"
-      description="Browsers and scripts paired with this host. Revoking a device signs it out at once."
-      actions={
+    <section className="flex flex-col gap-3">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-medium">Paired devices</h3>
+          <p className="text-muted-foreground text-xs">
+            Browsers and scripts paired with this host. Revoking a device signs it out at once.
+          </p>
+        </div>
         <Button size="sm" disabled={creating} onClick={newCode}>
           {creating ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
           Pair a device
         </Button>
-      }
-    >
+      </div>
       <PairingCodeDialog code={code} onClose={() => setCode(undefined)} />
       {error && <p className="text-destructive text-sm break-words">{error}</p>}
       {devices && (
@@ -76,7 +78,7 @@ export function Devices() {
           </CardContent>
         </Card>
       )}
-    </Page>
+    </section>
   );
 }
 

@@ -40,6 +40,15 @@ export function adoptClaudeConfigDir(config: HostConfig): void {
   if (config.mode === "remote") process.env.CLAUDE_CONFIG_DIR = claudeConfigDir(config);
 }
 
+/** The host command that signs the Claude CLI in, for a remote-mode host: `auth-login` parses the same configuration as the server, so it names the data root and the secrets backend too. */
+export function remoteLoginCommand(config: HostConfig): string {
+  const secrets =
+    config.secrets.backend === "file"
+      ? ["--secrets-key-file", config.secrets.keyFile]
+      : ["--secrets", "keychain"];
+  return hostCommand("auth-login", "--mode", "remote", "--data-root", config.dataRoot, ...secrets);
+}
+
 /** Every Claude CLI child the host starts. */
 export interface ClaudeAccess {
   /** The environment for a CLI child: the host's whole environment in local mode, an allowlist in remote mode. */
@@ -106,13 +115,8 @@ export function createClaudeAccess(config: HostConfig, cli: ResolvedCli): Claude
       if (running) await running;
       if (state === "signed-out") await checkSignIn();
       if (state === "signed-out") {
-        // `auth-login` parses the same configuration as the server, so the command has to name the secrets backend too.
-        const secrets =
-          config.secrets.backend === "file"
-            ? ["--secrets-key-file", config.secrets.keyFile]
-            : ["--secrets", "keychain"];
         throw new SignedOut(
-          `Claude is not signed in on this host; run \`${hostCommand("auth-login", "--mode", "remote", "--data-root", config.dataRoot, ...secrets)}\` in a terminal on the host, then try again`,
+          `Claude is not signed in on this host; run \`${remoteLoginCommand(config)}\` in a terminal on the host, then try again`,
         );
       }
     },

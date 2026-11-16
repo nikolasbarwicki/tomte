@@ -37,7 +37,7 @@ export function parseButtonData(
  */
 export function linkTo(
   publicUrl: string,
-  item: Pick<CardItem, "botId" | "panel">,
+  item: Pick<CardItem, "botId" | "panel" | "section">,
 ): ChannelMessage["link"] {
   let url: URL;
   try {
@@ -52,10 +52,11 @@ export function linkTo(
     url.hostname.startsWith("127.");
   if (url.protocol === "http:" && loopback) return undefined;
   const path = `/bots/${encodeURIComponent(item.botId)}`;
-  return {
-    label: "Open in Claudebot",
-    url: `${url.origin}${path}${item.panel ? `?panel=${encodeURIComponent(item.panel)}` : ""}`,
-  };
+  const search = new URLSearchParams({
+    ...(item.panel && { panel: item.panel }),
+    ...(item.section && { section: item.section }),
+  }).toString();
+  return { label: "Open in Claudebot", url: `${url.origin}${path}${search ? `?${search}` : ""}` };
 }
 
 /**

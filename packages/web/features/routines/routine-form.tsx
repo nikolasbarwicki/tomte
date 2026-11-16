@@ -220,7 +220,7 @@ export function RoutineForm({
               Send the result to my phone
             </FieldLabel>
             <FieldDescription className="text-xs">
-              Needs a linked channel (Channels page)
+              Needs a linked channel (Settings › Channels)
             </FieldDescription>
           </FieldContent>
         </Field>

@@ -75,10 +75,10 @@ export interface FrontOptions {
   allows?: (tool: string) => boolean;
   delegate: HostDelegate;
   log?: (line: string) => void;
-  /** Who the bot is; appended to the system prompt. */
-  persona: string;
-  /** The bot's full persona, files folder included, which the worker's prompt ends with. */
-  workerPersona: string;
+  /** Who the bot is; appended to the system prompt. Called whenever the session opens. */
+  persona: () => string;
+  /** The bot's full persona, files folder included, which the worker's prompt ends with. Called whenever the session opens. */
+  workerPersona: () => string;
   /** The bot's files folder: with `cwd`, the places its worker may read and write without asking. */
   files: string;
   memory: MemoryPaths;
@@ -191,14 +191,14 @@ export class FrontSession {
     const worker: WorkerSetup = {
       shell: lease.isolation?.shell !== "disabled",
       integrationServers: integrationServers.map(([name]) => name),
-      context: this.o.workerPersona + memorySections(this.o.memory),
+      context: this.o.workerPersona() + memorySections(this.o.memory),
     };
     const agents = agentDefinitions(this.settings, worker);
     const append =
       FRONT_PROMPT +
       `\n\n${MEMORY_INSTRUCTIONS}` +
       (lease.instructions ? `\n\n${lease.instructions}` : "") +
-      `\n\n${this.o.persona}` +
+      `\n\n${this.o.persona()}` +
       memorySections(this.o.memory);
     const launch = claudeHarness.launch({
       hostServers: lease.servers,

@@ -124,7 +124,7 @@ describe("a failed run", () => {
     expect(markup.inline_keyboard.flat()).toEqual([
       {
         text: "Open in Claudebot",
-        url: `https://claudebot.example.com/bots/${t.botId}?panel=routines`,
+        url: `https://claudebot.example.com/bots/${t.botId}?panel=settings&section=routines`,
       },
     ]);
   });
@@ -178,7 +178,7 @@ describe("a routine that sends its result", () => {
       inline_keyboard: { url?: string }[][];
     };
     expect(markup.inline_keyboard.flat().map((b) => b.url)).toEqual([
-      `https://claudebot.example.com/bots/${t.botId}?panel=routines`,
+      `https://claudebot.example.com/bots/${t.botId}?panel=settings&section=routines`,
     ]);
   });
 

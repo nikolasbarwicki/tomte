@@ -73,8 +73,8 @@ export interface ThreadOptions {
   allows?: (tool: string) => boolean;
   delegate: HostDelegate;
   log?: (line: string) => void;
-  /** Who this thread is; appended to the system prompt. */
-  persona?: string;
+  /** Who this thread is; appended to the system prompt. Called whenever a live query opens, so a rename or new instructions reach a reopened session. */
+  persona?: () => string;
   memory: MemoryPaths;
   /** Called with a scope's full memory file after the agent changes it. */
   onMemory?: (scope: MemoryScope, text: string) => void;
@@ -130,10 +130,11 @@ export class Thread {
     await this.o.claude.requireSignIn();
     const session = await this.o.integrations?.session();
     const lease = this.o.hostServers?.();
+    const persona = this.o.persona?.();
     const append =
       HOST_INSTRUCTIONS +
       (lease?.instructions ? `\n\n${lease.instructions}` : "") +
-      (this.o.persona ? `\n\n${this.o.persona}` : "") +
+      (persona ? `\n\n${persona}` : "") +
       memorySections(this.o.memory);
     const launch = claudeHarness.launch({
       hostServers: lease?.servers ?? [],

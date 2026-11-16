@@ -269,6 +269,7 @@ host.loopScript(
 const box = page.getByRole("textbox", { name: "Message Loop", exact: true });
 const sendButton = page.getByRole("button", { name: "Send", exact: true });
 const settingsTab = page.getByRole("tab", { name: "Settings" });
+const chatRow = page.getByRole("button", { name: /^Chat & model/ });
 const modeSwitch = page.getByRole("switch", { name: "Double-loop chat" });
 const tasksTab = page.getByRole("tab", { name: "Tasks" });
 const limits = page.getByTestId("rate-limits");
@@ -285,10 +286,16 @@ const say = async (text: string) => {
   await host.until(() => sends.length > before);
   return sends.at(-1)!;
 };
-/** Waits until the chat settings can switch the mode again: nothing runs and the bot is not replying. Leaves the Settings tab open. */
-const waitIdle = async () => {
+/** Opens the "Chat & model" page of the Settings tab (the panel remembers the page across tab switches). */
+const openChatSettings = async () => {
   await settingsTab.click();
+  await modeSwitch.or(chatRow).first().waitFor();
+  if (await chatRow.isVisible()) await chatRow.click();
   await modeSwitch.waitFor();
+};
+/** Waits until the chat settings can switch the mode again: nothing runs and the bot is not replying. Leaves the page open. */
+const waitIdle = async () => {
+  await openChatSettings();
   await page.waitForFunction(
     () => {
       const el = document.getElementById("double-loop");
@@ -313,8 +320,8 @@ try {
   check((await limits.count()) === 0, "no rate-limit indicator for a standard bot");
   check((await tasksTab.count()) === 0, "no Tasks tab for a standard bot");
 
-  console.log("the toggle, in the Settings tab");
-  await settingsTab.click();
+  console.log("the toggle, on the Chat & model page of the Settings tab");
+  await openChatSettings();
   check(
     await page.getByText("Model", { exact: true }).first().isVisible(),
     "a standard bot's settings name its model",
@@ -400,7 +407,7 @@ try {
     (await transcript.getByText("Agent", { exact: true }).count()) === 0,
     "the front's tool calls are not shown",
   );
-  await settingsTab.click();
+  await openChatSettings();
   check((await modeSwitch.isDisabled()) === true, "the mode switch is locked while a task runs");
   await tasksTab.click();
 
