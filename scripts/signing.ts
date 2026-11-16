@@ -8,7 +8,8 @@
 //       timestamp and the entitlements of scripts/entitlements.mac.plist; Windows: Authenticode, SHA-256, timestamped).
 //   bun scripts/signing.ts verify <bundleDir> <version> <arch>...
 //       checks a signed `package:desktop` run for this OS: the apps, the macOS update zips and the installer are signed
-//       and valid, notarized and stapled (macOS), and the bundled host is signed by the same identity as the app.
+//       and valid, notarized and stapled (macOS), and the bundled host and browser (engine, Chrome and its helpers and
+//       libraries) are signed by the same identity as the app.
 // `sign-host` changes the keychain and the certificate store, so it refuses to run outside GitHub Actions. A developer
 // machine never signs through this script; `package:desktop --sign` has its own credential rules (package-desktop.ts).
 // The secrets are never put on a command line this script prints, and its temporary keychain and files are removed.
@@ -19,12 +20,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { spawnRunner } from "./command-runner.ts";
-import { bundledAppPath, bundledHostPath, desktopAssets, isDesktopArch } from "./desktop-kit.ts";
+import { isDesktopArch } from "./desktop-kit.ts";
 import { verifyMacBundle } from "./mac-verify.ts";
 import {
-  checkSignedWindows,
   MAC_ENTITLEMENTS,
-  parseAuthenticodeLines,
   parseDeveloperIdIdentity,
   planSigning,
   type SigningDecision,
@@ -34,6 +33,7 @@ import {
   signingSummary,
   TIMESTAMP_URL,
 } from "./signing-kit.ts";
+import { verifyWindowsBundle } from "./win-verify.ts";
 
 const USAGE =
   "usage: bun scripts/signing.ts plan | sign-host <binary> | verify <bundleDir> <version> <arch>...";
@@ -179,45 +179,6 @@ async function signHost(binary: string): Promise<void> {
   }
 }
 
-const AUTHENTICODE_SCRIPT = `
-$ErrorActionPreference = 'Stop'
-foreach ($p in $args) {
-  $s = Get-AuthenticodeSignature -LiteralPath $p
-  $t = if ($s.SignerCertificate) { $s.SignerCertificate.Thumbprint } else { '' }
-  '{0}|{1}|{2}|{3}' -f $p, $s.Status, $t, ($null -ne $s.TimeStamperCertificate)
-}
-`;
-
-/** The installer, the app and the bundled host: valid, timestamped, one certificate. */
-async function verifyWindows(bundleDir: string, version: string): Promise<void> {
-  const files = [
-    join(bundleDir, desktopAssets("win32", ["x64"], version).installers[0] as string),
-    join(bundleDir, bundledAppPath("win32", "x64")),
-    join(bundleDir, bundledHostPath("win32", "x64")),
-  ];
-  const tmp = await mkdtemp(join(tmpdir(), "claudebot-verify-"));
-  try {
-    const script = join(tmp, "verify.ps1");
-    await writeFile(script, AUTHENTICODE_SCRIPT);
-    const out = await run([
-      "powershell",
-      "-NoProfile",
-      "-NonInteractive",
-      "-File",
-      script,
-      ...files,
-    ]);
-    const records = parseAuthenticodeLines(out.stdout);
-    const problems = checkSignedWindows(records);
-    if (records.length !== files.length)
-      problems.push(`expected ${files.length} files, checked ${records.length}`);
-    if (problems.length > 0) throw new SigningError(`- ${problems.join("\n- ")}`);
-    for (const r of records) console.log(`ok ${r.path} (${r.thumbprint})`);
-  } finally {
-    await rm(tmp, { recursive: true, force: true });
-  }
-}
-
 async function main(): Promise<number> {
   const [command, ...args] = process.argv.slice(2);
   if (command === "plan" && args.length === 0) return plan();
@@ -232,7 +193,7 @@ async function main(): Promise<number> {
       return 2;
     }
     if (process.platform === "darwin") await verifyMacBundle(run, bundleDir, version, archs);
-    else if (process.platform === "win32") await verifyWindows(bundleDir, version);
+    else if (process.platform === "win32") await verifyWindowsBundle(run, bundleDir, version);
     else throw new Error(`there is nothing to verify on ${process.platform}`);
     return 0;
   }

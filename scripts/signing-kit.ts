@@ -35,6 +35,30 @@ export const SIGNING_SECRETS: Record<SigningPlatform, readonly string[]> = {
 /** RFC 3161 timestamp server for Windows signatures; a signature outlives the certificate only with a timestamp. */
 export const TIMESTAMP_URL = "http://timestamp.digicert.com";
 
+/**
+ * The app, its uninstaller and the installer are signed with the PFX in WIN_CSC_LINK, SHA-256 only and timestamped.
+ * `signExts` is electron-builder's `shouldSignFile`: every pattern is an `endsWith` on the full path, a positive match
+ * wins over a `!` one, and a file that matches neither is signed when it is an `.exe`. So:
+ * - `.dll` signs libraries too, which it never does by default. They are the bundled Chrome's (`chrome.dll`, `libEGL.dll`,
+ *   ...), which the extra-resource copy signs file by file, and also the Electron app's own top-level DLLs and any in
+ *   `app.asar.unpacked`, which `signApp` signs the same way. Every `.exe` stays signed by default, the engine and Chrome's
+ *   among them.
+ * - `!claudebot-host.exe` keeps the host out: it arrives signed (`signing.ts sign-host`) and a second signature would break the byte
+ *   identity `release.ts desktop` checks. Never add a positive `.exe` pattern, it would beat this one.
+ * - Chrome for Testing's one third-party DLL, `D3DCompiler_47.dll`, carries Microsoft's signature in the pinned zip and
+ *   cannot be excluded (a `!` pattern loses to `.dll`), so it ends up with ours, replacing Microsoft's (nothing in Chrome is
+ *   known to check that DLL's signer; unobserved), and `signing.ts verify` requires one certificate on every file. Every other `.exe` and
+ *   `.dll` in the zip is unsigned.
+ * electron-builder only warns when it fails to sign one of these files, so `signing.ts verify` is what fails the release.
+ */
+export const SIGNED_WIN = {
+  signtoolOptions: {
+    signingHashAlgorithms: ["sha256" as const],
+    rfc3161TimeStampServer: TIMESTAMP_URL,
+  },
+  signExts: [".dll", "!claudebot-host.exe"],
+};
+
 /** A signing configuration that cannot proceed: required but missing, or only partly set. */
 export class SigningError extends Error {}
 

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import { WinPackager } from "electron-builder";
+
 import {
   checkSignedMac,
   checkSignedWindows,
@@ -11,6 +13,7 @@ import {
   planSigning,
   localMacSigning,
   MAC_ENTITLEMENTS,
+  SIGNED_WIN,
   SIGNING_SECRETS,
   SigningError,
   signingRequired,
@@ -309,6 +312,39 @@ describe("checkSignedMac", () => {
     const plist = await Bun.file(MAC_ENTITLEMENTS).text();
     expect(checkSignedMac(app, host, plist, [{ ...chrome, entitlements: plist }, engine])).toEqual(
       [],
+    );
+  });
+});
+
+describe("SIGNED_WIN", () => {
+  // electron-builder's own rule for which file it signs, run on our configuration.
+  const signs = (file: string) =>
+    WinPackager.prototype.shouldSignFile.call(
+      { platformSpecificBuildOptions: SIGNED_WIN } as unknown as WinPackager,
+      file,
+    );
+  const resources = String.raw`C:\out\win-unpacked\resources`;
+
+  test("signs the engine, Chrome's executables and every DLL of the browser", () => {
+    expect(signs(String.raw`${resources}\browser-engine\agent-browser.exe`)).toBe(true);
+    expect(signs(String.raw`${resources}\browser-engine\chrome\chrome-win64\chrome.exe`)).toBe(
+      true,
+    );
+    expect(signs(String.raw`${resources}\browser-engine\chrome\chrome-win64\chrome.dll`)).toBe(
+      true,
+    );
+    expect(signs(String.raw`${resources}\browser-engine\chrome\chrome-win64\libEGL.dll`)).toBe(
+      true,
+    );
+  });
+
+  test("leaves the host to the host job's signature, so release.ts can compare its bytes", () => {
+    expect(signs(String.raw`${resources}\claudebot-host.exe`)).toBe(false);
+  });
+
+  test("does not sign data files", () => {
+    expect(signs(String.raw`${resources}\browser-engine\chrome\chrome-win64\icudtl.dat`)).toBe(
+      false,
     );
   });
 });

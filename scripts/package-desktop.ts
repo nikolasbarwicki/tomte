@@ -54,9 +54,9 @@ import {
   localMacSigning,
   packagingSigning,
   MAC_ENTITLEMENTS,
+  SIGNED_WIN,
   SIGNING_SECRETS,
   type SigningDecision,
-  TIMESTAMP_URL,
 } from "./signing-kit.ts";
 
 const ROOT = join(import.meta.dir, "..");
@@ -129,18 +129,6 @@ const SIGNED_MAC = {
   notarize: true,
   signIgnore: ["/Contents/Resources/claudebot-host$"],
 };
-/**
- * The app, its uninstaller and the installer are signed with the PFX in WIN_CSC_LINK, SHA-256 only and timestamped.
- * The host's exe is not: `!` excludes it from electron-builder's signing of extra resources; it arrives signed (see above).
- */
-const SIGNED_WIN = {
-  signtoolOptions: {
-    signingHashAlgorithms: ["sha256" as const],
-    rfc3161TimeStampServer: TIMESTAMP_URL,
-  },
-  signExts: ["!claudebot-host.exe"],
-};
-
 const INSTALLER_TARGETS: Record<DesktopPlatform, string[]> = {
   darwin: ["dmg", "zip"],
   win32: ["nsis"],
