@@ -19,6 +19,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { readJson } from "@/host/api.ts";
+import { useHostInfo } from "@/host/hooks.ts";
 import { dateTime, duration, tokenCount } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
 
@@ -49,6 +50,7 @@ function RunBadge({ status }: { status: RunStatus }) {
 
 export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   const [open, setOpen] = useState(false);
+  const absenceDays = useHostInfo()?.pauseAfterAbsenceDays ?? 0;
   const [toggling, toggle] = useTransition();
   const [starting, startRun] = useTransition();
   const [removing, startRemoving] = useTransition();
@@ -66,7 +68,11 @@ export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   const next = !r.active
     ? r.pausedReason === "failures"
       ? "Paused after 5 failed runs"
-      : "Paused"
+      : r.pausedReason === "absence"
+        ? absenceDays > 0
+          ? `Paused: no activity for ${absenceDays} ${absenceDays === 1 ? "day" : "days"}`
+          : "Paused: no activity"
+        : "Paused"
     : r.nextRunAt
       ? `Next run ${dateTime(r.nextRunAt)}`
       : "No runs left";

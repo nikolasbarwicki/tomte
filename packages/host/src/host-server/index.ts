@@ -54,6 +54,7 @@ import { openFileSecrets } from "../platform/file-secrets.ts";
 import { keychainSecrets, type SecretStore } from "../platform/secrets.ts";
 import { TokenRegistry } from "../platform/tokens.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
+import { createPresence } from "../presence/index.ts";
 import {
   createRoutines,
   createRoutinesEndpoint,
@@ -61,6 +62,7 @@ import {
 } from "../routines/index.ts";
 import { serveUi, type UiAssets } from "../ui/index.ts";
 import { createWaits } from "../waits/index.ts";
+import { absenceActions } from "./absence.ts";
 import { externalEventsRoute } from "./api/external-events.ts";
 import { hostInfoRoute } from "./api/host-info.ts";
 import { createApi } from "./api/index.ts";
@@ -115,6 +117,8 @@ export interface HostServerOptions {
   now?: () => number;
   /** How long an idle double-loop front stays open; 10 minutes when omitted. */
   frontIdleMs?: number;
+  /** How often the absence check runs; an hour when omitted. */
+  absenceCheckMs?: number;
 }
 
 export interface HostServer {
@@ -149,6 +153,9 @@ export interface HostServer {
 function openSecrets({ dataRoot, secrets }: HostConfig): SecretStore {
   return secrets.backend === "file" ? openFileSecrets(dataRoot, secrets.keyFile) : keychainSecrets;
 }
+
+/** How often the absence check runs unless a test says otherwise. */
+const ABSENCE_CHECK_MS = 60 * 60_000;
 
 export async function createHostServer(o: HostServerOptions): Promise<HostServer> {
   const { cli, db } = o;
@@ -378,6 +385,16 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     unattended: (botId) => chats.unattended(botId),
     now: Date.now,
   });
+  const presence = createPresence({
+    db,
+    pauseAfterDays: o.config.pauseAfterAbsenceDays,
+    ...(o.now !== undefined && { now: o.now }),
+    ...absenceActions({
+      routines,
+      events: externalEvents,
+      botIds: () => listBots(dataRoot).map((b) => b.id),
+    }),
+  });
   // A run's waits are told to the run: an answer resumes it, an expiry fails it.
   waits.subscribe((e) => {
     if (e.type === "closed") routines.waitClosed(e.wait);
@@ -442,6 +459,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     removeBot,
     cwd,
     headedBrowser: o.config.headedBrowser,
+    pauseAfterAbsenceDays: o.config.pauseAfterAbsenceDays,
     hasActiveTasks: (botId) => loop.hasActive(botId),
     dataRoot,
     cli,
@@ -485,6 +503,10 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   });
   const agent = agentRoutes({ browser, handoffs, routines: routinesEndpoint });
 
+  // Before the routines start, so an absence that ended while the host was down pauses them instead of catching them up.
+  presence.check();
+  const absenceTimer = setInterval(() => presence.check(), o.absenceCheckMs ?? ABSENCE_CHECK_MS);
+  absenceTimer.unref();
   routines.start();
   channels.start();
   // Items that arrived while the host or a channel was down get their cards now.
@@ -495,6 +517,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       clientAt,
       devices,
       sessions,
+      presence,
       createRequestListener(client, (req, res) =>
         vite ? vite.middlewares(req, res) : serveBuiltUi(req, res),
       ),
@@ -520,6 +543,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       agentListener.pause();
       chats.close();
       waits.close();
+      clearInterval(absenceTimer);
       await cards.stop();
       await channels.stop();
       await externalEvents.stop();

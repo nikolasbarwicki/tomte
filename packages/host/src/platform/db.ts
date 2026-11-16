@@ -455,6 +455,16 @@ const SCHEMA_V24 = (db: Database) => {
       db.run(`ALTER TABLE routine_runs ADD COLUMN ${name} ${type}`);
 };
 
+// The owner's presence (the absence pause): one row with the time of the last action and the time of the last warning. It is in the
+// database so a restart does not reset the clock.
+const SCHEMA_V25 = `
+CREATE TABLE IF NOT EXISTS presence (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  last_action_at INTEGER NOT NULL,
+  last_warned_at INTEGER                -- when the warning of this absence was raised; null once the owner is back
+);
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -485,6 +495,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V22,
     SCHEMA_V23,
     SCHEMA_V24,
+    SCHEMA_V25,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

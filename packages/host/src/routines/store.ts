@@ -116,6 +116,16 @@ export function listActiveRoutines(db: Database): RoutineRecord[] {
   return db.query<RoutineRow, []>("SELECT * FROM routines WHERE active = 1").all().map(toRoutine);
 }
 
+export function listPausedFor(
+  db: Database,
+  reason: NonNullable<RoutineRecord["pausedReason"]>,
+): RoutineRecord[] {
+  return db
+    .query<RoutineRow, [string]>("SELECT * FROM routines WHERE active = 0 AND paused_reason = ?")
+    .all(reason)
+    .map(toRoutine);
+}
+
 export function insertRoutine(db: Database, r: RoutineRecord) {
   db.query(
     `INSERT INTO routines (id, bot_id, name, instruction, schedule, active, catch_up, notify_result, last_scheduled_for, created_at, updated_at)

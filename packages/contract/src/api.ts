@@ -12,11 +12,13 @@ export const BrowserAvailability = z.discriminatedUnion("status", [
 ]);
 export type BrowserAvailability = z.infer<typeof BrowserAvailability>;
 
-/** The `/api/info` response: where the host runs and which Claude CLI it uses. */
+/** The `/api/info` response: where the host runs, which Claude CLI it uses and the days of absence after which it pauses routines. */
 export const HostInfo = z.object({
   cwd: z.string(),
   cli: z.string(),
   browser: BrowserAvailability,
+  /** `--pause-after-absence-days`; 0 when the absence pause is off (or the host is older than the setting). */
+  pauseAfterAbsenceDays: z.number().int().nonnegative().default(0),
 });
 export type HostInfo = z.infer<typeof HostInfo>;
 

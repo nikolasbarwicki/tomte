@@ -25,6 +25,8 @@ export interface ApiContext {
   dataRoot: string;
   /** Whether a bot may run headed Chrome; see `HostConfig.headedBrowser`. */
   headedBrowser: boolean;
+  /** Days of absence after which routines pause; see `HostConfig.pauseAfterAbsenceDays`. */
+  pauseAfterAbsenceDays: number;
   /** True while the bot has background tasks running or queued; changing its chat mode is refused then. */
   hasActiveTasks: (botId: string) => boolean;
   cli: ResolvedCli;

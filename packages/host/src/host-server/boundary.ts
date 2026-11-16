@@ -3,6 +3,7 @@ import type { IncomingMessage, RequestListener, ServerResponse } from "node:http
 import type { DeviceAuth } from "../device-auth/index.ts";
 import { eventsRouteBot } from "../events/index.ts";
 import type { HostOrigin } from "../platform/config.ts";
+import type { Presence } from "../presence/index.ts";
 import type { DeviceSessions } from "./device-sessions.ts";
 import { readSessionCookie } from "./session-cookie.ts";
 
@@ -47,17 +48,22 @@ function reject(res: ServerResponse, status: number, error: string) {
   res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify({ error }));
 }
 
+/** The event stream every page and the desktop app's banner keep open: it says nothing about the owner being here, so it is never presence. */
+const EVENT_STREAM_PATH = "/api/events";
+
 /**
  * The one check every request to the client listener passes before it is routed, so a rejected request never
  * reaches a handler. In order: the Host names this host (403); a mutating request's Origin is the public URL's or
  * the loopback origin (403), which stops other web pages, and its body is JSON (415), which forces a CORS
  * preflight; then a valid device token (401), except on the open paths. The events post is exempt from the Origin
- * rule as well as the device token. The method's own rules stay with its route.
+ * rule as well as the device token. The method's own rules stay with its route. A request a device token accepted
+ * is the owner's presence, except the event stream.
  */
 export function withBoundary(
   origin: HostOrigin,
   devices: DeviceAuth,
   sessions: DeviceSessions,
+  presence: Pick<Presence, "touch">,
   next: RequestListener,
 ): RequestListener {
   return (req, res) => {
@@ -74,6 +80,7 @@ export function withBoundary(
       const token = presentedToken(req);
       const deviceId = token === undefined ? undefined : devices.authenticate(token);
       if (deviceId === undefined) return reject(res, 401, "pair this device first");
+      if (!(method === "GET" && path === EVENT_STREAM_PATH)) presence.touch();
       sessions.open(deviceId, req, res);
     }
     next(req, res);

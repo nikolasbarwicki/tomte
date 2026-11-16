@@ -557,7 +557,7 @@ export function createRoutines(deps: {
     onChange(r.botId);
   }
 
-  return {
+  const api = {
     /** Reconcile downtime, then arm every active routine. */
     start() {
       reconcile();
@@ -677,11 +677,45 @@ export function createRoutines(deps: {
       return store.listRuns(db, id, before, Math.min(Math.max(limit, 1), 100), now());
     },
 
+    /** The active routines of bots that exist, with their bot, for what must tell an owner about every routine that is about to stop. */
+    active(): { botId: string; name: string }[] {
+      return store
+        .listActiveRoutines(db)
+        .filter((r) => getBot(dataRoot, r.botId))
+        .map(({ botId, name }) => ({ botId, name }));
+    },
+
+    /** Pauses every active routine of a bot that exists, saying why, and returns them. A run already working finishes; only the schedule is disarmed. */
+    pauseAll(
+      reason: NonNullable<RoutineRecord["pausedReason"]>,
+    ): { botId: string; name: string }[] {
+      const t = now();
+      const paused: { botId: string; name: string }[] = [];
+      for (const r of store.listActiveRoutines(db)) {
+        if (!getBot(dataRoot, r.botId) || !store.pauseRoutine(db, r.id, reason, t)) continue;
+        disarm(r.id);
+        paused.push({ botId: r.botId, name: r.name });
+      }
+      for (const botId of new Set(paused.map((p) => p.botId))) onChange(botId);
+      return paused;
+    },
+
+    /** Resumes every routine paused for `reason` the way the owner's switch does (no catch-up of what was missed); returns the bots it touched. */
+    resumeByReason(reason: NonNullable<RoutineRecord["pausedReason"]>): string[] {
+      const bots = new Set<string>();
+      for (const r of store.listPausedFor(db, reason)) {
+        api.update(r.id, { active: true });
+        bots.add(r.botId);
+      }
+      return [...bots];
+    },
+
     /** The next three times a schedule would fire, for the editor's preview. */
     preview(schedule: Schedule): number[] {
       return nextOccurrences(schedule, now(), 3);
     },
   };
+  return api;
 }
 
 export type Routines = ReturnType<typeof createRoutines>;
