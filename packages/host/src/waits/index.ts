@@ -150,6 +150,20 @@ export function waitResolvedCard(w: Wait): ServerEvent {
   return { type: "wait_resolved", id: w.id, label };
 }
 
+/** What a wait asks, in a few words: the heading of a message about it (a notice that its park expired). */
+export function waitTitle(w: Wait): string {
+  switch (w.kind) {
+    case "tool_approval":
+      return `approval for ${w.payload.tool}`;
+    case "question":
+      return `question ${quote(w.payload.question)}`;
+    case "takeover":
+      return "browser takeover";
+    case "credential":
+      return `sign-in with "${w.payload.label}"`;
+  }
+}
+
 const quote = (s: string) => `"${s.length > 120 ? `${s.slice(0, 119)}…` : s}"`;
 
 const approval: WaitHandler<"tool_approval"> = {

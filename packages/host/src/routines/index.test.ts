@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +11,7 @@ import { createBot } from "../bots/index.ts";
 import { migrate } from "../platform/db.ts";
 import { defined } from "../testing/defined.ts";
 import { createWaits, type Waits } from "../waits/index.ts";
-import { Conflict, createRoutines, type Executor } from "./index.ts";
+import { Conflict, createRoutines, type Executor, type RunEnd } from "./index.ts";
 import * as store from "./store.ts";
 
 const at = (iso: string) => Date.parse(iso);
@@ -34,6 +34,8 @@ let changed: { promise: Promise<string>; resolve(botId: string): void };
 /** What the host told the bot's session, and what the owner's chat was shown. */
 let told: string[];
 let notices: string[];
+/** Every run `onRunEnded` was told about. */
+let ended: RunEnd[];
 
 const execute: Executor = ({ prompt, runId, resumed }) => {
   const { promise, resolve, reject } = Promise.withResolvers<string>();
@@ -48,6 +50,7 @@ beforeEach(() => {
   jobs = [];
   told = [];
   notices = [];
+  ended = [];
   changed = Promise.withResolvers();
   botId = createBot(cwd, "Bot").id;
   waits = createWaits({
@@ -65,6 +68,7 @@ beforeEach(() => {
     notice: async (_bot, text) => void notices.push(text),
     deliver: async (_bot, text) => void told.push(text),
     onChange: (id) => changed.resolve(id),
+    onRunEnded: (end) => void ended.push(end),
   });
   waits.subscribe((e) => {
     if (e.type === "closed") routines.waitClosed(e.wait);
@@ -454,4 +458,139 @@ test("a database made before parked runs keeps its runs and their order, and tak
   await until(() => jobs.length === 1);
   expect(defined(jobs[0]).prompt).toContain(`<human-wait-result id="${id}">`);
   expect(waits.ofRun("parked")).toEqual([]);
+});
+
+/** What `onRunEnded` was told, as status and error per run. */
+const endings = () => ended.map((e) => [e.run.status, e.run.error, e.expired] as const);
+
+test("a run that succeeds is reported once, with its output and no expired waits", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  changed = Promise.withResolvers();
+  defined(jobs[0], "job").resolve("all done");
+  await changed.promise;
+  expect(ended).toHaveLength(1);
+  expect(ended[0]).toMatchObject({
+    run: { status: "succeeded", output: "all done", trigger: "manual" },
+    routine: { id: r.id, name: "h" },
+    expired: [],
+  });
+});
+
+test("a run whose turn fails is reported once as failed, a manual one like any other", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  defined(jobs[0], "job").reject(new Error("the CLI crashed"));
+  await until(() => ended.length > 0);
+  await Bun.sleep(20);
+  expect(endings()).toEqual([["failed", "the CLI crashed", []]]);
+  expect(ended[0]?.run.trigger).toBe("manual");
+});
+
+test("a run left running by a previous process is reported as interrupted at start, once however often it starts", () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  store.insertRun(db, {
+    id: "stale",
+    routineId: r.id,
+    trigger: "schedule",
+    scheduledFor: null,
+    status: "running",
+    sessionId: null,
+    output: null,
+    error: null,
+    startedAt: clock,
+    finishedAt: null,
+  });
+  routines.start();
+  routines.start();
+  expect(endings()).toEqual([["interrupted", "app stopped during run", []]]);
+});
+
+test("a park that expires is reported once, with the title of what lapsed, and a late answer reports nothing more", async () => {
+  const { r } = await park(2);
+  clock += DAY;
+  waits.start();
+  expect(ended).toHaveLength(1);
+  expect(ended[0]).toMatchObject({
+    run: { status: "failed", error: "approval expired" },
+    routine: { id: r.id },
+    expired: ["approval for mcp__fx__send"],
+  });
+  waits.start();
+  expect(ended).toHaveLength(1);
+});
+
+test("a parked run that resumes and ends is reported once, after the last turn", async () => {
+  const { ids, runId } = await park();
+  expect(ended).toEqual([]);
+  waits.answer(defined(ids[0]), "allow");
+  await until(() => jobs.length === 2);
+  expect(ended).toEqual([]);
+  defined(jobs[1], "resume").resolve("finished");
+  await until(() => ended.length > 0);
+  expect(ended).toHaveLength(1);
+  expect(ended[0]?.run).toMatchObject({ id: runId, status: "succeeded", output: "finished" });
+});
+
+test("a new session that fails a parked run reports it as an ordinary failure", async () => {
+  await park();
+  routines.sessionEnded(botId);
+  expect(endings()).toEqual([["failed", "session ended while waiting for you", []]]);
+});
+
+test("a skipped run and a run stopped by deleting its routine are not reported", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  clock = at("2026-01-01T11:05:00Z");
+  routines.testRun(r.id);
+  routines.start();
+  expect(runsOf(r.id).map((x) => x.status)).toContain("skipped");
+  await routines.remove(r.id);
+  expect(ended).toEqual([]);
+});
+
+test("a run stopped by shutdown is left running, and the next start reports it as interrupted", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  routines.stop();
+  await Bun.sleep(20);
+  expect(runsOf(r.id)[0]?.status).toBe("running");
+  expect(ended).toEqual([]);
+  const again = createRoutines({
+    db,
+    dataRoot: cwd,
+    now: () => clock,
+    execute,
+    waits,
+    notice: async () => {},
+    deliver: async () => {},
+    onChange: () => {},
+    onRunEnded: (end) => void ended.push(end),
+  });
+  again.start();
+  expect(endings()).toEqual([["interrupted", "app stopped during run", []]]);
+  again.stop();
+});
+
+test("a failing onRunEnded is logged and the run's final status stands", async () => {
+  const quiet = spyOn(console, "error").mockImplementation(() => {});
+  const failing = createRoutines({
+    db,
+    dataRoot: cwd,
+    now: () => clock,
+    execute,
+    waits,
+    notice: async () => {},
+    deliver: async () => {},
+    onChange: () => {},
+    onRunEnded: () => {
+      throw new Error("no channel");
+    },
+  });
+  const r = failing.create(botId, { name: "f", instruction: "i", schedule: hourly, active: false });
+  failing.testRun(r.id);
+  defined(jobs[0], "job").resolve("ok");
+  await until(() => failing.get(r.id).lastRun?.status === "succeeded");
+  expect(quiet).toHaveBeenCalledWith(expect.stringContaining("no channel"));
+  quiet.mockRestore();
+  failing.stop();
 });

@@ -255,12 +255,12 @@ export function listRuns(
     .map(toRun);
 }
 
-/** Marks runs left `running` by a previous process as interrupted, and returns their ids; `live` lists run ids this process still owns. A `waiting` run has no process and is left alone. */
-export function interruptStaleRuns(db: Database, now: number, live: string[]): string[] {
+/** Marks runs left `running` by a previous process as interrupted, and returns them as they now stand; `live` lists run ids this process still owns. A `waiting` run has no process and is left alone. */
+export function interruptStaleRuns(db: Database, now: number, live: string[]): RoutineRun[] {
   return db
-    .query<{ id: string }, [number, string]>(
-      "UPDATE routine_runs SET status = 'interrupted', error = 'app stopped during run', finished_at = ? WHERE status = 'running' AND id NOT IN (SELECT value FROM json_each(?)) RETURNING id",
+    .query<RunRow, [number, string]>(
+      "UPDATE routine_runs SET status = 'interrupted', error = 'app stopped during run', finished_at = ? WHERE status = 'running' AND id NOT IN (SELECT value FROM json_each(?)) RETURNING *",
     )
     .all(now, JSON.stringify(live))
-    .map((r) => r.id);
+    .map(toRun);
 }
