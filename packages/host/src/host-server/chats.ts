@@ -32,7 +32,7 @@ import type { Events, ExternalRow } from "../events/index.ts";
 import type { Handoffs, Mention } from "../handoffs/index.ts";
 import type { HostServersSource } from "../harness/index.ts";
 import { openFront, type FrontSession, type LoopStore } from "../loop/index.ts";
-import type { Executor } from "../routines/index.ts";
+import { parkingDelegate, type Executor } from "../routines/index.ts";
 import {
   canonicalInput,
   type Wait,
@@ -104,6 +104,8 @@ export interface Chats {
   isWorking(botId: string): boolean;
   /** True while no human is watching the bot's turn: a routine turn or a headless run. */
   unattended(botId: string): boolean;
+  /** The routine run the bot's unattended turn belongs to, if one is running now: a standard bot's chat-hosted or headless routine turn. A double-loop bot's routine turn answers like an attended turn and has none. */
+  runOf(botId: string): string | undefined;
   botsEvent(): BotsEvent;
   currentBotId: () => string | undefined;
   announceBots: () => void;
@@ -148,8 +150,8 @@ type Chat = {
   /** Transcript events, replayed when the page (re)connects or switches back to this bot. */
   history: ServerEvent[];
   busy: boolean;
-  /** True while a routine turn runs, so its questions and approvals are answered without the user. */
-  routineTurn: boolean;
+  /** The routine run whose turn is running, so its questions and approvals park the run instead of waiting for the user. */
+  routineRun: string | undefined;
   /** Tool calls of this session waiting in this process for a human wait, by wait id. A wait nobody awaits is answered with a message. */
   awaiting: Map<string, (wait: Wait, text: string) => void>;
   /** External events that reached the bot's current session; the only ones a question may claim to be about. */
@@ -284,11 +286,9 @@ export function createChats(deps: ChatsDeps): Chats {
     routineTurns.startReady(
       (botId) => chats.get(botId),
       (chat, job) => {
-        emit(chat, {
-          type: "routine",
-          name: job.routine.name,
-          trigger: job.prompt.includes('trigger="manual"') ? "manual" : "schedule",
-        });
+        // A resumed run continues the turn the chat already shows the start of; its prompt is the owner's answers.
+        if (!job.resumed)
+          emit(chat, { type: "routine", name: job.routine.name, trigger: job.trigger });
         if (chat.front) {
           // A double-loop chat has no turn of its own: the routine's prompt goes to the front, and the routine ends with the front's next result.
           const { promise, resolve } = Promise.withResolvers<TurnResult | Error>();
@@ -296,7 +296,7 @@ export function createChats(deps: ChatsDeps): Chats {
           pushToFront(chat, job.prompt, true);
           return { done: promise, stop: (reason) => closeSessions(chat, reason) };
         }
-        chat.routineTurn = true;
+        chat.routineRun = job.runId;
         return { done: turn(chat, job.prompt), stop: (reason) => chat.thread.close(reason) };
       },
     );
@@ -463,7 +463,7 @@ export function createChats(deps: ChatsDeps): Chats {
       emit(chat, { type: "error", message: out.message });
     } finally {
       chat.busy = false;
-      chat.routineTurn = false;
+      chat.routineRun = undefined;
       dropAwaiting(chat);
       if (chat.configStale) {
         chat.configStale = false;
@@ -548,7 +548,8 @@ export function createChats(deps: ChatsDeps): Chats {
       if (scope === "user" || current?.bot.id === bot.id)
         broadcast({ type: "memory", scope, text });
     },
-    unattended: () => chat().routineTurn,
+    unattended: () => chat().routineRun !== undefined,
+    park: parkingDelegate(deps.waits, bot.id),
     ownedEvent(claimed) {
       if (claimed === undefined) return undefined;
       const { bot: owner, delivered } = chat();
@@ -628,7 +629,7 @@ export function createChats(deps: ChatsDeps): Chats {
       bot,
       history,
       busy: false,
-      routineTurn: false,
+      routineRun: undefined,
       awaiting: new Map(),
       delivered: deliveredIn(history),
       configStale: false,
@@ -833,7 +834,8 @@ export function createChats(deps: ChatsDeps): Chats {
       }
     },
     isWorking,
-    unattended: (botId) => !!chats.get(botId)?.routineTurn || headless(botId),
+    unattended: (botId) => chats.get(botId)?.routineRun !== undefined || headless(botId),
+    runOf: (botId) => chats.get(botId)?.routineRun ?? routineTurns.headlessRun(botId),
     botsEvent: chatsBotsEvent,
     announceBots,
     currentBotId: () => current?.bot.id,

@@ -278,6 +278,45 @@ CREATE INDEX IF NOT EXISTS human_waits_open ON human_waits(bot_id, created_at) W
 CREATE INDEX IF NOT EXISTS human_waits_by_run ON human_waits(run_id) WHERE run_id IS NOT NULL;
 `;
 
+// A routine run can park (ADR-0009): `waiting` joins the run statuses. SQLite cannot change a CHECK, so `routine_runs` is rebuilt with
+// its rows and rowids kept; the index went with the old table and is made again. `human_waits` has no foreign key to it, so the drop
+// cascades nowhere. `human_waits.delivered_at` marks a wait of a run whose outcome the run has given the bot (in a resume message,
+// or by continuing at once), so a restart between two answers of one park still delivers both together. A database migrated again
+// after its version was set back (the old-database tests do) already has the wider table and the column, and one made by hand may
+// have neither table; each is changed only when it needs it.
+const REBUILD_ROUTINE_RUNS = `
+CREATE TABLE routine_runs_v17 (
+  id TEXT PRIMARY KEY,
+  routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+  trigger TEXT NOT NULL CHECK (trigger IN ('schedule','manual')),
+  scheduled_for INTEGER,               -- NULL for manual runs
+  status TEXT NOT NULL CHECK (status IN ('running','waiting','succeeded','failed','interrupted','skipped')),
+  session_id TEXT,
+  output TEXT,
+  error TEXT,
+  started_at INTEGER NOT NULL,
+  finished_at INTEGER,
+  UNIQUE (routine_id, scheduled_for)   -- NULLs do not collide, so manual runs are unlimited
+);
+INSERT INTO routine_runs_v17 (rowid, id, routine_id, trigger, scheduled_for, status, session_id, output, error, started_at, finished_at)
+  SELECT rowid, id, routine_id, trigger, scheduled_for, status, session_id, output, error, started_at, finished_at FROM routine_runs ORDER BY rowid;
+DROP TABLE routine_runs;
+ALTER TABLE routine_runs_v17 RENAME TO routine_runs;
+CREATE INDEX routine_runs_by_routine ON routine_runs(routine_id, started_at DESC);
+`;
+
+const SCHEMA_V17 = (db: Database) => {
+  const sql = db
+    .query<{ sql: string }, []>(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'routine_runs'",
+    )
+    .get()?.sql;
+  if (sql !== undefined && !sql.includes("'waiting'")) db.run(REBUILD_ROUTINE_RUNS);
+  const columns = db.query<{ name: string }, []>("PRAGMA table_info(human_waits)").all();
+  if (columns.length > 0 && !columns.some((c) => c.name === "delivered_at"))
+    db.run("ALTER TABLE human_waits ADD COLUMN delivered_at INTEGER");
+};
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -300,6 +339,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V14,
     SCHEMA_V15,
     SCHEMA_V16,
+    SCHEMA_V17,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

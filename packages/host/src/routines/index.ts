@@ -8,13 +8,15 @@ import { z } from "zod";
 import {
   currentSession,
   getBot,
-  headlessDelegate,
   openThread,
   touchBot,
+  type HostDelegate,
   type Thread,
   type ThreadEnv,
 } from "../bots/index.ts";
 import { NotFound } from "../platform/errors.ts";
+import type { Wait, Waits } from "../waits/index.ts";
+import { parkingDelegate } from "./parking.ts";
 import {
   WINDOW_MS,
   hasOccurrence,
@@ -25,6 +27,8 @@ import {
 } from "./schedule.ts";
 import * as store from "./store.ts";
 import type { RoutineRecord } from "./store.ts";
+
+export { parkingDelegate };
 
 export class Conflict extends Error {}
 
@@ -55,7 +59,17 @@ export const RoutinePatch = z.object({
 });
 export type RoutinePatch = z.output<typeof RoutinePatch>;
 
-export type RoutineJob = { bot: Bot; routine: RoutineRecord; prompt: string };
+/** One agent turn of a routine run. A run has one turn, or more when it parks: each answer resumes it in the same session. */
+export type RoutineJob = {
+  bot: Bot;
+  routine: RoutineRecord;
+  prompt: string;
+  /** The run this turn belongs to, whichever turn of it this is. */
+  runId: string;
+  trigger: RunTrigger;
+  /** True for a turn that resumes a parked run: its prompt carries the owner's answers, not the routine's instruction. */
+  resumed: boolean;
+};
 
 /** One agent turn in the bot's chat session; `done` resolves to the final text, `stop` ends it early (rejecting `done`). */
 export type Executor = (job: RoutineJob) => {
@@ -75,10 +89,11 @@ const LATE_NOTE_MS = 15 * 60_000;
 /** setTimeout's delay is a signed 32-bit int; longer waits re-arm in steps. */
 const MAX_TIMEOUT_MS = 2_147_000_000;
 
-/** Runs a routine turn in the bot's own session without the UI, for a bot that is not open. */
+/** Runs a routine turn in the bot's own session without the UI, for a bot that is not open. `delegate` answers what the bot asks during the turn. */
 export function runHeadless(
   env: ThreadEnv,
   { bot, routine, prompt }: RoutineJob,
+  delegate: HostDelegate,
 ): ReturnType<Executor> {
   let thread: Thread | undefined;
   let stopped: string | undefined;
@@ -88,7 +103,7 @@ export function runHeadless(
     if (stopped) throw new Error(stopped);
     thread = openThread(env, bot, {
       resume,
-      delegate: headlessDelegate,
+      delegate,
       log: (l) => console.error(`[routine ${routine.name}] ${l}`),
     });
     touchBot(env.dataRoot, bot);
@@ -120,7 +135,7 @@ function prompt(
   const when = scheduledFor === null ? "now" : new Date(scheduledFor).toISOString();
   return [
     `<scheduled-routine name="${r.name.replace(/"/g, "'")}" trigger="${trigger}" scheduled-for="${when}">`,
-    "No human is watching this run. Carry out the instruction below on your own. Save anything you produce in your files folder. End with a short summary (at most 5 lines) of what you did and what the user should know.",
+    "No human is watching this run, but you can reach the owner: a tool that needs approval, and the ask_user tool, send the request to the owner and park this run until they answer. The answer arrives later as a message in this conversation. After sending such a request, end your turn; do not guess, retry or wait. Otherwise carry out the instruction below on your own. Save anything you produce in your files folder. End with a short summary (at most 5 lines) of what you did and what the user should know.",
     late,
     "",
     r.instruction,
@@ -134,8 +149,14 @@ export function createRoutines(deps: {
   now?: () => number;
   execute: Executor;
   onChange: (botId: string) => void;
+  /** The human waits of a run: what it is waiting for, what the owner answered, and the cancelling of what an ended run left open. */
+  waits: Pick<Waits, "ofRun" | "cancelRun" | "resultText" | "delivered">;
+  /** Shows the owner a line in the bot's chat. */
+  notice(botId: string, text: string): Promise<void>;
+  /** Sends a host message into the bot's session through the normal send path (queued while the bot is busy). */
+  deliver(botId: string, text: string): Promise<void>;
 }) {
-  const { db, dataRoot, onChange, execute } = deps;
+  const { db, dataRoot, onChange, execute, waits } = deps;
   const now = deps.now ?? Date.now;
   const jobs = new Map<string, { stop: () => void }>();
   const running = new Map<string, LiveRun>();
@@ -208,6 +229,7 @@ export function createRoutines(deps: {
         disarm(id);
       }
       if (running.has(id)) return skip(r, t, "previous run still in progress");
+      if (store.waitingRun(db, id)) return skip(r, t, "previous run is waiting for you");
       await run(r, "schedule", t).done;
     } catch (e) {
       console.error(`[routines] fire ${id} failed: ${(e as Error).message}`);
@@ -239,43 +261,143 @@ export function createRoutines(deps: {
       onChange(r.botId);
       return { row, done: Promise.resolve() };
     }
+    const first = prompt(
+      r,
+      trigger,
+      scheduledFor,
+      scheduledFor === null ? 0 : startedAt - scheduledFor,
+    );
+    return { row, done: begin(r, row, bot, first, false) };
+  }
+
+  /** Makes the run the routine's one run in flight and drives it until it ends or parks. */
+  function begin(r: RoutineRecord, row: RoutineRun, bot: Bot, first: string, resumed: boolean) {
     const entry: LiveRun = { runId: row.id, done: Promise.resolve() };
     running.set(r.id, entry);
     onChange(r.botId);
-    entry.done = (async () => {
-      try {
+    entry.done = drive(entry, r, row, bot, first, resumed);
+    return entry.done;
+  }
+
+  /**
+   * The turns of one run in the bot's session: the first, then one more each time the owner's answers are already in when a turn
+   * ends. The turn-end rule decides what a turn that succeeded means: a request to the owner still open parks the run (the single
+   * place a run enters `waiting`); answers that came in while the turn still ran continue it at once; a wait that expired fails it.
+   */
+  async function drive(
+    entry: LiveRun,
+    r: RoutineRecord,
+    row: RoutineRun,
+    bot: Bot,
+    first: string,
+    resumed: boolean,
+  ) {
+    try {
+      let message = first;
+      let isResume = resumed;
+      for (;;) {
         const job = execute({
           bot,
           routine: r,
-          prompt: prompt(
-            r,
-            trigger,
-            scheduledFor,
-            scheduledFor === null ? 0 : startedAt - scheduledFor,
-          ),
+          prompt: message,
+          runId: row.id,
+          trigger: row.trigger,
+          resumed: isResume,
         });
         entry.stop = job.stop;
         const text = await job.done;
-        store.finishRun(db, row.id, "succeeded", { output: text, finishedAt: now() });
-      } catch (e) {
         if (entry.removed) return;
-        const message = (e as Error).message;
-        store.finishRun(db, row.id, "failed", { error: message, finishedAt: now() });
-      } finally {
-        running.delete(r.id);
-        onChange(r.botId);
+        const pending = waits.ofRun(row.id);
+        if (pending.some((w) => w.state === "open")) {
+          store.parkRun(db, row.id);
+          return;
+        }
+        if (pending.some((w) => w.state === "expired")) return expire(row.id);
+        if (pending.length === 0) {
+          store.finishRun(db, row.id, "succeeded", { output: text, finishedAt: now() });
+          return;
+        }
+        message = waits.resultText(pending);
+        waits.delivered(pending);
+        isResume = true;
       }
-    })();
-    return { row, done: entry.done };
+    } catch (e) {
+      if (entry.removed) return;
+      endRun(row.id, (e as Error).message);
+    } finally {
+      if (running.get(r.id) === entry) running.delete(r.id);
+      onChange(r.botId);
+    }
+  }
+
+  /** Fails a run that has not ended and cancels what it still waits for, telling nobody; false when the run had ended. */
+  function endRun(runId: string, error: string): boolean {
+    if (!store.finishRun(db, runId, "failed", { error, finishedAt: now() })) return false;
+    waits.cancelRun(runId, error);
+    return true;
+  }
+
+  /** A parked run's answers are all in: runs its session on with them. The single place a run leaves `waiting` for `running`. */
+  async function resume(runId: string, message: string): Promise<void> {
+    const row = store.getRun(db, runId);
+    if (row?.status !== "waiting") throw new Conflict("run is not waiting");
+    const r = require(row.routineId);
+    const bot = getBot(dataRoot, r.botId);
+    if (!bot) {
+      endRun(runId, "bot no longer exists");
+      onChange(r.botId);
+      return Promise.resolve();
+    }
+    store.unparkRun(db, runId);
+    return begin(r, { ...row, status: "running" }, bot, message, true);
+  }
+
+  /** A wait of a run closed. A parked run whose last request was answered resumes with every answer of the park in one message. */
+  function waitClosed(w: Wait) {
+    if (w.runId === null) return;
+    const row = store.getRun(db, w.runId);
+    // A run still in its turn collects the answer when the turn ends; an ended or deleted run has nobody to tell.
+    if (row?.status !== "waiting") return;
+    if (w.state === "expired") return expire(row.id);
+    const pending = waits.ofRun(row.id);
+    if (pending.some((p) => p.state === "open")) return;
+    const message = waits.resultText(pending);
+    waits.delivered(pending);
+    resume(row.id, message).catch((e: Error) =>
+      console.error(`[routines] resume ${row.id} failed: ${e.message}`),
+    );
+  }
+
+  /**
+   * A wait of the run went unanswered for 24 hours: the run fails with "approval expired", whatever started it. The bot is told
+   * that nothing was approved, in a message of its own session; its reply is a chat message, not the run's output. The single
+   * place a run leaves `waiting` for `failed` by time.
+   */
+  function expire(runId: string) {
+    const row = store.getRun(db, runId);
+    const lapsed = waits.ofRun(runId).filter((w) => w.state === "expired");
+    if (!row || !lapsed.length || !endRun(runId, "approval expired")) return;
+    const r = store.getRoutine(db, row.routineId);
+    if (r) {
+      void (async () => {
+        await deps.notice(r.botId, `Routine "${r.name}" failed: approval expired`);
+        await deps.deliver(r.botId, waits.resultText(lapsed));
+      })().catch((e: Error) =>
+        console.error(`[routines] telling ${r.botId} about the expired run failed: ${e.message}`),
+      );
+      onChange(r.botId);
+    }
   }
 
   function reconcile() {
     const n = now();
-    store.interruptStaleRuns(
+    // A run the last process left `running` has no turn any more; what it still asked the owner can never reach it.
+    for (const id of store.interruptStaleRuns(
       db,
       n,
       [...running.values()].map((e) => e.runId),
-    );
+    ))
+      waits.cancelRun(id, "the app stopped during the run");
     for (const r of store.listActiveRoutines(db)) {
       const last = r.lastScheduledFor ?? r.createdAt;
       const inWindow = latestOccurrence(r.schedule, Math.max(last, n - WINDOW_MS), n);
@@ -301,7 +423,7 @@ export function createRoutines(deps: {
     return {
       ...rest,
       nextRunAt: r.active && pending ? nextOccurrence(s, now()) : null,
-      lastRun: store.lastRun(db, r.id),
+      lastRun: store.waitingRun(db, r.id) ?? store.lastRun(db, r.id),
       running: running.has(r.id),
     };
   }
@@ -315,7 +437,9 @@ export function createRoutines(deps: {
       e.stop?.("routine deleted");
       await e.done;
     }
+    const unfinished = store.unfinishedRunIds(db, id);
     store.deleteRoutine(db, id);
+    for (const runId of unfinished) waits.cancelRun(runId, "the routine was deleted");
     onChange(r.botId);
   }
 
@@ -394,7 +518,26 @@ export function createRoutines(deps: {
     testRun(id: string): RoutineRun {
       const r = require(id);
       if (running.has(id)) throw new Conflict("routine is already running");
+      if (store.waitingRun(db, id)) throw new Conflict("routine is waiting for you");
       return run(r, "manual", null).row;
+    },
+
+    /**
+     * Runs a parked run's session on with `message` (the owner's answers) as its next turn, in the bot's chat when it has one and
+     * headless otherwise; resolves when the run ends or parks again. Rejects when the run is not waiting.
+     */
+    resume,
+
+    /** Fails the run for a wait that went unanswered for 24 hours ("approval expired") and tells the bot; nothing happens when no wait of it expired. */
+    expire,
+
+    /** The owner's side of a human wait closed (the answer, an expiry, a cancel): resumes or expires the run it belongs to. */
+    waitClosed,
+
+    /** The bot's session ended (a new session): its parked runs fail with "session ended while waiting for you" and their waits are cancelled. */
+    sessionEnded(botId: string) {
+      for (const run of store.waitingRunsOfBot(db, botId))
+        if (endRun(run.id, "session ended while waiting for you")) onChange(botId);
     },
 
     runs(id: string, before = Number.MAX_SAFE_INTEGER, limit = 20): RoutineRun[] {

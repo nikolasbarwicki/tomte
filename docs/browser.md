@@ -88,6 +88,8 @@ Open **Credentials** to add website logins: a label, a sign-in URL, a username a
 
 Scheduled routines of a browser-enabled bot can browse using the bot's existing logins. They cannot sign in with the vault and cannot request a takeover: both are refused with "not available in unattended runs". A routine that hits a login wall is told to say so in its run result, so check run results and sign the bot in again from chat. A routine and the bot's chat never drive the browser at the same time; a second call waits up to 30 seconds, then fails with "previous browser call still running".
 
+A routine that needs an approval or an answer does not fail. A tool on the `ask` policy, or a question to you, parks the run: it shows "Waiting for you", you answer on the usual card (open the bot), and the run continues in the same session. A park that stays unanswered for 24 hours fails the run with "approval expired". While a run waits, the routine's next occurrences are skipped and "Run now" is unavailable.
+
 ## Safety
 
 - **Egress block.** Chrome's traffic goes through a claudebot-run proxy that resolves DNS itself and refuses loopback (every port, which covers claudebot's own server, the browser endpoint and the engine's control and stream ports), link-local including the cloud metadata address `169.254.169.254`, and `0.0.0.0/8`. Redirects and DNS rebinding are covered because the check is on the resolved address. Public internet and private LAN addresses are allowed. A test page you want a bot to open therefore cannot be on `localhost`.

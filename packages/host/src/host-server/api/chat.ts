@@ -20,7 +20,7 @@ const Model = z.object({ model: BotModel });
 const Effort = z.object({ effort: EffortLevel });
 
 /** Routes that act on the chat the page shows. */
-export function chatRoutes({ dataRoot, chats, browser }: ApiContext): OpenChatRoutes {
+export function chatRoutes({ dataRoot, chats, browser, routines }: ApiContext): OpenChatRoutes {
   return {
     "/api/send": async ({ res, parse }, chat) => {
       const { text, mentions: ids, eventId, answer } = parse(Send);
@@ -59,6 +59,7 @@ export function chatRoutes({ dataRoot, chats, browser }: ApiContext): OpenChatRo
     "/api/session/new": async ({ res }, chat) => {
       if (!chat.newSession())
         return json(res, { error: "a turn is running; wait for it to finish" }, 409);
+      routines.sessionEnded(chat.bot.id);
       browser.cancelTakeover(chat.bot.id, "a new session started");
       return json(res, { ok: true });
     },

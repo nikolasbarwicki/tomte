@@ -97,6 +97,10 @@ export interface WaitStore {
   open(botId?: string): Wait[];
   /** Open waits whose expiry is at or before `at`. */
   overdue(at: number): Wait[];
+  /** A run's waits that are open, or closed with their outcome not yet given to the bot, oldest first. */
+  ofRun(runId: string): Wait[];
+  /** Records that the run has given the bot the outcome of these waits. */
+  markDelivered(ids: string[], at: number): void;
   /** Closes an open wait; false when it was not open. */
   close(
     id: string,
@@ -154,6 +158,19 @@ export function createWaitStore(db: Database): WaitStore {
         )
         .all(at)
         .map(toWait),
+    ofRun: (runId) =>
+      db
+        .query<Row, [string]>(
+          `${select} WHERE run_id = ? AND (state = 'open' OR delivered_at IS NULL) ORDER BY created_at, rowid`,
+        )
+        .all(runId)
+        .map(toWait),
+    markDelivered(ids, at) {
+      const mark = db.query(
+        `UPDATE human_waits SET delivered_at = ? WHERE id = ? AND delivered_at IS NULL`,
+      );
+      for (const id of ids) mark.run(at, id);
+    },
     close: (id, state, outcome, note, at) =>
       db
         .query(

@@ -326,7 +326,15 @@ export const Schedule = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("once"), at: z.number() }),
 ]);
 export type Schedule = z.infer<typeof Schedule>;
-export const RunStatus = z.enum(["running", "succeeded", "failed", "interrupted", "skipped"]);
+/** `waiting`: the run's turn ended on a request to the owner (a tool approval or a question) and its session resumes with the answer. */
+export const RunStatus = z.enum([
+  "running",
+  "waiting",
+  "succeeded",
+  "failed",
+  "interrupted",
+  "skipped",
+]);
 export type RunStatus = z.infer<typeof RunStatus>;
 export const RoutineRun = z.object({
   id: z.string(),

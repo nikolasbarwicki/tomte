@@ -60,8 +60,13 @@ export interface WaitsOptions {
    * True when one took it, so the bot gets no message. Without it every closed wait is delivered as a message.
    */
   claim?(wait: Wait, text: string): boolean;
-  /** The bot's current session, recorded on each wait. */
-  sessionOf?(botId: string): string | undefined;
+  /**
+   * What a wait opened for this bot now belongs to: the session it is in and, while an unattended routine turn runs, that run's id.
+   * A wait with a run id is never delivered as a message by this module; the run decides when the bot hears it (`ofRun`).
+   */
+  context?(
+    botId: string,
+  ): { sessionId?: string | undefined; runId?: string | undefined } | undefined;
   /** The clock expiry reads, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
 }
@@ -92,6 +97,14 @@ export interface Waits {
   cards(botId: string): ServerEvent[];
   /** Allows a tool call once when the user approved exactly this input and no call has used that approval yet. */
   consumeApproval(botId: string, tool: string, input: Record<string, unknown>): boolean;
+  /** Cancels every open wait of a routine run without telling the bot, as the run ended. Returns how many were open. */
+  cancelRun(runId: string, reason: string): number;
+  /** A run's waits that are open, or closed with an outcome the run has not yet given the bot, oldest first. */
+  ofRun(runId: string): Wait[];
+  /** What the bot is told for these closed waits: one `<human-wait-result>` block each, in the order given. */
+  resultText(waits: Wait[]): string;
+  /** Records that the run has given the bot the outcome of these waits. */
+  delivered(waits: Wait[]): void;
   /** Deletes a bot's waits, open or closed. */
   removeBot(botId: string): void;
   /** Cancels what a restart left unanswerable, expires what is overdue and keeps sweeping. Call once every kind has its handler. */
@@ -190,6 +203,10 @@ export function createWaits(o: WaitsOptions): Waits {
     return w.note ? `${text}\nThe user's note: ${w.note}` : text;
   }
 
+  /** The `<human-wait-result>` block the bot is sent for a closed wait. */
+  const block = (w: Wait) =>
+    `<human-wait-result id="${w.id}">\n${textFor(w, handlerOf(w.kind))}\n</human-wait-result>`;
+
   function finish(
     id: string,
     state: "answered" | "expired" | "cancelled",
@@ -201,12 +218,14 @@ export function createWaits(o: WaitsOptions): Waits {
     const h = handlerOf(w.kind);
     o.emit(w.botId, h.closing(w));
     h.onResolve?.(w);
-    const text = textFor(w, h);
-    const claimed = o.claim?.(w, text) ?? false;
-    if (claimed) {
-      if (w.kind === "tool_approval" && w.outcome === "allow") store.markConsumed(w.id, now());
-    } else if (!h.silent?.(w))
-      o.deliver(w.botId, `<human-wait-result id="${w.id}">\n${text}\n</human-wait-result>`);
+    // A run's wait is told to the run, which subscribes to the close below and gives the bot every outcome of the park in one message.
+    if (w.runId === null) {
+      const text = textFor(w, h);
+      const claimed = o.claim?.(w, text) ?? false;
+      if (claimed) {
+        if (w.kind === "tool_approval" && w.outcome === "allow") store.markConsumed(w.id, now());
+      } else if (!h.silent?.(w)) o.deliver(w.botId, block(w));
+    }
     tell({ type: "closed", wait: store.get(id)! });
     return true;
   }
@@ -222,14 +241,14 @@ export function createWaits(o: WaitsOptions): Waits {
     open(botId, spec) {
       const id = randomUUID();
       const createdAt = now();
-      const sessionId = o.sessionOf?.(botId) ?? null;
+      const context = o.context?.(botId);
       handlerOf(spec.kind);
       store.insert({
         id,
         botId,
         kind: spec.kind,
-        runId: spec.runId ?? null,
-        sessionId,
+        runId: spec.runId ?? context?.runId ?? null,
+        sessionId: context?.sessionId ?? null,
         payload: spec.payload,
         actions: spec.actions,
         createdAt,
@@ -258,6 +277,18 @@ export function createWaits(o: WaitsOptions): Waits {
       for (const w of open) finish(w.id, "cancelled", "cancelled", reason);
       return open.length;
     },
+    cancelRun(runId, reason) {
+      const open = store.ofRun(runId).filter((w) => w.state === "open");
+      for (const w of open) finish(w.id, "cancelled", "cancelled", reason);
+      return open.length;
+    },
+    ofRun: (runId) => store.ofRun(runId),
+    resultText: (waits) => waits.map(block).join("\n\n"),
+    delivered: (waits) =>
+      store.markDelivered(
+        waits.map((w) => w.id),
+        now(),
+      ),
     find(id) {
       const w = store.get(id);
       return w?.state === "open" ? w : undefined;

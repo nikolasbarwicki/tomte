@@ -10,7 +10,6 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { BotAvatar, defaultAvatar } from "@claudebot/contract/avatars";
 import {
   Bot,
@@ -257,16 +256,6 @@ export function frontContext(dataRoot: string, bot: Bot) {
     memory: full.memory,
   };
 }
-
-/** Answers questions and approvals while nobody is watching, as in a routine run. */
-export const headlessDelegate: HostDelegate = {
-  askUser: async () =>
-    "No human is available during this scheduled run. Make the most reasonable assumption, state it in your final message, and continue.",
-  approve: async (): Promise<PermissionResult> => ({
-    behavior: "deny",
-    message: "no human is present during a scheduled run",
-  }),
-};
 
 /** Opens a Claude Code thread bound to a bot in the host's shared thread environment. */
 export function openThread(

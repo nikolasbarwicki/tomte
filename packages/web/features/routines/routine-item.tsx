@@ -25,19 +25,24 @@ import { cn } from "@/lib/utils";
 import { deleteRoutine, routineRuns, runRoutine, setRoutineActive } from "./api.ts";
 import { describe } from "./schedule.ts";
 
-const RUN_STATUS: Record<RunStatus, string> = {
-  running: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  succeeded: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  failed: "bg-destructive/10 text-destructive",
-  interrupted: "bg-destructive/10 text-destructive",
-  skipped: "bg-muted text-muted-foreground",
+const RUN_STATUS: Record<RunStatus, { label: string; style: string }> = {
+  running: { label: "Running", style: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
+  waiting: { label: "Waiting for you", style: "bg-sky-500/10 text-sky-700 dark:text-sky-400" },
+  succeeded: {
+    label: "Succeeded",
+    style: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  },
+  failed: { label: "Failed", style: "bg-destructive/10 text-destructive" },
+  interrupted: { label: "Interrupted", style: "bg-destructive/10 text-destructive" },
+  skipped: { label: "Skipped", style: "bg-muted text-muted-foreground" },
 };
 
 function RunBadge({ status }: { status: RunStatus }) {
+  const { label, style } = RUN_STATUS[status];
   return (
-    <Badge variant="secondary" className={cn("capitalize", RUN_STATUS[status])}>
+    <Badge variant="secondary" className={style}>
       {status === "running" && <Spinner className="size-3" />}
-      {status}
+      {label}
     </Badge>
   );
 }
@@ -57,6 +62,7 @@ export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   }, [open, r.id, lastRunId, r.lastRun?.status]);
 
   const status = r.running ? "running" : r.lastRun?.status;
+  const parked = !r.running && r.lastRun?.status === "waiting";
   const next = !r.active
     ? "Paused"
     : r.nextRunAt
@@ -112,7 +118,7 @@ export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
                 variant="ghost"
                 size="icon-xs"
                 aria-label="Run now"
-                disabled={r.running || starting}
+                disabled={r.running || parked || starting}
                 onClick={() =>
                   startRun(async () => {
                     await runRoutine(r.id);
@@ -123,7 +129,9 @@ export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
           >
             {r.running || starting ? <Spinner /> : <PlayIcon />}
           </TooltipTrigger>
-          <TooltipContent>{r.running ? "Running…" : "Run now"}</TooltipContent>
+          <TooltipContent>
+            {r.running ? "Running…" : parked ? "Waiting for you" : "Run now"}
+          </TooltipContent>
         </Tooltip>
         <DropdownMenu>
           <DropdownMenuTrigger

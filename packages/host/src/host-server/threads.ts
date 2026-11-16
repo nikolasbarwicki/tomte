@@ -1,18 +1,14 @@
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import type { Bot, MemoryScope } from "@claudebot/contract/events";
 
-import {
-  headlessDelegate,
-  openThread,
-  type HostDelegate,
-  type Thread,
-  type ThreadEnv,
-} from "../bots/index.ts";
+import { openThread, type HostDelegate, type Thread, type ThreadEnv } from "../bots/index.ts";
 
 export interface ThreadHooks {
   onMemory: (scope: MemoryScope, text: string) => void;
-  /** True while a routine turn runs: questions and approvals are then answered without the user. */
+  /** True while a routine turn runs: questions and approvals then park the run (`park`) instead of waiting for the user. */
   unattended(): boolean;
+  /** Answers a question or approval during a routine turn, which parks the run. */
+  park: HostDelegate;
   /** The external event a question is about: `claimed` when this bot's session was given it and it is still open, else undefined. */
   ownedEvent(claimed: string | undefined): string | undefined;
   /** Shows the user a question and resolves with their answer. `eventId` links the question to the external event its answer closes. */
@@ -29,7 +25,7 @@ export interface ThreadHooks {
 export function hostDelegate(hooks: ThreadHooks): HostDelegate {
   return {
     askUser: (question, options, claimed) => {
-      if (hooks.unattended()) return headlessDelegate.askUser(question);
+      if (hooks.unattended()) return hooks.park.askUser(question, options);
       const eventId = hooks.ownedEvent(claimed);
       return hooks.askQuestion({
         question,
@@ -38,7 +34,7 @@ export function hostDelegate(hooks: ThreadHooks): HostDelegate {
       });
     },
     approve: async (tool, input, reason): Promise<PermissionResult> => {
-      if (hooks.unattended()) return headlessDelegate.approve(tool, input, reason);
+      if (hooks.unattended()) return hooks.park.approve(tool, input, reason);
       return hooks.askApproval({ tool, input, reason });
     },
   };

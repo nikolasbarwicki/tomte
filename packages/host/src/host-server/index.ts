@@ -152,9 +152,9 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
           console.error(`[waits] delivery to ${botId} failed: ${(e as Error).message}`),
         ),
     claim: (wait, text) => chats.claim(wait, text),
-    sessionOf: (botId) => {
+    context: (botId) => {
       const bot = getBot(dataRoot, botId);
-      return bot && currentSession(bot);
+      return { sessionId: bot && currentSession(bot), runId: chats.runOf(botId) };
     },
     ...(o.now !== undefined && { now: o.now }),
   });
@@ -288,9 +288,16 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     db,
     dataRoot,
     execute: chats.execute,
+    waits,
+    notice: async (botId, text) => chats.emitTo(botId, { type: "info", text }),
+    deliver: (botId, text) => chats.deliver(botId, text),
     onChange: (botId) => {
       if (botId === chats.currentBotId()) broadcast(routinesEvent(botId));
     },
+  });
+  // A run's waits are told to the run: an answer resumes it, an expiry fails it.
+  waits.subscribe((e) => {
+    if (e.type === "closed") routines.waitClosed(e.wait);
   });
   const integrationsEvent = (): IntegrationsEvent => ({
     type: "integrations",

@@ -31,6 +31,7 @@ export function botRoutes({
   db,
   chats,
   browser,
+  routines,
   headedBrowser,
   hasActiveTasks,
   botsChanged,
@@ -107,6 +108,7 @@ export function botRoutes({
       setChatMode(dataRoot, bot.id, chatMode);
       // The two modes keep different sessions, so switching starts a new conversation.
       chats.newSession(bot.id);
+      routines.sessionEnded(bot.id);
       browser.cancelTakeover(bot.id, "a new session started");
       chats.announceBots();
       return json(res, { ok: true });
