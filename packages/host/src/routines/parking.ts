@@ -1,7 +1,7 @@
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 
 import type { HostDelegate } from "../bots/index.ts";
-import { canonicalInput, type Waits } from "../waits/index.ts";
+import { approvalActions, canonicalInput, type Waits } from "../waits/index.ts";
 
 /**
  * Answers a bot's question or tool approval during a routine run, when nobody is watching: it stores the request as a human wait and
@@ -28,10 +28,7 @@ export function parkingDelegate(
       waits.open(botId, {
         kind: "tool_approval",
         payload: { tool, input, canonical: canonicalInput(input), reason },
-        actions: [
-          { id: "allow", label: "Allow" },
-          { id: "deny", label: "Deny" },
-        ],
+        actions: approvalActions(tool),
       });
       return {
         behavior: "deny",

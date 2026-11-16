@@ -40,6 +40,13 @@ export {
 export { readMemory, userMemoryPath, type MemoryPaths } from "./memory.ts";
 export { deleteActivity, getActivity, markSeen, recordMessage } from "./activity-store.ts";
 export {
+  allowTool,
+  allowsTool,
+  deleteAllowances,
+  listAllowances,
+  removeAllowance,
+} from "./allowance-store.ts";
+export {
   deleteFile,
   listFiles,
   openFileInside,
@@ -259,7 +266,7 @@ export function frontContext(dataRoot: string, bot: Bot) {
 
 /** Opens a Claude Code thread bound to a bot in the host's shared thread environment. */
 export function openThread(
-  { cwd, dataRoot, cli, claude, integrations, hostServers, botEnv, approveAll }: ThreadEnv,
+  { cwd, dataRoot, cli, claude, integrations, hostServers, botEnv, approveAll, allows }: ThreadEnv,
   bot: Bot,
   opts: {
     resume?: boolean;
@@ -277,6 +284,7 @@ export function openThread(
     model: bot.model,
     effort: bot.effort,
     approveAll,
+    allows: (tool) => allows(bot.id, tool),
     integrations,
     hostServers: () => hostServers(bot.id),
     env: () => botEnv(bot.id),

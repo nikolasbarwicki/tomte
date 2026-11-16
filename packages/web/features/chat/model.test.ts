@@ -4,7 +4,14 @@ import type { WorkEvent } from "@claudebot/contract/events";
 
 import type { Item } from "@/host/transcript.ts";
 
-import { itemActions, needsYouItems, needsYouRows, rowLabels } from "./model.ts";
+import {
+  approvalAnswerLabel,
+  approvalButtons,
+  itemActions,
+  needsYouItems,
+  needsYouRows,
+  rowLabels,
+} from "./model.ts";
 
 const work = (kind: "question" | "blocked" | "failed"): WorkEvent => ({
   type: "work",
@@ -38,7 +45,18 @@ test("a blocked item's first button opens a draft that answers it; the second as
   ]);
 });
 
-const approve: Item = { kind: "approve", id: "a1", tool: "Mail__send", reason: "", input: "{}" };
+const approve: Item = {
+  kind: "approve",
+  id: "a1",
+  tool: "Mail__send",
+  reason: "",
+  input: "{}",
+  actions: [
+    { id: "allow", label: "Allow" },
+    { id: "allow_always", label: "Always allow Mail__send for this bot" },
+    { id: "deny", label: "Deny" },
+  ],
+};
 const takeover: Item = {
   kind: "wait",
   id: "w1",
@@ -83,6 +101,7 @@ test("a request row carries its card's own buttons", () => {
     ],
     [
       { label: "Allow", value: "allow" },
+      { label: "Always allow Mail__send for this bot", value: "allow_always" },
       { label: "Deny", value: "deny" },
     ],
     [
@@ -109,4 +128,23 @@ test("a question about an open external item is that item's row, not a second on
   expect(needsYouRows(work("question"), "b1", [linked]).map((r) => r.type)).toEqual(["event"]);
   // Once the item is handled the question is the only thing left to answer.
   expect(needsYouRows(undefined, "b1", [linked]).map((r) => r.type)).toEqual(["request"]);
+});
+
+test("an approval card's buttons come from the host's actions, the first is the main one, and only Deny takes a note", () => {
+  const actions = [
+    { id: "allow", label: "Allow" },
+    { id: "allow_always", label: "Always allow Bash for this bot" },
+    { id: "deny", label: "Deny" },
+  ];
+  expect(approvalButtons(actions)).toEqual([
+    { id: "allow", label: "Allow", main: true, takesNote: false },
+    { id: "allow_always", label: "Always allow Bash for this bot", main: false, takesNote: false },
+    { id: "deny", label: "Deny", main: false, takesNote: true },
+  ]);
+});
+
+test("an answered approval card reads Allowed, Always allowed or Denied, and the host's words otherwise", () => {
+  expect(
+    ["allow", "allow_always", "deny", "expired", "cancelled"].map(approvalAnswerLabel),
+  ).toEqual(["Allowed", "Always allowed", "Denied", "expired", "cancelled"]);
 });

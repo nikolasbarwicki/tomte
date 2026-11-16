@@ -133,6 +133,8 @@ export const ServerEvent = z.discriminatedUnion("type", [
     tool: z.string(),
     reason: z.string(),
     input: z.string(),
+    /** The card's buttons, the main one first; answering one sends its `id` to `/api/answer`. */
+    actions: z.array(WaitAction),
   }),
   z.object({ type: z.literal("answered"), id: z.string(), value: z.string() }),
   /** A question linked to an external event can no longer be answered, because its turn ended; the card stops offering answers. */

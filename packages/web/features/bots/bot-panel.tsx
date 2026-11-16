@@ -1,3 +1,4 @@
+import type { ToolAllowances } from "@claudebot/contract/api";
 import type { BotFile, BotSummary } from "@claudebot/contract/events";
 import { getRouteApi } from "@tanstack/react-router";
 import {
@@ -9,7 +10,7 @@ import {
   TrashIcon,
   XIcon,
 } from "lucide-react";
-import { useTransition, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { Streamdown } from "streamdown";
 
 import { confirmAction } from "@/components/confirm.tsx";
@@ -30,11 +31,18 @@ import {
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useFiles, useMemory, usePublicHostInfo, useRoutines, useWork } from "@/host/hooks.ts";
+import {
+  useChat,
+  useFiles,
+  useMemory,
+  usePublicHostInfo,
+  useRoutines,
+  useWork,
+} from "@/host/hooks.ts";
 import { dateTime, fileSize } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
 
-import { deleteFile, downloadUrl, revealFile } from "./api.ts";
+import { fetchAllowances, deleteFile, downloadUrl, removeAllowance, revealFile } from "./api.ts";
 
 export const PANEL_TABS = [
   "work",
@@ -163,7 +171,10 @@ export function BotPanel({
         {browser}
       </TabsContent>
       <TabsContent value="settings" className="min-h-0 overflow-y-auto p-4">
-        {settings}
+        <div className="grid gap-6">
+          {settings}
+          <Permissions bot={bot} />
+        </div>
       </TabsContent>
     </Tabs>
   );
@@ -216,6 +227,65 @@ function Memory({ bot }: { bot: BotSummary }) {
         <MemoryText text={memory.bot} empty="No directions yet." />
       </Section>
     </div>
+  );
+}
+
+/** The tools the owner chose "Always allow for this bot" on, each with a way to take the rule back. */
+function Permissions({ bot }: { bot: BotSummary }) {
+  const [rules, setRules] = useState<ToolAllowances["allowances"] | { error: string }>();
+  const [removing, startRemoving] = useTransition();
+  // A rule added on a card in this chat shows up without reopening the panel.
+  const added = useChat().items.filter(
+    (i) => i.kind === "approve" && i.answer === "allow_always",
+  ).length;
+  useEffect(() => {
+    let current = true;
+    void fetchAllowances(bot.id).then((r) => {
+      if (current) setRules("error" in r ? r : r.allowances);
+    });
+    return () => {
+      current = false;
+    };
+  }, [bot.id, added]);
+  const remove = (tool: string) =>
+    startRemoving(async () => {
+      if (await removeAllowance(bot.id, tool))
+        setRules((now) => (Array.isArray(now) ? now.filter((r) => r.tool !== tool) : now));
+    });
+  return (
+    <Section
+      title="Permissions"
+      description={`Tools ${bot.name} may always use without asking, chosen on an approval card. A tool switched off in Integrations stays off.`}
+    >
+      {rules === undefined ? (
+        <Spinner className="text-muted-foreground" />
+      ) : !Array.isArray(rules) ? (
+        <p className="text-destructive text-sm">{rules.error}</p>
+      ) : rules.length === 0 ? (
+        <p className="text-muted-foreground rounded-lg border border-dashed p-3 text-sm">
+          Nothing is always allowed yet.
+        </p>
+      ) : (
+        <ul className="grid gap-1" data-testid="allowances">
+          {rules.map((r) => (
+            <li key={r.tool} className="bg-muted/50 flex items-center gap-2 rounded-lg px-3 py-1.5">
+              <span className="min-w-0 flex-1 truncate font-mono text-sm" title={r.tool}>
+                {r.tool}
+              </span>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={removing}
+                aria-label={`Remove ${r.tool}`}
+                onClick={() => remove(r.tool)}
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
   );
 }
 

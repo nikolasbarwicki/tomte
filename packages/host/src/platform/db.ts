@@ -317,6 +317,17 @@ const SCHEMA_V17 = (db: Database) => {
     db.run("ALTER TABLE human_waits ADD COLUMN delivered_at INTEGER");
 };
 
+// Tools the owner chose "Always allow for this bot" on (ADR-0009): a rule is the tool's name and nothing more, kept per bot, and is
+// read wherever a tool call would otherwise ask. Switching a tool off in Integrations still wins over it.
+const SCHEMA_V18 = `
+CREATE TABLE IF NOT EXISTS tool_allowances (
+  bot_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (bot_id, tool_name)
+);
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -340,6 +351,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V15,
     SCHEMA_V16,
     SCHEMA_V17,
+    SCHEMA_V18,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

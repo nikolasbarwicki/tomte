@@ -15,7 +15,8 @@ const Send = z.object({
   answer: z.string().optional(),
 });
 const Id = z.object({ id: z.string() });
-const Answer = Id.extend({ value: z.string() });
+/** `note`: a line for the bot with the answer, which a Deny carries as the reason. */
+const Answer = Id.extend({ value: z.string(), note: z.string().trim().max(500).optional() });
 const Model = z.object({ model: BotModel });
 const Effort = z.object({ effort: EffortLevel });
 
@@ -44,8 +45,8 @@ export function chatRoutes({ dataRoot, chats, browser, routines }: ApiContext): 
       return json(res, { error: "that message already reached the bot" }, 404);
     },
     "/api/answer": async ({ res, parse }) => {
-      const { id, value } = parse(Answer);
-      if (chats.answer(id, value)) return json(res, { ok: true });
+      const { id, value, note } = parse(Answer);
+      if (chats.answer(id, value, note || undefined)) return json(res, { ok: true });
       return json(res, { error: "no such question" }, 404);
     },
     "/api/model": async ({ res, parse }, chat) => {

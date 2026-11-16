@@ -31,7 +31,15 @@ export type Item =
       /** Its turn ended before an answer: nobody is waiting for one any more. */
       expired?: true;
     }
-  | { kind: "approve"; id: string; tool: string; reason: string; input: string; answer?: string }
+  | {
+      kind: "approve";
+      id: string;
+      tool: string;
+      reason: string;
+      input: string;
+      actions: WaitAction[];
+      answer?: string;
+    }
   | {
       kind: "wait";
       id: string;
@@ -124,7 +132,14 @@ function reduceLive(
     case "approve":
       return [
         ...items,
-        { kind: "approve", id: e.id, tool: e.tool, reason: e.reason, input: e.input },
+        {
+          kind: "approve",
+          id: e.id,
+          tool: e.tool,
+          reason: e.reason,
+          input: e.input,
+          actions: e.actions,
+        },
       ];
     case "answered":
       return items.map((i) =>

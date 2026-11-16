@@ -8,11 +8,14 @@ import type {
 } from "@claudebot/contract/events";
 
 import {
+  allowsTool,
+  allowTool,
   getBot,
   listBots,
   botFilesPath,
   currentSession,
   deleteActivity,
+  deleteAllowances,
   reveal,
   trashBot,
 } from "../bots/index.ts";
@@ -152,6 +155,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
           console.error(`[waits] delivery to ${botId} failed: ${(e as Error).message}`),
         ),
     claim: (wait, text) => chats.claim(wait, text),
+    alwaysAllow: (botId, tool) => allowTool(db, botId, tool, (o.now ?? Date.now)()),
     context: (botId) => {
       const bot = getBot(dataRoot, botId);
       return { sessionId: bot && currentSession(bot), runId: chats.runOf(botId) };
@@ -233,6 +237,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     // After the trash move the bot no longer exists, so messages the browser cleanup sends it (a cancelled takeover) go nowhere.
     trashBot(dataRoot, botId);
     deleteActivity(db, botId);
+    deleteAllowances(db, botId);
     loop.removeBot(botId);
     await externalEvents.removeBot(botId);
     await chats.drop(botId);
@@ -271,6 +276,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     loop,
     botEnv: (botId) => externalEvents.env(botId),
     approveAll: !o.config.askApproval,
+    allows: (botId, tool) => allowsTool(db, botId, tool),
     handoffs,
     events: externalEvents,
     items: {

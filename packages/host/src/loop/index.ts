@@ -16,7 +16,7 @@ export { withoutWorkState } from "./work-state.ts";
 
 /** Opens a bot's front session in the host's shared thread environment, whose `hostServers` is the lease the front may use. */
 export function openFront(
-  { cwd, dataRoot, cli, claude, hostServers, botEnv, approveAll, integrations }: ThreadEnv,
+  { cwd, dataRoot, cli, claude, hostServers, botEnv, approveAll, allows, integrations }: ThreadEnv,
   bot: Bot,
   opts: {
     resume: boolean;
@@ -67,6 +67,7 @@ export function openFront(
     hostServers: () => hostServers(bot.id),
     env: () => botEnv(bot.id),
     approveAll,
+    allows: (tool) => allows(bot.id, tool),
     persona,
     workerPersona,
     files,

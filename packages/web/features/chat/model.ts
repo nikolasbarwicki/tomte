@@ -1,4 +1,10 @@
-import type { ChatMode, Presence, ServerEvent, WorkEvent } from "@claudebot/contract/events";
+import type {
+  ChatMode,
+  Presence,
+  ServerEvent,
+  WaitAction,
+  WorkEvent,
+} from "@claudebot/contract/events";
 
 import type { Item } from "@/host/transcript.ts";
 
@@ -72,12 +78,6 @@ export type NeedsYouRow =
   | { type: "event"; item: NeedsYouItem }
   | { type: "request"; request: RequestRow };
 
-/** The buttons of a tool approval card, in the order the bar shows them. */
-const APPROVE_ACTIONS: RequestAction[] = [
-  { label: "Allow", value: "allow" },
-  { label: "Deny", value: "deny" },
-];
-
 const WAIT_LABELS: Record<string, string> = { takeover: "Takeover", approval: "Approval" };
 
 /** The request a transcript item is while it is unresolved; none for a resolved or expired card, or any other item. */
@@ -91,7 +91,7 @@ function requestOf(item: Item): RequestRow | undefined {
             id: item.id,
             label: "Approval",
             title: `Allow ${item.tool}?`,
-            actions: APPROVE_ACTIONS,
+            actions: item.actions.map((a) => ({ label: a.label, value: a.id })),
           };
     case "ask":
       return item.answer !== undefined || item.expired
@@ -180,3 +180,28 @@ export function itemActions(item: NeedsYouItem): ItemAction[] {
       return [{ label: "Status", message: `Status ${item.source}` }];
   }
 }
+
+/** What an answered approval card reads: the past tense of the button picked. `cancelled` and `expired` are the host's own words. */
+export function approvalAnswerLabel(answer: string): string {
+  switch (answer) {
+    case "allow":
+      return "Allowed";
+    case "allow_always":
+      return "Always allowed";
+    case "deny":
+      return "Denied";
+    default:
+      return answer;
+  }
+}
+
+export type ApprovalButton = WaitAction & {
+  /** The card's main button, the one the host listed first. */
+  main: boolean;
+  /** A Deny carries the one-line note the user typed beside it. */
+  takesNote: boolean;
+};
+
+/** The card's buttons, from the actions the host stored with the wait. */
+export const approvalButtons = (actions: WaitAction[]): ApprovalButton[] =>
+  actions.map((a, i) => ({ ...a, main: i === 0, takesNote: a.id === "deny" }));

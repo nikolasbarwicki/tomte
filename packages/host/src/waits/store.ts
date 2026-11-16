@@ -187,7 +187,7 @@ export function createWaitStore(db: Database): WaitStore {
           `UPDATE human_waits SET consumed_at = ?
            WHERE id = (
              SELECT id FROM human_waits
-             WHERE bot_id = ? AND kind = 'tool_approval' AND state = 'answered' AND outcome = 'allow'
+            WHERE bot_id = ? AND kind = 'tool_approval' AND state = 'answered' AND outcome IN ('allow', 'allow_always')
                AND consumed_at IS NULL
                AND json_extract(payload, '$.tool') = ? AND json_extract(payload, '$.canonical') = ?
              ORDER BY resolved_at, rowid LIMIT 1

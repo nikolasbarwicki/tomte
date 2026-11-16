@@ -34,7 +34,9 @@ import type { HostServersSource } from "../harness/index.ts";
 import { openFront, type FrontSession, type LoopStore } from "../loop/index.ts";
 import { parkingDelegate, type Executor } from "../routines/index.ts";
 import {
+  approvalActions,
   canonicalInput,
+  isApproved,
   type Wait,
   type WaitKind,
   type Waits,
@@ -114,8 +116,8 @@ export interface Chats {
   switchTo(bot: Bot): Promise<void>;
   /** Closes and forgets a deleted bot's chat; when it was the shown one, shows the most recently active bot, or nothing. */
   drop(botId: string): Promise<void>;
-  /** Answers a question or approval, and acknowledges the external event the question was linked to; false when there is no such question. */
-  answer(id: string, value: string): boolean;
+  /** Answers a question or approval (with a note for the bot, for either), and acknowledges the external event the question was linked to; false when there is no such question. */
+  answer(id: string, value: string, note?: string): boolean;
   /** Hands a closed wait to the tool call of a session still waiting for it in this process, with the text the bot would have been sent; false when none waits, and the bot then gets the text as a message. */
   claim(wait: Wait, text: string): boolean;
   /** The id of the bot's oldest pending question that was asked about this external event, if any. */
@@ -497,10 +499,10 @@ export function createChats(deps: ChatsDeps): Chats {
   }
 
   /** Answers an open question or approval, then closes the external event a question was linked to, relaying `said` (the answer when omitted) to its sender, and cancels queued answers to that event, which the question's answer replaces. */
-  function answerAsk(id: string, value: string, said = value): boolean {
+  function answerAsk(id: string, value: string, said = value, note?: string): boolean {
     const wait = deps.waits.find(id);
     if (!wait || (wait.kind !== "question" && wait.kind !== "tool_approval")) return false;
-    if (!deps.waits.answer(id, value)) return false;
+    if (!deps.waits.answer(id, value, note)) return false;
     if (wait.kind === "question" && wait.payload.eventId !== undefined) {
       const chat = chats.get(wait.botId);
       const answers =
@@ -576,12 +578,9 @@ export function createChats(deps: ChatsDeps): Chats {
       const { wait, text } = await waitFor(c, {
         kind: "tool_approval",
         payload: { tool, input, canonical: canonicalInput(input), reason },
-        actions: [
-          { id: "allow", label: "Allow" },
-          { id: "deny", label: "Deny" },
-        ],
+        actions: approvalActions(tool),
       });
-      if (wait.outcome === "allow") return { behavior: "allow", updatedInput: input };
+      if (isApproved(wait.outcome)) return { behavior: "allow", updatedInput: input };
       // A denial the user made keeps its short wording; a cancelled or expired wait says why.
       const declined = wait.state === "answered";
       return {
@@ -846,7 +845,7 @@ export function createChats(deps: ChatsDeps): Chats {
     open: () => current && openChat(current),
     switchTo,
     drop,
-    answer: answerAsk,
+    answer: (id, value, note) => answerAsk(id, value, undefined, note),
     claim(wait, text) {
       const chat = chats.get(wait.botId);
       const waiting = chat?.awaiting.get(wait.id);

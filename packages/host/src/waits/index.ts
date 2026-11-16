@@ -67,6 +67,8 @@ export interface WaitsOptions {
   context?(
     botId: string,
   ): { sessionId?: string | undefined; runId?: string | undefined } | undefined;
+  /** Stores the owner's "always allow" rule for a tool when they answer an approval with `allow_always`, before the bot hears the answer. */
+  alwaysAllow?(botId: string, tool: string): void;
   /** The clock expiry reads, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
 }
@@ -112,6 +114,17 @@ export interface Waits {
   close(): void;
 }
 
+/** The buttons of a tool approval: allow this call, allow the tool for the bot from now on, or deny. The second names the tool, so a rule for Bash says how broad it is. */
+export const approvalActions = (tool: string): WaitAction[] => [
+  { id: "allow", label: "Allow" },
+  { id: "allow_always", label: `Always allow ${tool} for this bot` },
+  { id: "deny", label: "Deny" },
+];
+
+/** True for an approval's outcome that lets the call run: `allow`, and `allow_always`, which also stores the rule. */
+export const isApproved = (outcome: string | null): boolean =>
+  outcome === "allow" || outcome === "allow_always";
+
 /** An input as JSON with the keys of every object in order, so two inputs compare equal exactly when they hold the same data. */
 export function canonicalInput(input: unknown): string {
   const sort = (v: unknown): unknown =>
@@ -144,6 +157,7 @@ const approval: WaitHandler<"tool_approval"> = {
     tool: w.payload.tool,
     reason: w.payload.reason,
     input: JSON.stringify(w.payload.input, null, 2),
+    actions: w.actions,
   }),
   closing: (w) => ({
     type: "answered",
@@ -152,8 +166,8 @@ const approval: WaitHandler<"tool_approval"> = {
   }),
   subject: (w) => `approval to use ${w.payload.tool}`,
   answered: (w) =>
-    w.outcome === "allow"
-      ? `The user allowed ${w.payload.tool} for exactly this input: ${w.payload.canonical}. Call ${w.payload.tool} again with exactly that input; a call with any other input asks again.`
+    isApproved(w.outcome)
+      ? `The user allowed ${w.payload.tool} for exactly this input: ${w.payload.canonical}. Call ${w.payload.tool} again with exactly that input; a call with any other input asks again.${w.outcome === "allow_always" ? ` They also always allow ${w.payload.tool} for you from now on: later calls to it, with any input, run without asking.` : ""}`
       : `The user denied ${w.payload.tool}. Do not retry it; continue without it or report what is blocked.`,
 };
 
@@ -218,12 +232,14 @@ export function createWaits(o: WaitsOptions): Waits {
     const h = handlerOf(w.kind);
     o.emit(w.botId, h.closing(w));
     h.onResolve?.(w);
+    if (w.kind === "tool_approval" && w.state === "answered" && w.outcome === "allow_always")
+      o.alwaysAllow?.(w.botId, w.payload.tool);
     // A run's wait is told to the run, which subscribes to the close below and gives the bot every outcome of the park in one message.
     if (w.runId === null) {
       const text = textFor(w, h);
       const claimed = o.claim?.(w, text) ?? false;
       if (claimed) {
-        if (w.kind === "tool_approval" && w.outcome === "allow") store.markConsumed(w.id, now());
+        if (w.kind === "tool_approval" && isApproved(w.outcome)) store.markConsumed(w.id, now());
       } else if (!h.silent?.(w)) o.deliver(w.botId, block(w));
     }
     tell({ type: "closed", wait: store.get(id)! });
