@@ -17,7 +17,7 @@ export interface BrowserToolContext {
   /** Asks the user to take over the bot's browser. */
   takeover: Pick<Takeover, "request">;
   /** Stored credentials and sign-in. */
-  login: Pick<BrowserLogin, "list" | "login">;
-  /** True while the bot runs without the user (a routine); human waits are refused then. */
-  unattended(): boolean;
+  login: Pick<BrowserLogin, "list" | "login" | "coverage">;
+  /** The pause between the snapshots that wait out a bot wall; the whole wait stays far below the lane wait. */
+  wallPauseMs: number;
 }

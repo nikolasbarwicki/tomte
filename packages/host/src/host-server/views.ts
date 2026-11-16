@@ -13,17 +13,72 @@ import {
   userMemoryPath,
 } from "../bots/index.ts";
 import type { OpenItems } from "../events/index.ts";
+import type { Wait, WaitKind } from "../waits/index.ts";
 
-/** The sidebar: every bot with its latest message, whether it is working, unseen or idle, and its open needs-you items. */
+/** What the sidebar needs to know about human waits to count them. */
+export interface WaitCounts {
+  /** Every bot's open waits, oldest first. */
+  list(): Wait[];
+  /** The name of the routine a run belongs to; undefined for a run that is gone. */
+  routineName(runId: string): string | undefined;
+  /** Whether an external event is still an open needs-you item. */
+  eventOpen(botId: string, eventId: string): boolean;
+}
+
+const KIND_LABEL: Record<WaitKind, string> = {
+  tool_approval: "Approval",
+  question: "Question",
+  takeover: "Takeover",
+  credential: "Approval",
+};
+
+/**
+ * A bot's open external items plus its open human waits. A question about an external event is that event's item already and is
+ * not counted again while the event is open. A source is named once; a wait newer than every external item is named first.
+ */
+function withWaits(
+  botId: string,
+  items: OpenItems | undefined,
+  open: Wait[],
+  waits: WaitCounts,
+): OpenItems | undefined {
+  const own = open.filter(
+    (w) =>
+      w.botId === botId &&
+      !(w.kind === "question" && w.payload.eventId && waits.eventOpen(botId, w.payload.eventId)),
+  );
+  if (!own.length) return items;
+  const external = items ?? { count: 0, sources: [], newestAt: 0 };
+  const newestWait = own[own.length - 1]!.createdAt;
+  const labels = own
+    .map((w) => (w.runId !== null ? waits.routineName(w.runId) : undefined) ?? KIND_LABEL[w.kind])
+    .reverse();
+  const sources = [
+    ...new Set(
+      newestWait > external.newestAt
+        ? [...labels, ...external.sources]
+        : [...external.sources, ...labels],
+    ),
+  ];
+  return {
+    count: external.count + own.length,
+    sources,
+    newestAt: Math.max(external.newestAt, newestWait),
+  };
+}
+
+/** The sidebar: every bot with its latest message, whether it is working, unseen or idle, and its open needs-you items and waits. */
 export const botsEvent = (
   dataRoot: string,
   db: Database,
   isWorking: (botId: string) => boolean,
   needsYou: () => ReadonlyMap<string, OpenItems>,
+  waits: WaitCounts,
 ): BotsEvent => {
   const listed = listBots(dataRoot);
   // No bots, no count query: a host with nothing to list has nothing to ask the database.
   const open = listed.length > 0 ? needsYou() : new Map<string, OpenItems>();
+  const openWaits = listed.length > 0 ? waits.list() : [];
   return {
     type: "bots",
     bots: listed.map((bot) => {
@@ -34,7 +89,7 @@ export const botsEvent = (
         : last?.from === "bot" && last.at > (activity?.seenAt ?? 0)
           ? "unseen"
           : "idle";
-      const items = open.get(bot.id);
+      const items = withWaits(bot.id, open.get(bot.id), openWaits, waits);
       return {
         ...bot,
         last,

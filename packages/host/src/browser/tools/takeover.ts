@@ -2,10 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import type { BrowserToolContext } from "./context.ts";
-import { errorResult, textResult } from "./result.ts";
-
-export const UNATTENDED_MESSAGE =
-  "not available in unattended runs; report the login wall or CAPTCHA in your result instead";
+import { textResult } from "./result.ts";
 
 export function registerTakeoverTools(mcp: McpServer, ctx: BrowserToolContext) {
   mcp.registerTool(
@@ -18,7 +15,6 @@ export function registerTakeoverTools(mcp: McpServer, ctx: BrowserToolContext) {
       },
     },
     ({ reason }) => {
-      if (ctx.unattended()) return errorResult(UNATTENDED_MESSAGE);
       const wait = ctx.takeover.request(ctx.botId, reason);
       return textResult(
         JSON.stringify({

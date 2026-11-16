@@ -3,10 +3,12 @@
 // Like the real engine it enforces `--action-policy`, so a host command missing from the allow list fails here too.
 //
 // FAKE_AGENT_BROWSER_DIR holds everything the fake reads and writes:
-//   script.json  (optional) { pages: { [url]: { title?, snapshot, text?, selectors?: { [css]: snapshot } } }, onAction?: { ["click @e1"]: nextUrl }, fail?: { [command]: message }, delayMs?: { [command]: number },
+//   script.json  (optional) { pages: { [url]: { title?, snapshot, text?, selectors?: { [css]: snapshot }, later?: { snapshot, title? }[] } }, onAction?: { ["click @e1"]: nextUrl }, fail?: { [command]: message }, delayMs?: { [command]: number },
 //                logins?: { [signInUrl]: { username, password, next: nextUrl, error?: message } } }
+//                A page's `later` lists what each `snapshot` call after the first returns (the last entry repeats): a page whose snapshot differs on each call, such as a bot wall that clears while it is waited out. Opening the page or navigating to it starts the count again; `tab list` reports the title of the view the latest `snapshot` returned.
 //   calls.jsonl  one line per invocation: { argv, env: { AGENT_BROWSER_ENCRYPTION_KEY, AGENT_BROWSER_PLUGINS } }
 //   state.json   the current page per session; a session listed here has an open browser
+//   views.json   how many `snapshot` calls a session's current page has answered, for pages with `later`
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -17,6 +19,7 @@ interface Page {
   snapshot: string;
   text?: string;
   selectors?: Record<string, string>;
+  later?: { snapshot: string; title?: string }[];
 }
 interface Script {
   /** `open` fetches the URL through the engine's --proxy first, as the real browser does. */
@@ -185,6 +188,17 @@ async function authLogin() {
   reply({ loggedIn: true, name });
 }
 
+const views = () => read<Record<string, number>>("views.json", {});
+const setViews = (v: Record<string, number>) =>
+  writeFileSync(join(dir, "views.json"), JSON.stringify(v));
+
+/** The page as its `index`th `snapshot` call sees it: the page itself first, then each `later` entry in turn. */
+function viewOf(url: string, index: number): Page {
+  const page = pageAt(url);
+  const next = page.later?.[Math.min(index, page.later.length) - 1];
+  return next ? { ...page, ...next } : page;
+}
+
 await Bun.sleep(script.delayMs?.[command] ?? 0);
 if (script.fail?.[command]) fail(script.fail[command]);
 
@@ -195,6 +209,7 @@ switch (command) {
       await fetch(target, { proxy: flags["--proxy"] }).then((r) => r.arrayBuffer());
     const landed = script.redirects?.[target] ?? target;
     state[session] = landed;
+    setViews({ ...views(), [session]: 0 });
     writeFileSync(join(dir, "state.json"), JSON.stringify(state));
     reply({ title: pageAt(landed).title ?? "", url: landed });
     break;
@@ -202,7 +217,9 @@ switch (command) {
   case "snapshot": {
     const url = state[session];
     if (!url) fail("No page is open");
-    const page = pageAt(url);
+    const seen = views()[session] ?? 0;
+    if (pageAt(url).later) setViews({ ...views(), [session]: seen + 1 });
+    const page = viewOf(url, seen);
     const selector = args.includes("-s") ? args[args.indexOf("-s") + 1] : undefined;
     let snapshot = page.snapshot;
     if (selector) {
@@ -243,7 +260,9 @@ switch (command) {
             {
               active: true,
               tabId: "t1",
-              title: pageAt(state[session]).title ?? "",
+              title:
+                viewOf(defined(state[session], "url"), Math.max(0, (views()[session] ?? 0) - 1))
+                  .title ?? "",
               type: "page",
               url: state[session],
             },
@@ -262,6 +281,7 @@ switch (command) {
     const next = script.onAction?.[[command, ...args].join(" ")];
     if (next) {
       state[session] = next;
+      setViews({ ...views(), [session]: 0 });
       writeFileSync(join(dir, "state.json"), JSON.stringify(state));
     }
     reply({ done: command });

@@ -4,7 +4,6 @@ import { z } from "zod";
 import { NEEDS_STEP } from "../login.ts";
 import type { BrowserToolContext } from "./context.ts";
 import { errorResult, guarded, textResult } from "./result.ts";
-import { UNATTENDED_MESSAGE } from "./takeover.ts";
 
 export function registerCredentialTools(mcp: McpServer, ctx: BrowserToolContext) {
   mcp.registerTool(
@@ -26,7 +25,6 @@ export function registerCredentialTools(mcp: McpServer, ctx: BrowserToolContext)
     },
     ({ entry }) =>
       guarded(async () => {
-        if (ctx.unattended()) return errorResult(UNATTENDED_MESSAGE);
         const r = await ctx.login.login(ctx.botId, ctx.browser, ctx.page, entry);
         switch (r.status) {
           case "waiting_for_user":

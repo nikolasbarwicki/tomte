@@ -60,7 +60,7 @@ Front defaults that worked in v3: `claude-haiku-5-5` with `thinking: {type: "dis
    - Browser tools stay off agents in the first cut. The browser session is one per bot (GLOSSARY), and parallel agents would fight over its tabs. Revisit with a lock later.
    - Handoff tools (`mcp__bots__*`) stay on the front only, so a handoff result comes back through `deliver()` into the front.
 7. **Permissions keep Claudebot's rules.** Reuse `Thread.canUseTool` and the `HostDelegate`. A background agent's approval or `ask_user` raises the normal approve/ask card, which is a needs-you item. That agent waits; the front and the other agents keep going. Do not port v3's `permissionMode: "dontAsk"`: a human is present here. Keep v3's PreToolUse path guard as defence in depth for the worker.
-8. **`deliver()` in double-loop mode** pushes a synthetic message (`isSynthetic: true`, `priority: "next"`) into the front instead of queueing a turn. This applies to handoff results, external events, browser waits and routine prompts. Routine runs on a double-loop bot without a chat use the standard headless runner unchanged (`runHeadless`).
+8. **`deliver()` in double-loop mode** pushes a synthetic message (`isSynthetic: true`, `priority: "next"`) into the front instead of queueing a turn. This applies to handoff results, external events and browser waits. Routine prompts no longer go to the front: a double-loop bot's routine runs go headless in a session of their own (ADR-0011, "Routine runs").
 9. **No composer queue.** In double-loop mode `/api/send` always answers `outcome: "sent"`. `queued`/`dequeued` and `/api/send/cancel` do not apply. Answers to needs-you items (`eventId`) keep their current path: a linked ask is answered directly, otherwise the message goes to the front.
 10. **Presence instead of "is working…" per turn.** `BotSummary.status` is `working` while the front's turn or any agent runs. The transcript shows one presence line: "typing…" while the front streams, "working…" while agents run. Front text still streams through `text_start`/`delta`. Reports appear whole.
 
@@ -120,7 +120,7 @@ New host feature module `packages/host/src/loop/` (add `loop` to `MODULES` in `.
 - v3's devtools page, trace rows and SDK cost estimate.
 - Unprompted progress updates (`UNPROMPTED_UPDATES`).
 - Browser tools on background agents.
-- A double-loop variant of headless routine runs.
+- (Done later, ADR-0011 "Routine runs": double-loop routine runs are headless and park.)
 - Multiple front sessions per bot.
 
 ## Verification

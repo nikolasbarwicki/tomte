@@ -10,6 +10,7 @@ import { z } from "zod";
 import { createBot } from "../bots/index.ts";
 import { migrate } from "../platform/db.ts";
 import { defined } from "../testing/defined.ts";
+import { createWaits, type Waits } from "../waits/index.ts";
 import { Conflict, createRoutines, type Executor } from "./index.ts";
 import * as store from "./store.ts";
 
@@ -19,14 +20,24 @@ const hourly: Schedule = { kind: "cron", expr: "0 * * * *", tz: "UTC" };
 let cwd: string;
 let db: Database;
 let clock: number;
-let jobs: { prompt: string; resolve(text: string): void; reject(e: Error): void }[];
+let jobs: {
+  prompt: string;
+  runId: string;
+  resumed: boolean;
+  resolve(text: string): void;
+  reject(e: Error): void;
+}[];
 let routines: ReturnType<typeof createRoutines>;
+let waits: Waits;
 let botId: string;
 let changed: { promise: Promise<string>; resolve(botId: string): void };
+/** What the host told the bot's session, and what the owner's chat was shown. */
+let told: string[];
+let notices: string[];
 
-const execute: Executor = ({ prompt }) => {
+const execute: Executor = ({ prompt, runId, resumed }) => {
   const { promise, resolve, reject } = Promise.withResolvers<string>();
-  jobs.push({ prompt, resolve, reject });
+  jobs.push({ prompt, runId, resumed, resolve, reject });
   return { done: promise, stop: (reason) => reject(new Error(reason)) };
 };
 
@@ -35,19 +46,34 @@ beforeEach(() => {
   db = migrate(new Database(":memory:"));
   clock = at("2026-01-01T10:00:00Z");
   jobs = [];
+  told = [];
+  notices = [];
   changed = Promise.withResolvers();
   botId = createBot(cwd, "Bot").id;
+  waits = createWaits({
+    db,
+    emit() {},
+    deliver: (_bot, text) => void told.push(text),
+    now: () => clock,
+  });
   routines = createRoutines({
     db,
     dataRoot: cwd,
     now: () => clock,
     execute,
+    waits,
+    notice: async (_bot, text) => void notices.push(text),
+    deliver: async (_bot, text) => void told.push(text),
     onChange: (id) => changed.resolve(id),
+  });
+  waits.subscribe((e) => {
+    if (e.type === "closed") routines.waitClosed(e.wait);
   });
 });
 
 afterEach(() => {
   routines.stop();
+  waits.close();
   rmSync(cwd, { recursive: true, force: true });
 });
 
@@ -182,4 +208,250 @@ test("a stored schedule that does not match its schema throws a ZodError on read
   const r = routines.create(botId, { name: "hourly", instruction: "do it", schedule: hourly });
   db.run("UPDATE routines SET schedule = ? WHERE id = ?", [JSON.stringify({ kind: "cron" }), r.id]);
   expect(() => store.getRoutine(db, r.id)).toThrow(z.ZodError);
+});
+
+const DAY = 24 * 60 * 60_000;
+
+const until = async (check: () => boolean) => {
+  for (let i = 0; i < 200 && !check(); i++) await Bun.sleep(5);
+  expect(check()).toBe(true);
+};
+
+/** A request to the owner that a routine turn raised, as `parkingDelegate` does. */
+const askApproval = (runId: string) =>
+  waits.open(botId, {
+    kind: "tool_approval",
+    runId,
+    payload: {
+      tool: "mcp__fx__send",
+      input: { to: "ana" },
+      canonical: '{"to":"ana"}',
+      reason: "send",
+    },
+    actions: [
+      { id: "allow", label: "Allow" },
+      { id: "deny", label: "Deny" },
+    ],
+  }).id;
+
+const askQuestion = (runId: string) =>
+  waits.open(botId, {
+    kind: "question",
+    runId,
+    payload: { question: "Which list?" },
+    actions: [],
+  }).id;
+
+/** A test run whose first turn raises `count` requests and ends; resolves once the run is waiting. */
+async function park(count = 1) {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  const job = defined(jobs[0], "job");
+  const ids = [askApproval(job.runId), ...(count > 1 ? [askQuestion(job.runId)] : [])];
+  job.resolve("I asked the owner");
+  await until(() => routines.get(r.id).lastRun?.status === "waiting");
+  return { r, ids, runId: job.runId };
+}
+
+test("a turn that ends on a request to the owner parks the run; occurrences are skipped and test runs refused until it is answered", async () => {
+  const { r } = await park();
+  expect(routines.get(r.id)).toMatchObject({
+    running: false,
+    lastRun: { status: "waiting", output: null },
+  });
+
+  // A catch-up of the hourly schedule meets the parked run, which a reconcile leaves alone.
+  clock = at("2026-01-01T11:05:00Z");
+  routines.start();
+  expect(runsOf(r.id).map((x) => [x.status, x.error])).toContainEqual([
+    "skipped",
+    "previous run is waiting for you",
+  ]);
+  expect(runsOf(r.id).filter((x) => x.status === "waiting")).toHaveLength(1);
+  expect(routines.get(r.id).lastRun?.status).toBe("waiting");
+  expect(() => routines.testRun(r.id)).toThrow(Conflict);
+  expect(jobs).toHaveLength(1);
+});
+
+test("an answer resumes the run in the same session with the owner's message, and the run ends with the last turn's text", async () => {
+  const { r, ids, runId } = await park();
+  expect(waits.answer(defined(ids[0]), "allow")).toBe(true);
+  await until(() => jobs.length === 2);
+  const resumed = defined(jobs[1], "job");
+  expect(resumed).toMatchObject({ runId, resumed: true });
+  expect(resumed.prompt).toContain(`<human-wait-result id="${ids[0]}">`);
+  expect(resumed.prompt).toContain("exactly that input");
+  expect(resumed.prompt).not.toContain("scheduled-routine");
+  expect(routines.get(r.id)).toMatchObject({ running: true });
+  expect(runsOf(r.id)[0]).toMatchObject({ status: "running", output: null });
+
+  resumed.resolve("sent it");
+  await until(() => runsOf(r.id)[0]?.status === "succeeded");
+  expect(runsOf(r.id)).toHaveLength(1);
+  expect(runsOf(r.id)[0]).toMatchObject({ output: "sent it" });
+  // The answer reached the run, not the bot's session as a message of its own.
+  expect(told).toEqual([]);
+});
+
+test("a denial's note is in the resume message", async () => {
+  const { ids } = await park();
+  expect(waits.answer(defined(ids[0]), "deny", "not at night")).toBe(true);
+  await until(() => jobs.length === 2);
+  expect(defined(jobs[1]).prompt).toContain("denied");
+  expect(defined(jobs[1]).prompt).toContain("not at night");
+});
+
+test("several requests of one park resume the run once, after the last answer, with every answer in one message", async () => {
+  const { ids } = await park(2);
+  expect(waits.answer(defined(ids[0]), "allow")).toBe(true);
+  await Bun.sleep(30);
+  expect(jobs).toHaveLength(1);
+  expect(waits.answer(defined(ids[1]), "List A")).toBe(true);
+  await until(() => jobs.length === 2);
+  const { prompt } = defined(jobs[1], "job");
+  expect(prompt).toContain(`<human-wait-result id="${ids[0]}">`);
+  expect(prompt).toContain(`<human-wait-result id="${ids[1]}">`);
+  expect(prompt).toContain("Which list?");
+  expect(prompt).toContain("List A");
+});
+
+test("an answer that comes in while the turn still runs does not park: the turn's end continues the run at once", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  const first = defined(jobs[0], "job");
+  const id = askApproval(first.runId);
+  expect(waits.answer(id, "allow")).toBe(true);
+  expect(jobs).toHaveLength(1);
+
+  first.resolve("asking and carrying on");
+  await until(() => jobs.length === 2);
+  expect(defined(jobs[1]).prompt).toContain(`<human-wait-result id="${id}">`);
+  expect(routines.get(r.id)).toMatchObject({ running: true });
+  expect(runsOf(r.id)[0]?.status).toBe("running");
+
+  defined(jobs[1]).resolve("finished");
+  await until(() => runsOf(r.id)[0]?.status === "succeeded");
+  expect(runsOf(r.id)[0]).toMatchObject({ output: "finished" });
+  expect(told).toEqual([]);
+});
+
+test("a turn that fails fails the run and cancels its waits, telling nobody", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  const job = defined(jobs[0], "job");
+  askApproval(job.runId);
+  job.reject(new Error("the CLI crashed"));
+  await until(() => runsOf(r.id)[0]?.status === "failed");
+  expect(runsOf(r.id)[0]).toMatchObject({ error: "the CLI crashed" });
+  expect(waits.list(botId)).toEqual([]);
+  expect(told).toEqual([]);
+});
+
+test("a park that goes 24 hours unanswered fails the run with 'approval expired', tells the bot and the owner, and drops the other requests", async () => {
+  const { r } = await park(2);
+  clock += DAY;
+  waits.start();
+  expect(runsOf(r.id)[0]).toMatchObject({ status: "failed", error: "approval expired" });
+  expect(waits.list(botId)).toEqual([]);
+  await until(() => told.length === 1);
+  expect(defined(told[0])).toContain("expired");
+  expect(defined(told[0])).toContain("nothing was approved");
+  expect(defined(told[0])).toContain("Do not retry");
+  expect(notices).toEqual(['Routine "h" failed: approval expired']);
+  // The routine is free again.
+  expect(() => routines.testRun(r.id)).not.toThrow();
+});
+
+test("a new session fails the parked run and cancels its waits, without a message to the bot", async () => {
+  const { r } = await park();
+  routines.sessionEnded(botId);
+  expect(runsOf(r.id)[0]).toMatchObject({
+    status: "failed",
+    error: "session ended while waiting for you",
+  });
+  expect(waits.list(botId)).toEqual([]);
+  await Bun.sleep(20);
+  expect(told).toEqual([]);
+});
+
+test("deleting a parked routine cancels its waits and removes its run", async () => {
+  const { r } = await park();
+  await routines.remove(r.id);
+  expect(waits.list(botId)).toEqual([]);
+  expect(db.query("SELECT count(*) AS n FROM routine_runs").get()).toEqual({ n: 0 });
+  expect(told).toEqual([]);
+});
+
+test("what a run that the last process left running asked the owner is cancelled at start", () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  store.insertRun(db, {
+    id: "stale",
+    routineId: r.id,
+    trigger: "manual",
+    scheduledFor: null,
+    status: "running",
+    sessionId: null,
+    output: null,
+    error: null,
+    startedAt: clock,
+    finishedAt: null,
+  });
+  askApproval("stale");
+  routines.start();
+  expect(runsOf(r.id)[0]).toMatchObject({ id: "stale", status: "interrupted" });
+  expect(waits.list(botId)).toEqual([]);
+});
+
+test("resuming a run that is not waiting is refused", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  const run = routines.testRun(r.id);
+  await expect(routines.resume(run.id, "hello")).rejects.toThrow(Conflict);
+  await expect(routines.resume("missing", "hello")).rejects.toThrow(Conflict);
+});
+
+test("a database made before parked runs keeps its runs and their order, and takes waiting ones", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  db.run("DROP TABLE routine_runs");
+  db.run(`CREATE TABLE routine_runs (
+    id TEXT PRIMARY KEY,
+    routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+    trigger TEXT NOT NULL CHECK (trigger IN ('schedule','manual')),
+    scheduled_for INTEGER,
+    status TEXT NOT NULL CHECK (status IN ('running','succeeded','failed','interrupted','skipped')),
+    session_id TEXT, output TEXT, error TEXT,
+    started_at INTEGER NOT NULL, finished_at INTEGER,
+    UNIQUE (routine_id, scheduled_for))`);
+  const insert = db.query(
+    "INSERT INTO routine_runs (id, routine_id, trigger, scheduled_for, status, output, started_at) VALUES (?, ?, 'manual', NULL, 'succeeded', ?, ?)",
+  );
+  insert.run("r1", r.id, "first", 1);
+  insert.run("r2", r.id, "second", 2);
+  db.run("ALTER TABLE human_waits DROP COLUMN delivered_at");
+  db.run("PRAGMA user_version = 16");
+
+  migrate(db);
+
+  expect(runsOf(r.id).map((x) => [x.id, x.output])).toEqual([
+    ["r2", "second"],
+    ["r1", "first"],
+  ]);
+  store.insertRun(db, {
+    id: "parked",
+    routineId: r.id,
+    trigger: "manual",
+    scheduledFor: null,
+    status: "waiting",
+    sessionId: null,
+    output: null,
+    error: null,
+    startedAt: 3,
+    finishedAt: null,
+  });
+  expect(routines.get(r.id).lastRun).toMatchObject({ id: "parked", status: "waiting" });
+  // A parked run answered after the upgrade resumes with the answer, and the wait counts as delivered.
+  const id = askApproval("parked");
+  waits.answer(id, "allow");
+  await until(() => jobs.length === 1);
+  expect(defined(jobs[0]).prompt).toContain(`<human-wait-result id="${id}">`);
+  expect(waits.ofRun("parked")).toEqual([]);
 });

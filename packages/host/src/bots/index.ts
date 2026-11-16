@@ -10,7 +10,6 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { BotAvatar, defaultAvatar } from "@claudebot/contract/avatars";
 import {
   Bot,
@@ -40,6 +39,13 @@ export {
 } from "./session-kit.ts";
 export { readMemory, userMemoryPath, type MemoryPaths } from "./memory.ts";
 export { deleteActivity, getActivity, markSeen, recordMessage } from "./activity-store.ts";
+export {
+  allowTool,
+  allowsTool,
+  deleteAllowances,
+  listAllowances,
+  removeAllowance,
+} from "./allowance-store.ts";
 export {
   deleteFile,
   listFiles,
@@ -258,22 +264,14 @@ export function frontContext(dataRoot: string, bot: Bot) {
   };
 }
 
-/** Answers questions and approvals while nobody is watching, as in a routine run. */
-export const headlessDelegate: HostDelegate = {
-  askUser: async () =>
-    "No human is available during this scheduled run. Make the most reasonable assumption, state it in your final message, and continue.",
-  approve: async (): Promise<PermissionResult> => ({
-    behavior: "deny",
-    message: "no human is present during a scheduled run",
-  }),
-};
-
 /** Opens a Claude Code thread bound to a bot in the host's shared thread environment. */
 export function openThread(
-  { cwd, dataRoot, cli, claude, integrations, hostServers, botEnv, approveAll }: ThreadEnv,
+  { cwd, dataRoot, cli, claude, integrations, hostServers, botEnv, approveAll, allows }: ThreadEnv,
   bot: Bot,
   opts: {
     resume?: boolean;
+    /** A session of its own instead of the bot's current one. */
+    sessionId?: string;
     delegate: HostDelegate;
     log: (line: string) => void;
     idleMs?: number;
@@ -288,6 +286,7 @@ export function openThread(
     model: bot.model,
     effort: bot.effort,
     approveAll,
+    allows: (tool) => allows(bot.id, tool),
     integrations,
     hostServers: () => hostServers(bot.id),
     env: () => botEnv(bot.id),

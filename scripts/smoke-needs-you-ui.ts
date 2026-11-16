@@ -225,6 +225,37 @@ try {
     "an option on the card still resolves the question and closes its item",
   );
 
+  console.log("an open wait: a question of the bot's own, about no event");
+  const results = host.toolResults().length;
+  host.askOnMessage("Which environment?", ["prod", "staging"]);
+  await box.fill("deploy it");
+  await box.press("Enter");
+  await page.getByText("Which environment?", { exact: true }).last().waitFor();
+  host.stopAsking();
+  // The count is the host's: the sidebar badge shows it too, and the card is not counted a second time as a row.
+  await settled(1);
+  await expand();
+  check((await item("Which environment?").count()) === 1, "the open wait is a row of the bar");
+  check(
+    (await item("Which environment?")
+      .getByRole("button", { name: "prod", exact: true })
+      .count()) === 1,
+    "the row has the card's own buttons",
+  );
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("e");
+  await Bun.sleep(400);
+  check(answers.length === 1, "Enter and e answer nothing");
+  check(host.toolResults().length === results, "the question received no answer");
+  check((await needsYou()) === 1, "the wait is still open and still counted");
+  await item("Which environment?").getByRole("button", { name: "staging", exact: true }).click();
+  await host.until(() => answers.length === 2);
+  await settled(0);
+  await host.until(() => host.toolResults().length === results + 1);
+  check(host.toolResults().at(-1) === "staging", "a button of the row answers the question");
+  await turnsOver();
+
   check(pageErrors.length === 0, `no page errors ${pageErrors.join("; ")}`);
   await smoke.pass();
 } catch (e) {

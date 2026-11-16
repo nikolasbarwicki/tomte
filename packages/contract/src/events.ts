@@ -133,6 +133,8 @@ export const ServerEvent = z.discriminatedUnion("type", [
     tool: z.string(),
     reason: z.string(),
     input: z.string(),
+    /** The card's buttons, the main one first; answering one sends its `id` to `/api/answer`. */
+    actions: z.array(WaitAction),
   }),
   z.object({ type: z.literal("answered"), id: z.string(), value: z.string() }),
   /** A question linked to an external event can no longer be answered, because its turn ended; the card stops offering answers. */
@@ -281,9 +283,11 @@ export type LastMessage = z.infer<typeof LastMessage>;
 export const BotStatus = z.enum(["idle", "working", "unseen"]);
 export type BotStatus = z.infer<typeof BotStatus>;
 /**
- * `needsYou`: how many of the bot's external-event items are open, waiting for the user. `needsYouSources`: the labels of
- * the sources they came from, the source of the newest open item first. `needsYouAt`: when the newest open item arrived
- * (epoch ms), 0 when none is open. The desktop app's banner reads only these.
+ * `needsYou`: how many items wait for the user: the bot's open external-event items plus its open human waits (an approval, a
+ * question, a takeover; a question about an open external event is that event's item and is not counted twice).
+ * `needsYouSources`: the labels of where they came from, newest first: an event's source, a routine's name for a wait of its
+ * run, otherwise what the wait asks for. `needsYouAt`: when the newest arrived (epoch ms), 0 when none is open. The desktop
+ * app's banner reads only these.
  */
 export const BotSummary = Bot.extend({
   last: LastMessage.nullable(),
@@ -326,7 +330,15 @@ export const Schedule = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("once"), at: z.number() }),
 ]);
 export type Schedule = z.infer<typeof Schedule>;
-export const RunStatus = z.enum(["running", "succeeded", "failed", "interrupted", "skipped"]);
+/** `waiting`: the run's turn ended on a request to the owner (a tool approval or a question) and its session resumes with the answer. */
+export const RunStatus = z.enum([
+  "running",
+  "waiting",
+  "succeeded",
+  "failed",
+  "interrupted",
+  "skipped",
+]);
 export type RunStatus = z.infer<typeof RunStatus>;
 export const RoutineRun = z.object({
   id: z.string(),

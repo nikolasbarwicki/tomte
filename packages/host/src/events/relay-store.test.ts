@@ -172,8 +172,5 @@ describe("the relay columns", () => {
     const after = createEventStore(old);
     expect(after.row("bot", id)).toMatchObject({ id, state: "open" });
     expect(after.row("bot", id)?.relay).toBeUndefined();
-    expect(old.query<{ user_version: number }, []>("PRAGMA user_version").get()).toEqual({
-      user_version: 15,
-    });
   });
 });

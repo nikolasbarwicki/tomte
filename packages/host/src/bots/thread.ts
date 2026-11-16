@@ -46,6 +46,8 @@ export interface ThreadEnv {
   botEnv: (botId: string) => Promise<Record<string, string>>;
   /** Approve every tool call instead of asking the user; off when `HostConfig.askApproval` is set. */
   approveAll: boolean;
+  /** Whether the owner always allows this bot a tool (`allow_always`); asked before the delegate. */
+  allows: (botId: string, tool: string) => boolean;
 }
 
 export interface ThreadOptions {
@@ -67,6 +69,8 @@ export interface ThreadOptions {
   idleMs?: number;
   /** Run every tool without asking the delegate. */
   approveAll?: boolean;
+  /** Whether the owner always allows the bot this tool. A rule skips the approval card, never a tool switched off in Integrations. */
+  allows?: (tool: string) => boolean;
   delegate: HostDelegate;
   log?: (line: string) => void;
   /** Who this thread is; appended to the system prompt. */
@@ -115,6 +119,7 @@ export class Thread {
       roots: [o.cwd, ...(o.additionalDirectories ?? [])].map((d) => resolve(d)),
       integrations: o.integrations,
       approveAll: o.approveAll,
+      allows: o.allows,
       delegate: o.delegate,
     });
     this.log = o.log ?? ((l) => console.error(l));

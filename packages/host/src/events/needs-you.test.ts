@@ -125,8 +125,9 @@ const act = async (botId: string, id: string) => {
     const res = await host.ui("/api/send", { text: "ok", eventId: id });
     const body = (await res.json()) as { outcome?: string; queued?: string };
     if (body.outcome !== "queued") return res.status;
-    // The bot is still on an earlier turn; an item is only closed once its answer is delivered, so ask again when it is free.
-    await host.ui("/api/send/cancel", { id: body.queued });
+    // The bot is still on an earlier turn; an item is only closed once its answer is delivered, so take the answer back and ask
+    // again when the bot is free. If the turn ended first, the queued answer already reached the bot and closed the item.
+    if ((await host.ui("/api/send/cancel", { id: body.queued })).status === 404) return res.status;
     await Bun.sleep(25);
   }
 };

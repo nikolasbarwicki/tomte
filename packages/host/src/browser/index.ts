@@ -1,17 +1,17 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type { Bot, ServerEvent } from "@claudebot/contract/events";
+import type { Bot } from "@claudebot/contract/events";
 
 import type { Credentials } from "../credentials/index.ts";
 import type { HostOrigin } from "../platform/config.ts";
 import type { SecretStore } from "../platform/secrets.ts";
 import type { TokenRegistry } from "../platform/tokens.ts";
+import type { Waits } from "../waits/index.ts";
 import { createAutoInstall } from "./auto-install.ts";
 import { removeBotBrowser } from "./cleanup.ts";
 import { createEgressProxy } from "./egress-proxy.ts";
 import { createBrowserEndpoint, type BrowserEndpoint } from "./endpoint.ts";
 import { engineStatus, installManagedEngine, type EngineStatus } from "./engine.ts";
-import { createHumanWaits, type HumanWaitsOptions } from "./human-waits.ts";
 import { createLiveView, type LiveViewOptions } from "./live-view.ts";
 import { CREDENTIAL_EXCHANGE_PATH, createBrowserLogin } from "./login.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./runtime.ts";
@@ -33,7 +33,14 @@ export {
   type SandboxStatus,
 };
 
-export interface BrowserOptions extends HumanWaitsOptions {
+/** Looked at three times, so a wall gets about six seconds to clear: well under the 30 s lane wait. */
+const DEFAULT_WALL_PAUSE_MS = 2_000;
+
+export interface BrowserOptions {
+  /** The human waits the takeover and the credential approval raise. */
+  waits: Waits;
+  /** Sends a host message into the bot's session through the normal send path: queued while the bot is busy, reopening a closed session. */
+  deliver: (botId: string, text: string) => void;
   /** The data root; the managed engine is installed in it. */
   dataRoot: string;
   secrets: SecretStore;
@@ -46,8 +53,6 @@ export interface BrowserOptions extends HumanWaitsOptions {
   /** Whether a bot may run headed Chrome. When false, Chrome launches headless whatever a bot's stored setting says. */
   headedAllowed: boolean;
   filesDir: (botId: string) => string;
-  /** True while no human is watching the bot's turn. */
-  unattended: (botId: string) => boolean;
   /** Whether the shell sandbox can run; checks this platform when omitted. */
   sandbox?: () => SandboxStatus;
   /** Overrides for the browser engine, Chrome and the engine's environment. */
@@ -73,8 +78,6 @@ export interface Browser {
   sandbox(): SandboxStatus;
   /** Whether the browser can be switched on: the engine, Chrome and the shell sandbox must all be usable. */
   status(): EngineStatus;
-  /** Wait cards still open for a bot, to replay into its chat. */
-  pendingWaits: (botId: string) => ServerEvent[];
   /** Ends any takeover of a bot's browser. */
   cancelTakeover(botId: string, reason: string): void;
   restart(botId: string): Promise<void>;
@@ -108,17 +111,16 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
   });
   if (autoInstall) engineOf();
   runtimes.start();
-  const waits = createHumanWaits({ emit: o.emit, deliver: o.deliver });
   const takeover = new Takeover({
     runtimes,
-    waits,
+    waits: o.waits,
     deliver: o.deliver,
     inactivityMs: o.takeoverInactivityMs,
   });
   const login = createBrowserLogin({
     credentials: o.credentials,
     secrets: o.secrets,
-    waits,
+    waits: o.waits,
     botName: (botId) => o.bot(botId)?.name ?? "A bot",
     exchangeUrl: () => `${o.agent.localUrl}${CREDENTIAL_EXCHANGE_PATH}`,
   });
@@ -126,7 +128,7 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
     tokens: o.tokens,
     takeover,
     login,
-    unattended: o.unattended,
+    wallPauseMs: o.runtime?.wallPauseMs ?? DEFAULT_WALL_PAUSE_MS,
     host: o.agent,
     isEnabled: (botId) => enabled(botId) && sandboxOf().status === "available",
     runtimes,
@@ -142,7 +144,7 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
   const ui = createBrowserUiRoutes({
     isEnabled: enabled,
     takeover,
-    waits,
+    waits: o.waits,
     liveView,
   });
   return {
@@ -157,12 +159,14 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
       const sandbox = sandboxOf();
       return sandbox.status === "unavailable" ? sandbox : engine;
     },
-    pendingWaits: (botId) => waits.pending(botId),
     cancelTakeover: (botId, reason) => takeover.cancelBot(botId, reason),
     restart: (botId) => runtimes.restart(botId),
     signOut: (botId) => runtimes.signOut(botId),
     removeBot: (botId) =>
-      removeBotBrowser({ endpoint, runtimes, takeover, credentials: o.credentials }, botId),
+      removeBotBrowser(
+        { endpoint, runtimes, takeover, credentials: o.credentials, waits: o.waits },
+        botId,
+      ),
     async close() {
       liveView.close();
       await runtimes.closeAll();

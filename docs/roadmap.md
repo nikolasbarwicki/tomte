@@ -27,23 +27,13 @@ Items 1 and 2 come first because they extend the safety advantage into unattende
 
 ## 1. Approvals that park an unattended run
 
-**Problem.** In `packages/host/src/bots/thread.ts`, `canUseTool` sends `ask`-policy integration tools to `delegate.approve` before it checks `approveAll`. `headlessDelegate.approve` in `packages/host/src/routines/index.ts` always denies. `ask` is the default policy (`packages/host/src/integrations/index.ts`), so a scheduled run cannot use any tool the user left at its default. A routine that must send an email fails.
+**Shipped (parked runs).** A routine run that meets an `ask`-policy tool or an `ask_user` question no longer denies it. The tool call is refused for now, the bot is told the request went to the owner and to end its turn, and the run becomes `waiting` ("Waiting for you" in the Routines panel). The owner answers on the same cards as in a chat. When the last open request of a park is answered the run resumes in the same session, as one message holding every answer (a denial carries the owner's note), so earlier steps do not run again; an answer that comes in while the bot is still finishing its turn never parks. A park survives a restart, expires after 24 hours (the run fails with "approval expired" and the bot is told nothing was approved), and an occurrence that comes due during a park is recorded as skipped. A new session, or deleting the routine or the bot, cancels the park. A double-loop bot's routine turns are unchanged: they answer like an attended turn and never park.
+
+ADR-0009 records what this replaced: the original plan had Allow and Block lists per tool, a 30-minute expiry and a resume through `deliver()`. There are no lists, a park lasts 24 hours, and the run resumes through the routine executor so its status and output stay the run's. What is still open from the spec ([`plans/unattended-parking/spec.md`](plans/unattended-parking/spec.md)): takeover and `browser_login` in unattended runs (still refused), the unattended-approvals summary, and the cost guards.
 
 **Competitors.** Rerun: coworkers stop before consequential actions, any teammate can answer, the run resumes where it stopped, and rules can answer on the user's behalf. Rakazo: Never ask / Auto / Ask modes with Allow and Block lists that grow from approval cards; a blocked action is refused without a card.
 
-**Plan.**
-
-- Add a `waiting` run status. A headless approval creates a wait (reuse the existing `wait` / `wait_resolved` events and `human-waits.ts`) and ends the run's turn.
-- On approval, resume the run through `deliver()` into the bot's session. On deny, tell the bot and let it finish.
-- Add Allow and Block lists per tool, fed from approval cards, so repeated approvals become rules.
-- Auto-expire a wait after a fixed time, as takeover does (30 minutes).
-
-**Decisions needed.**
-
-- Resume in the same turn or as a new message. ADR-0002 already commits to "tools return at once, events arrive as messages"; follow it.
-- Whether to add an approval model (Rakazo's Auto mode) or stay with static lists. Start with lists.
-
-**Done when.** A routine calls an `ask`-policy tool, the run shows as waiting, the user approves from the UI, and the run completes without re-running earlier steps.
+**Done when.** A routine calls an `ask`-policy tool, the run shows as waiting, the user approves from the UI, and the run completes without re-running earlier steps. (Met for approvals and questions; see the spec's remaining tickets.)
 
 ## 2. Event triggers
 

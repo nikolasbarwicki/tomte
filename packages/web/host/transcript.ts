@@ -25,11 +25,21 @@ export type Item =
       id: string;
       question: string;
       options?: string[];
+      /** The external needs-you item the question is about; that item is in the Needs you bar already. */
+      eventId?: string;
       answer?: string;
       /** Its turn ended before an answer: nobody is waiting for one any more. */
       expired?: true;
     }
-  | { kind: "approve"; id: string; tool: string; reason: string; input: string; answer?: string }
+  | {
+      kind: "approve";
+      id: string;
+      tool: string;
+      reason: string;
+      input: string;
+      actions: WaitAction[];
+      answer?: string;
+    }
   | {
       kind: "wait";
       id: string;
@@ -116,12 +126,20 @@ function reduceLive(
           id: e.id,
           question: e.question,
           ...(e.options && { options: e.options }),
+          ...(e.eventId && { eventId: e.eventId }),
         },
       ];
     case "approve":
       return [
         ...items,
-        { kind: "approve", id: e.id, tool: e.tool, reason: e.reason, input: e.input },
+        {
+          kind: "approve",
+          id: e.id,
+          tool: e.tool,
+          reason: e.reason,
+          input: e.input,
+          actions: e.actions,
+        },
       ];
     case "answered":
       return items.map((i) =>

@@ -306,7 +306,7 @@ async function scenarios(
   await until("the resumed takeover turn to finish", () => doneCount() > m);
   const transcript = JSON.stringify(await getSessionMessages(botId, { dir: workspace }));
   check(
-    transcript.includes(`<browser-wait-result id=\\"${tcard!.id}\\">`) &&
+    transcript.includes(`<human-wait-result id=\\"${tcard!.id}\\">`) &&
       transcript.includes("The user skipped the takeover"),
     "the bot received the Skip resume message",
   );

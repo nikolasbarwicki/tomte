@@ -1,3 +1,4 @@
+import type { ToolAllowances } from "@claudebot/contract/api";
 import { BotAvatar } from "@claudebot/contract/avatars";
 import { ChatMode } from "@claudebot/contract/events";
 import { z } from "zod";
@@ -5,7 +6,9 @@ import { z } from "zod";
 import {
   createBot,
   getBot,
+  listAllowances,
   markSeen,
+  removeAllowance,
   setBrowserEnabled,
   setBrowserHeaded,
   setChatMode,
@@ -22,6 +25,7 @@ const NewBot = z.object({
 const BrowserEnabled = BotId.extend({ enabled: z.boolean() });
 const BrowserHeaded = BotId.extend({ headed: z.boolean() });
 const ChatModeChange = BotId.extend({ chatMode: ChatMode });
+const AllowanceRemoval = BotId.extend({ tool: z.string().min(1) });
 
 /** Routes that address a bot by id, or none; they work whether or not a bot is open. */
 export function botRoutes({
@@ -31,6 +35,7 @@ export function botRoutes({
   db,
   chats,
   browser,
+  routines,
   headedBrowser,
   hasActiveTasks,
   botsChanged,
@@ -107,8 +112,21 @@ export function botRoutes({
       setChatMode(dataRoot, bot.id, chatMode);
       // The two modes keep different sessions, so switching starts a new conversation.
       chats.newSession(bot.id);
+      routines.sessionEnded(bot.id);
       browser.cancelTakeover(bot.id, "a new session started");
       chats.announceBots();
+      return json(res, { ok: true });
+    },
+    "/api/bots/allowances": async ({ res, parse }) => {
+      const { botId } = parse(BotId);
+      if (!getBot(dataRoot, botId)) return json(res, { error: "no such bot" }, 404);
+      return json(res, { allowances: listAllowances(db, botId) } satisfies ToolAllowances);
+    },
+    "/api/bots/allowances/remove": async ({ res, parse }) => {
+      const { botId, tool } = parse(AllowanceRemoval);
+      if (!getBot(dataRoot, botId)) return json(res, { error: "no such bot" }, 404);
+      if (!removeAllowance(db, botId, tool))
+        return json(res, { error: "that tool is not always allowed" }, 404);
       return json(res, { ok: true });
     },
     "/api/bots/browser/restart": browserLifecycle,

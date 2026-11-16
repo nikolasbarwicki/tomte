@@ -18,8 +18,9 @@ export const setEffort = (effort: EffortLevel) => act("/api/effort", { effort })
 /** Answers a wait card with one of its action ids. */
 export const answerWait = (id: string, action: string) => act("/api/waits/answer", { id, action });
 
-/** Answers a question or permission prompt: free text, or "allow" / "deny". */
-export const answer = (id: string, value: string) => act("/api/answer", { id, value });
+/** Answers a question or permission prompt: free text, or an action id of the card (`allow`, `allow_always`, `deny`). A note is a line for the bot. */
+export const answer = (id: string, value: string, note?: string) =>
+  act("/api/answer", { id, value, ...(note && { note }) });
 
 /** Drops a needs-you item without acting on it. */
 export const dismissItem = (botId: string, id: string) =>

@@ -108,9 +108,18 @@ export function Scroller({
 }
 
 /** One row of the transcript. `content-visibility: auto` skips rendering rows far off screen in a long transcript. */
-export function ScrollerItem({ className, children }: { className?: string; children: ReactNode }) {
+export function ScrollerItem({
+  id,
+  className,
+  children,
+}: {
+  id?: string;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
     <div
+      id={id}
       className={cn(
         "min-w-0 shrink-0 [contain-intrinsic-size:auto_10rem] [content-visibility:auto]",
         className,

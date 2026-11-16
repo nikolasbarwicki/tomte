@@ -15,12 +15,13 @@ const Send = z.object({
   answer: z.string().optional(),
 });
 const Id = z.object({ id: z.string() });
-const Answer = Id.extend({ value: z.string() });
+/** `note`: a line for the bot with the answer, which a Deny carries as the reason. */
+const Answer = Id.extend({ value: z.string(), note: z.string().trim().max(500).optional() });
 const Model = z.object({ model: BotModel });
 const Effort = z.object({ effort: EffortLevel });
 
 /** Routes that act on the chat the page shows. */
-export function chatRoutes({ dataRoot, chats, browser }: ApiContext): OpenChatRoutes {
+export function chatRoutes({ dataRoot, chats, browser, routines }: ApiContext): OpenChatRoutes {
   return {
     "/api/send": async ({ res, parse }, chat) => {
       const { text, mentions: ids, eventId, answer } = parse(Send);
@@ -44,8 +45,8 @@ export function chatRoutes({ dataRoot, chats, browser }: ApiContext): OpenChatRo
       return json(res, { error: "that message already reached the bot" }, 404);
     },
     "/api/answer": async ({ res, parse }) => {
-      const { id, value } = parse(Answer);
-      if (chats.answer(id, value)) return json(res, { ok: true });
+      const { id, value, note } = parse(Answer);
+      if (chats.answer(id, value, note || undefined)) return json(res, { ok: true });
       return json(res, { error: "no such question" }, 404);
     },
     "/api/model": async ({ res, parse }, chat) => {
@@ -59,6 +60,7 @@ export function chatRoutes({ dataRoot, chats, browser }: ApiContext): OpenChatRo
     "/api/session/new": async ({ res }, chat) => {
       if (!chat.newSession())
         return json(res, { error: "a turn is running; wait for it to finish" }, 409);
+      routines.sessionEnded(chat.bot.id);
       browser.cancelTakeover(chat.bot.id, "a new session started");
       return json(res, { ok: true });
     },

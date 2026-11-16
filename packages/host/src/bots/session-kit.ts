@@ -96,12 +96,17 @@ export class Inbox implements AsyncIterable<SDKUserMessage> {
 const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "NotebookRead"]);
 const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
-/** Claudebot's permission rules for one session: host tools run freely, integration tools follow their setting, and files outside the session's roots and shell commands need the user. */
+/**
+ * Claudebot's permission rules for one session: host tools run freely, integration tools follow their setting, and files outside the
+ * session's roots and shell commands need the user. A tool the owner always allows for the bot (`allows`) skips the question; a
+ * tool switched off in Integrations is denied whatever `allows` says.
+ */
 export function createCanUseTool(o: {
   cwd: string;
   roots: string[];
   integrations?: IntegrationsSource | undefined;
   approveAll?: boolean | undefined;
+  allows?: ((tool: string) => boolean) | undefined;
   delegate: HostDelegate;
 }): CanUseTool {
   const inRoots = (p: unknown): boolean => {
@@ -125,9 +130,11 @@ export function createCanUseTool(o: {
       case "deny":
         return { behavior: "deny", message: "this tool is switched off in Integrations" };
       case "ask":
-        return o.delegate.approve(name, input, "integration tool");
+        return o.allows?.(name)
+          ? { behavior: "allow", updatedInput: input }
+          : o.delegate.approve(name, input, "integration tool");
     }
-    if (o.approveAll) return { behavior: "allow", updatedInput: input };
+    if (o.approveAll || o.allows?.(name)) return { behavior: "allow", updatedInput: input };
     const path = input.file_path ?? input.notebook_path ?? input.path;
     if (READ_TOOLS.has(name) || WRITE_TOOLS.has(name)) {
       if (path === undefined || inRoots(path)) return { behavior: "allow", updatedInput: input };

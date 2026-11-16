@@ -7,7 +7,18 @@ import type {
   RoutinesEvent,
 } from "@claudebot/contract/events";
 
-import { getBot, listBots, botFilesPath, deleteActivity, reveal, trashBot } from "../bots/index.ts";
+import {
+  allowsTool,
+  allowTool,
+  getBot,
+  listBots,
+  botFilesPath,
+  currentSession,
+  deleteActivity,
+  deleteAllowances,
+  reveal,
+  trashBot,
+} from "../bots/index.ts";
 import {
   createBrowser,
   sandboxStatus,
@@ -36,6 +47,7 @@ import { TokenRegistry } from "../platform/tokens.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
 import { createRoutines } from "../routines/index.ts";
 import { serveUi, type UiAssets } from "../ui/index.ts";
+import { createWaits } from "../waits/index.ts";
 import { externalEventsRoute } from "./api/external-events.ts";
 import { hostInfoRoute } from "./api/host-info.ts";
 import { createApi } from "./api/index.ts";
@@ -72,7 +84,7 @@ export interface HostServerOptions {
   takeoverInactivityMs?: number;
   /** The built web UI the client listener serves; every request no route claims answers 404 without it. Ignored when `config.vite` is on. */
   ui?: UiAssets;
-  /** The clock device auth reads for pairing code expiry, in epoch milliseconds; the system clock when omitted. */
+  /** The clock device auth reads for pairing code expiry and human waits read for their 24-hour expiry, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
   /** How long an idle double-loop front stays open; 10 minutes when omitted. */
   frontIdleMs?: number;
@@ -133,6 +145,24 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     onChange: () => broadcast(credentialsEvent()),
   });
   const tokens = new TokenRegistry();
+  const waits = createWaits({
+    db,
+    emit: (botId, e) => chats.emitTo(botId, e),
+    deliver: (botId, text) =>
+      void chats
+        .deliver(botId, text)
+        .catch((e) =>
+          console.error(`[waits] delivery to ${botId} failed: ${(e as Error).message}`),
+        ),
+    claim: (wait, text) => chats.claim(wait, text),
+    alwaysAllow: (botId, tool) => allowTool(db, botId, tool, (o.now ?? Date.now)()),
+    context: (botId) => {
+      const bot = getBot(dataRoot, botId);
+      const run = chats.runOf(botId);
+      return { sessionId: run?.sessionId ?? (bot && currentSession(bot)), runId: run?.runId };
+    },
+    ...(o.now !== undefined && { now: o.now }),
+  });
   const browser = await createBrowser({
     dataRoot,
     secrets,
@@ -143,8 +173,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     agent: agentAt,
     bot: (botId) => getBot(dataRoot, botId),
     filesDir: (botId) => botFilesPath(dataRoot, botId),
-    unattended: (botId) => chats.unattended(botId),
-    emit: (botId, e) => chats.emitTo(botId, e),
+    waits,
     deliver: (botId, text) => void chats.deliver(botId, text),
     sandbox,
     ...(o.browser !== undefined && { runtime: o.browser }),
@@ -209,6 +238,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     // After the trash move the bot no longer exists, so messages the browser cleanup sends it (a cancelled takeover) go nowhere.
     trashBot(dataRoot, botId);
     deleteActivity(db, botId);
+    deleteAllowances(db, botId);
     loop.removeBot(botId);
     await externalEvents.removeBot(botId);
     await chats.drop(botId);
@@ -247,6 +277,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     loop,
     botEnv: (botId) => externalEvents.env(botId),
     approveAll: !o.config.askApproval,
+    allows: (botId, tool) => allowsTool(db, botId, tool),
     handoffs,
     events: externalEvents,
     items: {
@@ -254,7 +285,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       acted: (botId, id, answer) => void externalEvents.answer(botId, id, answer),
     },
     transcript: (bot) => transcripts.transcript(bot),
-    pendingWaits: browser.pendingWaits,
+    waits,
+    routineName: (runId) => routines.nameOfRun(runId),
     routinesEvent: (botId) => routinesEvent(botId),
     workEvent: (botId) => externalEvents.work(botId),
     broadcast,
@@ -263,9 +295,18 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     db,
     dataRoot,
     execute: chats.execute,
+    waits,
+    notice: async (botId, text) => chats.emitTo(botId, { type: "info", text }),
+    deliver: (botId, text) => chats.deliver(botId, text),
     onChange: (botId) => {
       if (botId === chats.currentBotId()) broadcast(routinesEvent(botId));
     },
+  });
+  // A run's waits are told to the run: an answer resumes it, an expiry fails it.
+  waits.subscribe((e) => {
+    if (e.type === "closed") routines.waitClosed(e.wait);
+    // An open wait is a Needs-you item: the sidebar and the banner follow it as it opens and closes.
+    chats.announceBots();
   });
   const integrationsEvent = (): IntegrationsEvent => ({
     type: "integrations",
@@ -282,6 +323,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   });
 
   if (o.config.mode === "remote") void claude.checkSignIn();
+  // Every kind has its handler by now: what a restart left unanswerable is cancelled, and overdue waits expire.
+  waits.start();
   if (initial) await chats.switchTo(initial);
   void transcripts
     .backfillActivity()
@@ -375,6 +418,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       clientListener.pause();
       agentListener.pause();
       chats.close();
+      waits.close();
       await externalEvents.stop();
       routines.stop();
       await browser.close();
