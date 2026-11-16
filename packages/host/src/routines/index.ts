@@ -258,7 +258,7 @@ export function createRoutines(deps: {
         disarm(id);
       }
       if (running.has(id)) return skip(r, t, "previous run still in progress");
-      if (store.waitingRun(db, id)) return skip(r, t, "previous run is waiting for you");
+      if (store.waitingRun(db, id, now())) return skip(r, t, "previous run is waiting for you");
       await run(r, "schedule", t).done;
     } catch (e) {
       console.error(`[routines] fire ${id} failed: ${(e as Error).message}`);
@@ -319,14 +319,21 @@ export function createRoutines(deps: {
   }
 
   /** Makes the run the routine's one run in flight and drives it until it ends or parks. */
-  function begin(r: RoutineRecord, row: RoutineRun, bot: Bot, first: string, resumed: boolean) {
+  function begin(
+    r: RoutineRecord,
+    row: RoutineRun,
+    bot: Bot,
+    first: string,
+    resumed: boolean,
+    usedMs = 0,
+  ) {
     const entry: LiveRun = {
       runId: row.id,
       done: Promise.resolve(),
       expiry: Promise.withResolvers(),
     };
     entry.expiry.promise.catch(() => {});
-    entry.clock = startRunClock(runCapMs, () => expireRun(entry));
+    entry.clock = startRunClock(runCapMs, () => expireRun(entry), usedMs);
     running.set(r.id, entry);
     onChange(r.botId);
     entry.done = drive(entry, r, row, bot, first, resumed);
@@ -372,13 +379,15 @@ export function createRoutines(deps: {
         if (entry.expired) throw new Error(entry.expired);
         const pending = waits.ofRun(row.id);
         if (pending.some((w) => w.state === "open")) {
-          store.parkRun(db, row.id);
+          // The park starts here: the clock stops and the active time used so far is kept for the resume.
+          entry.clock?.pause();
+          store.parkRun(db, row.id, now(), entry.clock?.activeMs() ?? 0);
           return;
         }
         if (pending.some((w) => w.state === "expired")) return expire(row.id);
         if (pending.length === 0) {
           if (store.finishRun(db, row.id, "succeeded", { output: text, finishedAt: now() }))
-            ended(store.getRun(db, row.id)!);
+            ended(store.getRun(db, row.id, now())!);
           return;
         }
         message = waits.resultText(pending);
@@ -401,7 +410,7 @@ export function createRoutines(deps: {
     if (!store.finishRun(db, runId, "failed", { error, finishedAt: now() })) return false;
     pauseAfterFailures(runId);
     waits.cancelRun(runId, error);
-    ended(store.getRun(db, runId)!, expired);
+    ended(store.getRun(db, runId, now())!, expired);
     return true;
   }
 
@@ -421,7 +430,7 @@ export function createRoutines(deps: {
 
   /** A failed run that completes a streak of failures pauses its routine and tells the owner, who need not have the bot open. */
   function pauseAfterFailures(runId: string) {
-    const row = store.getRun(db, runId);
+    const row = store.getRun(db, runId, now());
     const r = row && store.getRoutine(db, row.routineId);
     if (!r?.active || !getBot(dataRoot, r.botId)) return;
     const last = store.lastOutcomes(db, r.id, FAILURES_TO_PAUSE);
@@ -438,7 +447,7 @@ export function createRoutines(deps: {
 
   /** A parked run's answers are all in: runs its session on with them. The single place a run leaves `waiting` for `running`. */
   async function resume(runId: string, message: string): Promise<void> {
-    const row = store.getRun(db, runId);
+    const row = store.getRun(db, runId, now());
     if (row?.status !== "waiting") throw new Conflict("run is not waiting");
     const r = require(row.routineId);
     const bot = getBot(dataRoot, r.botId);
@@ -447,14 +456,15 @@ export function createRoutines(deps: {
       onChange(r.botId);
       return Promise.resolve();
     }
-    store.unparkRun(db, runId);
-    return begin(r, { ...row, status: "running" }, bot, message, true);
+    // The park ends here: its time joins the run's parked time and the clock goes on from the active time used before it.
+    const usedMs = store.unparkRun(db, runId, now()) ?? 0;
+    return begin(r, { ...row, status: "running" }, bot, message, true, usedMs);
   }
 
   /** A wait of a run closed. A parked run whose last request was answered resumes with every answer of the park in one message. */
   function waitClosed(w: Wait) {
     if (w.runId === null) return;
-    const row = store.getRun(db, w.runId);
+    const row = store.getRun(db, w.runId, now());
     // A run still in its turn collects the answer when the turn ends; an ended or deleted run has nobody to tell.
     if (row?.status !== "waiting") return;
     if (w.state === "expired") return expire(row.id);
@@ -474,7 +484,7 @@ export function createRoutines(deps: {
    * shows the failure. The single place a run leaves `waiting` for `failed` by time.
    */
   function expire(runId: string) {
-    const row = store.getRun(db, runId);
+    const row = store.getRun(db, runId, now());
     const lapsed = waits.ofRun(runId).filter((w) => w.state === "expired");
     if (!row || !lapsed.length || !endRun(runId, "approval expired", lapsed.map(waitTitle))) return;
     const r = store.getRoutine(db, row.routineId);
@@ -526,7 +536,7 @@ export function createRoutines(deps: {
     return {
       ...rest,
       nextRunAt: r.active && pending ? nextOccurrence(s, now()) : null,
-      lastRun: store.waitingRun(db, r.id) ?? store.lastRun(db, r.id),
+      lastRun: store.waitingRun(db, r.id, now()) ?? store.lastRun(db, r.id, now()),
       running: running.has(r.id),
     };
   }
@@ -570,7 +580,7 @@ export function createRoutines(deps: {
 
     /** The name of the routine a run belongs to; undefined when the run or its routine is gone. */
     nameOfRun(runId: string): string | undefined {
-      const run = store.getRun(db, runId);
+      const run = store.getRun(db, runId, now());
       return run && store.getRoutine(db, run.routineId)?.name;
     },
 
@@ -639,7 +649,7 @@ export function createRoutines(deps: {
     testRun(id: string): RoutineRun {
       const r = require(id);
       if (running.has(id)) throw new Conflict("routine is already running");
-      if (store.waitingRun(db, id)) throw new Conflict("routine is waiting for you");
+      if (store.waitingRun(db, id, now())) throw new Conflict("routine is waiting for you");
       return run(r, "manual", null).row;
     },
 
@@ -658,13 +668,13 @@ export function createRoutines(deps: {
 
     /** The bot's session ended (a new session): its parked runs fail with "session ended while waiting for you" and their waits are cancelled. */
     sessionEnded(botId: string) {
-      for (const run of store.waitingRunsOfBot(db, botId))
+      for (const run of store.waitingRunsOfBot(db, botId, now()))
         if (endRun(run.id, "session ended while waiting for you")) onChange(botId);
     },
 
     runs(id: string, before = Number.MAX_SAFE_INTEGER, limit = 20): RoutineRun[] {
       require(id);
-      return store.listRuns(db, id, before, Math.min(Math.max(limit, 1), 100));
+      return store.listRuns(db, id, before, Math.min(Math.max(limit, 1), 100), now());
     },
 
     /** The next three times a schedule would fire, for the editor's preview. */

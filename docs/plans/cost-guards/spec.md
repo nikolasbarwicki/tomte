@@ -65,7 +65,7 @@ There is no dollar budget in Stage 1. On a Claude plan `total_cost_usd` is an es
 
 - `createRoutines` takes `runCapMs` (default 30 minutes; tests pass a small one). A run clock starts with the run, counts active time only, and can be paused and resumed. At the cap it calls the run's `stop` with the reason, and the run ends `failed` with "run exceeded the 30 minute time limit". The thread's own error after `stop` ("Claude Code exited…") is not the message the run records: the run remembers that it expired.
 - A run that finishes first clears the clock. A run stopped by `remove()` or shutdown keeps its existing handling.
-- Parked time stops the clock. Ticket 04 connects the clock to spec 10's park and resume.
+- Parked time stops the clock. Entering `waiting` pauses it and stores the park's start and the active time used (`parked_at`, `active_ms`, one more append-only schema step); the resume's clock starts with the cap's remainder, so a restart does not give the run a fresh cap.
 - The cap applies to every run, scheduled or manual.
 
 ### Auto-pause after failures

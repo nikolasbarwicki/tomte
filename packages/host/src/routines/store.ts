@@ -57,6 +57,7 @@ type RunRow = {
   cache_creation_tokens: number | null;
   total_cost_usd: number | null;
   parked_ms: number;
+  parked_at: number | null;
 };
 
 const toRoutine = (r: RoutineRow): RoutineRecord => ({
@@ -74,7 +75,8 @@ const toRoutine = (r: RoutineRow): RoutineRecord => ({
   updatedAt: r.updated_at,
 });
 
-const toRun = (r: RunRow): RoutineRun => ({
+/** `now` ends the park of a run that is waiting: its `parkedMs` counts the time parked so far. */
+const toRun = (r: RunRow, now: number): RoutineRun => ({
   id: r.id,
   routineId: r.routine_id,
   trigger: r.trigger,
@@ -95,7 +97,7 @@ const toRun = (r: RunRow): RoutineRun => ({
           cacheCreationTokens: r.cache_creation_tokens ?? 0,
         },
   costUsd: r.total_cost_usd,
-  parkedMs: r.parked_ms,
+  parkedMs: r.parked_ms + (r.parked_at === null ? 0 : Math.max(now - r.parked_at, 0)),
 });
 
 export function getRoutine(db: Database, id: string): RoutineRecord | undefined {
@@ -215,9 +217,18 @@ export function finishRun(
   return (
     db
       .query(
-        "UPDATE routine_runs SET status = ?, output = ?, error = ?, finished_at = ? WHERE id = ? AND status IN ('running', 'waiting')",
+        `UPDATE routine_runs SET status = ?, output = ?, error = ?, finished_at = ?,
+           parked_ms = parked_ms + COALESCE(MAX(? - parked_at, 0), 0), parked_at = NULL
+         WHERE id = ? AND status IN ('running', 'waiting')`,
       )
-      .run(status, fields.output ?? null, fields.error ?? null, fields.finishedAt, id).changes > 0
+      .run(
+        status,
+        fields.output ?? null,
+        fields.error ?? null,
+        fields.finishedAt,
+        fields.finishedAt,
+        id,
+      ).changes > 0
   );
 }
 
@@ -234,48 +245,56 @@ export function addRunUsage(db: Database, id: string, u: TurnUsage) {
   ).run(u.inputTokens, u.outputTokens, u.cacheReadTokens, u.cacheCreationTokens, u.costUsd, id);
 }
 
-export function getRun(db: Database, id: string): RoutineRun | undefined {
+export function getRun(db: Database, id: string, now: number): RoutineRun | undefined {
   const r = db.query<RunRow, [string]>("SELECT * FROM routine_runs WHERE id = ?").get(id);
-  return r ? toRun(r) : undefined;
+  return r ? toRun(r, now) : undefined;
 }
 
-/** A running run whose turn ended on a request to the owner becomes `waiting`; false when it was not running. */
-export function parkRun(db: Database, id: string): boolean {
+/**
+ * A running run whose turn ended on a request to the owner becomes `waiting`; false when it was not running. The park starts at
+ * `at`; `activeMs` is the time the run has worked so far, which its clock goes on from when it resumes, also after a restart.
+ */
+export function parkRun(db: Database, id: string, at: number, activeMs: number): boolean {
   return (
     db
-      .query("UPDATE routine_runs SET status = 'waiting' WHERE id = ? AND status = 'running'")
-      .run(id).changes > 0
+      .query(
+        "UPDATE routine_runs SET status = 'waiting', parked_at = ?, active_ms = ? WHERE id = ? AND status = 'running'",
+      )
+      .run(at, activeMs, id).changes > 0
   );
 }
 
-/** A waiting run runs again; false when it was not waiting. */
-export function unparkRun(db: Database, id: string): boolean {
+/** A waiting run runs again and the park up to `at` joins its parked time; returns the active time it used before the park, or null when it was not waiting. */
+export function unparkRun(db: Database, id: string, at: number): number | null {
   return (
     db
-      .query("UPDATE routine_runs SET status = 'running' WHERE id = ? AND status = 'waiting'")
-      .run(id).changes > 0
+      .query<{ active_ms: number }, [number, string]>(
+        `UPDATE routine_runs SET status = 'running', parked_ms = parked_ms + COALESCE(MAX(? - parked_at, 0), 0), parked_at = NULL
+         WHERE id = ? AND status = 'waiting' RETURNING active_ms`,
+      )
+      .get(at, id)?.active_ms ?? null
   );
 }
 
 /** The routine's run that waits for its owner, if any; a routine has at most one run in flight. */
-export function waitingRun(db: Database, routineId: string): RoutineRun | null {
+export function waitingRun(db: Database, routineId: string, now: number): RoutineRun | null {
   const r = db
     .query<RunRow, [string]>(
       "SELECT * FROM routine_runs WHERE routine_id = ? AND status = 'waiting' ORDER BY started_at DESC, rowid DESC LIMIT 1",
     )
     .get(routineId);
-  return r ? toRun(r) : null;
+  return r ? toRun(r, now) : null;
 }
 
 /** Every run of the bot's routines that waits for its owner. */
-export function waitingRunsOfBot(db: Database, botId: string): RoutineRun[] {
+export function waitingRunsOfBot(db: Database, botId: string, now: number): RoutineRun[] {
   return db
     .query<RunRow, [string]>(
       `SELECT routine_runs.* FROM routine_runs JOIN routines ON routines.id = routine_runs.routine_id
        WHERE routines.bot_id = ? AND routine_runs.status = 'waiting' ORDER BY routine_runs.started_at, routine_runs.rowid`,
     )
     .all(botId)
-    .map(toRun);
+    .map((r) => toRun(r, now));
 }
 
 /** Ids of the routine's runs that have not ended: running or waiting. */
@@ -288,13 +307,13 @@ export function unfinishedRunIds(db: Database, routineId: string): string[] {
     .map((r) => r.id);
 }
 
-export function lastRun(db: Database, routineId: string): RoutineRun | null {
+export function lastRun(db: Database, routineId: string, now: number): RoutineRun | null {
   const r = db
     .query<RunRow, [string]>(
       "SELECT * FROM routine_runs WHERE routine_id = ? ORDER BY started_at DESC, rowid DESC LIMIT 1",
     )
     .get(routineId);
-  return r ? toRun(r) : null;
+  return r ? toRun(r, now) : null;
 }
 
 /** The outcome of the routine's last `limit` runs that succeeded or failed, newest first; a skipped, interrupted or waiting run is not one. */
@@ -310,19 +329,20 @@ export function lastOutcomes(
     .all(routineId, limit);
 }
 
-/** Newest first; `before` pages by `started_at`. */
+/** Newest first; `before` pages by `started_at`. A waiting run's `parkedMs` counts up to `now`. */
 export function listRuns(
   db: Database,
   routineId: string,
   before: number,
   limit: number,
+  now: number,
 ): RoutineRun[] {
   return db
     .query<RunRow, [string, number, number]>(
       "SELECT * FROM routine_runs WHERE routine_id = ? AND started_at < ? ORDER BY started_at DESC, rowid DESC LIMIT ?",
     )
     .all(routineId, before, limit)
-    .map(toRun);
+    .map((r) => toRun(r, now));
 }
 
 /** Marks runs left `running` by a previous process as interrupted, and returns them as they now stand; `live` lists run ids this process still owns. A `waiting` run has no process and is left alone. */

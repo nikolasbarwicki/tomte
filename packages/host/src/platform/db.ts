@@ -443,6 +443,18 @@ CREATE TABLE IF NOT EXISTS session_usage_marks (
       db.run(`ALTER TABLE routine_runs ADD COLUMN ${name} ${type}`);
 };
 
+// Parked time: when a waiting run's park began and how long it had worked before it, so the park survives a restart and the run's
+// clock goes on from its active time. Columns are added only when missing, as in V23.
+const SCHEMA_V24 = (db: Database) => {
+  const have = db.query<{ name: string }, []>("PRAGMA table_info(routine_runs)").all();
+  for (const [name, type] of [
+    ["parked_at", "INTEGER"],
+    ["active_ms", "INTEGER NOT NULL DEFAULT 0"],
+  ] as const)
+    if (have.length > 0 && !have.some((c) => c.name === name))
+      db.run(`ALTER TABLE routine_runs ADD COLUMN ${name} ${type}`);
+};
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -472,6 +484,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V21,
     SCHEMA_V22,
     SCHEMA_V23,
+    SCHEMA_V24,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

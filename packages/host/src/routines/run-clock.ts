@@ -6,12 +6,15 @@
 export type RunClock = {
   pause(): void;
   resume(): void;
+  /** Unpaused time counted so far, `usedMs` it started with included. */
+  activeMs(): number;
   /** Ends the clock for good: it never fires afterwards. */
   clear(): void;
 };
 
-export function startRunClock(capMs: number, onExpire: () => void): RunClock {
-  let left = capMs;
+/** `usedMs` is the active time a run already used before this clock (a run that parked and resumed): the cap's remainder is left. */
+export function startRunClock(capMs: number, onExpire: () => void, usedMs = 0): RunClock {
+  let left = Math.max(capMs - usedMs, 0);
   let timer: ReturnType<typeof setTimeout> | undefined;
   let armedAt = 0;
   let done = false;
@@ -41,6 +44,11 @@ export function startRunClock(capMs: number, onExpire: () => void): RunClock {
     resume() {
       if (done || timer !== undefined) return;
       arm();
+    },
+    activeMs() {
+      const remaining =
+        timer === undefined ? left : Math.max(0, left - (performance.now() - armedAt));
+      return capMs - remaining;
     },
     clear() {
       done = true;
