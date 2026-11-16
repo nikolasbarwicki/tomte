@@ -86,7 +86,7 @@ export interface Channels {
 
 export interface ChannelsDeps {
   db: Database;
-  /** Called once for every update from a linked account, whatever it says, so feature 13's absence pause counts presence. */
+  /** Called once for every update from a linked account, whatever it says: the owner's presence for the absence pause. */
   onActivity: () => void;
   /** The URL users reach the host at: a notice links to the web UI under it. */
   publicUrl: string;

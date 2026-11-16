@@ -47,9 +47,20 @@ test("a kind the web UI has no actions for still gets a Dismiss button, and noth
       heading: "auth-sso · Which database?",
       buttons: [{ label: "Dismiss", arg: "d" }],
       reply: false,
-      panel: "work",
+      panel: "settings",
+      section: "routines",
     },
   ]);
+});
+
+test("a notice takes no reply, and a question's card still opens the work panel", async () => {
+  const { cards, sent } = source([item({ kind: notice }), item({ id: "e2" })]);
+  expect(await cards.reply("e1", "yes")).toEqual({
+    outcome: "refused",
+    reason: "A notice takes no reply. Use Dismiss.",
+  });
+  expect(sent).toEqual([]);
+  expect(cards.open()[1]).toMatchObject({ panel: "work" });
 });
 
 test("a press of a button no action has, and of an item that is gone or closed, is refused and sends nothing", async () => {

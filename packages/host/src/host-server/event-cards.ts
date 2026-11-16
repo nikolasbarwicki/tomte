@@ -32,7 +32,8 @@ function cardOf(item: EventItem): CardItem {
       { label: "Dismiss", arg: "d" },
     ],
     reply: actions.some((a) => "draft" in a),
-    panel: "work",
+    // A notice reports a paused routine, so its link opens the routines page of the bot's settings; any other item opens the work panel.
+    ...(item.kind === "notice" ? { panel: "settings", section: "routines" } : { panel: "work" }),
   };
 }
 
@@ -68,7 +69,15 @@ export function createEventCards(d: {
       if (!item) return undefined;
       return item.state === "open"
         ? { open: true, item: cardOf(item) }
-        : { open: false, heading: headingOf(item), outcome: OUTCOMES[item.state] };
+        : {
+            open: false,
+            heading: headingOf(item),
+            // What resolves a notice is the host's own doing, not a source's.
+            outcome:
+              item.kind === "notice" && item.state === "resolved"
+                ? "Resolved"
+                : OUTCOMES[item.state],
+          };
     },
     async press(id, arg) {
       const item = openItem(id);
@@ -87,6 +96,9 @@ export function createEventCards(d: {
     async reply(id, text) {
       const item = openItem(id);
       if ("outcome" in item) return item;
+      // A notice is about the host, not for the bot: words in answer to it would otherwise reach the session as a user message.
+      if (item.kind === "notice")
+        return { outcome: "refused", reason: "A notice takes no reply. Use Dismiss." };
       // The web UI's draft starts with the item's heading and a colon; what follows is the answer.
       return say(item, `${headingOf(item)}: ${text}`, text);
     },

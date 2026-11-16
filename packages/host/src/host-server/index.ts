@@ -248,8 +248,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     onChange: (botId, changed) => {
       chats.updateExternal(botId, changed);
       if (botId === chats.currentBotId()) broadcast(externalEvents.work(botId));
-      // An item that left `open` has its card edited.
-      if (changed.length > 0) void cards.sync();
+      // An item that left `open` has its card edited; a notice leaves no transcript row, so this does not depend on `changed`.
+      void cards.sync();
     },
     onNeedsYou: () => chats.announceBots(),
     onOpened: () => void cards.sync(),
@@ -350,8 +350,14 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   // Before the routines, adapters included: a run that ends while the host starts (a park that expired during downtime) is reported through it.
   const channels = createChannels({
     db,
-    // Feature 13's absence pause counts it; until it exists, presence is not tracked.
-    onActivity: () => {},
+    // Any update from the linked account (a message, a button, free text no card takes) is the owner being here. A failed write never fails the update.
+    onActivity: () => {
+      try {
+        presence.touch();
+      } catch (e) {
+        console.error(`[presence] recording the owner's action failed: ${(e as Error).message}`);
+      }
+    },
     publicUrl: clientAt.publicUrl,
     ...(o.now !== undefined && { now: o.now }),
     ...(o.notices?.retryMs !== undefined && { noticeRetryMs: o.notices.retryMs }),

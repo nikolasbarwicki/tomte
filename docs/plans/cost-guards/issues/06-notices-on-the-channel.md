@@ -6,12 +6,19 @@ Notices are open needs-you items (ticket 03), so the channel's delivery of open 
 
 **Blocked by:** [03](03-auto-pause-after-failures.md), [05](05-absence-pause.md), [spec 11 ticket 01](../../telegram-channel/issues/01-channel-interface-and-link.md)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A `notice` item (auto-pause, absence warning, absence pause) is delivered to a linked channel through the same path as other open needs-you items. It shows its title and body and a link to the web UI, and offers Dismiss only. Dismissing it on the channel closes it through the answer path, and it closes in the web UI too
-- [ ] A notice closed as `resolved` (a routine resumed, the owner returned) is closed on the channel too, in whatever way the interface closes any item that left `open`
-- [ ] A message or button press from the linked owner account calls presence's `touch`. An update from an account that is not linked does not (the channel already ignores it). Free text with no open card is still a presence touch: the owner is there
-- [ ] The gate check passes with a fake channel adapter at the host seam: a routine that always fails pauses itself after 5 runs and the adapter receives the notice; with `--pause-after-absence-days` set, the adapter receives the warning and then the pause notice; a message from the linked account resumes the absence-paused routines; a message from another account does not
-- [ ] The channel interface needs no new method for notices. If it does, say so under `## Comments` before changing it
-- [ ] Where the channel's documentation lists what it sends, auto-pause and absence notices are named
-- [ ] Tests at the host HTTP seam with the fake adapter as above. `bun run check` passes
+- [x] A `notice` item (auto-pause, absence warning, absence pause) is delivered to a linked channel through the same path as other open needs-you items. It shows its title and body and a link to the web UI, and offers Dismiss only. Dismissing it on the channel closes it through the answer path, and it closes in the web UI too
+- [x] A notice closed as `resolved` (a routine resumed, the owner returned) is closed on the channel too, in whatever way the interface closes any item that left `open`
+- [x] A message or button press from the linked owner account calls presence's `touch`. An update from an account that is not linked does not (the channel already ignores it). Free text with no open card is still a presence touch: the owner is there
+- [x] The gate check passes with a fake channel adapter at the host seam: a routine that always fails pauses itself after 5 runs and the adapter receives the notice; with `--pause-after-absence-days` set, the adapter receives the warning and then the pause notice; a message from the linked account resumes the absence-paused routines; a message from another account does not
+- [x] The channel interface needs no new method for notices. If it does, say so under `## Comments` before changing it
+- [x] Where the channel's documentation lists what it sends, auto-pause and absence notices are named
+- [x] Tests at the host HTTP seam with the fake adapter as above. `bun run check` passes
+
+## Comments
+
+- The channel interface needed no new method. Two gaps were in the host, not the interface: `Events` raised a notice with `onChange(botId, [])` (a notice leaves no transcript row), and the composition root synced cards only when `changed` was not empty, so a notice never got a card and a dismissed or resolved one never had its card edited. The root now syncs on every `Events` change (sync is serialized and idempotent).
+- A reply to a notice card used to reach the bot: the event source answered it through `Chats.send` with the item's id. `createEventCards` now refuses a reply for kind `notice`.
+- The card's link for a notice opens `?panel=settings&section=routines` (the conservative choice after the navigation revamp: that page shows why a routine paused and holds the switch), not `work`.
+- Not covered by a host test: free text from the linked account with no open card at all while an absence is running. The notice that an absence raises is itself an open card, so the test sends words with that one card open; the "touch on every update, whatever it says" rule is covered by `channels.test.ts`.

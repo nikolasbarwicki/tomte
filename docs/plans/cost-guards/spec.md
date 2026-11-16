@@ -94,7 +94,7 @@ There is no dollar budget in Stage 1. On a Claude plan `total_cost_usd` is an es
 
 ### Delivery to a channel
 
-Notices are needs-you items, so ADR-0010's channel delivers them. Ticket 06 proves it against the channel interface from spec 11, ticket 01, and wires channel actions to presence. Until that ticket lands, notices show in the web UI and the desktop banner only.
+Notices are needs-you items, so ADR-0010's channel delivers them. Ticket 06 proves it against the channel interface from spec 11, ticket 01, and wires channel actions to presence: a notice goes out as a card with its title and body, Dismiss only and a link to the bot's routines settings, and any update from the linked account is a presence touch.
 
 ## Testing Decisions
 
