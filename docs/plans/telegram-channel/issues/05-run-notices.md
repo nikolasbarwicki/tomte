@@ -5,11 +5,11 @@
 Two seams:
 
 - **`Channels.notify(notice)`** sends one plain-text message to the linked account. Notice kinds (a Zod union in the host, not the contract): `run_failed` (bot, routine name, error) and `park_expired` (bot, routine name, title of the wait that expired). `routine_result` is added by ticket 06. A failed send is retried while the adapter's backoff allows and then logged; the run row stays the record, so a lost notice never hides a failure from the web UI.
-- **`onRunEnded` in `createRoutines`** (`routines/index.ts`): called once when a run row reaches a terminal status. Today that is in `run()` after `store.finishRun` (`succeeded` or `failed`) and in `reconcile()` through `store.interruptStaleRuns`, which does not return the rows it changed (`routines/store.ts`); make it return them so a host restart that kills a run is reported. With feature 10, a parked run reaches its terminal status after it resumes, and an expired park ends it as `failed` ("approval expired"); the expiry path from `.scratch/10-unattended-parking/issues/02-parked-runs.md` must be told apart from other failures without matching the error text, so the callback carries the cause.
+- **`onRunEnded` in `createRoutines`** (`routines/index.ts`): called once when a run row reaches a terminal status. Today that is in `run()` after `store.finishRun` (`succeeded` or `failed`) and in `reconcile()` through `store.interruptStaleRuns`, which does not return the rows it changed (`routines/store.ts`); make it return them so a host restart that kills a run is reported. With feature 10, a parked run reaches its terminal status after it resumes, and an expired park ends it as `failed` ("approval expired"); the expiry path from `docs/plans/unattended-parking/issues/02-parked-runs.md` must be told apart from other failures without matching the error text, so the callback carries the cause.
 
 An auto-pause or an absence pause is not a notice in this sense. Feature 13 makes it a needs-you item of kind `notice` (`.scratch/13-cost-guards/issues/03-auto-pause-after-failures.md`), which the cards of ticket 03 deliver, so this ticket sends nothing for it.
 
-**Blocked by:** 03, `.scratch/10-unattended-parking/issues/02-parked-runs.md`
+**Blocked by:** 03, `docs/plans/unattended-parking/issues/02-parked-runs.md`
 
 **Status:** ready-for-agent
 

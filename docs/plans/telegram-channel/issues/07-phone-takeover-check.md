@@ -1,6 +1,6 @@
 # 07: Check a takeover from my phone
 
-**What to build:** Nothing to build. This is a manual check that a takeover card's link opens the live view in my phone's browser over Tailscale and that touch and typing work there. It answers the open question in Decision 6 and [ADR-0010](../../../docs/adr/0010-channels-deliver-needs-you-items.md): "If touch input does not work there, the takeover waits for the laptop within the 24-hour park, and a mobile live view becomes its own task."
+**What to build:** Nothing to build. This is a manual check that a takeover card's link opens the live view in my phone's browser over Tailscale and that touch and typing work there. It answers the open question in Decision 6 and [ADR-0010](../../../adr/0010-channels-deliver-needs-you-items.md): "If touch input does not work there, the takeover waits for the laptop within the 24-hour park, and a mobile live view becomes its own task."
 
 What the code does today, so I know where to look when something fails:
 
@@ -8,7 +8,7 @@ What the code does today, so I know where to look when something fails:
 - Keyboard input is taken from key events on a focusable element (`tabIndex`, `onKeyDown`), not from a text input, so a phone's soft keyboard may never open. [INFERENCE: not tried on a phone.]
 - A takeover that a bot requested gives me control at once (`Takeover.request` in `browser/takeover.ts`); the card has "I'm done" and "Skip". An unattended run refuses takeover today (`UNATTENDED_MESSAGE`, `browser/tools/takeover.ts:21`); feature 10 lifts that for a routine run by parking it.
 
-**Blocked by:** 04, `.scratch/10-unattended-parking/issues/02-parked-runs.md` (and feature 10's ticket that parks a takeover, which had no number when this was written)
+**Blocked by:** 04, `docs/plans/unattended-parking/issues/02-parked-runs.md` and `docs/plans/unattended-parking/issues/04-takeover-parks.md`
 
 **Status:** ready-for-human
 
@@ -28,5 +28,5 @@ The check:
 
 If touch or typing does not work:
 
-- [ ] Write a new ticket, `.scratch/11-telegram-channel/issues/NN-mobile-live-view.md` (`Status: needs-triage`), naming exactly what failed (no soft keyboard, wrong tap position, no scroll, a layout that does not fit) and pointing at `browser-panel.tsx`. It is not part of the cancel gate
+- [ ] Write a new ticket, `docs/plans/telegram-channel/issues/NN-mobile-live-view.md` (`Status: needs-triage`), naming exactly what failed (no soft keyboard, wrong tap position, no scroll, a layout that does not fit) and pointing at `browser-panel.tsx`. It is not part of the cancel gate
 - [ ] Check the fallback instead: leave the card unanswered, open the laptop's desktop app (remote profile), take over from there within the park, press "I'm done", and see the run finish. Record it. A takeover that waits for the laptop is within the plan

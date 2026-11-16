@@ -2,13 +2,13 @@
 
 Status: ready-for-agent
 
-Gate step 3 of `docs/plans/grok-bot-replacement-roadmap.md` ("The cancel gate") and its Decision 6 ("Reaching me on my phone"). Decisions are in [ADR-0010](../../docs/adr/0010-channels-deliver-needs-you-items.md); it builds on [ADR-0008](../../docs/adr/0008-answer-relay-hook.md) and `docs/plans/answer-path-and-relay.md`, and needs [ADR-0009](../../docs/adr/0009-unattended-runs-park-on-durable-human-waits.md).
+Gate step 3 of `docs/plans/grok-bot-replacement-roadmap.md` ("The cancel gate") and its Decision 6 ("Reaching me on my phone"). Decisions are in [ADR-0010](../../adr/0010-channels-deliver-needs-you-items.md); it builds on [ADR-0008](../../adr/0008-answer-relay-hook.md) and `docs/plans/answer-path-and-relay.md`, and needs [ADR-0009](../../adr/0009-unattended-runs-park-on-durable-human-waits.md).
 
-Depends on `.scratch/10-unattended-parking/` for human waits (tickets 04 and later here need `issues/01-durable-human-waits.md` and `issues/02-parked-runs.md`). Tickets 01 to 03 depend on nothing open. Related roadmap item: 5 (one chat channel; the remote access and service wrapper parts are done by the VPS install, which gate step 2 covers, so no ticket here). Voice notes are out of scope. Feature 13 (cost guards) builds on it: see "Further Notes".
+Depends on `docs/plans/unattended-parking/` (done, on master) for human waits (tickets 04 and later here need `issues/01-durable-human-waits.md` and `issues/02-parked-runs.md`). Tickets 01 to 03 depend on nothing open. Related roadmap item: 5 (one chat channel; the remote access and service wrapper parts are done by the VPS install, which gate step 2 covers, so no ticket here). Voice notes are out of scope. Feature 13 (cost guards) builds on it: see "Further Notes".
 
 ## Problem Statement
 
-My routines run at night, on the VPS, with the laptop closed. A parked run waits for me ([ADR-0009](../../docs/adr/0009-unattended-runs-park-on-durable-human-waits.md)): an email the Outreach researcher wants to send, a login that expired, a question. Nothing reaches my phone today. The only places that show a wait are the web UI and the desktop banner, and both need me at a screen. A park expires after 24 hours, so a wait I never see ends the run for nothing. When a routine fails, pauses itself or finishes, I learn it only when I open the Routines panel.
+My routines run at night, on the VPS, with the laptop closed. A parked run waits for me ([ADR-0009](../../adr/0009-unattended-runs-park-on-durable-human-waits.md)): an email the Outreach researcher wants to send, a login that expired, a question. Nothing reaches my phone today. The only places that show a wait are the web UI and the desktop banner, and both need me at a screen. A park expires after 24 hours, so a wait I never see ends the run for nothing. When a routine fails, pauses itself or finishes, I learn it only when I open the Routines panel.
 
 I want the VPS to tell me on my phone, let me answer there with one tap, and stay quiet about everything else. I cannot cancel Grok Bot until this works.
 
