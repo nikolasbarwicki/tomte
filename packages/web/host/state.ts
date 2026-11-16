@@ -15,6 +15,9 @@ import type {
 
 import { reduce, type Item } from "./transcript.ts";
 
+/** What the host last reported about one window of the subscription's rate limit. */
+export type RateLimit = Extract<ServerEvent, { type: "rate_limit" }>;
+
 /** `host-info` carries the `/api/info` response and `public-info` the `/api/host-info` response; neither is named `info`, which the contract uses for a chat line. */
 export type HostEvent =
   | StreamEvent
@@ -37,6 +40,8 @@ export type HostState = {
     /** What a double-loop bot's presence line shows; `idle` for every other bot. */
     presence: Presence;
     context: ContextEvent | undefined;
+    /** The subscription's rate limit per window, as the host last reported it; only a double-loop bot is sent any. */
+    rateLimits: Record<string, RateLimit>;
   };
   memory: Record<MemoryScope, string>;
   files: FilesEvent;
@@ -51,7 +56,7 @@ export const initialHostState: HostState = {
   publicInfo: undefined,
   bots: undefined,
   openBotId: undefined,
-  chat: { items: [], busy: false, presence: "idle", context: undefined },
+  chat: { items: [], busy: false, presence: "idle", context: undefined, rateLimits: {} },
   memory: { user: "", bot: "" },
   files: { type: "files", dir: "", files: [] },
   routines: undefined,
@@ -85,12 +90,17 @@ export function applyEvent(s: HostState, e: HostEvent): HostState {
       return {
         ...s,
         openBotId: e.botId,
-        chat: { items: [], busy: false, presence: "idle", context: undefined },
+        chat: { items: [], busy: false, presence: "idle", context: undefined, rateLimits: {} },
       };
     case "context":
       return { ...s, chat: { ...s.chat, context: e } };
     case "presence":
       return { ...s, chat: { ...s.chat, presence: e.state } };
+    case "rate_limit":
+      return {
+        ...s,
+        chat: { ...s.chat, rateLimits: { ...s.chat.rateLimits, [e.window ?? ""]: e } },
+      };
     default:
       return { ...s, chat: applyChatEvent(s.chat, e) };
   }
@@ -98,7 +108,7 @@ export function applyEvent(s: HostState, e: HostEvent): HostState {
 
 function applyChatEvent(
   chat: HostState["chat"],
-  e: Exclude<ServerEvent, { type: "reset" | "context" | "presence" }>,
+  e: Exclude<ServerEvent, { type: "reset" | "context" | "presence" | "rate_limit" }>,
 ): HostState["chat"] {
   const context = e.type === "session" ? undefined : chat.context;
   const busy =
@@ -110,5 +120,5 @@ function applyChatEvent(
       : e.type === "done" || e.type === "error"
         ? false
         : chat.busy;
-  return { items: reduce(chat.items, e), busy, presence: chat.presence, context };
+  return { ...chat, items: reduce(chat.items, e), busy, context };
 }

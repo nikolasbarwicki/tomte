@@ -137,6 +137,51 @@ describe("a double-loop bot's front session", () => {
     await settled(bot);
   });
 
+  test("a rate limit the CLI reports reaches the page and is sent again to a page that connects later, for each window, and a standard bot's page is sent none", async () => {
+    const bot = await doubleLoopBot();
+    host.loopScript({
+      steps: [
+        {
+          emit: {
+            type: "rate_limit_event",
+            rate_limit_info: {
+              status: "allowed_warning",
+              rateLimitType: "five_hour",
+              utilization: 0.7,
+              resetsAt: 1_800_000_000,
+            },
+          },
+        },
+        {
+          emit: {
+            type: "rate_limit_event",
+            rate_limit_info: { status: "allowed", rateLimitType: "seven_day", utilization: 0.2 },
+          },
+        },
+        {
+          emit: {
+            type: "rate_limit_event",
+            rate_limit_info: { status: "rejected", rateLimitType: "five_hour", utilization: 1 },
+          },
+        },
+      ],
+    });
+    await send("hello");
+    await host.until(() => host.messagesOf(bot).length === 1);
+    await settled(bot);
+
+    // A page connecting now gets the latest report of each window, after the presence, and none of it is in the transcript history.
+    const limits = (await pageEvents()).filter((e) => e.type === "rate_limit");
+    expect(limits).toEqual([
+      { type: "rate_limit", status: "rejected", window: "five_hour", utilization: 1 },
+      { type: "rate_limit", status: "allowed", window: "seven_day", utilization: 0.2 },
+    ]);
+
+    const other = host.createBot("Plain");
+    expect((await host.ui("/api/open", { id: other, botId: other })).status).toBe(200);
+    expect((await pageEvents()).some((e) => e.type === "rate_limit")).toBe(false);
+  });
+
   test("an external event is delivered to the front as it comes, while a user message is still running", async () => {
     const bot = await doubleLoopBot();
     host.hold();

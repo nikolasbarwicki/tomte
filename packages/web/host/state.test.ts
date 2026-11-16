@@ -14,7 +14,13 @@ test("reset sets the open bot and clears the chat", () => {
     { type: "reset", botId: "b2" },
   ]);
   expect(s.openBotId).toBe("b2");
-  expect(s.chat).toEqual({ items: [], busy: false, presence: "idle", context: undefined });
+  expect(s.chat).toEqual({
+    items: [],
+    busy: false,
+    presence: "idle",
+    context: undefined,
+    rateLimits: {},
+  });
 });
 
 test("busy turns on for user, update, routine and received handoffs, and off for done and error", () => {
@@ -148,6 +154,22 @@ test("presence follows the host's events, never a turn, and a reset clears it", 
   expect(play([{ type: "presence", state: "working" }], talking).chat.presence).toBe("working");
   expect(play([{ type: "presence", state: "idle" }], talking).chat.presence).toBe("idle");
   expect(play([{ type: "reset", botId: "b2" }], talking).chat.presence).toBe("idle");
+});
+
+test("rate limits are kept per window, the newest report replacing the last, and a reset clears them while a new session keeps them", () => {
+  const s = play([
+    { type: "rate_limit", status: "allowed", window: "five_hour", utilization: 0.4 },
+    { type: "rate_limit", status: "allowed_warning", window: "seven_day", utilization: 0.8 },
+    { type: "rate_limit", status: "allowed_warning", window: "five_hour", utilization: 0.9 },
+  ]);
+  expect(Object.keys(s.chat.rateLimits)).toEqual(["five_hour", "seven_day"]);
+  expect(s.chat.rateLimits.five_hour).toMatchObject({
+    status: "allowed_warning",
+    utilization: 0.9,
+  });
+  expect(s.chat.items).toEqual([]);
+  expect(play([{ type: "session" }], s).chat.rateLimits).toEqual(s.chat.rateLimits);
+  expect(play([{ type: "reset", botId: "b2" }], s).chat.rateLimits).toEqual({});
 });
 
 test("task events build the task rows without touching the turn or the presence, and findings arrive with the task", () => {

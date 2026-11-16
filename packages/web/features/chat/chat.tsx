@@ -19,6 +19,7 @@ import { ChatModeMenu } from "./chat-mode.tsx";
 import { Composer } from "./composer.tsx";
 import { ContextMeter } from "./context-meter.tsx";
 import { NeedsYou } from "./needs-you.tsx";
+import { RateLimitMeter } from "./rate-limit-meter.tsx";
 import { Transcript } from "./transcript.tsx";
 
 const PANEL_KEY = "claudebot:panel";
@@ -32,7 +33,7 @@ export function ChatView({
   bot: BotSummary;
   panel: (controls: { onClose: () => void }) => ReactNode;
 }) {
-  const { items, busy: turnRunning, presence, context } = useChat();
+  const { items, busy: turnRunning, presence, context, rateLimits } = useChat();
   // A double-loop bot never has a turn that blocks the chat: its one presence line says what it is doing.
   const live: Presence =
     bot.chatMode === "double_loop" ? presence : turnRunning ? "working" : "idle";
@@ -91,6 +92,7 @@ export function ChatView({
             <h1 className="truncate text-sm font-medium">{bot.name}</h1>
             {bot.purpose && <p className="text-muted-foreground truncate text-xs">{bot.purpose}</p>}
           </div>
+          {bot.chatMode === "double_loop" && <RateLimitMeter limits={rateLimits} />}
           <ContextMeter context={context} />
           <Tooltip>
             <TooltipTrigger

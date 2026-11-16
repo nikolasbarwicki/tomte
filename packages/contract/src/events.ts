@@ -213,6 +213,20 @@ export const ServerEvent = z.discriminatedUnion("type", [
   }),
   /** The live status line of a running task, from the agent's progress summaries; ephemeral, so it is never in the replayed history. An empty `text` clears the line. */
   z.object({ type: z.literal("task_status"), taskId: z.string(), text: z.string() }),
+  /**
+   * The subscription's rate limit as Claude Code last reported it for one window, shown beside the context meter of a double-loop
+   * bot, whose parallel agents spend the 5-hour and weekly limits faster. `window` is the CLI's `rateLimitType` (`five_hour`,
+   * `seven_day`, ...; a string, so a window a newer CLI adds still parses); `utilization` is the used fraction (0 to 1) and
+   * `resetsAt` when the window resets, in epoch milliseconds. Ephemeral like `presence`: never in the replayed history, and a page
+   * connecting is sent the latest of each window.
+   */
+  z.object({
+    type: z.literal("rate_limit"),
+    status: z.enum(["allowed", "allowed_warning", "rejected"]),
+    window: z.string().exactOptional(),
+    utilization: z.number().exactOptional(),
+    resetsAt: z.number().exactOptional(),
+  }),
   /** A background task's result, posted whole as the bot's own message; it never enters the front session. */
   z.object({ type: z.literal("report"), taskId: z.string(), text: z.string() }),
   ContextEvent,

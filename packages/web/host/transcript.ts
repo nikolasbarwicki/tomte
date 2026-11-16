@@ -211,6 +211,7 @@ function reduceLive(
     case "reset":
     case "context":
     case "presence":
+    case "rate_limit":
       return items;
   }
 }

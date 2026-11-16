@@ -5,6 +5,7 @@ import type {
   HookCallbackMatcher,
   HookEvent,
   SDKMessage,
+  SDKRateLimitInfo,
   SubagentStopHookInput,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { ServerEvent, TaskState } from "@claudebot/contract/events";
@@ -63,6 +64,19 @@ const END_STATUS = {
   failed: "failed",
   stopped: "cancelled",
 } as const satisfies Record<string, TaskState>;
+
+/** The page's `rate_limit` event for what the CLI reported; the CLI gives the reset in epoch seconds, the page takes milliseconds. */
+function rateLimitEvent(info: SDKRateLimitInfo): Extract<ServerEvent, { type: "rate_limit" }> {
+  return {
+    type: "rate_limit",
+    status: info.status,
+    ...(info.rateLimitType !== undefined && { window: info.rateLimitType }),
+    ...(info.utilization !== undefined && { utilization: info.utilization }),
+    ...(info.resetsAt !== undefined && {
+      resetsAt: info.resetsAt < 1e11 ? info.resetsAt * 1000 : info.resetsAt,
+    }),
+  };
+}
 
 /** Text of the last assistant message in a Claude Code transcript (JSONL), or "". */
 export function lastAssistantText(path: string): string {
@@ -324,6 +338,7 @@ export class Observer {
   }
 
   onMessage(m: SDKMessage): void {
+    if (m.type === "rate_limit_event") this.d.emit(rateLimitEvent(m.rate_limit_info));
     if (m.type === "user") this.onToolResults(m);
     if (m.type !== "system") return;
     if (m.subtype === "task_started") this.onTaskStarted(m);

@@ -729,6 +729,40 @@ describe("view", () => {
     expect(observer.running()).toBe(0);
   });
 });
+describe("rate limits", () => {
+  const limit = (info: Record<string, unknown>) =>
+    observer.onMessage({
+      type: "rate_limit_event",
+      rate_limit_info: info,
+    } as unknown as SDKMessage);
+
+  test("a report from the CLI reaches the page with its window, used fraction and reset in milliseconds", () => {
+    limit({
+      status: "allowed_warning",
+      rateLimitType: "five_hour",
+      utilization: 0.82,
+      resetsAt: 1_800_000_000,
+    });
+    expect(emitted).toEqual([
+      {
+        type: "rate_limit",
+        status: "allowed_warning",
+        window: "five_hour",
+        utilization: 0.82,
+        resetsAt: 1_800_000_000_000,
+      },
+    ]);
+  });
+
+  test("a reset the CLI already gave in milliseconds is kept, and a report with only a status carries nothing else", () => {
+    limit({ status: "rejected", rateLimitType: "seven_day", resetsAt: 1_800_000_000_000 });
+    limit({ status: "allowed" });
+    expect(emitted).toEqual([
+      { type: "rate_limit", status: "rejected", window: "seven_day", resetsAt: 1_800_000_000_000 },
+      { type: "rate_limit", status: "allowed" },
+    ]);
+  });
+});
 
 describe("hooks", () => {
   test("a hook that throws is logged and answers nothing, so the agent is not held up", async () => {

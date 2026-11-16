@@ -223,6 +223,9 @@ export function createChats(deps: ChatsDeps): Chats {
     for (const waiter of chat.frontWaiters.splice(0)) waiter(result);
   }
 
+  /** The latest rate limit report of each window. The limits belong to the account, not to a chat, so they outlive a new session and a reload; only a double-loop bot's page is sent them. */
+  const rateLimits = new Map<string, ServerEvent>();
+
   /** Changes what a double-loop chat's presence line shows, and the bot's sidebar status with it. */
   function setPresence(chat: Chat, state: Presence) {
     if (chat.presence === state) return;
@@ -247,6 +250,11 @@ export function createChats(deps: ChatsDeps): Chats {
 
   /** Shows what the loop observed: a task's snapshot and a report join the transcript, a status line is only shown live. */
   function emitLoop(chat: Chat, e: ServerEvent) {
+    if (e.type === "rate_limit") {
+      rateLimits.set(e.window ?? "", e);
+      if (chat === current) broadcast(e);
+      return;
+    }
     if (e.type === "task_status") {
       if (chat === current) broadcast(e);
       return;
@@ -580,6 +588,7 @@ export function createChats(deps: ChatsDeps): Chats {
     if (chat.front) {
       for (const e of chat.front.observer.statusEvents()) broadcast(e);
       broadcast({ type: "presence", state: chat.presence });
+      for (const e of rateLimits.values()) broadcast(e);
     }
     announceBots();
     for (const e of memoryEvents(dataRoot, chat.bot.id)) broadcast(e);
@@ -801,6 +810,7 @@ export function createChats(deps: ChatsDeps): Chats {
               ? [
                   ...current.front.observer.statusEvents(),
                   { type: "presence" as const, state: current.presence },
+                  ...rateLimits.values(),
                 ]
               : []),
           ]
