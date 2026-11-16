@@ -17,6 +17,7 @@
     "smoke:blocked-ui": "bun scripts/smoke-blocked-ui.ts",
     "smoke:answers": "bun scripts/smoke-answers.ts",
     "smoke:ui": "bun scripts/smoke-ui.ts",
+    "eval:loop-routing": "bun scripts/eval-loop-routing.ts",
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun test && bun scripts/check-coverage.ts",
     "depcheck": "depcruise packages",
