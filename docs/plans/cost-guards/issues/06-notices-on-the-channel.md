@@ -1,10 +1,10 @@
 # 06: Notices reach my phone, and channel actions count as presence
 
-**What to build:** Once the channel interface exists, an auto-pause or absence notice arrives on the channel like any needs-you item, and a message or button press from the linked owner counts as presence for the absence pause. This is the last piece of the gate's cost-guard check: a looping routine pauses itself and tells me, on my phone. See the spec section "Delivery to a channel" and [ADR-0010](../../../docs/adr/0010-channels-deliver-needs-you-items.md), which has a channel send every needs-you item, an expired park, a failed run and an auto-pause.
+**What to build:** Once the channel interface exists, an auto-pause or absence notice arrives on the channel like any needs-you item, and a message or button press from the linked owner counts as presence for the absence pause. This is the last piece of the gate's cost-guard check: a looping routine pauses itself and tells me, on my phone. See the spec section "Delivery to a channel" and [ADR-0010](../../../adr/0010-channels-deliver-needs-you-items.md), which has a channel send every needs-you item, an expired park, a failed run and an auto-pause.
 
 Notices are open needs-you items (ticket 03), so the channel's delivery of open items should carry them without a special case. Read spec 11, ticket 01 for the interface: this ticket uses it and does not change it. If the interface delivers only the item kinds it knew when it was written, make it deliver `notice` through the same path, not a second one.
 
-**Blocked by:** [03](03-auto-pause-after-failures.md), [05](05-absence-pause.md), [spec 11 ticket 01](../../11-telegram-channel/issues/01-channel-interface-and-link.md)
+**Blocked by:** [03](03-auto-pause-after-failures.md), [05](05-absence-pause.md), [spec 11 ticket 01](../../telegram-channel/issues/01-channel-interface-and-link.md)
 
 **Status:** ready-for-agent
 

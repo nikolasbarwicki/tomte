@@ -1,10 +1,10 @@
 # 04: Parked time is recorded and does not count against the cap
 
-**What to build:** When a run parks at a human wait, its run clock stops and its parked time is recorded; when the run resumes, the clock goes on. A 03:00 run that waits until 07:00 then keeps its full 30 minutes, and the run history shows how long it waited. See the spec sections "Run usage" and "Time cap", and [ADR-0009](../../../docs/adr/0009-unattended-runs-park-on-durable-human-waits.md).
+**What to build:** When a run parks at a human wait, its run clock stops and its parked time is recorded; when the run resumes, the clock goes on. A 03:00 run that waits until 07:00 then keeps its full 30 minutes, and the run history shows how long it waited. See the spec sections "Run usage" and "Time cap", and [ADR-0009](../../../adr/0009-unattended-runs-park-on-durable-human-waits.md).
 
 Read spec 10, ticket 02 first and hook into the two points it defines: where a run enters `waiting` and where it leaves it (an answer resumes it by a message, or the 24 hour expiry fails it). A parked run's turn has ended, so the executor is not running; the resume turn is a new turn in the same session. Its usage must be added to the same run, not a new row. The `human_waits` row already has the run id, so a resume turn can name its run.
 
-**Blocked by:** [01](01-run-usage.md), [02](02-run-time-cap.md), [spec 10 ticket 02](../../10-unattended-parking/issues/02-parked-runs.md)
+**Blocked by:** [01](01-run-usage.md), [02](02-run-time-cap.md), [spec 10 ticket 02](../../unattended-parking/issues/02-parked-runs.md)
 
 **Status:** ready-for-agent
 

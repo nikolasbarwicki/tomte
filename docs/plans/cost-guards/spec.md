@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 
-Gate step 5 of `docs/plans/grok-bot-replacement-roadmap.md` (section "Cost guards and usage"), and roadmap item 6d in `docs/roadmap.md` (run usage only). Depends on [spec 10, ticket 02](../10-unattended-parking/issues/02-parked-runs.md) for parked time, and on [spec 11, ticket 01](../11-telegram-channel/issues/01-channel-interface-and-link.md) for notices on the phone. Everything else stands alone. The decisions below are settled by the plan; this spec does not reopen them.
+Gate step 5 of `docs/plans/grok-bot-replacement-roadmap.md` (section "Cost guards and usage"), and roadmap item 6d in `docs/roadmap.md` (run usage only). Depends on [spec 10, ticket 02](../unattended-parking/issues/02-parked-runs.md) for parked time, and on [spec 11, ticket 01](../telegram-channel/issues/01-channel-interface-and-link.md) for notices on the phone. Everything else stands alone. The decisions below are settled by the plan; this spec does not reopen them.
 
 ## Problem Statement
 
