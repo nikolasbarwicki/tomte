@@ -354,6 +354,19 @@ export const RoutineRun = z.object({
   error: z.string().nullable(),
   startedAt: z.number(),
   finishedAt: z.number().nullable(),
+  /** What the run used, summed over its turns; null when unknown (the run never reached a result, or its session's earlier cost was unknown). */
+  usage: z
+    .object({
+      inputTokens: z.number(),
+      outputTokens: z.number(),
+      cacheReadTokens: z.number(),
+      cacheCreationTokens: z.number(),
+    })
+    .nullable(),
+  /** The run's estimated cost: `total_cost_usd` at API prices, not money spent on a Claude plan. Null when unknown. */
+  costUsd: z.number().nullable(),
+  /** Milliseconds the run spent parked at a human wait. */
+  parkedMs: z.number(),
 });
 export type RoutineRun = z.infer<typeof RoutineRun>;
 export const Routine = z.object({

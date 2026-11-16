@@ -7,12 +7,18 @@ import { join } from "node:path";
 import type { Schedule } from "@claudebot/contract/events";
 import { z } from "zod";
 
-import { createBot } from "../bots/index.ts";
+import { createBot, TurnError, type TurnUsage } from "../bots/index.ts";
 import type { Events } from "../events/index.ts";
 import { migrate } from "../platform/db.ts";
 import { defined } from "../testing/defined.ts";
 import { createWaits, type Waits } from "../waits/index.ts";
-import { Conflict, createRoutines, type Executor, type RunEnd } from "./index.ts";
+import {
+  Conflict,
+  createRoutines,
+  type Executor,
+  type RoutineTurnResult,
+  type RunEnd,
+} from "./index.ts";
 import * as store from "./store.ts";
 
 const at = (iso: string) => Date.parse(iso);
@@ -25,7 +31,7 @@ let jobs: {
   prompt: string;
   runId: string;
   resumed: boolean;
-  resolve(text: string): void;
+  resolve(text: string, usage?: TurnUsage | null): void;
   reject(e: Error): void;
 }[];
 let routines: ReturnType<typeof createRoutines>;
@@ -52,8 +58,14 @@ const events: Pick<Events, "notice" | "resolveNotices"> = {
 };
 
 const execute: Executor = ({ prompt, runId, resumed }) => {
-  const { promise, resolve, reject } = Promise.withResolvers<string>();
-  jobs.push({ prompt, runId, resumed, resolve, reject });
+  const { promise, resolve, reject } = Promise.withResolvers<RoutineTurnResult>();
+  jobs.push({
+    prompt,
+    runId,
+    resumed,
+    resolve: (text, usage = null) => resolve({ text, usage }),
+    reject,
+  });
   return { done: promise, stop: (reason) => reject(new Error(reason)) };
 };
 
@@ -163,6 +175,9 @@ test("a run left running by a previous process becomes interrupted", () => {
     error: null,
     startedAt: clock,
     finishedAt: null,
+    usage: null,
+    costUsd: null,
+    parkedMs: 0,
   });
   routines.start();
   expect(runsOf(r.id)).toMatchObject([
@@ -417,6 +432,9 @@ test("what a run that the last process left running asked the owner is cancelled
     error: null,
     startedAt: clock,
     finishedAt: null,
+    usage: null,
+    costUsd: null,
+    parkedMs: 0,
   });
   askApproval("stale");
   routines.start();
@@ -457,6 +475,7 @@ test("a database made before parked runs keeps its runs and their order, and tak
     ["r2", "second"],
     ["r1", "first"],
   ]);
+  expect(runsOf(r.id)[0]).toMatchObject({ usage: null, costUsd: null, parkedMs: 0 });
   store.insertRun(db, {
     id: "parked",
     routineId: r.id,
@@ -468,6 +487,9 @@ test("a database made before parked runs keeps its runs and their order, and tak
     error: null,
     startedAt: 3,
     finishedAt: null,
+    usage: null,
+    costUsd: null,
+    parkedMs: 0,
   });
   expect(routines.get(r.id).lastRun).toMatchObject({ id: "parked", status: "waiting" });
   // A parked run answered after the upgrade resumes with the answer, and the wait counts as delivered.
@@ -518,6 +540,9 @@ test("a run left running by a previous process is reported as interrupted at sta
     error: null,
     startedAt: clock,
     finishedAt: null,
+    usage: null,
+    costUsd: null,
+    parkedMs: 0,
   });
   routines.start();
   routines.start();
@@ -618,7 +643,10 @@ test("a failing onRunEnded is logged and the run's final status stands", async (
 const CAP = 40;
 
 /** A routine host with a small cap over the same database; `stopped` counts the executor's stops. */
-function capped(exited = "Claude Code exited before the turn produced a result") {
+function capped(
+  exited = "Claude Code exited before the turn produced a result",
+  exitedWith?: TurnUsage,
+) {
   const turns: { resolve(text: string): void; reject(e: Error): void }[] = [];
   const stopped: string[] = [];
   const timed = createRoutines({
@@ -627,13 +655,13 @@ function capped(exited = "Claude Code exited before the turn produced a result")
     now: () => clock,
     runCapMs: CAP,
     execute: () => {
-      const { promise, resolve, reject } = Promise.withResolvers<string>();
-      turns.push({ resolve, reject });
+      const { promise, resolve, reject } = Promise.withResolvers<RoutineTurnResult>();
+      turns.push({ resolve: (text) => resolve({ text, usage: null }), reject });
       return {
         done: promise,
         stop: (reason) => {
           stopped.push(reason);
-          reject(new Error(exited));
+          reject(exitedWith ? new TurnError(exited, exitedWith) : new Error(exited));
         },
       };
     },
@@ -672,7 +700,7 @@ test("a run whose executor never settles after stop still fails at the cap", asy
     dataRoot: cwd,
     now: () => clock,
     runCapMs: CAP,
-    execute: () => ({ done: new Promise<string>(() => {}), stop() {} }),
+    execute: () => ({ done: new Promise<RoutineTurnResult>(() => {}), stop() {} }),
     waits,
     notice: async () => {},
     deliver: async () => {},
@@ -757,6 +785,9 @@ const interrupted = (routineId: string, n: number) =>
     error: "app stopped during run",
     startedAt: clock,
     finishedAt: clock,
+    usage: null,
+    costUsd: null,
+    parkedMs: 0,
   });
 
 test("the fifth failed run in a row pauses the routine and tells its owner once, the fourth does not", async () => {
@@ -842,4 +873,87 @@ test("a run that exceeds the time limit is a failed run and counts toward the pa
   expect(raised).toMatchObject([
     { title: "slow paused after 5 failed runs", body: "run exceeded the 40 ms time limit" },
   ]);
+});
+
+const turnUsage = (costUsd: number, inputTokens = 100): TurnUsage => ({
+  inputTokens,
+  outputTokens: 20,
+  cacheReadTokens: 300,
+  cacheCreationTokens: 40,
+  costUsd,
+});
+
+test("a run that succeeds records what its turn used", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  defined(jobs[0], "job").resolve("done", turnUsage(0.25));
+  await until(() => runsOf(r.id)[0]?.status === "succeeded");
+  expect(runsOf(r.id)[0]).toMatchObject({
+    usage: { inputTokens: 100, outputTokens: 20, cacheReadTokens: 300, cacheCreationTokens: 40 },
+    costUsd: 0.25,
+    parkedMs: 0,
+  });
+});
+
+test("a run whose turn failed keeps what the turn cost", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  defined(jobs[0], "job").reject(
+    new TurnError("turn failed (error_during_execution)", turnUsage(1.5)),
+  );
+  await until(() => runsOf(r.id)[0]?.status === "failed");
+  expect(runsOf(r.id)[0]).toMatchObject({
+    error: "turn failed (error_during_execution)",
+    usage: { inputTokens: 100 },
+    costUsd: 1.5,
+  });
+});
+
+test("a run with no usage to report, succeeded or failed, has none", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  defined(jobs[0], "job").resolve("done", null);
+  await until(() => runsOf(r.id)[0]?.status === "succeeded");
+  expect(runsOf(r.id)[0]).toMatchObject({ usage: null, costUsd: null });
+
+  routines.testRun(r.id);
+  defined(jobs[1], "job").reject(new Error("the CLI crashed"));
+  await until(() => runsOf(r.id)[0]?.status === "failed");
+  expect(runsOf(r.id)[0]).toMatchObject({ usage: null, costUsd: null });
+});
+
+test("a run that parks and resumes adds up the usage of its turns", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.testRun(r.id);
+  const first = defined(jobs[0], "job");
+  const ask = askApproval(first.runId);
+  first.resolve("asked", turnUsage(0.1, 100));
+  await until(() => routines.get(r.id).lastRun?.status === "waiting");
+  expect(runsOf(r.id)[0]).toMatchObject({ costUsd: 0.1, usage: { inputTokens: 100 } });
+
+  waits.answer(ask, "allow");
+  await until(() => jobs.length === 2);
+  defined(jobs[1], "job").resolve("done", turnUsage(0.2, 50));
+  await until(() => runsOf(r.id)[0]?.status === "succeeded");
+  const run = defined(runsOf(r.id)[0]);
+  expect(run.usage).toMatchObject({ inputTokens: 150, outputTokens: 40 });
+  expect(run.costUsd).toBeCloseTo(0.3);
+});
+
+test("a run stopped at the cap keeps the usage its stopped turn still reported", async () => {
+  const { timed } = capped("turn failed (error_during_execution): interrupted", {
+    inputTokens: 700,
+    outputTokens: 70,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    costUsd: 0.6,
+  });
+  const r = timed.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  timed.testRun(r.id);
+  await until(() => timed.get(r.id).lastRun?.status === "failed");
+  await until(() => timed.get(r.id).lastRun?.costUsd === 0.6);
+  expect(timed.get(r.id).lastRun).toMatchObject({
+    error: "run exceeded the 40 ms time limit",
+    usage: { inputTokens: 700, outputTokens: 70 },
+  });
 });

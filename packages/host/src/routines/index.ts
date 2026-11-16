@@ -10,8 +10,10 @@ import {
   openThread,
   touchBot,
   type HostDelegate,
+  TurnError,
   type Thread,
   type ThreadEnv,
+  type TurnUsage,
 } from "../bots/index.ts";
 import type { Events } from "../events/index.ts";
 import { NotFound } from "../platform/errors.ts";
@@ -59,9 +61,15 @@ export type RoutineJob = {
   ownSession?: string;
 };
 
-/** One agent turn of a run, in the bot's chat session or, for a double-loop bot, in the run's own session; `done` resolves to the final text, `stop` ends it early (rejecting `done`). */
+/** What a routine turn ends in: the final text and what the turn used (null when unknown). */
+export interface RoutineTurnResult {
+  text: string;
+  usage: TurnUsage | null;
+}
+
+/** One agent turn of a run, in the bot's chat session or, for a double-loop bot, in the run's own session; `done` resolves to its result, `stop` ends it early (rejecting `done`). A failed turn rejects with a `TurnError` that carries its usage. */
 export type Executor = (job: RoutineJob) => {
-  done: Promise<string>;
+  done: Promise<RoutineTurnResult>;
   stop: (reason: string) => void;
 };
 
@@ -113,7 +121,8 @@ export function runHeadless(
     });
     touchBot(env.dataRoot, bot);
     try {
-      return (await thread.send(prompt)).text;
+      const { text, usage } = await thread.send(prompt);
+      return { text, usage };
     } finally {
       thread.close("routine done");
     }
@@ -226,6 +235,9 @@ export function createRoutines(deps: {
       error,
       startedAt: t,
       finishedAt: t,
+      usage: null,
+      costUsd: null,
+      parkedMs: 0,
     });
     onChange(r.botId);
   }
@@ -287,6 +299,9 @@ export function createRoutines(deps: {
       error: bot ? null : "bot no longer exists",
       startedAt,
       finishedAt: bot ? null : startedAt,
+      usage: null,
+      costUsd: null,
+      parkedMs: 0,
     };
     store.insertRun(db, row);
     if (!bot) {
@@ -346,8 +361,13 @@ export function createRoutines(deps: {
           ...(ownSession !== undefined && { ownSession }),
         });
         entry.stop = job.stop;
-        job.done.catch(() => {});
-        const text = await Promise.race([job.done, entry.expiry.promise]);
+        // Usage is booked whenever the turn settles, even after the run cap has already ended the run.
+        void job.done.then(
+          (r) => r.usage && store.addRunUsage(db, row.id, r.usage),
+          (e: unknown) =>
+            e instanceof TurnError && e.usage && store.addRunUsage(db, row.id, e.usage),
+        );
+        const { text } = await Promise.race([job.done, entry.expiry.promise]);
         if (entry.removed) return;
         if (entry.expired) throw new Error(entry.expired);
         const pending = waits.ofRun(row.id);

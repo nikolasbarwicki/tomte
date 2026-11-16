@@ -417,6 +417,32 @@ const SCHEMA_V22 = (db: Database) => {
   if (sql !== undefined && !sql.includes("'notice'")) db.run(REBUILD_EXTERNAL_EVENTS);
 };
 
+// Run usage: what the host last saw of each session's cumulative cost and tokens (a run's usage is the difference), and what each run
+// used. A column is added only when missing, as in V15: SQLite has no ADD COLUMN IF NOT EXISTS.
+const SCHEMA_V23 = (db: Database) => {
+  db.run(`
+CREATE TABLE IF NOT EXISTS session_usage_marks (
+  session_id TEXT PRIMARY KEY,
+  cost_usd REAL NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  cache_read_tokens INTEGER NOT NULL,
+  cache_creation_tokens INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);`);
+  const have = db.query<{ name: string }, []>("PRAGMA table_info(routine_runs)").all();
+  for (const [name, type] of [
+    ["input_tokens", "INTEGER"],
+    ["output_tokens", "INTEGER"],
+    ["cache_read_tokens", "INTEGER"],
+    ["cache_creation_tokens", "INTEGER"],
+    ["total_cost_usd", "REAL"],
+    ["parked_ms", "INTEGER NOT NULL DEFAULT 0"],
+  ] as const)
+    if (have.length > 0 && !have.some((c) => c.name === name))
+      db.run(`ALTER TABLE routine_runs ADD COLUMN ${name} ${type}`);
+};
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -445,6 +471,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V20,
     SCHEMA_V21,
     SCHEMA_V22,
+    SCHEMA_V23,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

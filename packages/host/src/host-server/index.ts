@@ -10,6 +10,7 @@ import type {
 import {
   allowsTool,
   allowTool,
+  createUsageMeter,
   getBot,
   listBots,
   botFilesPath,
@@ -325,6 +326,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     botEnv: (botId) => externalEvents.env(botId),
     approveAll: !o.config.askApproval,
     allows: (botId, tool) => allowsTool(db, botId, tool),
+    meter: createUsageMeter(db, o.now),
     handoffs,
     events: externalEvents,
     items: {

@@ -28,6 +28,7 @@ import { type HostDelegate } from "./session-kit.ts";
 import { Thread, type ThreadEnv } from "./thread.ts";
 
 export { Thread, type ThreadEnv, type TurnResult } from "./thread.ts";
+export { TurnError, createUsageMeter, type TurnUsage } from "./usage.ts";
 export {
   Inbox,
   MEMORY_INSTRUCTIONS,
@@ -300,7 +301,18 @@ export function frontContext(dataRoot: string, bot: Bot) {
 
 /** Opens a Claude Code thread bound to a bot in the host's shared thread environment. */
 export function openThread(
-  { cwd, dataRoot, cli, claude, integrations, hostServers, botEnv, approveAll, allows }: ThreadEnv,
+  {
+    cwd,
+    dataRoot,
+    cli,
+    claude,
+    integrations,
+    hostServers,
+    botEnv,
+    approveAll,
+    allows,
+    meter,
+  }: ThreadEnv,
   bot: Bot,
   opts: {
     resume?: boolean;
@@ -324,6 +336,7 @@ export function openThread(
     integrations,
     hostServers: () => hostServers(bot.id),
     env: () => botEnv(bot.id),
+    meter,
     ...opts,
   });
 }

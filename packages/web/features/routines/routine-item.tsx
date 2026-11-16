@@ -19,7 +19,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { readJson } from "@/host/api.ts";
-import { dateTime } from "@/lib/format.ts";
+import { dateTime, duration, tokenCount } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
 
 import { deleteRoutine, routineRuns, runRoutine, setRoutineActive } from "./api.ts";
@@ -180,8 +180,21 @@ export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   );
 }
 
+function runUsage(run: RoutineRun) {
+  const u = run.usage;
+  const cached = u ? u.cacheReadTokens + u.cacheCreationTokens : 0;
+  return [
+    u && u.inputTokens + u.outputTokens + cached > 0
+      ? `${tokenCount(u.inputTokens)} in · ${tokenCount(u.outputTokens)} out${cached > 0 ? ` · ${tokenCount(cached)} cached` : ""}`
+      : undefined,
+    run.costUsd ? `est. $${run.costUsd.toFixed(2)}` : undefined,
+    run.parkedMs > 0 ? `parked ${duration(run.parkedMs)}` : undefined,
+  ].filter((s) => s !== undefined);
+}
+
 function RunRow({ run }: { run: RoutineRun }) {
   const hasBody = !!(run.error || run.output);
+  const used = runUsage(run);
   return (
     <Collapsible disabled={!hasBody}>
       <CollapsibleTrigger className="group/run hover:bg-muted/60 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-xs disabled:hover:bg-transparent">
@@ -193,7 +206,11 @@ function RunRow({ run }: { run: RoutineRun }) {
         />
         <RunBadge status={run.status} />
         <span className="text-muted-foreground truncate">
-          {dateTime(run.startedAt)} · {run.trigger === "manual" ? "test run" : "scheduled"}
+          {[
+            dateTime(run.startedAt),
+            run.trigger === "manual" ? "test run" : "scheduled",
+            ...used,
+          ].join(" · ")}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent>

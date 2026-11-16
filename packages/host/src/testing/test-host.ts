@@ -148,6 +148,18 @@ export interface HandoffHost {
   /** While held, a message the fake CLI receives keeps its turn running. */
   hold(): void;
   release(): void;
+  /**
+   * The cumulative session totals every result of the fake CLI carries from now on, as the real CLI's `total_cost_usd` and `modelUsage`
+   * are: set a larger total before each turn, a smaller one to mimic `/clear`. With `error` the turn ends in an error result.
+   */
+  setUsage(usage: {
+    cost: number;
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheCreation?: number;
+    error?: string;
+  }): void;
   /** The client listener's URL: the web UI and `/api/*`. Follows `restart()`. */
   readonly clientUrl: string;
   /** The agent listener's URL: the browser and bots endpoints. Follows `restart()`. */
@@ -342,6 +354,23 @@ export async function startHandoffHost(
       sandboxAvailable = available;
     },
     hold: () => writeFileSync(join(claudeDir, "hold"), ""),
+    setUsage: (usage) =>
+      writeFileSync(
+        join(claudeDir, "usage.json"),
+        JSON.stringify({
+          total_cost_usd: usage.cost,
+          modelUsage: {
+            fake: {
+              inputTokens: usage.input ?? 0,
+              outputTokens: usage.output ?? 0,
+              cacheReadInputTokens: usage.cacheRead ?? 0,
+              cacheCreationInputTokens: usage.cacheCreation ?? 0,
+              costUSD: usage.cost,
+            },
+          },
+          ...(usage.error !== undefined && { error: usage.error }),
+        }),
+      ),
     release: () => rmSync(join(claudeDir, "hold"), { force: true }),
     advanceClock: (ms) => {
       clock += ms;

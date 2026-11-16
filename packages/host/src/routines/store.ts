@@ -7,6 +7,8 @@ import {
   type RunTrigger,
 } from "@claudebot/contract/events";
 
+import type { TurnUsage } from "../bots/index.ts";
+
 /** A routine as stored; `Routine` adds the fields derived at read time. */
 export type RoutineRecord = {
   id: string;
@@ -49,6 +51,12 @@ type RunRow = {
   error: string | null;
   started_at: number;
   finished_at: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_creation_tokens: number | null;
+  total_cost_usd: number | null;
+  parked_ms: number;
 };
 
 const toRoutine = (r: RoutineRow): RoutineRecord => ({
@@ -77,6 +85,17 @@ const toRun = (r: RunRow): RoutineRun => ({
   error: r.error,
   startedAt: r.started_at,
   finishedAt: r.finished_at,
+  usage:
+    r.input_tokens === null
+      ? null
+      : {
+          inputTokens: r.input_tokens,
+          outputTokens: r.output_tokens ?? 0,
+          cacheReadTokens: r.cache_read_tokens ?? 0,
+          cacheCreationTokens: r.cache_creation_tokens ?? 0,
+        },
+  costUsd: r.total_cost_usd,
+  parkedMs: r.parked_ms,
 });
 
 export function getRoutine(db: Database, id: string): RoutineRecord | undefined {
@@ -200,6 +219,19 @@ export function finishRun(
       )
       .run(status, fields.output ?? null, fields.error ?? null, fields.finishedAt, id).changes > 0
   );
+}
+
+/** Adds one turn's usage to the run's: a run that parks and resumes has several turns. Unknown (null) turns add nothing. */
+export function addRunUsage(db: Database, id: string, u: TurnUsage) {
+  db.query(
+    `UPDATE routine_runs SET
+       input_tokens = COALESCE(input_tokens, 0) + ?,
+       output_tokens = COALESCE(output_tokens, 0) + ?,
+       cache_read_tokens = COALESCE(cache_read_tokens, 0) + ?,
+       cache_creation_tokens = COALESCE(cache_creation_tokens, 0) + ?,
+       total_cost_usd = COALESCE(total_cost_usd, 0) + ?
+     WHERE id = ?`,
+  ).run(u.inputTokens, u.outputTokens, u.cacheReadTokens, u.cacheCreationTokens, u.costUsd, id);
 }
 
 export function getRun(db: Database, id: string): RoutineRun | undefined {
