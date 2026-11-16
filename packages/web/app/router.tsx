@@ -50,6 +50,11 @@ const devicesRoute = createRoute({
   path: "/devices",
 }).lazy(() => import("./routes/devices.lazy.tsx").then((d) => d.Route));
 
+const channelsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/channels",
+}).lazy(() => import("./routes/channels.lazy.tsx").then((d) => d.Route));
+
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
@@ -58,6 +63,7 @@ export const router = createRouter({
     integrationRoute,
     credentialsRoute,
     devicesRoute,
+    channelsRoute,
   ]),
 });
 

@@ -328,6 +328,25 @@ CREATE TABLE IF NOT EXISTS tool_allowances (
 );
 `;
 
+// Channels (ADR-0010): the one account linked per channel, and the one-time codes that link it. Only a code's digest is stored;
+// `failures` counts wrong code-shaped attempts and is reset on every code of the channel when a new one is created.
+const SCHEMA_V19 = `
+CREATE TABLE IF NOT EXISTS channel_links (
+  channel TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  linked_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS channel_link_codes (
+  channel TEXT NOT NULL,
+  code_digest BLOB NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER,
+  failures INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (channel, code_digest)
+);
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -352,6 +371,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V16,
     SCHEMA_V17,
     SCHEMA_V18,
+    SCHEMA_V19,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

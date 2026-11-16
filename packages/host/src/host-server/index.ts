@@ -27,6 +27,7 @@ import {
   type LiveViewOptions,
   type SandboxStatus,
 } from "../browser/index.ts";
+import { createChannels, type Channel, type Channels } from "../channels/index.ts";
 import { createCredentials } from "../credentials/index.ts";
 import { createDeviceAuth, type DeviceAuth } from "../device-auth/index.ts";
 import { createEvents, eventsPath } from "../events/index.ts";
@@ -84,6 +85,11 @@ export interface HostServerOptions {
   takeoverInactivityMs?: number;
   /** The built web UI the client listener serves; every request no route claims answers 404 without it. Ignored when `config.vite` is on. */
   ui?: UiAssets;
+  /**
+   * The channel adapters to run, given the function that hands an update to the host (`Channels.receive`); none when omitted.
+   * Tests pass a fake channel here.
+   */
+  channelAdapters?: (receive: Channels["receive"]) => Channel[];
   /** The clock device auth reads for pairing code expiry and human waits read for their 24-hour expiry, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
   /** How long an idle double-loop front stays open; 10 minutes when omitted. */
@@ -103,6 +109,8 @@ export interface HostServer {
   bots: BotsEndpoint;
   /** Pairing codes and device tokens, so a caller can pair a device without going through the exchange. */
   devices: DeviceAuth;
+  /** The channels and their links, so a caller can feed an update in or send to the linked account. */
+  channels: Channels;
   currentBotId: () => string | undefined;
   /** Whether the bot is working (a turn, a busy double-loop front or a headless run): deleting it, a new session and a mode switch are refused then. */
   isWorking: (botId: string) => boolean;
@@ -346,6 +354,15 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const serveBuiltUi = serveUi(o.ui ?? { read: async () => undefined });
 
   const devices = createDeviceAuth({ db, ...(o.now !== undefined && { now: o.now }) });
+  const channels = createChannels({
+    db,
+    // Feature 13's absence pause counts it; until it exists, presence is not tracked.
+    onActivity: () => {},
+    ...(o.now !== undefined && { now: o.now }),
+  });
+  for (const adapter of o.channelAdapters?.((kind, inbound) => channels.receive(kind, inbound)) ??
+    [])
+    channels.register(adapter);
   const sessions = createDeviceSessions();
   const api = createApi({
     botsChanged,
@@ -362,6 +379,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     integrations,
     credentials,
     devices,
+    channels,
     sessions,
     externalEvents,
     events,
@@ -393,6 +411,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const agent = agentRoutes({ browser, handoffs });
 
   routines.start();
+  channels.start();
   handoffs.redeliverOpen();
   clientListener.serve(
     withBoundary(
@@ -413,6 +432,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     browser: browser.endpoint,
     bots: handoffs.endpoint,
     devices,
+    channels,
     currentBotId: chats.currentBotId,
     isWorking: (botId) => chats.isWorking(botId),
     signInState: () => claude.signInState(),
@@ -422,6 +442,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       agentListener.pause();
       chats.close();
       waits.close();
+      await channels.stop();
       await externalEvents.stop();
       routines.stop();
       await browser.close();

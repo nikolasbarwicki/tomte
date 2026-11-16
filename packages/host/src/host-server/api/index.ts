@@ -5,6 +5,7 @@ import { z } from "zod";
 import { InvalidBody, readJsonObject } from "../../platform/json-body.ts";
 import { json, type Handler } from "../http.ts";
 import { botRoutes } from "./bots.ts";
+import { channelApi } from "./channels.ts";
 import { chatRoutes } from "./chat.ts";
 import type { ApiContext, ApiRequest } from "./context.ts";
 import { credentialApi } from "./credentials.ts";
@@ -33,6 +34,7 @@ export function createApi(ctx: ApiContext): Handler {
     if (path === "/api/events") return ctx.events.subscribe(req, res, ctx.snapshot());
     const b = await readJsonObject(req);
     if (path.startsWith("/api/devices/")) return deviceApi(ctx, req, res, path, b);
+    if (path.startsWith("/api/channels/")) return channelApi(ctx, res, path, b);
     if (path.startsWith("/api/routines/")) return routineApi(ctx, res, path, b);
     if (path.startsWith("/api/integrations/")) return integrationApi(ctx, res, path, b);
     if (path.startsWith("/api/credentials/")) {

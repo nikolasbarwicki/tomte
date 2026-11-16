@@ -90,6 +90,25 @@ export type RevokeDeviceRequest = z.infer<typeof RevokeDeviceRequest>;
 export const PairingCodeResponse = z.object({ code: z.string() });
 export type PairingCodeResponse = z.infer<typeof PairingCodeResponse>;
 
+/** A channel in the `/api/channels/list` response: its kind (`telegram`) and the account linked to it, or null. */
+export const ChannelEntry = z.object({
+  kind: z.string(),
+  link: z.object({ label: z.string(), linkedAt: z.number() }).nullable(),
+});
+export type ChannelEntry = z.infer<typeof ChannelEntry>;
+
+/** The `/api/channels/list` response: every registered channel. */
+export const ChannelList = z.array(ChannelEntry);
+export type ChannelList = z.infer<typeof ChannelList>;
+
+/** The `/api/channels/link-code` and `/api/channels/unlink` request: the channel's kind. */
+export const ChannelRequest = z.object({ channel: z.string().min(1) });
+export type ChannelRequest = z.infer<typeof ChannelRequest>;
+
+/** The `/api/channels/link-code` response: a new single-use code, in groups of four, which is shown only here. */
+export const ChannelLinkCodeResponse = z.object({ code: z.string() });
+export type ChannelLinkCodeResponse = z.infer<typeof ChannelLinkCodeResponse>;
+
 /** The largest `/api/bots/<botId>/events` request body in bytes; a larger one gets 413. */
 export const MAX_EVENT_BODY_BYTES = 64 * 1024;
 
