@@ -17,6 +17,7 @@ import { NotFound } from "../platform/errors.ts";
 import { waitTitle, type Wait, type Waits } from "../waits/index.ts";
 import { RoutineInput, RoutinePatch } from "./input.ts";
 import { parkingDelegate } from "./parking.ts";
+import { describeCap, startRunClock, type RunClock } from "./run-clock.ts";
 import {
   WINDOW_MS,
   hasOccurrence,
@@ -75,9 +76,15 @@ type LiveRun = {
   stop?: (reason: string) => void;
   done: Promise<void>;
   removed?: boolean;
+  /** Set when the run's time cap ran out: what the run records as its error, whatever the stopped executor throws. */
+  expired?: string;
+  clock?: RunClock;
+  /** Rejects with the limit message when the cap runs out, so a turn that ignores `stop` still ends the run. */
+  expiry: { promise: Promise<never>; reject(reason: Error): void };
 };
 
 const LATE_NOTE_MS = 15 * 60_000;
+const DEFAULT_RUN_CAP_MS = 30 * 60_000;
 /** setTimeout's delay is a signed 32-bit int; longer waits re-arm in steps. */
 const MAX_TIMEOUT_MS = 2_147_000_000;
 
@@ -141,6 +148,8 @@ export function createRoutines(deps: {
   dataRoot: string;
   now?: () => number;
   execute: Executor;
+  /** How long a run may work before it fails; time parked at a human wait does not count. */
+  runCapMs?: number;
   onChange: (botId: string) => void;
   /** The human waits of a run: what it is waiting for, what the owner answered, and the cancelling of what an ended run left open. */
   waits: Pick<Waits, "ofRun" | "cancelRun" | "resultText" | "delivered">;
@@ -160,6 +169,7 @@ export function createRoutines(deps: {
   const jobs = new Map<string, { stop: () => void }>();
   const running = new Map<string, LiveRun>();
   let stopping = false;
+  const runCapMs = deps.runCapMs ?? DEFAULT_RUN_CAP_MS;
 
   const require = (id: string) => {
     const r = store.getRoutine(db, id);
@@ -288,7 +298,13 @@ export function createRoutines(deps: {
 
   /** Makes the run the routine's one run in flight and drives it until it ends or parks. */
   function begin(r: RoutineRecord, row: RoutineRun, bot: Bot, first: string, resumed: boolean) {
-    const entry: LiveRun = { runId: row.id, done: Promise.resolve() };
+    const entry: LiveRun = {
+      runId: row.id,
+      done: Promise.resolve(),
+      expiry: Promise.withResolvers(),
+    };
+    entry.expiry.promise.catch(() => {});
+    entry.clock = startRunClock(runCapMs, () => expireRun(entry));
     running.set(r.id, entry);
     onChange(r.botId);
     entry.done = drive(entry, r, row, bot, first, resumed);
@@ -323,8 +339,10 @@ export function createRoutines(deps: {
           ...(ownSession !== undefined && { ownSession }),
         });
         entry.stop = job.stop;
-        const text = await job.done;
+        job.done.catch(() => {});
+        const text = await Promise.race([job.done, entry.expiry.promise]);
         if (entry.removed) return;
+        if (entry.expired) throw new Error(entry.expired);
         const pending = waits.ofRun(row.id);
         if (pending.some((w) => w.state === "open")) {
           store.parkRun(db, row.id);
@@ -343,8 +361,9 @@ export function createRoutines(deps: {
     } catch (e) {
       // A run stopped by shutdown keeps its `running` row: the next start finds it and reports it as interrupted.
       if (entry.removed || stopping) return;
-      endRun(row.id, (e as Error).message);
+      endRun(row.id, entry.expired ?? (e as Error).message);
     } finally {
+      entry.clock?.clear();
       if (running.get(r.id) === entry) running.delete(r.id);
       onChange(r.botId);
     }
@@ -356,6 +375,20 @@ export function createRoutines(deps: {
     waits.cancelRun(runId, error);
     ended(store.getRun(db, runId)!, expired);
     return true;
+  }
+
+  /** The cap ran out: the run fails with the limit, not with what stopping its executor throws. */
+  function expireRun(entry: LiveRun) {
+    if (entry.removed || entry.expired) return;
+    entry.expired = `run exceeded the ${describeCap(runCapMs)} time limit`;
+    try {
+      entry.stop?.(entry.expired);
+    } catch (e) {
+      console.error(
+        `[routines] stopping the expired run ${entry.runId} failed: ${(e as Error).message}`,
+      );
+    }
+    entry.expiry.reject(new Error(entry.expired));
   }
 
   /** A parked run's answers are all in: runs its session on with them. The single place a run leaves `waiting` for `running`. */
@@ -479,7 +512,10 @@ export function createRoutines(deps: {
     stop() {
       stopping = true;
       for (const id of jobs.keys()) disarm(id);
-      for (const e of running.values()) e.stop?.("shutdown");
+      for (const e of running.values()) {
+        e.clock?.clear();
+        e.stop?.("shutdown");
+      }
     },
 
     list(botId: string): Routine[] {

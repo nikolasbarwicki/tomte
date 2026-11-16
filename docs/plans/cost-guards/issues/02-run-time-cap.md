@@ -6,12 +6,12 @@ In `routines/index.ts`, `run()` already holds the live run's `stop` (`LiveRun.st
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `createRoutines` takes `runCapMs` (default 30 minutes). A run clock with `pause()`, `resume()` and `clear()` starts with each run, counts active time, and at the cap calls the run's `stop`
-- [ ] An expired run ends `failed` with "run exceeded the 30 minute time limit" (the real cap in the text), whatever error the stopped executor throws. It frees `running` for the routine and calls `onChange`
-- [ ] A run that finishes first, fails first, or is stopped by `remove()` or shutdown clears its clock and keeps today's handling. No timer outlives its run
-- [ ] A manual run has the same cap as a scheduled one
-- [ ] The routine's next occurrence after an expired run starts normally
-- [ ] A short comment on the clock says it is the one place that counts active time, so ticket 04 has one seam to pause
-- [ ] Tests at the `createRoutines` seam with a small `runCapMs` and an injected `Executor`: a run that never settles fails at the cap with the message; a run that ends before the cap is unaffected and leaves no pending timer; an executor whose `stop` rejects with another message still records the limit message; a clock paused for longer than the cap does not expire (the unit seam of ticket 04). `bun run check` passes
+- [x] `createRoutines` takes `runCapMs` (default 30 minutes). A run clock with `pause()`, `resume()` and `clear()` starts with each run, counts active time, and at the cap calls the run's `stop`
+- [x] An expired run ends `failed` with "run exceeded the 30 minute time limit" (the real cap in the text), whatever error the stopped executor throws. It frees `running` for the routine and calls `onChange`
+- [x] A run that finishes first, fails first, or is stopped by `remove()` or shutdown clears its clock and keeps today's handling. No timer outlives its run
+- [x] A manual run has the same cap as a scheduled one
+- [x] The routine's next occurrence after an expired run starts normally
+- [x] A short comment on the clock says it is the one place that counts active time, so ticket 04 has one seam to pause
+- [x] Tests at the `createRoutines` seam with a small `runCapMs` and an injected `Executor`: a run that never settles fails at the cap with the message; a run that ends before the cap is unaffected and leaves no pending timer; an executor whose `stop` rejects with another message still records the limit message; a clock paused for longer than the cap does not expire (the unit seam of ticket 04). `bun run check` passes
