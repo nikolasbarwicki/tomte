@@ -92,6 +92,7 @@ export type FormFields = {
   expr: string;
   tz: string;
   catchUp: boolean;
+  notifyResult: boolean;
 };
 
 /** The form's starting values: the routine being edited, or a daily 09:00 default that first fires an hour from `now` when once. */
@@ -115,6 +116,7 @@ export function formFromRoutine(routine?: Routine, now = Date.now()): FormFields
           : "0 9 * * *",
     tz: routine?.schedule.kind === "cron" ? routine.schedule.tz : browserZone(),
     catchUp: routine?.catchUp ?? true,
+    notifyResult: routine?.notifyResult ?? false,
   };
 }
 

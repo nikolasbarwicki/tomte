@@ -1,4 +1,4 @@
-// Shared harness of the browser smokes (smoke-answer-ui, smoke-needs-you-ui, smoke-blocked-ui, smoke-answers, smoke-loop-ui).
+// Shared harness of the browser smokes (smoke-answer-ui, smoke-needs-you-ui, smoke-blocked-ui, smoke-answers, smoke-loop-ui, smoke-scroll-ui, smoke-channels-ui).
 // A smoke gets a fresh run directory under the OS temp folder, a web build in it (or the one named by SMOKE_WEB_DIST, which the
 // wrapper smoke-ui.ts builds once), the whole-host test harness (temporary data root, in-memory database and secrets, fake
 // Claude CLI), and headless Chrome in a fresh profile with the paired device's cookie. Nothing touches real app data, the
@@ -61,6 +61,8 @@ export interface SmokeOptions {
   hostFlags?: (runDir: string) => string[] | Promise<string[]>;
   /** The environment the host's configuration is read from, such as `CLAUDEBOT_ASK_APPROVAL`; the process environment is left alone. */
   env?: Record<string, string>;
+  /** The host's timing overrides, the channel adapters it runs and where Telegram's API is (`startHandoffHost`'s fourth argument). */
+  timing?: Parameters<typeof startHandoffHost>[3];
 }
 
 interface Session {
@@ -113,7 +115,7 @@ export async function startSmoke(name: string, options: SmokeOptions = {}): Prom
       flags,
       directoryAssets(dist),
       undefined,
-      undefined,
+      options.timing,
       options.env,
     );
     host = startedHost;

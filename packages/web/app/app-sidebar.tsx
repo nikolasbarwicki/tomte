@@ -8,6 +8,7 @@ import {
   MoonIcon,
   PlugIcon,
   PlusIcon,
+  SendIcon,
   SunIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -220,6 +221,16 @@ export function AppSidebar({
             >
               <LaptopIcon />
               <span>Devices</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={!!matchRoute({ to: "/channels" })}
+              render={<Link to="/channels" />}
+              onClick={reveal}
+            >
+              <SendIcon />
+              <span>Channels</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

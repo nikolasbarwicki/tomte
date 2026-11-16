@@ -15,7 +15,7 @@ import {
   type ThreadEnv,
 } from "../bots/index.ts";
 import { NotFound } from "../platform/errors.ts";
-import type { Wait, Waits } from "../waits/index.ts";
+import { waitTitle, type Wait, type Waits } from "../waits/index.ts";
 import { parkingDelegate } from "./parking.ts";
 import {
   WINDOW_MS,
@@ -46,6 +46,7 @@ export const RoutineInput = z.object({
   }),
   active: z.boolean().optional(),
   catchUp: z.boolean().optional(),
+  notifyResult: z.boolean().optional(),
 });
 export type RoutineInput = z.output<typeof RoutineInput>;
 
@@ -56,6 +57,7 @@ export const RoutinePatch = z.object({
   schedule: RoutineInput.shape.schedule.exactOptional(),
   active: z.boolean().exactOptional(),
   catchUp: z.boolean().exactOptional(),
+  notifyResult: z.boolean().exactOptional(),
 });
 export type RoutinePatch = z.output<typeof RoutinePatch>;
 
@@ -81,6 +83,12 @@ export type Executor = (job: RoutineJob) => {
   done: Promise<string>;
   stop: (reason: string) => void;
 };
+
+/**
+ * A run that reached a terminal status, as the row now stands. `expired` holds the titles of the waits whose 24 hours ran out
+ * when that is why it failed ("approval expired"), so the cause is not read back from the error text; it is empty otherwise.
+ */
+export type RunEnd = { run: RoutineRun; routine: RoutineRecord; expired: string[] };
 
 /** A run in progress; `removed` marks one stopped by `remove()`, whose row the cascade already owns. */
 type LiveRun = {
@@ -161,11 +169,18 @@ export function createRoutines(deps: {
   notice(botId: string, text: string): Promise<void>;
   /** Sends a host message into the bot's session through the normal send path (queued while the bot is busy). */
   deliver(botId: string, text: string): Promise<void>;
+  /**
+   * Called once when a run reaches `succeeded`, `failed` or `interrupted`, after its row is final: when a turn ends it, when a parked run
+   * resumes and ends, when a park expires, and for a run the last process left behind (found by `start()`). Not for a skipped run, and not
+   * for a run stopped by `remove()` or by shutdown (the next start reports it as interrupted). A throw is logged and changes nothing.
+   */
+  onRunEnded(end: RunEnd): void;
 }) {
   const { db, dataRoot, onChange, execute, waits } = deps;
   const now = deps.now ?? Date.now;
   const jobs = new Map<string, { stop: () => void }>();
   const running = new Map<string, LiveRun>();
+  let stopping = false;
 
   const require = (id: string) => {
     const r = store.getRoutine(db, id);
@@ -242,6 +257,17 @@ export function createRoutines(deps: {
     }
   }
 
+  /** Reports a run that just reached a terminal status; nothing when its routine is gone. */
+  function ended(row: RoutineRun, expired: string[] = []) {
+    const routine = store.getRoutine(db, row.routineId);
+    if (!routine) return;
+    try {
+      deps.onRunEnded({ run: row, routine, expired });
+    } catch (e) {
+      console.error(`[routines] reporting run ${row.id} failed: ${(e as Error).message}`);
+    }
+  }
+
   /** Inserts the run row synchronously; the agent works in the background until `done`. */
   function run(
     r: RoutineRecord,
@@ -268,6 +294,7 @@ export function createRoutines(deps: {
     };
     store.insertRun(db, row);
     if (!bot) {
+      ended(row);
       onChange(r.botId);
       return { row, done: Promise.resolve() };
     }
@@ -326,7 +353,8 @@ export function createRoutines(deps: {
         }
         if (pending.some((w) => w.state === "expired")) return expire(row.id);
         if (pending.length === 0) {
-          store.finishRun(db, row.id, "succeeded", { output: text, finishedAt: now() });
+          if (store.finishRun(db, row.id, "succeeded", { output: text, finishedAt: now() }))
+            ended(store.getRun(db, row.id)!);
           return;
         }
         message = waits.resultText(pending);
@@ -334,7 +362,8 @@ export function createRoutines(deps: {
         isResume = true;
       }
     } catch (e) {
-      if (entry.removed) return;
+      // A run stopped by shutdown keeps its `running` row: the next start finds it and reports it as interrupted.
+      if (entry.removed || stopping) return;
       endRun(row.id, (e as Error).message);
     } finally {
       if (running.get(r.id) === entry) running.delete(r.id);
@@ -342,10 +371,11 @@ export function createRoutines(deps: {
     }
   }
 
-  /** Fails a run that has not ended and cancels what it still waits for, telling nobody; false when the run had ended. */
-  function endRun(runId: string, error: string): boolean {
+  /** Fails a run that has not ended and cancels what it still waits for, telling nobody (but `onRunEnded`); false when the run had ended. */
+  function endRun(runId: string, error: string, expired: string[] = []): boolean {
     if (!store.finishRun(db, runId, "failed", { error, finishedAt: now() })) return false;
     waits.cancelRun(runId, error);
+    ended(store.getRun(db, runId)!, expired);
     return true;
   }
 
@@ -389,7 +419,7 @@ export function createRoutines(deps: {
   function expire(runId: string) {
     const row = store.getRun(db, runId);
     const lapsed = waits.ofRun(runId).filter((w) => w.state === "expired");
-    if (!row || !lapsed.length || !endRun(runId, "approval expired")) return;
+    if (!row || !lapsed.length || !endRun(runId, "approval expired", lapsed.map(waitTitle))) return;
     const r = store.getRoutine(db, row.routineId);
     if (r) {
       if (getBot(dataRoot, r.botId)?.chatMode !== "double_loop")
@@ -406,12 +436,14 @@ export function createRoutines(deps: {
   function reconcile() {
     const n = now();
     // A run the last process left `running` has no turn any more; what it still asked the owner can never reach it.
-    for (const id of store.interruptStaleRuns(
+    for (const run of store.interruptStaleRuns(
       db,
       n,
       [...running.values()].map((e) => e.runId),
-    ))
-      waits.cancelRun(id, "the app stopped during the run");
+    )) {
+      waits.cancelRun(run.id, "the app stopped during the run");
+      ended(run);
+    }
     for (const r of store.listActiveRoutines(db)) {
       const last = r.lastScheduledFor ?? r.createdAt;
       const inWindow = latestOccurrence(r.schedule, Math.max(last, n - WINDOW_MS), n);
@@ -466,6 +498,7 @@ export function createRoutines(deps: {
 
     /** Shutdown: stop all jobs and close running threads; their rows are reconciled on next start. */
     stop() {
+      stopping = true;
       for (const id of jobs.keys()) disarm(id);
       for (const e of running.values()) e.stop?.("shutdown");
     },
@@ -495,6 +528,7 @@ export function createRoutines(deps: {
         schedule: input.schedule,
         active: input.active ?? true,
         catchUp: input.catchUp ?? true,
+        notifyResult: input.notifyResult ?? false,
         lastScheduledFor: null,
         createdAt: t,
         updatedAt: t,
@@ -513,6 +547,7 @@ export function createRoutines(deps: {
         ...patch,
         active: patch.active ?? old.active,
         catchUp: patch.catchUp ?? old.catchUp,
+        notifyResult: patch.notifyResult ?? old.notifyResult,
         updatedAt: t,
       };
       // Occurrences before an edit or while paused are not "missed": move the claim baseline to now.

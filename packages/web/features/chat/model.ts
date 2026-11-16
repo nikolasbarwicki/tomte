@@ -27,14 +27,6 @@ export type NeedsYouItem = {
   receivedAt: number;
 };
 
-/**
- * What a button does for an item: answers it with `message`, or fills the composer with `draft`, which answers the item once sent. The host decides where an answer goes: it resolves the bot's pending question about the item with `answer` (the message when omitted), or else sends `message` to the bot, and closes the item once the bot has it.
- */
-export type ItemAction = { label: string } & (
-  | { message: string; answer?: string }
-  | { draft: string }
-);
-
 /** The open bot's open items, oldest first. `undefined` work, or work of another bot (a switch still arriving), has none. */
 export function needsYouItems(work: WorkEvent | undefined, botId: string): NeedsYouItem[] {
   if (work?.botId !== botId) return [];
@@ -147,39 +139,6 @@ export const cardElementId = (requestId: string) => `card-${requestId}`;
 export const rowLabels = (rows: NeedsYouRow[]): string[] => [
   ...new Set(rows.map((r) => (r.type === "event" ? r.item.source : r.request.label))),
 ];
-
-/** An item's buttons, the primary one first: Enter runs it. Every message reads as something the user typed. */
-export function itemActions(item: NeedsYouItem): ItemAction[] {
-  const what = `${item.source}: ${item.title}`;
-  switch (item.kind) {
-    case "question":
-      return [
-        ...item.options.map((o) => ({
-          label: o,
-          message: `${item.source} · ${item.title}: answer '${o}'`,
-          answer: o,
-        })),
-        {
-          label: item.options.length ? "Other…" : "Answer…",
-          draft: `${item.source} · ${item.title}: `,
-        },
-      ];
-    case "blocked":
-      return [
-        { label: "Unblock…", draft: `${item.source} · ${item.title}: ` },
-        { label: "Status", message: `Status ${what}` },
-      ];
-    case "failed":
-      return [
-        { label: "Retry", message: `Retry ${what}` },
-        { label: "Skip", message: `Skip ${what}` },
-      ];
-    case "done":
-      return [{ label: "Review", message: `Prepare the landing brief for ${item.source}` }];
-    case "stopped":
-      return [{ label: "Status", message: `Status ${item.source}` }];
-  }
-}
 
 /** What an answered approval card reads: the past tense of the button picked. `cancelled` and `expired` are the host's own words. */
 export function approvalAnswerLabel(answer: string): string {
