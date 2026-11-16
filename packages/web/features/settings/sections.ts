@@ -4,6 +4,7 @@ export const SETTINGS_SECTIONS = [
   "instructions",
   "models",
   "connections",
+  "channels",
   "credentials",
   "about",
 ] as const;

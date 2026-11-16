@@ -33,12 +33,18 @@ export function chatRoutes({ dataRoot, chats, browser, routines }: ApiContext): 
         if (!mentions.some((m) => m.id === target.id))
           mentions.push({ id: target.id, name: target.name });
       }
-      const sent = chat.send(withMentions(text, mentions), text, mentions, eventId, answer);
-      if ("refused" in sent) return json(res, { error: sent.refused }, 409);
-      if ("answered" in sent) return json(res, { ok: true, outcome: "answered" });
-      if ("queued" in sent) return json(res, { ok: true, outcome: "queued", queued: sent.queued });
-      json(res, { ok: true, outcome: "sent" });
-      sent.start();
+      const sent = await chats.send(
+        chat.bot.id,
+        withMentions(text, mentions),
+        text,
+        mentions,
+        eventId,
+        answer,
+      );
+      if (sent.outcome === "refused") return json(res, { error: sent.reason }, 409);
+      if (sent.outcome === "queued")
+        return json(res, { ok: true, outcome: "queued", queued: sent.queued });
+      json(res, { ok: true, outcome: sent.outcome });
     },
     "/api/send/cancel": async ({ res, parse }) => {
       if (chats.cancelQueued(parse(Id).id)) return json(res, { ok: true });

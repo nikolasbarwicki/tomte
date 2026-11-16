@@ -328,6 +328,49 @@ CREATE TABLE IF NOT EXISTS tool_allowances (
 );
 `;
 
+// Channels (ADR-0010): the one account linked per channel, and the one-time codes that link it. Only a code's digest is stored;
+// `failures` counts wrong code-shaped attempts and is reset on every code of the channel when a new one is created.
+const SCHEMA_V19 = `
+CREATE TABLE IF NOT EXISTS channel_links (
+  channel TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  linked_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS channel_link_codes (
+  channel TEXT NOT NULL,
+  code_digest BLOB NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER,
+  failures INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (channel, code_digest)
+);
+`;
+
+// The card a channel sent for one needs-you item: an open external event (`event`) or a human wait (`wait`). A card is sent once per item
+// (the unique key), keeps the message reference its channel needs to edit it, and is closed once its item left `open` and the card was edited.
+const SCHEMA_V20 = `
+CREATE TABLE IF NOT EXISTS channel_cards (
+  channel TEXT NOT NULL,
+  item_kind TEXT NOT NULL CHECK (item_kind IN ('event', 'wait')),
+  item_id TEXT NOT NULL,
+  bot_id TEXT NOT NULL,
+  message_ref TEXT NOT NULL,
+  sent_at INTEGER NOT NULL,
+  closed_at INTEGER,
+  PRIMARY KEY (channel, item_kind, item_id)
+);
+CREATE INDEX IF NOT EXISTS channel_cards_by_ref ON channel_cards (channel, message_ref);
+`;
+
+// A routine's opt-in to a short result on the owner's linked channel when a run succeeds; existing routines stay off. A database migrated
+// again after its version was set back (the old-database tests do) already has the column, and one made by hand may have no table.
+const SCHEMA_V21 = (db: Database) => {
+  const columns = db.query<{ name: string }, []>("PRAGMA table_info(routines)").all();
+  if (columns.length > 0 && !columns.some((c) => c.name === "notify_result"))
+    db.run("ALTER TABLE routines ADD COLUMN notify_result INTEGER NOT NULL DEFAULT 0");
+};
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -352,6 +395,9 @@ export function migrate(db: Database): Database {
     SCHEMA_V16,
     SCHEMA_V17,
     SCHEMA_V18,
+    SCHEMA_V19,
+    SCHEMA_V20,
+    SCHEMA_V21,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

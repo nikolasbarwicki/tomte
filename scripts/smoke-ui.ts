@@ -17,6 +17,7 @@ const SMOKES = [
   "scripts/smoke-answers.ts",
   "scripts/smoke-loop-ui.ts",
   "scripts/smoke-scroll-ui.ts",
+  "scripts/smoke-channels-ui.ts",
 ];
 const scripts = process.argv.length > 2 ? process.argv.slice(2) : SMOKES;
 

@@ -5,6 +5,7 @@ import {
   KeyRoundIcon,
   MessageSquareTextIcon,
   MonitorSmartphoneIcon,
+  SendIcon,
   SlidersHorizontalIcon,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
@@ -43,6 +44,12 @@ const SECTIONS: Record<
     description: "The host this app talks to, and the devices paired with it.",
     icon: MonitorSmartphoneIcon,
   },
+  channels: {
+    label: "Channels",
+    description:
+      "Where the host reaches you outside this app. Link your account with a one-time code; messages from any other account are ignored.",
+    icon: SendIcon,
+  },
   credentials: {
     label: "Credentials",
     description:
@@ -60,8 +67,10 @@ const SECTIONS: Record<
 type SettingsSlots = {
   /** The shared user memory, shown under Instructions. */
   aboutYou: ReactNode;
-  /** The paired devices, shown under Connections & devices. */
+  /** The paired devices, shown under Connections. */
   devices: ReactNode;
+  /** The Channels section's content. */
+  channels: ReactNode;
   /** The Credentials section's content. */
   credentials: ReactNode;
 };
@@ -132,6 +141,8 @@ function Content({ section, slots }: { section: SettingsSection; slots: Settings
       return <Models />;
     case "connections":
       return <Connections devices={slots.devices} />;
+    case "channels":
+      return slots.channels;
     case "credentials":
       return slots.credentials;
     case "about":

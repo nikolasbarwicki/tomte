@@ -16,6 +16,7 @@ Settings  /settings/<section>
 ├─ Instructions   instructions for every bot (system prompt), About you (shared user memory)
 ├─ Models         model providers: Claude (status, how to sign in, models); room for more
 ├─ Connections    this host (local or remote, address, version), paired devices and pairing codes
+├─ Channels       linked phone accounts, Telegram bot token (was /channels)
 ├─ Credentials    stored logins (was /credentials)
 └─ About          versions, Claude CLI, browser engine, updates (not yet available)
 Bot panel  /bots/<id>?panel=<tab>&section=<page>
@@ -30,7 +31,8 @@ Bot panel  /bots/<id>?panel=<tab>&section=<page>
 ```
 
 Integrations stays a top-level destination: it is where tools are connected and it carries an attention badge.
-`/credentials` and `/devices` are gone; their content lives under Settings.
+`/credentials`, `/devices` and `/channels` are gone; their content lives under Settings. Links the host sends to a
+phone (run notices) open the routines page as `?panel=settings&section=routines`.
 
 The panel keeps a tab only for what changes while the user watches (Work, Tasks, Files, Browser). Everything that
 configures the bot moves under one Settings tab with nested pages, so a new per-bot setting adds a row to the overview,

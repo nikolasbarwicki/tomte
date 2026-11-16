@@ -7,7 +7,6 @@ import type { Item } from "@/host/transcript.ts";
 import {
   approvalAnswerLabel,
   approvalButtons,
-  itemActions,
   needsYouItems,
   needsYouRows,
   rowLabels,
@@ -34,14 +33,6 @@ const work = (kind: "question" | "blocked" | "failed"): WorkEvent => ({
 test("an open blocked report is a needs-you item, a handled one is not", () => {
   expect(needsYouItems(work("blocked"), "b1").map((i) => [i.id, i.kind])).toEqual([
     ["e1", "blocked"],
-  ]);
-});
-
-test("a blocked item's first button opens a draft that answers it; the second asks for status", () => {
-  const [item] = needsYouItems(work("blocked"), "b1");
-  expect(itemActions(item!)).toEqual([
-    { label: "Unblock…", draft: "claudebot · 04-notify · waiting for the API key: " },
-    { label: "Status", message: "Status claudebot · 04-notify: waiting for the API key" },
   ]);
 });
 

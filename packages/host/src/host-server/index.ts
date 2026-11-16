@@ -27,6 +27,14 @@ import {
   type LiveViewOptions,
   type SandboxStatus,
 } from "../browser/index.ts";
+import {
+  createCards,
+  createChannels,
+  createTelegramChannel,
+  type Channel,
+  type Channels,
+  type TelegramOptions,
+} from "../channels/index.ts";
 import { createCredentials } from "../credentials/index.ts";
 import { createDeviceAuth, type DeviceAuth } from "../device-auth/index.ts";
 import { createEvents, eventsPath } from "../events/index.ts";
@@ -56,12 +64,15 @@ import { pairRoute } from "./api/pair.ts";
 import { withBoundary } from "./boundary.ts";
 import { createChats } from "./chats.ts";
 import { createDeviceSessions } from "./device-sessions.ts";
+import { createEventCards } from "./event-cards.ts";
 import { createEventStream } from "./events.ts";
 import { agentRoutes, clientRoutes, createRequestListener } from "./http.ts";
 import { createHostIsolation } from "./isolation.ts";
 import { openListener } from "./listener.ts";
+import { runNotice } from "./run-notices.ts";
 import { createTranscripts } from "./transcript.ts";
 import { filesEvent, memoryEvents } from "./views.ts";
+import { createWaitCards } from "./wait-cards.ts";
 
 export interface HostServerOptions {
   /** Deployment choices parsed once at startup: the data root, where to listen and what URL users reach, and Vite. */
@@ -84,6 +95,17 @@ export interface HostServerOptions {
   takeoverInactivityMs?: number;
   /** The built web UI the client listener serves; every request no route claims answers 404 without it. Ignored when `config.vite` is on. */
   ui?: UiAssets;
+  /**
+   * Channel adapters to run besides Telegram, given the function that hands an update to the host (`Channels.receive`); none when omitted.
+   * Tests pass a fake channel here.
+   */
+  channelAdapters?: (receive: Channels["receive"]) => Channel[];
+  /** The Telegram adapter's API base URL and timing; Telegram's own API with its own timing when omitted. Tests point it at a fake server. */
+  telegram?: TelegramOptions;
+  /** Timing of the cards sent to channels; tests set it so a send that failed is tried again soon. */
+  cards?: { retryMs?: number };
+  /** Timing of the notices sent to channels (failed runs, expired parks); tests set it so a send that failed is tried again soon. */
+  notices?: { retryMs?: number };
   /** The clock device auth reads for pairing code expiry and human waits read for their 24-hour expiry, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
   /** How long an idle double-loop front stays open; 10 minutes when omitted. */
@@ -103,6 +125,8 @@ export interface HostServer {
   bots: BotsEndpoint;
   /** Pairing codes and device tokens, so a caller can pair a device without going through the exchange. */
   devices: DeviceAuth;
+  /** The channels and their links, so a caller can feed an update in or send to the linked account. */
+  channels: Channels;
   currentBotId: () => string | undefined;
   /** Whether the bot is working (a turn, a busy double-loop front or a headless run): deleting it, a new session and a mode switch are refused then. */
   isWorking: (botId: string) => boolean;
@@ -210,8 +234,11 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     onChange: (botId, changed) => {
       chats.updateExternal(botId, changed);
       if (botId === chats.currentBotId()) broadcast(externalEvents.work(botId));
+      // An item that left `open` has its card edited.
+      if (changed.length > 0) void cards.sync();
     },
     onNeedsYou: () => chats.announceBots(),
+    onOpened: () => void cards.sync(),
     deliver: (botId, text) =>
       void chats
         .deliver(botId, text)
@@ -243,8 +270,11 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     deleteAllowances(db, botId);
     loop.removeBot(botId);
     await externalEvents.removeBot(botId);
+    void cards.sync();
     await chats.drop(botId);
     await browser.removeBot(botId);
+    // Its waits are gone with it, and so are their cards.
+    void cards.sync();
     botsChanged();
   };
   const integrations = createIntegrations({
@@ -293,6 +323,20 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     workEvent: (botId) => externalEvents.work(botId),
     broadcast,
   });
+  // Before the routines, adapters included: a run that ends while the host starts (a park that expired during downtime) is reported through it.
+  const channels = createChannels({
+    db,
+    // Feature 13's absence pause counts it; until it exists, presence is not tracked.
+    onActivity: () => {},
+    publicUrl: clientAt.publicUrl,
+    ...(o.now !== undefined && { now: o.now }),
+    ...(o.notices?.retryMs !== undefined && { noticeRetryMs: o.notices.retryMs }),
+  });
+  const receive: Channels["receive"] = (kind, inbound) => channels.receive(kind, inbound);
+  channels.register(
+    createTelegramChannel({ secrets, receive, ...(o.telegram && { options: o.telegram }) }),
+  );
+  for (const adapter of o.channelAdapters?.(receive) ?? []) channels.register(adapter);
   const routines = createRoutines({
     db,
     dataRoot,
@@ -302,6 +346,11 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     deliver: (botId, text) => chats.deliver(botId, text),
     onChange: (botId) => {
       if (botId === chats.currentBotId()) broadcast(routinesEvent(botId));
+    },
+    // The run row is the record; a notice that cannot be sent never changes it.
+    onRunEnded: (end) => {
+      const notice = runNotice(end);
+      if (notice && getBot(dataRoot, end.routine.botId)) void channels.notify(notice);
     },
   });
   // A run's waits are told to the run: an answer resumes it, an expiry fails it.
@@ -346,6 +395,22 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const serveBuiltUi = serveUi(o.ui ?? { read: async () => undefined });
 
   const devices = createDeviceAuth({ db, ...(o.now !== undefined && { now: o.now }) });
+  const cards = createCards({
+    db,
+    channels,
+    sources: [
+      createEventCards({ events: externalEvents, chats }),
+      createWaitCards({ waits, chats, botName: (botId) => getBot(dataRoot, botId)?.name }),
+    ],
+    publicUrl: clientAt.publicUrl,
+    ...(o.now !== undefined && { now: o.now }),
+    ...(o.cards?.retryMs !== undefined && { retryMs: o.cards.retryMs }),
+  });
+  channels.handle((kind, inbound) => cards.receive(kind, inbound));
+  // A newly linked account gets the cards that waited for one.
+  channels.onLinked(() => void cards.sync());
+  // A wait opening gets its card, and one closing any way gets its card edited.
+  waits.subscribe(() => void cards.sync());
   const sessions = createDeviceSessions();
   const api = createApi({
     botsChanged,
@@ -364,6 +429,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     integrations,
     credentials,
     devices,
+    channels,
     sessions,
     externalEvents,
     events,
@@ -395,6 +461,9 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const agent = agentRoutes({ browser, handoffs });
 
   routines.start();
+  channels.start();
+  // Items that arrived while the host or a channel was down get their cards now.
+  void cards.sync();
   handoffs.redeliverOpen();
   clientListener.serve(
     withBoundary(
@@ -415,6 +484,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     browser: browser.endpoint,
     bots: handoffs.endpoint,
     devices,
+    channels,
     currentBotId: chats.currentBotId,
     isWorking: (botId) => chats.isWorking(botId),
     signInState: () => claude.signInState(),
@@ -424,6 +494,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       agentListener.pause();
       chats.close();
       waits.close();
+      await cards.stop();
+      await channels.stop();
       await externalEvents.stop();
       routines.stop();
       await browser.close();

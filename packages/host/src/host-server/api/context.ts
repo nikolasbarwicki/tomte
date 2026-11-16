@@ -5,6 +5,7 @@ import type { HostEvent } from "@claudebot/contract/events";
 import type { z } from "zod";
 
 import type { Browser } from "../../browser/index.ts";
+import type { Channels } from "../../channels/index.ts";
 import type { Credentials } from "../../credentials/index.ts";
 import type { DeviceAuth } from "../../device-auth/index.ts";
 import type { Events as ExternalEvents } from "../../events/index.ts";
@@ -42,6 +43,7 @@ export interface ApiContext {
   integrations: Integrations;
   credentials: Credentials;
   devices: DeviceAuth;
+  channels: Channels;
   /** Which device each request came from, and the responses still open for it. */
   sessions: DeviceSessions;
   events: EventStream;

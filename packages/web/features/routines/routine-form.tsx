@@ -9,7 +9,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -46,7 +53,8 @@ export function RoutineForm({
   onDone: () => void;
 }) {
   const { fields, set, preview, error, busy, submit } = useRoutineForm({ botId, routine, onDone });
-  const { name, instruction, kind, minute, time, day, at, expr, tz, catchUp } = fields;
+  const { name, instruction, kind, minute, time, day, at, expr, tz, catchUp, notifyResult } =
+    fields;
 
   return (
     <form className="grid gap-4" action={submit}>
@@ -200,6 +208,21 @@ export function RoutineForm({
           <FieldLabel htmlFor="routine-catchup" className="font-normal">
             Catch up on a missed run after downtime (up to 12 h)
           </FieldLabel>
+        </Field>
+        <Field orientation="horizontal">
+          <Checkbox
+            id="routine-notify-result"
+            checked={notifyResult}
+            onCheckedChange={(checked) => set({ notifyResult: checked })}
+          />
+          <FieldContent>
+            <FieldLabel htmlFor="routine-notify-result" className="font-normal">
+              Send the result to my phone
+            </FieldLabel>
+            <FieldDescription className="text-xs">
+              Needs a linked channel (Settings › Channels)
+            </FieldDescription>
+          </FieldContent>
         </Field>
         <div className="bg-muted/50 rounded-lg p-3 text-xs">
           {preview.error ? (

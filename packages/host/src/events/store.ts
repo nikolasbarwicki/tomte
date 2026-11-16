@@ -24,6 +24,20 @@ const TIMELINE_EVENTS = 50;
 /** A bot's open needs-you items, as the bots slice reports them. */
 export type OpenItems = { count: number; sources: string[]; newestAt: number };
 
+/** A stored external event that is not `progress`, with everything a channel needs to show it: the item behind a card. */
+export type EventItem = {
+  id: string;
+  botId: string;
+  kind: Exclude<ExternalEventKind, "progress">;
+  /** The source's label. */
+  source: string;
+  title: string;
+  body?: string;
+  options: string[];
+  receivedAt: number;
+  state: ExternalEventState;
+};
+
 type EventRow = {
   id: string;
   source_id: string;
@@ -219,6 +233,37 @@ export function createEventStore(db: Database) {
      WHERE e.bot_id = ? AND e.id = ? AND e.kind != 'progress'`,
   );
 
+  const itemColumns = `e.id, e.bot_id, e.kind, e.title, e.body, e.options, e.received_at, e.state, s.label
+     FROM external_events e JOIN event_sources s ON s.bot_id = e.bot_id AND s.source_id = e.source_id`;
+  type ItemRow = {
+    id: string;
+    bot_id: string;
+    kind: EventItem["kind"];
+    title: string;
+    body: string | null;
+    options: string | null;
+    received_at: number;
+    state: ExternalEventState;
+    label: string;
+  };
+  const itemOf = (r: ItemRow): EventItem => ({
+    id: r.id,
+    botId: r.bot_id,
+    kind: r.kind,
+    source: r.label,
+    title: r.title,
+    ...(r.body !== null && { body: r.body }),
+    options: r.options === null ? [] : (JSON.parse(r.options) as string[]),
+    receivedAt: r.received_at,
+    state: r.state,
+  });
+  const itemById = db.query<ItemRow, [string]>(
+    `SELECT ${itemColumns} WHERE e.id = ? AND e.kind != 'progress'`,
+  );
+  const openItems = db.query<ItemRow, []>(
+    `SELECT ${itemColumns} WHERE e.state = 'open' ORDER BY e.rowid`,
+  );
+
   /**
    * Stores one event for a bot unless its key was already seen: the source is created or updated (its label, its last
    * event time, its work snapshot when the event carries one) and a source that was archived is live again. Events
@@ -285,6 +330,13 @@ export function createEventStore(db: Database) {
         ...(relay && { relay }),
       };
     },
+    /** An external event that is not `progress` by id alone, in any state; `undefined` when there is none. Ids are unique across bots. */
+    item(id: string): EventItem | undefined {
+      const r = itemById.get(id);
+      return r ? itemOf(r) : undefined;
+    },
+    /** Every open needs-you item of every bot, in arrival order, oldest first. */
+    openItems: (): EventItem[] => openItems.all().map(itemOf),
     /** Whether the bot has this event in state `open`. */
     isOpen: (botId: string, id: string): boolean => openItem.get(botId, id) !== null,
     record,
