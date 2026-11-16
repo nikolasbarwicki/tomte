@@ -41,8 +41,12 @@ async function start({ linked = true, hostFlags = [] as string[] } = {}) {
     await host.until(() => tg.texts().length === 1);
   }
   const confirmations = tg.texts().length;
-  /** What the host sent after the link confirmation. */
-  const notices = () => tg.texts().slice(confirmations);
+  /** What the host sent after the link confirmation that is not a card: the routine's question is also a card for the owner, which these tests are not about. */
+  const notices = () =>
+    tg
+      .texts()
+      .slice(confirmations)
+      .filter((text) => !text.startsWith("Planner asks:"));
 
   const botId = host.createBot("Planner");
   const other = host.createBot("Other");
