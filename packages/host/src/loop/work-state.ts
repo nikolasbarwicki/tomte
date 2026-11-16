@@ -2,6 +2,8 @@
 export const MAX_PARALLEL = 3;
 
 const RECENT_ENDED = 3;
+/** Findings the work state lists for one running task, newest last. */
+export const MAX_FINDINGS = 8;
 
 /** One background task as the front sees it in the work state. */
 export interface WorkTask {
@@ -17,6 +19,12 @@ export interface WorkTask {
   status: string;
   /** For a queued task: the task it waits for, when it waits for one. */
   after?: string | null | undefined;
+  /** For a running task: its live status line, from the agent's progress summaries. */
+  line?: string | undefined;
+  /** For a running task: what its agent verified so far, newest last. Listing it, even empty, is what says the agent reports findings. */
+  findings?: readonly string[] | undefined;
+  /** For a running task: instructions sent to it that it did not reject. */
+  steers?: number | undefined;
 }
 
 /** Every task of one session, grouped by where it stands; `ended` is oldest first. */
@@ -36,8 +44,8 @@ const quote = (s: string) => JSON.stringify(s.replace(/\s+/g, " ").trim());
 
 /**
  * The block the app appends to every message the front receives; the user never sees it. It lists running, queued and recently
- * ended tasks with their ids, so the front takes task ids from the latest block and never from memory. Findings and live status
- * lines join it when tasks carry them.
+ * ended tasks with their ids, so the front takes task ids from the latest block and never from memory. A running task lists its
+ * live status line, its findings and how many instructions it was sent.
  */
 export function workState(
   view: TaskView = NO_TASKS,
@@ -54,6 +62,13 @@ export function workState(
     lines.push(`  - id ${t.taskId} ${describe(t)}, ${elapsed(now - t.since)}: ${quote(t.goal)}`);
     if (t.status === "interrupted")
       lines.push("    interrupted by an app restart, not resumed yet");
+    if (t.line) lines.push(`    status: ${quote(t.line)}`);
+    if (t.findings?.length) {
+      lines.push(`    findings (newest last, max ${MAX_FINDINGS}):`);
+      for (const f of t.findings.slice(-MAX_FINDINGS))
+        lines.push(`      - ${f.replace(/\s+/g, " ").trim()}`);
+    } else if (t.findings) lines.push("    findings: (none yet)");
+    if (t.steers) lines.push(`    instructions sent so far: ${t.steers}`);
   }
   lines.push(`queued:${view.queued.length ? "" : " (none)"}`);
   for (const t of view.queued)

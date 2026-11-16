@@ -10,20 +10,17 @@ import type {
 import type { ServerEvent, TaskState } from "@claudebot/contract/events";
 
 import { RECORD_PROGRESS, type ProgressAttribution } from "./agents.ts";
-import {
-  isFinal,
-  type ActivityType,
-  type LoopTask,
-  type Progress,
-  type SessionLog,
-} from "./store.ts";
-import type { TaskView, WorkTask } from "./work-state.ts";
+import type { ActivityType, Progress, SessionLog } from "./store.ts";
+import { findingsOf, foldTasks, taskEvent, type Tasks } from "./tasks.ts";
+import type { TaskView } from "./work-state.ts";
 
 /** How long a finished task waits for its report text from the SubagentStop hook, which may arrive after the notification. */
 export const REPORT_WAIT_MS = 5000;
 
 export interface ObserverDeps {
   log: SessionLog;
+  /** The session's queue: which queue entry an Agent call starts, and what a queue id became. */
+  tasks: Tasks;
   attribution: ProgressAttribution;
   /** Tells the chat what the page shows: task snapshots, status lines and reports. */
   emit: (e: ServerEvent) => void;
@@ -42,6 +39,8 @@ interface Launch {
   model?: string | undefined;
   effort?: string | undefined;
   description?: string | undefined;
+  /** The queue entry the front was asked to start with this call. */
+  queuedId?: string | undefined;
 }
 
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
@@ -77,21 +76,6 @@ export function lastAssistantText(path: string): string {
   return "";
 }
 
-/** A task as the page shows it. */
-export function taskEvent(t: LoopTask): Extract<ServerEvent, { type: "task" }> {
-  return {
-    type: "task",
-    taskId: t.taskId,
-    ...(t.agentType !== undefined && { agentType: t.agentType }),
-    ...(t.model !== undefined && { model: t.model }),
-    ...(t.effort !== undefined && { effort: t.effort }),
-    goal: t.goal,
-    state: t.status,
-    startedAt: t.startedAt,
-    ...(t.endedAt !== undefined && { endedAt: t.endedAt }),
-  };
-}
-
 /**
  * Turns the front session's SDK messages and hook calls into task rows, live status lines and reports, for one bot session. A
  * report is posted once: its text comes from the agent's SubagentStop hook or, failing that, from its transcript, and the hook
@@ -102,6 +86,8 @@ export class Observer {
   private readonly statuses = new Map<string, string>();
   /** Agent tool calls by tool use id, until their task starts. */
   private readonly launches = new Map<string, Launch>();
+  /** SendMessage calls by tool use id, until their result arrives. */
+  private readonly steers = new Map<string, { taskId: string; text: string }>();
   /** Last message of each stopped agent, until its task notification arrives. */
   private readonly stopText = new Map<string, string>();
   /** Finished tasks whose report text has not arrived yet, with what cancels their wait. */
@@ -155,26 +141,18 @@ export class Observer {
     };
   }
 
-  /** The session's tasks grouped as the work state lists them. */
+  /** The session's tasks grouped as the work state lists them, with the status lines, findings and steers of those that run. */
   view(): TaskView {
-    const work = (t: LoopTask): WorkTask => ({
-      taskId: t.taskId,
-      agentType: t.agentType,
-      model: t.model,
-      effort: t.effort,
-      goal: t.goal,
-      since: t.startedAt,
-      status: t.status,
+    return foldTasks(this.d.log.tasks(), (t) => {
+      const steers = this.d.log.events("steer", t.taskId);
+      return {
+        line: this.statuses.get(t.taskId),
+        findings: findingsOf(this.d.log, t.taskId),
+        steers:
+          steers.filter((e) => e.state === "sent").length -
+          steers.filter((e) => e.state === "failed").length,
+      };
     });
-    const tasks = this.d.log.tasks();
-    return {
-      running: tasks.filter((t) => t.status === "running" || t.status === "interrupted").map(work),
-      queued: tasks.filter((t) => t.status === "queued").map(work),
-      ended: tasks
-        .filter((t) => isFinal(t.status))
-        .sort((a, b) => (a.endedAt ?? 0) - (b.endedAt ?? 0))
-        .map(work),
-    };
   }
 
   /** How many agents run now; an interrupted one does not. */
@@ -201,11 +179,17 @@ export class Observer {
   /** A finding an agent recorded through `record_progress`, attributed to its task. */
   recordProgress(taskId: string, progress: Progress): void {
     this.d.log.append({ kind: "progress", taskId, at: this.now(), progress });
+    if (progress.finding) this.emitTask(taskId);
   }
 
-  private emitTask(taskId: string) {
+  /** Shows the page the task as the store has it now; `queuedId` says a queue entry became this task. */
+  private emitTask(taskId: string, queuedId?: string) {
     const t = this.d.log.getTask(taskId);
-    if (t) this.d.emit(taskEvent(t));
+    if (t)
+      this.d.emit({
+        ...taskEvent(t, findingsOf(this.d.log, taskId)),
+        ...(queuedId && { queuedId }),
+      });
   }
 
   private onToolUse(input: {
@@ -234,8 +218,23 @@ export class Observer {
         model: str(args.model),
         effort: str(args.effort),
         description: str(args.description),
+        queuedId: this.d.tasks.claim({
+          name: str(args.name),
+          description: str(args.description),
+          prompt: str(args.prompt),
+        }),
       });
+    else if (name === "SendMessage") this.onSteer(input.tool_use_id, args);
     return {};
+  }
+
+  /** The front gave a running task an instruction: it is logged as sent now, and as failed if the tool answers with an error. */
+  private onSteer(toolUseId: string, args: Record<string, unknown>) {
+    const taskId = this.d.tasks.resolve(str(args.to) ?? "");
+    if (!this.d.log.getTask(taskId)) return;
+    const text = str(args.message) ?? JSON.stringify(args.message ?? "");
+    this.steers.set(toolUseId, { taskId, text });
+    this.d.log.append({ kind: "steer", taskId, at: this.now(), state: "sent", text });
   }
 
   private activity(taskId: string, type: ActivityType, text: string) {
@@ -265,11 +264,36 @@ export class Observer {
   }
 
   onMessage(m: SDKMessage): void {
+    if (m.type === "user") this.onToolResults(m);
     if (m.type !== "system") return;
     if (m.subtype === "task_started") this.onTaskStarted(m);
     else if (m.subtype === "task_progress") {
       if (m.summary && this.statuses.has(m.task_id)) this.setStatus(m.task_id, m.summary);
     } else if (m.subtype === "task_notification") this.onTaskEnded(m);
+  }
+
+  /** A SendMessage the tool rejected, such as one to an agent that does not exist, is a failed steer. */
+  private onToolResults(m: Extract<SDKMessage, { type: "user" }>) {
+    if (m.parent_tool_use_id !== null || ("agent_id" in m && m.agent_id)) return;
+    if (!Array.isArray(m.message.content)) return;
+    for (const b of m.message.content) {
+      if (b.type !== "tool_result") continue;
+      const steer = this.steers.get(b.tool_use_id);
+      if (!steer) continue;
+      this.steers.delete(b.tool_use_id);
+      if (!b.is_error) continue;
+      const why =
+        typeof b.content === "string"
+          ? b.content
+          : (b.content ?? []).flatMap((c) => (c.type === "text" ? [c.text] : [])).join(" ");
+      this.d.log.append({
+        kind: "steer",
+        taskId: steer.taskId,
+        at: this.now(),
+        state: "failed",
+        text: `${steer.text} (rejected: ${clip(why.trim(), 300)})`,
+      });
+    }
   }
 
   private onTaskStarted(m: Extract<SDKMessage, { subtype: "task_started" }>) {
@@ -282,8 +306,10 @@ export class Observer {
       return;
     const launch = m.tool_use_id ? this.launches.get(m.tool_use_id) : undefined;
     if (m.tool_use_id) this.launches.delete(m.tool_use_id);
+    // The agent that was started for a queue entry replaces the entry.
+    const queued = launch?.queuedId ? this.d.tasks.started(launch.queuedId, m.task_id) : undefined;
     const known = this.d.log.getTask(m.task_id);
-    const agentType = launch?.agentType ?? m.subagent_type ?? known?.agentType;
+    const agentType = launch?.agentType ?? m.subagent_type ?? known?.agentType ?? queued?.agentType;
     const defaults = this.d.defaults(agentType);
     const now = this.now();
     // A resumed agent is a new run of the same task: what the last run left unposted is stale.
@@ -297,13 +323,13 @@ export class Observer {
         agentType,
         model: launch?.model ?? known?.model ?? defaults.model,
         effort: launch?.effort ?? known?.effort ?? defaults.effort,
-        goal: known?.goal ?? (launch?.description || m.description),
+        goal: known?.goal ?? queued?.goal ?? (launch?.description || m.description),
         status: "running",
         startedAt: known?.startedAt ?? now,
       },
       now,
     );
-    this.emitTask(m.task_id);
+    this.emitTask(m.task_id, queued?.taskId);
     this.setStatus(m.task_id, known ? "Resuming" : "Starting");
     this.d.changed();
   }

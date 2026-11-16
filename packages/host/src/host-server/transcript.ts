@@ -16,7 +16,13 @@ import { z } from "zod";
 import { currentSession, listBots, markSeen, getActivity, recordMessage } from "../bots/index.ts";
 import type { Events } from "../events/index.ts";
 import { parseMentions, type Handoffs } from "../handoffs/index.ts";
-import { taskEvent, withoutWorkState, type LoopStore, type SessionLog } from "../loop/index.ts";
+import {
+  findingsOf,
+  taskEvent,
+  withoutWorkState,
+  type LoopStore,
+  type SessionLog,
+} from "../loop/index.ts";
 
 export type Transcript = { history: ServerEvent[]; hasSession: boolean };
 
@@ -51,7 +57,9 @@ function writtenAt(m: SessionMessage): number | undefined {
  */
 function withLoopLog(events: ServerEvent[], stamps: number[], log: SessionLog): ServerEvent[] {
   const stored: { at: number; event: ServerEvent }[] = [
-    ...log.tasks().map((t) => ({ at: t.startedAt, event: taskEvent(t) })),
+    ...log
+      .tasks()
+      .map((t) => ({ at: t.startedAt, event: taskEvent(t, findingsOf(log, t.taskId)) })),
     ...log.events("report").map((r) => ({
       at: r.at,
       event: { type: "report" as const, taskId: r.taskId, text: r.text },

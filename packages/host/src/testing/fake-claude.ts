@@ -7,7 +7,7 @@
 // Every tool result the host sends back for those calls is appended to `tool-results.jsonl` as the MCP response message.
 // `auth status` prints the real CLI's JSON and exits 1 while a `signed-out` file exists, else exits 0. `auth login` exits with the code in the optional `login-exit` file (default 0).
 // An optional `loop.json` scripts what the fake emits per user message, to drive the host as the double-loop chat mode's long-lived front query does (background tasks, hooks, in-process MCP servers, a crash mid-run). Without it, or when no script is left for a message, the behaviour above is unchanged. Shape: `{ scripts: [{ match?: string, steps: Step[] }] }`.
-// A user message takes the first unused script whose `match` is a substring of its text, else the first unused script without a `match`; the use is recorded in `loop-used.json`, so it holds across relaunches (`--resume`). Steps run in order, off the read loop, so a later user message is answered while an earlier script still runs. A script with no `result` step ends with the default result (`result.txt`, else "ok"). Every string in a step may hold `{session}` (the session id) and `{n}` (0-based index of the user message over all launches, the line count of `messages.jsonl` before it).
+// A user message takes the first unused script whose `match` is a substring of its text, else the first unused script without a `match`; the use is recorded in `loop-used.json`, so it holds across relaunches (`--resume`). Steps run in order, off the read loop, so a later user message is answered while an earlier script still runs. A script with no `result` step ends with the default result (`result.txt`, else "ok"). Every string in a step may hold `{session}` (the session id), `{n}` (0-based index of the user message over all launches, the line count of `messages.jsonl` before it) and `{queued}` (the first queue id, `q-` and hex digits, in the user message's text: the task the app asks the front to start).
 // Steps (one key each):
 // - `{ emit: <SDK message> }`: one stdout line; `session_id` and `uuid` are filled when missing. Use it for `system` `task_started` / `task_progress` / `task_notification`, `assistant` messages with `tool_use` blocks, `user` tool results, `rate_limit_event`.
 // - `{ text: "..." }`: `stream_event` deltas (message_start, content_block_start, one content_block_delta per word, content_block_stop, message_delta, message_stop), then the matching `assistant` message.
@@ -92,12 +92,17 @@ type Script = { match?: string; steps: Step[] };
 
 const record = (file: string, value: unknown) =>
   appendFileSync(join(dir, file), JSON.stringify(value) + "\n");
-const subst = <T>(value: T, n: number): T => {
+/** The values `{...}` in a step stand for. */
+type Substitutions = { n: number; queued: string };
+const subst = <T>(value: T, vars: Substitutions): T => {
   if (typeof value === "string")
-    return value.replaceAll("{session}", session).replaceAll("{n}", String(n)) as T;
-  if (Array.isArray(value)) return value.map((v) => subst(v, n)) as T;
+    return value
+      .replaceAll("{session}", session)
+      .replaceAll("{n}", String(vars.n))
+      .replaceAll("{queued}", vars.queued) as T;
+  if (Array.isArray(value)) return value.map((v) => subst(v, vars)) as T;
   if (value && typeof value === "object")
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, subst(v, n)])) as T;
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, subst(v, vars)])) as T;
   return value;
 };
 const resultMessage = (result: string) => ({
@@ -223,10 +228,10 @@ const denies = (r: unknown) => {
 
 let ranScript = false;
 /** Runs `steps`; true once a `result` step has emitted the turn's result. */
-const runSteps = async (steps: Step[], n: number): Promise<boolean> => {
+const runSteps = async (steps: Step[], vars: Substitutions): Promise<boolean> => {
   let answered = false;
   for (const raw of steps) {
-    const step = subst(raw, n);
+    const step = subst(raw, vars);
     if (step.emit) {
       out({ session_id: session, uuid: crypto.randomUUID(), ...step.emit });
     } else if (step.text !== undefined) {
@@ -260,7 +265,7 @@ const runSteps = async (steps: Step[], n: number): Promise<boolean> => {
       if (!callbacks.length)
         record("hook-results.jsonl", { hook: step.hook, input, callback: null, response: null });
       if (step.ifDenied && responses.some(denies))
-        answered = (await runSteps(step.ifDenied, n)) || answered;
+        answered = (await runSteps(step.ifDenied, vars)) || answered;
     } else if (step.mcp) {
       await callTool(step.mcp.server, step.mcp.tool, step.mcp.args ?? {});
     } else if (step.result !== undefined) {
@@ -355,7 +360,8 @@ for await (const line of createInterface({ input: process.stdin })) {
       const script = takeScript(text);
       if (script) {
         ranScript = true;
-        if (!(await runSteps(script.steps, n))) out(resultMessage(defaultResult()));
+        const queued = /q-[0-9a-f]+/.exec(text)?.[0] ?? "";
+        if (!(await runSteps(script.steps, { n, queued }))) out(resultMessage(defaultResult()));
         return;
       }
       const askFile = join(dir, "ask.json");

@@ -62,6 +62,40 @@ test("running, queued and ended tasks are listed with their ids, and only the la
   );
 });
 
+test("a running task lists its status line, its newest eight findings and the instructions it was sent", () => {
+  const findings = Array.from({ length: 10 }, (_, i) => `fact ${i + 1}`);
+  const text = workState(
+    {
+      running: [
+        task({ taskId: "t1", since: 0, goal: "g", line: "Reading the docs", findings, steers: 2 }),
+        task({ taskId: "t2", since: 0, goal: "h", findings: [], steers: 0 }),
+        task({ taskId: "t3", since: 0, goal: "i" }),
+      ],
+      queued: [],
+      ended: [],
+    },
+    3,
+    5_000,
+  );
+  expect(text).toBe(
+    [
+      "<work_state>",
+      "running (3 of 3 slots):",
+      '  - id t1 agent ?/?, 5s: "g"',
+      '    status: "Reading the docs"',
+      "    findings (newest last, max 8):",
+      ...findings.slice(2).map((f) => `      - ${f}`),
+      "    instructions sent so far: 2",
+      '  - id t2 agent ?/?, 5s: "h"',
+      "    findings: (none yet)",
+      '  - id t3 agent ?/?, 5s: "i"',
+      "queued: (none)",
+      "recent (last 3 ended): (none)",
+      "</work_state>",
+    ].join("\n"),
+  );
+});
+
 test("the block the app appends is stripped from a message, and only that block", () => {
   const typed = "what is the plan?\n\nplease be brief";
   expect(withoutWorkState(`${typed}\n\n${workState(undefined, 3, 0)}`)).toBe(typed);

@@ -202,6 +202,7 @@ export function createChats(deps: ChatsDeps): Chats {
   /** Closes a chat that is neither shown nor running; its session resumes from disk when the bot is opened again. */
   function release(chat: Chat) {
     if (chat === current || chat.busy || chat.inbox.length || chat.presence !== "idle") return;
+    chat.front?.tasks.dispose();
     closeSessions(chat, "released");
     chats.delete(chat.bot.id);
   }
@@ -310,12 +311,17 @@ export function createChats(deps: ChatsDeps): Chats {
     }
     if (chat.front) {
       showDelivered(chat, text);
-      if (headless(botId)) chat.held.push(text);
-      else pushToFront(chat, text, true);
+      messageFront(chat, text);
       return;
     }
     chat.inbox.push({ source: "host", text });
     await drain();
+  }
+
+  /** Gives a double-loop bot's front a message the app wrote; it waits while a scheduled run is writing the conversation. */
+  function messageFront(chat: Chat, text: string) {
+    if (headless(chat.bot.id)) chat.held.push(text);
+    else pushToFront(chat, text, true);
   }
 
   /** Gives a double-loop bot's front a message, which it takes mid-turn if it is busy; the reply streams through `onFrontMessage`. */
@@ -527,6 +533,7 @@ export function createChats(deps: ChatsDeps): Chats {
       store: deps.loop,
       emit: (e) => emitLoop(chat(), e),
       changed: () => tasksChanged(chat()),
+      dispatch: (text) => messageFront(chat(), text),
       onMessage: (m) => onFrontMessage(chat(), m),
       onEnd: (e) => frontFailed(chat(), e),
     });
@@ -602,6 +609,7 @@ export function createChats(deps: ChatsDeps): Chats {
   async function drop(botId: string) {
     const chat = chats.get(botId);
     if (chat) {
+      chat.front?.tasks.dispose();
       closeSessions(chat, "bot deleted");
       chats.delete(botId);
     }
@@ -632,6 +640,9 @@ export function createChats(deps: ChatsDeps): Chats {
 
   function startSession(chat: Chat): boolean {
     if (chat.busy || chat.presence !== "idle" || headless(chat.bot.id)) return false;
+    // The queue belongs to the conversation that ends here.
+    chat.front?.tasks.cancelAllQueued();
+    chat.front?.tasks.dispose();
     closeSessions(chat, "new session");
     newSession(dataRoot, chat.bot);
     chat.delivered.clear();
@@ -778,7 +789,10 @@ export function createChats(deps: ChatsDeps): Chats {
           ]
         : [],
     close() {
-      for (const chat of chats.values()) closeSessions(chat, "shutdown");
+      for (const chat of chats.values()) {
+        chat.front?.tasks.dispose();
+        closeSessions(chat, "shutdown");
+      }
       filesWatcher?.close();
     },
   };

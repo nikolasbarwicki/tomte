@@ -77,6 +77,20 @@ Chat mode dispatch lives in `host-server/chats.ts` (`send`, `deliver`, `reconfig
 - Presence is `typing` while the front streams its own message (messages from agents are not shown), `working` while any agent runs, else `idle`; a double-loop chat is kept alive while its presence is not `idle`.
 - The web shows a task as one row that follows its state and, while it runs, its status line; a report renders as the bot's message with a tooltip naming the task.
 
+**M4 decisions (parallel, steer, cancel, queue).** Beyond the spec above:
+
+- A queued task is a `loop_tasks` row of status `queued` with an app id `q-<8 hex>` and, when it waits for a task, `after_task` (`SCHEMA_V15`). When the front's Agent call that names the id starts, the entry's row is deleted and the agent's row takes its goal and agent type, its start being the agent's; tasks that waited for the entry are pointed at the agent, and the `task` event carries `queuedId` so the page puts the agent in the entry's row. The id is claimed by the Agent call's `name`, `description` or `prompt`, as in v3.
+- Which entries are due is computed from the store; what the front was asked to start (`dispatched`, with its attempt count) is memory only. An interrupted task holds a slot, as in v3, and an interrupted blocker is not over, so what waits for it waits for M5.
+- `pump()` runs on every task change and on a 5 s timer that exists only while something is queued. A due entry becomes the synthetic message `Start queued task q-… (agent: T): goal` through the chat's host-message path (held while a scheduled run writes the conversation); after 120 s unanswered it is asked again, and after two requests the task becomes `failed` with no report. The timer stops when the chat is released, dropped or shut down; a queue left by an earlier host run is looked at 5 s after its chat opens, and the queue is not pumped at construction.
+- A new session cancels the old session's queued tasks, because `hasActive` reads every session of the bot and nothing would ever start them.
+- `queue_task` and `cancel_queued` are in the `loop` MCP server and pre-approved with the front's other tools; `queue_task` refuses an unknown `after`, and treats an ended one as `null`.
+- A steer is two rows at most: `sent` when the front's `SendMessage` is about to run for a task the store knows (queue ids resolve to the agent they became), and `failed` (with the tool's reason) when the tool answers with an error. The work state lists `instructions sent so far` as sent minus failed. No `ServerEvent` carries steers.
+- `TaskStop` needs no rule of its own: the CLI's `stopped` notification cancels the task, and a stop on an `interrupted` task keeps it interrupted until M5.
+- The work state's running tasks list the status line, the newest eight findings and the steer count; queued and recent tasks keep M3's lines. `foldTasks` (`loop/tasks.ts`) is the pure grouping of the store's tasks into running, queued and ended.
+- Findings reach the web on the `task` event itself (`findings`, the newest eight, whole each time, so the latest event replaces the earlier one), with `after` for a queued task and `queuedId` as above; replay builds the same events from the store. No `finding` event.
+- The Tasks tab is a web feature module `features/tasks` composed into `BotPanel` through a `tasks` slot in `bot.lazy.tsx`. It reads the `task` rows of the open chat, so it lists what the transcript knows, and it exists only for a bot whose `chatMode` is `double_loop`; `?panel=tasks` on another bot opens the default tab.
+- The fake CLI's `loop.json` steps may use `{queued}`, the `q-` id in the user message's text, so a script can answer a queue dispatch.
+
 ## Consequences
 
 - Both modes stay supported: the standard chat and its tests are unchanged, and every `chats.ts` path that touches `busy`, `inbox` or `drain` needs a mode branch.

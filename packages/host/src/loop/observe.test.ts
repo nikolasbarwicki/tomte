@@ -11,9 +11,13 @@ import { migrate } from "../platform/db.ts";
 import { ProgressAttribution } from "./agents.ts";
 import { Observer, REPORT_WAIT_MS, lastAssistantText } from "./observe.ts";
 import { createLoopStore, type SessionLog } from "./store.ts";
+import { Tasks } from "./tasks.ts";
 
 let log: SessionLog;
 let attribution: ProgressAttribution;
+let tasks: Tasks;
+/** What the queue asked the front to start. */
+let dispatched: string[];
 let observer: Observer;
 let emitted: ServerEvent[];
 let changed: number;
@@ -25,11 +29,21 @@ beforeEach(() => {
   log = createLoopStore(migrate(new Database(":memory:"))).session("bot", "session");
   attribution = new ProgressAttribution();
   emitted = [];
+  dispatched = [];
   changed = 0;
   clock = 1000;
   waits = [];
+  tasks = new Tasks({
+    log,
+    maxParallel: 3,
+    dispatch: (m) => dispatched.push(m),
+    emit: (e) => emitted.push(e),
+    now: () => clock,
+    every: () => () => {},
+  });
   observer = new Observer({
     log,
+    tasks,
     attribution,
     emit: (e) => emitted.push(e),
     changed: () => changed++,
@@ -230,6 +244,153 @@ describe("what an agent does", () => {
   });
 });
 
+const toolResult = (id: string, content: string, isError = false) =>
+  ({
+    type: "user",
+    parent_tool_use_id: null,
+    message: {
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }],
+    },
+  }) as unknown as SDKMessage;
+
+describe("findings", () => {
+  test("a recorded finding reaches the page on the task's own event, newest last, and a record without one does not", () => {
+    started();
+    emitted.length = 0;
+    observer.recordProgress("t1", { phase: "p", finding: null, next: "n" });
+    expect(emitted).toEqual([]);
+
+    observer.recordProgress("t1", { phase: "p", finding: "X costs  $20.", next: "n" });
+    observer.recordProgress("t1", { phase: "q", finding: "Y is free.", next: "n" });
+    expect(emitted.at(-1)).toMatchObject({
+      type: "task",
+      taskId: "t1",
+      state: "running",
+      findings: ["X costs $20.", "Y is free."],
+    });
+  });
+
+  test("the work state view carries each running task's status line, findings and net steers", async () => {
+    started();
+    progress("Reading");
+    observer.recordProgress("t1", { phase: "p", finding: "F1", next: "n" });
+    await hook("PreToolUse", {
+      tool_name: "SendMessage",
+      tool_input: { to: "t1", message: "focus on pricing" },
+      tool_use_id: "tu-s1",
+    });
+    await hook("PreToolUse", {
+      tool_name: "SendMessage",
+      tool_input: { to: "t1", message: "and teams" },
+      tool_use_id: "tu-s2",
+    });
+    observer.onMessage(toolResult("tu-s2", "No agent with that id", true));
+
+    expect(observer.view().running).toMatchObject([
+      { taskId: "t1", line: "Reading", findings: ["F1"], steers: 1 },
+    ]);
+  });
+});
+
+describe("a steer", () => {
+  const sendMessage = (id: string, to: string, message: string) =>
+    hook("PreToolUse", {
+      tool_name: "SendMessage",
+      tool_input: { to, message },
+      tool_use_id: id,
+    });
+
+  test("is stored as sent when the front calls SendMessage on a known task, and stays sent when the tool succeeds", async () => {
+    started();
+    clock = 1500;
+    await sendMessage("tu-1", "t1", "skip pricing");
+    observer.onMessage(toolResult("tu-1", "Message queued", false));
+
+    expect(log.events("steer")).toEqual([
+      { kind: "steer", taskId: "t1", at: 1500, state: "sent", text: "skip pricing" },
+    ]);
+  });
+
+  test("is stored as failed too when the tool rejects it, with the reason", async () => {
+    started();
+    await sendMessage("tu-1", "t1", "skip pricing");
+    observer.onMessage(toolResult("tu-1", "Agent t1 is not running ".repeat(20), true));
+
+    const steers = log.events("steer");
+    expect(steers.map((e) => e.state)).toEqual(["sent", "failed"]);
+    expect(steers[1]?.text).toStartWith("skip pricing (rejected: Agent t1 is not running");
+    expect(steers[1]?.text.length).toBeLessThan(400);
+  });
+
+  test("to an id the app does not know is not logged, and results of other tools or agents are ignored", async () => {
+    started();
+    await sendMessage("tu-1", "ghost", "hello");
+    observer.onMessage(toolResult("tu-1", "no such agent", true));
+    observer.onMessage({
+      ...toolResult("tu-x", "boom", true),
+      parent_tool_use_id: "tu-agent",
+    } as SDKMessage);
+
+    expect(log.events("steer")).toEqual([]);
+  });
+
+  test("addressed to a queue id that became an agent reaches the agent", async () => {
+    const q = tasks.queue("later", "researcher", null);
+    if (!q.ok) throw new Error(q.error);
+    await hook("PreToolUse", {
+      tool_name: "Agent",
+      tool_use_id: "tu-a",
+      tool_input: { name: q.id, subagent_type: "researcher", description: "later", prompt: "x" },
+    });
+    started("agent-9", { tool_use_id: "tu-a" });
+    await sendMessage("tu-1", q.id, "also teams");
+
+    expect(log.events("steer")).toMatchObject([{ taskId: "agent-9", state: "sent" }]);
+  });
+});
+
+describe("a queued task starting", () => {
+  test("replaces its queue entry: same goal and agent type, the entry's row gone, the page told which entry it was", async () => {
+    const q = tasks.queue("compare plans", "researcher", null);
+    if (!q.ok) throw new Error(q.error);
+    expect(dispatched).toHaveLength(1);
+    emitted.length = 0;
+    clock = 4000;
+    await hook("PreToolUse", {
+      tool_name: "Agent",
+      tool_use_id: "tu-a",
+      tool_input: { name: q.id, subagent_type: "researcher", description: "ignored", prompt: "p" },
+    });
+    started("agent-1", { tool_use_id: "tu-a", description: "ignored too" });
+
+    expect(log.getTask(q.id)).toBeUndefined();
+    expect(log.getTask("agent-1")).toMatchObject({
+      goal: "compare plans",
+      agentType: "researcher",
+      status: "running",
+      startedAt: 4000,
+    });
+    expect(emitted[0]).toMatchObject({ type: "task", taskId: "agent-1", queuedId: q.id });
+    // The slot it took is not asked for again.
+    expect(tasks.due()).toEqual([]);
+  });
+
+  test("an Agent call that names no dispatched entry is a task of its own", async () => {
+    started("t1");
+    tasks.queue("later", "researcher", "t1");
+    await hook("PreToolUse", {
+      tool_name: "Agent",
+      tool_use_id: "tu-a",
+      tool_input: { name: "q-unknown", description: "own goal" },
+    });
+    started("agent-1", { tool_use_id: "tu-a" });
+
+    expect(log.getTask("agent-1")).toMatchObject({ goal: "own goal" });
+    expect(log.tasks().filter((t) => t.status === "queued")).toHaveLength(1);
+  });
+});
+
 describe("a task's report", () => {
   test("posts once when the hook arrives before the notification, and again signals add nothing", async () => {
     started();
@@ -425,6 +586,7 @@ describe("hooks", () => {
     };
     const broken = new Observer({
       log,
+      tasks,
       attribution: failing,
       emit: () => {},
       changed: () => {},

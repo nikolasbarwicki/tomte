@@ -74,6 +74,7 @@ const AGENT_CALL = {
 };
 const FINDING = { phase: "Pricing", finding: "X costs $20 a month.", next: "Check the team plan." };
 const REPORT = "X costs $20 a month on every plan.";
+const QUEUE_ARGS = { goal: "compare plans", agent: "researcher", after: "agent-1" };
 
 /** The scripted run: the front starts a researcher, which reports progress and finishes once the test lets it. */
 const researchScript = {
@@ -289,6 +290,7 @@ describe("a double-loop bot's researcher", () => {
       taskId: "agent-1",
       state: "done",
       goal: "research X",
+      findings: [FINDING.finding],
     });
     expect(events.some((e) => e.type === "task_status")).toBe(false);
   });
@@ -308,5 +310,252 @@ describe("a double-loop bot's researcher", () => {
     const events = await pageEvents();
     expect(events.find((e) => e.type === "presence")?.state).toBe("idle");
     expect(events.filter((e) => e.type === "report")).toEqual([]);
+  });
+});
+
+const agentCall = (description: string) => ({
+  subagent_type: "researcher",
+  description,
+  prompt: `Find out: ${description}`,
+  run_in_background: true,
+});
+const preToolUse = (id: string, name: string, input: Record<string, unknown>) => ({
+  hook: "PreToolUse",
+  tool_use_id: id,
+  input: { tool_name: name, tool_input: input, tool_use_id: id },
+});
+const taskStarted = (taskId: string, toolUseId: string, description: string) => ({
+  emit: {
+    type: "system",
+    subtype: "task_started",
+    task_id: taskId,
+    tool_use_id: toolUseId,
+    description,
+    subagent_type: "researcher",
+  },
+});
+const toolResult = (id: string, content: string, isError = false) => ({
+  emit: {
+    type: "user",
+    parent_tool_use_id: null,
+    message: {
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }],
+    },
+  },
+});
+/** The front starts a researcher for a message; `after` is what the agent does once it is running. */
+const startsAgent = (
+  match: string,
+  toolUseId: string,
+  taskId: string,
+  description: string,
+  after: Record<string, unknown>[] = [],
+) => ({
+  match,
+  steps: [
+    { text: "On it." },
+    toolUse(toolUseId, "Agent", agentCall(description)),
+    preToolUse(toolUseId, "Agent", agentCall(description)),
+    taskStarted(taskId, toolUseId, description),
+    { result: "On it." },
+    ...after,
+  ],
+});
+
+/** What the scripted front does for each of the five things the user says, and what agent 1 does meanwhile. */
+const parallelScripts = [
+  startsAgent("research ALPHA", "tu-a", "agent-1", "research ALPHA", [
+    {
+      hook: "PreToolUse",
+      tool_use_id: "tu-rp",
+      input: {
+        tool_name: "mcp__loop__record_progress",
+        tool_input: FINDING,
+        tool_use_id: "tu-rp",
+        agent_id: "agent-1",
+      },
+    },
+    { mcp: { server: "loop", tool: "record_progress", args: FINDING } },
+    { waitFor: "end-alpha" },
+    {
+      hook: "SubagentStop",
+      input: {
+        agent_id: "agent-1",
+        agent_type: "researcher",
+        agent_transcript_path: "",
+        stop_hook_active: false,
+        last_assistant_message: REPORT,
+      },
+    },
+    {
+      emit: {
+        type: "system",
+        subtype: "task_notification",
+        task_id: "agent-1",
+        status: "completed",
+        output_file: "",
+        summary: "done",
+      },
+    },
+  ]),
+  startsAgent("research BETA", "tu-b", "agent-2", "research BETA"),
+  {
+    match: "focus ALPHA",
+    steps: [
+      { text: "Passing that on." },
+      toolUse("tu-s1", "SendMessage", { to: "agent-1", message: "Focus on pricing." }),
+      preToolUse("tu-s1", "SendMessage", { to: "agent-1", message: "Focus on pricing." }),
+      toolResult("tu-s1", "Message queued for delivery"),
+      toolUse("tu-s2", "SendMessage", { to: "agent-1", message: "And the team plan." }),
+      preToolUse("tu-s2", "SendMessage", { to: "agent-1", message: "And the team plan." }),
+      toolResult("tu-s2", "Agent agent-1 is busy", true),
+      { result: "Passing that on." },
+    ],
+  },
+  {
+    match: "drop BETA",
+    steps: [
+      { text: "Dropping it now." },
+      toolUse("tu-stop", "TaskStop", { task_id: "agent-2" }),
+      preToolUse("tu-stop", "TaskStop", { task_id: "agent-2" }),
+      {
+        emit: {
+          type: "system",
+          subtype: "task_notification",
+          task_id: "agent-2",
+          status: "stopped",
+          output_file: "",
+          summary: "Stopped",
+        },
+      },
+      { result: "Dropping it now." },
+    ],
+  },
+  {
+    match: "after ALPHA ends",
+    steps: [
+      { text: "Okay, I'll do that after the first one." },
+      toolUse("tu-q", "mcp__loop__queue_task", QUEUE_ARGS),
+      { mcp: { server: "loop", tool: "queue_task", args: QUEUE_ARGS } },
+      { result: "Okay, I'll do that after the first one." },
+    ],
+  },
+  {
+    match: "Start queued task",
+    steps: [
+      toolUse("tu-c", "Agent", {
+        ...agentCall("compare plans"),
+        name: "{queued}",
+      }),
+      preToolUse("tu-c", "Agent", { ...agentCall("compare plans"), name: "{queued}" }),
+      taskStarted("agent-3", "tu-c", "compare plans"),
+      { result: "" },
+    ],
+  },
+];
+
+describe("a double-loop bot's parallel tasks", () => {
+  test("two tasks run in parallel, one is steered and one cancelled, and a queued task is started by the front when its blocker ends", async () => {
+    const bot = await doubleLoopBot();
+    const watch = await watchEvents(host);
+    host.loopScript(...parallelScripts);
+    const log = createLoopStore(host.db).session(bot, bot);
+    const records = () => host.messageRecords(bot);
+
+    await send("research ALPHA");
+    await send("research BETA");
+    await host.until(() => log.getTask("agent-2")?.status === "running");
+    expect(log.tasks().map((t) => [t.taskId, t.status])).toEqual([
+      ["agent-1", "running"],
+      ["agent-2", "running"],
+    ]);
+    await host.until(() => log.events("progress").length === 1);
+
+    // A steer: sent, and a second one the tool rejected is failed too.
+    await send("focus ALPHA on pricing");
+    await host.until(() => log.events("steer").length === 3);
+    expect(log.events("steer").map((e) => [e.taskId, e.state, e.text])).toEqual([
+      ["agent-1", "sent", "Focus on pricing."],
+      ["agent-1", "sent", "And the team plan."],
+      ["agent-1", "failed", "And the team plan. (rejected: Agent agent-1 is busy)"],
+    ]);
+
+    // The message after it tells the front what the agent found and how many instructions it has been sent.
+    await send("drop BETA");
+    await host.until(() => log.getTask("agent-2")?.status === "cancelled");
+    const state = defined(records().at(-1), "last message").text;
+    expect(state).toContain("  - id agent-1 researcher sonnet/medium");
+    expect(state).toContain("    findings (newest last, max 8):\n      - X costs $20 a month.");
+    expect(state).toContain("    instructions sent so far: 1");
+    expect(state).toContain("  - id agent-2 researcher sonnet/medium");
+    expect(
+      watch
+        .events()
+        .filter((e) => e.type === "task" && e.taskId === "agent-2")
+        .map((e) => e.state),
+    ).toEqual(["running", "cancelled"]);
+    expect(reportsIn(watch.events())).toEqual([]);
+
+    // Queued after the first task, it waits and nothing is asked of the front.
+    await send("do the comparison after ALPHA ends");
+    await host.until(() => log.tasks().some((t) => t.status === "queued"));
+    const queued = defined(
+      log.tasks().find((t) => t.status === "queued"),
+      "queued task",
+    );
+    expect(queued).toMatchObject({
+      goal: "compare plans",
+      agentType: "researcher",
+      after: "agent-1",
+    });
+    expect(host.loopCalls().at(-1)?.result?.content[0]?.text).toBe(`Queued as ${queued.taskId}.`);
+    expect(createLoopStore(host.db).hasActive(bot)).toBe(true);
+    expect(records().some((m) => m.text.startsWith("Start queued task"))).toBe(false);
+    expect(
+      watch.events().find((e) => e.type === "task" && e.taskId === queued.taskId),
+    ).toMatchObject({ state: "queued", after: "agent-1", goal: "compare plans" });
+
+    // The blocker ends: its report is posted, and the front is asked to start the queued task, as a message the app wrote.
+    host.allow("end-alpha");
+    await host.until(() => records().some((m) => m.text.startsWith("Start queued task")));
+    const dispatch = defined(
+      records().find((m) => m.text.startsWith("Start queued task")),
+      "dispatch",
+    );
+    expect(dispatch).toMatchObject({ isSynthetic: true, priority: "next" });
+    expect(dispatch.text).toStartWith(
+      `Start queued task ${queued.taskId} (agent: researcher): compare plans`,
+    );
+    expect(reportsIn(watch.events())).toEqual([
+      { type: "report", taskId: "agent-1", text: REPORT },
+    ]);
+
+    // The front's Agent call names the queue id: the agent replaces the entry.
+    await host.until(() => log.getTask("agent-3")?.status === "running");
+    expect(log.getTask(queued.taskId)).toBeUndefined();
+    expect(log.getTask("agent-3")).toMatchObject({
+      goal: "compare plans",
+      agentType: "researcher",
+      status: "running",
+    });
+    const started = watch.events().find((e) => e.type === "task" && e.taskId === "agent-3");
+    expect(started).toMatchObject({ state: "running", queuedId: queued.taskId });
+    expect(records().filter((m) => m.text.startsWith("Start queued task"))).toHaveLength(1);
+    watch.stop();
+
+    // A page connecting now is replayed the events of the live thread; each task event replaces the one before, and a task that replaced a queue entry replaces its row.
+    const events = await pageEvents();
+    const rows = new Map<string, Streamed>();
+    for (const e of events.filter((e) => e.type === "task")) {
+      if (typeof e.queuedId === "string") rows.delete(e.queuedId);
+      rows.set(String(e.taskId), e);
+    }
+    expect([...rows.values()].map((e) => [e.taskId, e.state, e.findings ?? null])).toEqual([
+      ["agent-1", "done", [FINDING.finding]],
+      ["agent-2", "cancelled", null],
+      ["agent-3", "running", null],
+    ]);
+    expect(events.find((e) => e.type === "presence")?.state).toBe("working");
   });
 });

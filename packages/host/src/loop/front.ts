@@ -29,21 +29,30 @@ import {
 } from "../harness/index.ts";
 import {
   AGENT_BUILTIN_TOOLS,
+  CANCEL_QUEUED,
   FRONT_AGENT,
   LOOP_SERVER,
+  QUEUE_TASK,
   RECORD_PROGRESS,
   agentDefinitions,
   type AgentSettings,
 } from "./agents.ts";
 import type { Observer } from "./observe.ts";
 import { FRONT_PROMPT } from "./prompt.ts";
+import type { Tasks } from "./tasks.ts";
 import { MAX_PARALLEL, workState } from "./work-state.ts";
 
 /** The built-in tools only the front uses; agents have their own. */
 const FRONT_TOOLS = ["Agent", "SendMessage", "TaskStop"];
 
-/** Tools the front and its agents use without asking: the front's own, agents' web research and their progress recorder. */
-const PRE_APPROVED = [...FRONT_TOOLS, ...AGENT_BUILTIN_TOOLS, RECORD_PROGRESS];
+/** Tools the front and its agents use without asking: the front's own, its queue tools, agents' web research and their progress recorder. */
+const PRE_APPROVED = [
+  ...FRONT_TOOLS,
+  QUEUE_TASK,
+  CANCEL_QUEUED,
+  ...AGENT_BUILTIN_TOOLS,
+  RECORD_PROGRESS,
+];
 
 /** The front answers in seconds and never needs to think, whatever model the bot itself is set to; the bot's model drives the background agents. */
 const FRONT_MODEL = "claude-haiku-5-5";
@@ -70,7 +79,9 @@ export interface FrontOptions {
   onMemory?: (scope: MemoryScope, text: string) => void;
   /** Turns the session's messages and hooks into task rows and reports, and says what the work state lists. */
   observer: Observer;
-  /** The in-process `loop` MCP server agents report progress to. */
+  /** The session's queue; the front's queue tools write to it and its due entries become messages to the front. */
+  tasks: Tasks;
+  /** The in-process `loop` MCP server agents report progress to and the front queues tasks with. */
   loopServer: McpSdkServerConfigWithInstance;
   /** Every SDK message of the session, in order. A throw is logged and never ends the session. */
   onMessage: (m: SDKMessage) => void;
@@ -102,9 +113,12 @@ export class FrontSession {
 
   /** What the session's messages mean to the chat: the tasks it runs and the reports it owes. */
   readonly observer: Observer;
+  /** The session's queue of tasks waiting for a slot or for another task. */
+  readonly tasks: Tasks;
 
   constructor(private readonly o: FrontOptions) {
     this.observer = o.observer;
+    this.tasks = o.tasks;
     this.started = o.resume;
     this.log = o.log ?? ((l) => console.error(l));
     const base = createCanUseTool({

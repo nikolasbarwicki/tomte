@@ -192,7 +192,11 @@ export const ServerEvent = z.discriminatedUnion("type", [
   }),
   /** A double-loop bot's presence changed; ephemeral, so it is never in the replayed history, and a page connecting is sent the current one. */
   z.object({ type: z.literal("presence"), state: Presence }),
-  /** A background task of a double-loop bot started, resumed or ended; each event is the task's whole current state, so a later one replaces an earlier one with the same `taskId`. */
+  /**
+   * A background task of a double-loop bot was queued, started, resumed or ended; each event is the task's whole current state, so a
+   * later one replaces an earlier one with the same `taskId`. `findings` are what its agent verified so far, newest last, and
+   * `after` is the task a queued task waits for. `queuedId` marks the start of a queued task: the row of that id is this task now.
+   */
   z.object({
     type: z.literal("task"),
     taskId: z.string(),
@@ -203,6 +207,9 @@ export const ServerEvent = z.discriminatedUnion("type", [
     state: TaskState,
     startedAt: z.number(),
     endedAt: z.number().exactOptional(),
+    after: z.string().exactOptional(),
+    findings: z.array(z.string()).exactOptional(),
+    queuedId: z.string().exactOptional(),
   }),
   /** The live status line of a running task, from the agent's progress summaries; ephemeral, so it is never in the replayed history. An empty `text` clears the line. */
   z.object({ type: z.literal("task_status"), taskId: z.string(), text: z.string() }),

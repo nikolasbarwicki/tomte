@@ -9,9 +9,15 @@ import {
 import { z } from "zod";
 
 import type { Progress } from "./store.ts";
+import type { QueueResult } from "./tasks.ts";
 
 export const LOOP_SERVER = "loop";
 export const RECORD_PROGRESS = `mcp__${LOOP_SERVER}__record_progress`;
+export const QUEUE_TASK = `mcp__${LOOP_SERVER}__queue_task`;
+export const CANCEL_QUEUED = `mcp__${LOOP_SERVER}__cancel_queued`;
+
+/** The agent types the front can start or queue. */
+const AGENT_TYPES = ["researcher"] as const;
 
 /** Turns an agent may take before Claude Code stops it. */
 const RESEARCHER_MAX_TURNS = 60;
@@ -108,11 +114,13 @@ function toolUseIdOf(extra: unknown): string | undefined {
   return typeof id === "string" ? id : undefined;
 }
 
-/** The in-process `loop` MCP server the front session hosts. Queue tools join `record_progress` with the queue. */
+/** The in-process `loop` MCP server the front session hosts: `record_progress` for the agents, the queue tools for the front. */
 export function createLoopServer(o: {
   attribution: ProgressAttribution;
   /** Stores a finding for the task the call was attributed to. */
   onProgress: (taskId: string, progress: Progress) => void;
+  queue: (goal: string, agentType: string, after: string | null) => QueueResult;
+  cancelQueued: (id: string) => QueueResult;
 }) {
   let last: { taskId: string; progress: Progress } | undefined;
   const recordProgress = tool(
@@ -138,5 +146,39 @@ export function createLoopServer(o: {
     },
     { annotations: { readOnlyHint: true }, alwaysLoad: true },
   );
-  return createSdkMcpServer({ name: LOOP_SERVER, tools: [recordProgress] });
+  const queueTask = tool(
+    "queue_task",
+    "Queue a background task to start later: after another task ends, or when a slot frees. The app tells you when to start it.",
+    {
+      goal: z
+        .string()
+        .describe("Self-contained goal including scope and the expected shape of the result."),
+      agent: z.enum(AGENT_TYPES).describe("Agent type that will run it."),
+      after: z
+        .string()
+        .nullable()
+        .describe(
+          "Id of the running or queued task to wait for, from <work_state>; null to start as soon as a slot is free.",
+        ),
+    },
+    async (args) => {
+      const r = o.queue(args.goal, args.agent, args.after);
+      return r.ok ? text(`Queued as ${r.id}.`) : text(r.error, true);
+    },
+    { alwaysLoad: true },
+  );
+  const cancelQueued = tool(
+    "cancel_queued",
+    "Drop a queued task that has not started.",
+    { id: z.string().describe("Queued task id (q-…) from <work_state>.") },
+    async (args) => {
+      const r = o.cancelQueued(args.id);
+      return r.ok ? text(`Dropped ${r.id}.`) : text(r.error, true);
+    },
+    { alwaysLoad: true },
+  );
+  return createSdkMcpServer({
+    name: LOOP_SERVER,
+    tools: [recordProgress, queueTask, cancelQueued],
+  });
 }

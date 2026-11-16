@@ -19,6 +19,50 @@ const task = (taskId: string, startedAt: number) => ({
   startedAt,
 });
 
+test("a database made before queued tasks keeps its tasks and gains what they wait for", () => {
+  const db = migrate(new Database(":memory:"));
+  createLoopStore(db)
+    .session("bot", "s")
+    .putTask({ taskId: "t", goal: "g", status: "running", startedAt: 1 }, 1);
+  db.run("ALTER TABLE loop_tasks DROP COLUMN after_task");
+  db.run("PRAGMA user_version = 14");
+
+  migrate(db);
+
+  const log = createLoopStore(db).session("bot", "s");
+  expect(log.getTask("t")).toMatchObject({ status: "running" });
+  log.putTask({ taskId: "q", goal: "g", status: "queued", startedAt: 2, after: "t" }, 2);
+  expect(log.getTask("q")?.after).toBe("t");
+});
+
+describe("queued tasks", () => {
+  test("keep what they wait for, which follows the task that replaces a queue entry", () => {
+    const log = store.session("bot", "s");
+    log.putTask({ taskId: "q-1", goal: "first", status: "queued", startedAt: 1 }, 1);
+    log.putTask({ taskId: "q-2", goal: "second", status: "queued", startedAt: 2, after: "q-1" }, 2);
+    expect(log.getTask("q-1")).not.toHaveProperty("after");
+    expect(log.getTask("q-2")?.after).toBe("q-1");
+
+    log.removeTask("q-1");
+    log.retarget("q-1", "agent-1");
+    expect(log.getTask("q-1")).toBeUndefined();
+    expect(log.getTask("q-2")?.after).toBe("agent-1");
+    // Another session's tasks are not touched.
+    store.session("bot", "other").putTask({ ...task("x", 1), after: "q-1" }, 1);
+    log.retarget("agent-1", "agent-2");
+    expect(store.session("bot", "other").getTask("x")?.after).toBe("q-1");
+  });
+
+  test("count as active for the bot until they start, are cancelled or fail", () => {
+    const log = store.session("bot", "s");
+    log.putTask({ taskId: "q-1", goal: "g", status: "queued", startedAt: 1 }, 1);
+    expect(store.hasActive("bot")).toBe(true);
+    expect(store.hasActive("other")).toBe(false);
+    log.setStatus("q-1", "cancelled", 2);
+    expect(store.hasActive("bot")).toBe(false);
+  });
+});
+
 describe("tasks", () => {
   test("are kept per bot session and listed by start", () => {
     const a = store.session("bot", "s1");

@@ -245,6 +245,13 @@ CREATE INDEX IF NOT EXISTS loop_events_by_session ON loop_events(bot_id, session
 CREATE INDEX IF NOT EXISTS loop_events_by_task ON loop_events(bot_id, session_id, task_id, kind);
 `;
 
+/** A queued task's `after_task` is the task it waits for, null for "when a slot frees". SQLite cannot add a column only when it is missing, so a database that already has it (one migrated again after its version was set back) is left alone. */
+const SCHEMA_V15 = (db: Database) => {
+  const columns = db.query<{ name: string }, []>("PRAGMA table_info(loop_tasks)").all();
+  if (!columns.some((c) => c.name === "after_task"))
+    db.run("ALTER TABLE loop_tasks ADD COLUMN after_task TEXT");
+};
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -265,11 +272,13 @@ export function migrate(db: Database): Database {
     SCHEMA_V12,
     SCHEMA_V13,
     SCHEMA_V14,
+    SCHEMA_V15,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;
     db.transaction(() => {
-      db.run(schema);
+      if (typeof schema === "string") db.run(schema);
+      else schema(db);
       db.run(`PRAGMA user_version = ${i + 1}`);
     })();
   }

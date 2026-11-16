@@ -15,6 +15,8 @@ export interface LoopTask {
   startedAt: number;
   updatedAt: number;
   endedAt?: number | undefined;
+  /** A queued task: the task it waits for; absent for "when a slot frees". */
+  after?: string | undefined;
 }
 
 /** What an agent reports through `record_progress`; the app attributes it to its task. */
@@ -60,6 +62,7 @@ type TaskRow = {
   started_at: number;
   updated_at: number;
   ended_at: number | null;
+  after_task: string | null;
 };
 
 type EventRow = { task_id: string; at: number; data: string };
@@ -74,6 +77,7 @@ const task = (r: TaskRow): LoopTask => ({
   startedAt: r.started_at,
   updatedAt: r.updated_at,
   ...(r.ended_at !== null && { endedAt: r.ended_at }),
+  ...(r.after_task !== null && { after: r.after_task }),
 });
 
 const event = (r: EventRow): LoopEvent => ({
@@ -87,6 +91,10 @@ export interface SessionLog {
   /** Creates the task, or replaces everything but its start when it exists already; the row is what `status` says from now on. */
   putTask(t: Omit<LoopTask, "updatedAt">, now: number): void;
   getTask(taskId: string): LoopTask | undefined;
+  /** Forgets a task, as when a queue entry becomes the agent that runs it. */
+  removeTask(taskId: string): void;
+  /** Points the queued tasks that wait for `from` at `to`. */
+  retarget(from: string, to: string): void;
   /** Every task of the session, oldest start first. */
   tasks(): LoopTask[];
   /** Moves a task to `status`; `endedAt` is set for a final one and cleared otherwise. */
@@ -116,7 +124,7 @@ export function createLoopStore(db: Database): LoopStore {
       const getTask = (taskId: string) => {
         const r = db
           .query<TaskRow, [string, string, string]>(
-            `SELECT task_id, agent_type, model, effort, goal, status, started_at, updated_at, ended_at
+            `SELECT task_id, agent_type, model, effort, goal, status, started_at, updated_at, ended_at, after_task
              FROM loop_tasks WHERE bot_id = ? AND session_id = ? AND task_id = ?`,
           )
           .get(botId, sessionId, taskId);
@@ -125,11 +133,12 @@ export function createLoopStore(db: Database): LoopStore {
       return {
         putTask(t, now) {
           db.query(
-            `INSERT INTO loop_tasks (bot_id, session_id, task_id, agent_type, model, effort, goal, status, started_at, updated_at, ended_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `INSERT INTO loop_tasks (bot_id, session_id, task_id, agent_type, model, effort, goal, status, started_at, updated_at, ended_at, after_task)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (bot_id, session_id, task_id) DO UPDATE SET
                agent_type = excluded.agent_type, model = excluded.model, effort = excluded.effort, goal = excluded.goal,
-               status = excluded.status, updated_at = excluded.updated_at, ended_at = excluded.ended_at`,
+               status = excluded.status, updated_at = excluded.updated_at, ended_at = excluded.ended_at,
+               after_task = excluded.after_task`,
           ).run(
             botId,
             sessionId,
@@ -142,13 +151,24 @@ export function createLoopStore(db: Database): LoopStore {
             t.startedAt,
             now,
             t.endedAt ?? null,
+            t.after ?? null,
           );
         },
         getTask,
+        removeTask(taskId) {
+          db.query(
+            "DELETE FROM loop_tasks WHERE bot_id = ? AND session_id = ? AND task_id = ?",
+          ).run(botId, sessionId, taskId);
+        },
+        retarget(from, to) {
+          db.query(
+            "UPDATE loop_tasks SET after_task = ? WHERE bot_id = ? AND session_id = ? AND after_task = ?",
+          ).run(to, botId, sessionId, from);
+        },
         tasks: () =>
           db
             .query<TaskRow, [string, string]>(
-              `SELECT task_id, agent_type, model, effort, goal, status, started_at, updated_at, ended_at
+              `SELECT task_id, agent_type, model, effort, goal, status, started_at, updated_at, ended_at, after_task
                FROM loop_tasks WHERE bot_id = ? AND session_id = ? ORDER BY started_at, rowid`,
             )
             .all(botId, sessionId)
