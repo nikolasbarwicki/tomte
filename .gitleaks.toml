@@ -8,3 +8,10 @@ description = "Fake password fixture in login.test.ts (path before the packages/
 condition = "AND"
 paths = ['''(^|/)src/browser/login\.test\.ts$''']
 regexes = ['''Zq7-correct-horse-battery''']
+
+[[allowlists]]
+description = "Password-manager names in a research table (\"1Password, Bitwarden/Vaultwarden\"), not a key"
+condition = "AND"
+paths = ['''(^|/)docs/research/grok-bot-alternatives/README\.md$''']
+regexTarget = "line"
+regexes = ['''1Password, Bitwarden/Vaultwarden''']
