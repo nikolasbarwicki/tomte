@@ -10,7 +10,7 @@ import type {
 import type { ServerEvent, TaskState } from "@claudebot/contract/events";
 
 import { RECORD_PROGRESS, type ProgressAttribution } from "./agents.ts";
-import type { ActivityType, Progress, SessionLog } from "./store.ts";
+import { isFinal, type ActivityType, type Progress, type SessionLog } from "./store.ts";
 import { findingsOf, foldTasks, taskEvent, type Tasks } from "./tasks.ts";
 import type { TaskView } from "./work-state.ts";
 
@@ -225,9 +225,19 @@ export class Observer {
         }),
       });
     else if (name === "SendMessage") this.onSteer(input.tool_use_id, args);
+    else if (name === "TaskStop") this.onStop(str(args.task_id) ?? "");
     return {};
   }
 
+  /** An interrupted agent is not running, so the CLI's TaskStop fails for it and no notification follows: the stop request itself ends the task. */
+  private onStop(id: string) {
+    const task = this.d.log.getTask(this.d.tasks.resolve(id));
+    if (task?.status !== "interrupted") return;
+    this.d.log.setStatus(task.taskId, "cancelled", this.now());
+    this.clearStatus(task.taskId);
+    this.emitTask(task.taskId);
+    this.d.changed();
+  }
   /** The front gave a running task an instruction: it is logged as sent now, and as failed if the tool answers with an error. */
   private onSteer(toolUseId: string, args: Record<string, unknown>) {
     const taskId = this.d.tasks.resolve(str(args.to) ?? "");
@@ -339,10 +349,12 @@ export class Observer {
     if (!task) return;
     // After a restart Claude Code reports each orphaned agent as stopped. The app has already marked it interrupted, and a
     // steer can still continue it, so it is not a cancel.
-    const status: TaskState =
+    const reported: TaskState =
       m.reason === "worker_restart" || (m.status === "stopped" && task.status === "interrupted")
         ? "interrupted"
         : END_STATUS[m.status];
+    // A task already ended (a stop of an interrupted one cancelled it) is not brought back by a restart report.
+    const status = reported === "interrupted" && isFinal(task.status) ? task.status : reported;
     if (task.status !== status) this.d.log.setStatus(m.task_id, status, this.now());
     this.clearStatus(m.task_id);
     this.emitTask(m.task_id);

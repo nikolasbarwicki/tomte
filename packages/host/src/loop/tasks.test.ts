@@ -146,6 +146,28 @@ describe("due", () => {
   });
 });
 
+describe("awaiting", () => {
+  test("counts the entries the front was asked to start until the dispatch timeout passes", () => {
+    const id = queue("first");
+    expect(tasks.awaiting()).toBe(1);
+    expect(sent).toHaveLength(1);
+
+    clock += DISPATCH_TIMEOUT_MS;
+    expect(tasks.awaiting()).toBe(1);
+    clock += 1;
+    expect(tasks.awaiting()).toBe(0);
+
+    tasks.started(id, "agent-1");
+    expect(tasks.awaiting()).toBe(0);
+  });
+
+  test("an entry that waits for a blocker is not asked of the front yet", () => {
+    running("a");
+    queue("later", "a");
+    expect(tasks.awaiting()).toBe(0);
+  });
+});
+
 describe("pump", () => {
   test("asks again once the request timed out, and fails the task when the front still has not started it after the last attempt", () => {
     const id = queue("stuck");

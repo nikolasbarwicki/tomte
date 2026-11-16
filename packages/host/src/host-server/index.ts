@@ -74,6 +74,8 @@ export interface HostServerOptions {
   ui?: UiAssets;
   /** The clock device auth reads for pairing code expiry, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
+  /** How long an idle double-loop front stays open; 10 minutes when omitted. */
+  frontIdleMs?: number;
 }
 
 export interface HostServer {
@@ -239,6 +241,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     claude,
     db,
     integrations,
+    ...(o.frontIdleMs !== undefined && { frontIdleMs: o.frontIdleMs }),
     hostServers,
     frontServers,
     loop,

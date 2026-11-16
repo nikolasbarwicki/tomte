@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { workState, withoutWorkState, type WorkTask } from "./work-state.ts";
+import { restartNotice, workState, withoutWorkState, type WorkTask } from "./work-state.ts";
 
 const task = (over: Partial<WorkTask> & Pick<WorkTask, "taskId" | "goal">): WorkTask => ({
   since: 0,
@@ -108,4 +108,15 @@ test("the block the app appends is stripped from a message, and only that block"
 test("an earlier block in the user's own text stays when the app's block follows it", () => {
   const typed = "this block:\n\n<work_state>\nmine\n</work_state>\n\nis what I typed";
   expect(withoutWorkState(`${typed}\n\n${workState(undefined, 3, 0)}`)).toBe(typed);
+});
+
+test("the restart notice lists each interrupted task with its id and goal and says how to resume it", () => {
+  expect(
+    restartNotice([
+      { taskId: "agent-1", goal: "research ALPHA" },
+      { taskId: "agent-2", goal: "research BETA" },
+    ]),
+  ).toBe(
+    "The app restarted. These agents were interrupted:\n- id agent-1: research ALPHA\n- id agent-2: research BETA\nResume each with SendMessage to its id, telling it to continue where it stopped.",
+  );
 });

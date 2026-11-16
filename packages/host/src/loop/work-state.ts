@@ -82,6 +82,11 @@ export function workState(
   return lines.join("\n");
 }
 
+/** The message the app gives a freshly opened front for tasks an app restart cut off, so it resumes each with `SendMessage`. */
+export function restartNotice(tasks: readonly Pick<WorkTask, "taskId" | "goal">[]): string {
+  return `The app restarted. These agents were interrupted:\n${tasks.map((t) => `- id ${t.taskId}: ${t.goal}`).join("\n")}\nResume each with SendMessage to its id, telling it to continue where it stopped.`;
+}
+
 /** The text of a front-session user message without the work state the app appended to it. */
 export function withoutWorkState(text: string): string {
   const at = text.lastIndexOf("\n\n<work_state>\n");

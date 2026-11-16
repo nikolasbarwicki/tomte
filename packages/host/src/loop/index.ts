@@ -15,7 +15,7 @@ export { withoutWorkState } from "./work-state.ts";
 
 /** Opens a bot's front session in the host's shared thread environment, whose `hostServers` is the lease the front may use. */
 export function openFront(
-  { cwd, dataRoot, cli, claude, hostServers, botEnv, approveAll }: ThreadEnv,
+  { cwd, dataRoot, cli, claude, hostServers, botEnv, approveAll, integrations }: ThreadEnv,
   bot: Bot,
   opts: {
     resume: boolean;
@@ -75,6 +75,8 @@ export function openFront(
       cancelQueued: (id) => tasks.cancelQueued(id),
     }),
     onStopped: () => observer.interruptRunning(),
+    // Nothing closes the front for an expiring token while agents run; the session is read at open, as a standard thread's is.
+    expiresAt: async () => (await integrations.session()).expiresAt,
     onMessage: (m) => {
       observer.onMessage(m);
       onMessage(m);

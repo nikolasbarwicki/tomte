@@ -39,6 +39,8 @@ export interface ChatsDeps extends ThreadEnv {
   /** The host servers a double-loop bot's front session may use; `hostServers` is what a standard bot's thread gets. */
   frontServers: HostServersSource;
   db: Database;
+  /** How long an idle double-loop front stays open; 10 minutes when omitted. */
+  frontIdleMs?: number;
   /** Where a double-loop bot's tasks and reports are kept. */
   loop: LoopStore;
   handoffs: Pick<Handoffs, "receivedCards" | "startDelivered">;
@@ -139,7 +141,7 @@ type Chat = {
   pending: Map<string, { resolve: (value: string) => void; eventId?: string }>;
   /** External events that reached the bot's current session; the only ones a question may claim to be about. */
   delivered: Set<string>;
-  /** Integration or bot settings changed during a turn; the thread reopens once the turn ends. */
+  /** Integration or bot settings changed during a standard turn; the thread reopens once the turn ends. A front has its own deferred close. */
   configStale: boolean;
   /** Messages for the bot that start the next turn once it is free: the user's sends while it was busy, and host messages (a human wait's outcome). */
   inbox: InboxEntry[];
@@ -202,6 +204,7 @@ export function createChats(deps: ChatsDeps): Chats {
   /** Closes a chat that is neither shown nor running; its session resumes from disk when the bot is opened again. */
   function release(chat: Chat) {
     if (chat === current || chat.busy || chat.inbox.length || chat.presence !== "idle") return;
+    if (chat.front && !chat.front.idle()) return;
     chat.front?.tasks.dispose();
     closeSessions(chat, "released");
     chats.delete(chat.bot.id);
@@ -338,7 +341,7 @@ export function createChats(deps: ChatsDeps): Chats {
     emit(chat, { type: "error", message: e.message });
     chat.frontText = "";
     settleWaiters(chat, e);
-    setPresence(chat, "idle");
+    setPresence(chat, restingPresence(chat));
     release(chat);
     void drain();
   }
@@ -373,10 +376,8 @@ export function createChats(deps: ChatsDeps): Chats {
       ?.contextUsage()
       .catch((e) => console.error(`[host] context usage failed: ${(e as Error).message}`));
     if (usage) emit(chat, { type: "context", ...usage });
-    if (chat.configStale && chat.presence === "idle") {
-      chat.configStale = false;
-      chat.front?.close("settings changed");
-    }
+    // A close that waited for the agents (changed settings, an expiring token) applies once the front is idle.
+    chat.front?.settle();
     release(chat);
     void drain();
   }
@@ -526,7 +527,7 @@ export function createChats(deps: ChatsDeps): Chats {
     const hooks = sessionHooks(bot, chat);
     return openFront({ ...deps, hostServers: deps.frontServers }, bot, {
       resume,
-      idleMs: 10 * 60_000,
+      idleMs: deps.frontIdleMs ?? 10 * 60_000,
       log: (l) => console.error(l),
       onMemory: hooks.onMemory,
       delegate: hostDelegate(hooks),
@@ -589,6 +590,20 @@ export function createChats(deps: ChatsDeps): Chats {
     broadcast(filesEvent(dataRoot, chat.bot.id));
     broadcast(deps.routinesEvent(chat.bot.id));
     broadcast(deps.workEvent(chat.bot.id));
+    recoverFront(chat);
+  }
+
+  /** A chat opening after an app restart (or a front that died) tells its front about the agents that were cut off, so it resumes them. A scheduled run writing the conversation delays it until the chat is shown again. */
+  function recoverFront(chat: Chat) {
+    const front = chat.front;
+    if (!front?.needsRecovery() || headless(chat.bot.id)) return;
+    setPresence(chat, "typing");
+    front.recover().then(
+      (told) => {
+        if (!told) setPresence(chat, restingPresence(chat));
+      },
+      (e: Error) => frontFailed(chat, e),
+    );
   }
 
   async function switchTo(bot: Bot) {
@@ -769,7 +784,9 @@ export function createChats(deps: ChatsDeps): Chats {
     reconfigure(botId, reason) {
       for (const chat of botId === undefined ? chats.values() : [chats.get(botId)]) {
         if (!chat) continue;
-        if (chat.busy || chat.presence !== "idle") chat.configStale = true;
+        // Closing a front kills its agents, so it closes once it is idle.
+        if (chat.front) chat.front.closeWhenIdle(reason);
+        else if (chat.busy) chat.configStale = true;
         else closeSessions(chat, reason);
       }
     },

@@ -40,7 +40,7 @@ import {
 import type { Observer } from "./observe.ts";
 import { FRONT_PROMPT } from "./prompt.ts";
 import type { Tasks } from "./tasks.ts";
-import { MAX_PARALLEL, workState } from "./work-state.ts";
+import { MAX_PARALLEL, restartNotice, workState } from "./work-state.ts";
 
 /** The built-in tools only the front uses; agents have their own. */
 const FRONT_TOOLS = ["Agent", "SendMessage", "TaskStop"];
@@ -89,9 +89,20 @@ export interface FrontOptions {
   onEnd: (error: Error) => void;
   /** The CLI process is gone, closed or ended, and every agent it ran with it. */
   onStopped?: () => void;
+  /** When the integration tokens the session would use run out (epoch ms); read whenever the session opens. Undefined means they never do. */
+  expiresAt?: () => Promise<number | undefined>;
+  now?: () => number;
 }
 
-type Live = { q: Query; input: Inbox; lease: HostServerLease };
+type Live = {
+  q: Query;
+  input: Inbox;
+  lease: HostServerLease;
+  /** When the integration tokens this process was started with run out (epoch ms). */
+  expiresAt: number | undefined;
+  /** True once this CLI process was told about the tasks a restart cut off. */
+  told: boolean;
+};
 
 /**
  * One long-lived Claude Code session per double-loop bot. Shaped like `Thread`, but a pump consumes the query's messages for
@@ -107,6 +118,9 @@ export class FrontSession {
   /** True from a message being sent until its `result`. */
   private turn = false;
   private idleTimer?: NodeJS.Timeout | undefined;
+  /** Why the session must close once it is idle; set when something asked for a close while it was not. */
+  private pendingClose?: string | undefined;
+  private readonly now: () => number;
   private readonly canUseTool: CanUseTool;
   private settings: AgentSettings = { model: DEFAULT_MODEL, effort: DEFAULT_EFFORT };
   private readonly log: (line: string) => void;
@@ -120,6 +134,7 @@ export class FrontSession {
     this.observer = o.observer;
     this.tasks = o.tasks;
     this.started = o.resume;
+    this.now = o.now ?? Date.now;
     this.log = o.log ?? ((l) => console.error(l));
     const base = createCanUseTool({
       cwd: o.cwd,
@@ -138,6 +153,7 @@ export class FrontSession {
     const generation = this.generation;
     const input = new Inbox();
     await this.o.claude.requireSignIn();
+    const expiresAt = await this.o.expiresAt?.();
     const lease = this.o.hostServers();
     const append =
       FRONT_PROMPT +
@@ -196,7 +212,7 @@ export class FrontSession {
         q.close();
         throw e;
       }
-      live = { q, input, lease };
+      live = { q, input, lease, expiresAt, told: false };
     } catch (e) {
       lease.release();
       throw e;
@@ -241,6 +257,7 @@ export class FrontSession {
       failure = e instanceof Error ? e : new Error(String(e));
     }
     if (this.live !== live) return;
+    this.pendingClose = undefined;
     clearTimeout(this.idleTimer);
     this.live = undefined;
     this.turn = false;
@@ -264,9 +281,35 @@ export class FrontSession {
     this.idleTimer = setTimeout(() => this.idleClose(), this.o.idleMs).unref();
   }
 
-  /** The one place a rule about what must outlive an idle front belongs: it stays open while a turn is running or an agent runs, since closing it kills the agents. */
-  private mayClose(): boolean {
-    return !this.turn && this.observer.running() === 0;
+  /**
+   * The one place a rule about what must outlive an idle front belongs: the session is idle when no turn is streaming, no agent
+   * runs and no queue entry waits for the front to start it. Everything that closes the session of its own accord (idle time,
+   * changed settings, an expiring integration token) waits for this, because closing kills every agent. Only a user's explicit
+   * action (a new session, deleting the bot) or the host shutting down closes it regardless.
+   */
+  idle(): boolean {
+    return (
+      !this.turn &&
+      this.opening === undefined &&
+      this.observer.running() === 0 &&
+      this.tasks.awaiting() === 0
+    );
+  }
+
+  /** Closes the session once it is idle, now if it is; the next message reopens it with the settings of that moment. */
+  closeWhenIdle(reason: string) {
+    if (!this.live && !this.opening) return;
+    this.pendingClose ??= reason;
+    this.settle();
+  }
+
+  /** Applies a close that waited for idleness, and the token running out, as soon as the session is idle. */
+  settle() {
+    const live = this.live;
+    if (!live) return;
+    if (live.expiresAt !== undefined && this.now() >= live.expiresAt)
+      this.pendingClose ??= "integration token expiring";
+    if (this.pendingClose !== undefined && this.idle()) this.close(this.pendingClose);
   }
 
   /** Model and effort the background agents run on; they apply to agents defined when the session next opens. */
@@ -279,15 +322,24 @@ export class FrontSession {
   }
 
   private idleClose() {
-    if (this.mayClose()) this.close("idle");
+    this.settle();
+    if (!this.live) return;
+    if (this.idle()) this.close("idle");
     else this.armIdle();
   }
 
-  /** Gives the session a message and returns once it is queued; the reply arrives through `onMessage`. `synthetic` marks a message the app wrote, not the user. */
+  /** Gives the session a message and returns once it is queued; the reply arrives through `onMessage`. `synthetic` marks a message the app wrote, not the user. A session that just opened is first told about the tasks a restart cut off. */
   async send(text: string, synthetic = false): Promise<void> {
     clearTimeout(this.idleTimer);
+    // A close that waited for the session to be idle, or a token that ran out, applies before the message starts a turn.
+    this.settle();
     const live = await this.ensureOpen();
     if (this.live !== live) throw new Error("front session closed before the message was sent");
+    this.tellRestart(live);
+    this.push(live, text, synthetic);
+  }
+
+  private push(live: Live, text: string, synthetic: boolean) {
     this.turn = true;
     live.input.push({
       type: "user",
@@ -300,6 +352,35 @@ export class FrontSession {
       uuid: randomUUID(),
       ...(synthetic ? { isSynthetic: true } : { origin: { kind: "human" as const } }),
     });
+  }
+
+  /** The tasks a restart cut off, which no live front has resumed. */
+  private interrupted() {
+    return this.observer.view().running.filter((t) => t.status === "interrupted");
+  }
+
+  /** True when the session owes its front the restart notice: a task is interrupted and this CLI process was not told yet. */
+  needsRecovery(): boolean {
+    return !this.live?.told && this.interrupted().length > 0;
+  }
+
+  /** Opens the session if needed and tells it about the interrupted tasks, as v3 does when its front starts; false when there was nothing to tell. */
+  async recover(): Promise<boolean> {
+    if (!this.needsRecovery()) return false;
+    clearTimeout(this.idleTimer);
+    const live = await this.ensureOpen();
+    if (this.live !== live) throw new Error("front session closed before the message was sent");
+    return this.tellRestart(live);
+  }
+
+  /** Once per CLI process: a message listing the interrupted tasks, so the front resumes each with `SendMessage`, which keeps the task's id. */
+  private tellRestart(live: Live): boolean {
+    if (live.told) return false;
+    live.told = true;
+    const tasks = this.interrupted();
+    if (!tasks.length) return false;
+    this.push(live, restartNotice(tasks), true);
+    return true;
   }
 
   /** Context window usage of the live query; undefined while the CLI is not running. */
@@ -321,6 +402,7 @@ export class FrontSession {
     this.opening = undefined;
     clearTimeout(this.idleTimer);
     this.turn = false;
+    this.pendingClose = undefined;
     const live = this.live;
     if (!live) return;
     this.live = undefined;

@@ -200,6 +200,14 @@ export class Tasks {
     return entry;
   }
 
+  /** How many queue entries the front was asked to start and has not answered within the dispatch timeout. */
+  awaiting(): number {
+    const now = this.now();
+    const timeout = this.d.dispatchTimeoutMs ?? DISPATCH_TIMEOUT_MS;
+    return [...this.dispatched.values()].filter((req) => req.at > 0 && now - req.at <= timeout)
+      .length;
+  }
+
   /** Queue entries whose wait is over, as many as there are free slots, in the order they were queued. */
   due(): LoopTask[] {
     const now = this.now();

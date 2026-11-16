@@ -554,6 +554,47 @@ describe("a restart", () => {
     expect(log.getTask("c")?.status).toBe("interrupted");
     expect(reports()).toEqual([]);
   });
+
+  test("TaskStop on an interrupted task cancels it, and a restart report afterwards does not bring it back", async () => {
+    started("a");
+    started("b");
+    observer.interruptRunning();
+    emitted.length = 0;
+    changed = 0;
+    clock = 7000;
+    await hook("PreToolUse", {
+      tool_name: "TaskStop",
+      tool_use_id: "tu-stop",
+      tool_input: { task_id: "a" },
+    });
+
+    expect(log.getTask("a")).toMatchObject({ status: "cancelled", updatedAt: 7000 });
+    expect(log.getTask("b")?.status).toBe("interrupted");
+    expect(emitted).toMatchObject([{ type: "task", taskId: "a", state: "cancelled" }]);
+    expect(changed).toBe(1);
+
+    ended("stopped", { reason: "worker_restart" }, "a");
+    expect(log.getTask("a")?.status).toBe("cancelled");
+    expect(reports()).toEqual([]);
+  });
+
+  test("TaskStop on a running task, an ended one or an unknown id leaves the task rows to the CLI's notification", async () => {
+    started("run");
+    started("gone");
+    ended("completed", {}, "gone");
+    await stopped("done", "gone");
+    changed = 0;
+    for (const id of ["run", "gone", "nobody"])
+      await hook("PreToolUse", {
+        tool_name: "TaskStop",
+        tool_use_id: id,
+        tool_input: { task_id: id },
+      });
+
+    expect(log.getTask("run")?.status).toBe("running");
+    expect(log.getTask("gone")?.status).toBe("done");
+    expect(changed).toBe(0);
+  });
 });
 
 describe("view", () => {

@@ -305,11 +305,22 @@ describe("a double-loop bot's researcher", () => {
 
     await host.restart();
 
+    // The reopened chat tells its front about the cut-off agent; this front (no script) leaves it interrupted, and its turn ends.
+    await host.until(() =>
+      host.messageRecords(bot).some((m) => m.text.startsWith("The app restarted")),
+    );
     expect(log.getTask("agent-1")?.status).toBe("interrupted");
     expect(createLoopStore(host.db).hasActive(bot)).toBe(false);
-    const events = await pageEvents();
-    expect(events.find((e) => e.type === "presence")?.state).toBe("idle");
-    expect(events.filter((e) => e.type === "report")).toEqual([]);
+    const watch = await watchEvents(host);
+    await host.until(
+      () =>
+        watch
+          .events()
+          .filter((e) => e.type === "presence")
+          .at(-1)?.state === "idle",
+    );
+    watch.stop();
+    expect(watch.events().filter((e) => e.type === "report")).toEqual([]);
   });
 });
 
