@@ -158,7 +158,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     alwaysAllow: (botId, tool) => allowTool(db, botId, tool, (o.now ?? Date.now)()),
     context: (botId) => {
       const bot = getBot(dataRoot, botId);
-      return { sessionId: bot && currentSession(bot), runId: chats.runOf(botId) };
+      const run = chats.runOf(botId);
+      return { sessionId: run?.sessionId ?? (bot && currentSession(bot)), runId: run?.runId };
     },
     ...(o.now !== undefined && { now: o.now }),
   });

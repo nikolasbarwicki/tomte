@@ -3,10 +3,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
 import { setChatMode } from "../bots/index.ts";
+import { defined } from "../testing/defined.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 import { watchEvents, type EventsWatch } from "../testing/watch-events.ts";
 
@@ -155,6 +158,10 @@ describe.each([
     expect(parked.output).toBeNull();
 
     const id = await cardOf(chatOpen, botId, other, page, "approvals");
+    // The wait is stored under the run and the run's own session, not the front's.
+    expect(
+      host.db.query("SELECT run_id, session_id FROM human_waits WHERE id = ?").get(id),
+    ).toEqual({ run_id: parked.id, session_id: session });
     expect((await answer(id, "allow")).status).toBe(200);
     await untilRun(routineId, "succeeded");
 
@@ -285,5 +292,56 @@ describe("a double-loop bot's front while a routine run is parked", () => {
     await untilRun(routineId, "succeeded");
     expect(resultMessages(session)).toHaveLength(1);
     expect(host.messagesOf(botId)).toHaveLength(1);
+  });
+});
+
+describe("a double-loop bot's routine run that asks for a takeover", () => {
+  test("parks under the run's id and own session, and a hand-back resumes the run", async () => {
+    const { botId, routineId } = await setup(true);
+    expect((await host.ui("/api/bots/browser", { botId, enabled: true })).status).toBe(200);
+    host.hold();
+    await startRun(routineId);
+    const first = defined(await latest(routineId), "run");
+    const session = first.sessionId!;
+    expect(session).not.toBe(botId);
+    await host.until(() => host.messagesOf(session).length === 1);
+
+    // The bot's browser call during the run, as the CLI would make it.
+    const lease = defined(host.server.browser.lease(botId).servers[0], "browser server");
+    const client = new Client({ name: "test", version: "1.0.0" });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(lease.url), {
+        requestInit: { headers: { Authorization: `Bearer ${lease.token}` } },
+      }),
+    );
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const r = await client.callTool({ name, arguments: args });
+      expect(r.isError).not.toBe(true);
+      return (r.content as { text: string }[]).map((c) => c.text).join("\n");
+    };
+    try {
+      await call("browser_open", { url: "https://example.com" });
+      const wait = JSON.parse(await call("browser_request_takeover", { reason: "solve it" })) as {
+        status: string;
+        id: string;
+      };
+      expect(wait.status).toBe("waiting_for_user");
+      host.release();
+      await untilRun(routineId, "waiting");
+      expect(
+        host.db.query("SELECT run_id, session_id FROM human_waits WHERE id = ?").get(wait.id),
+      ).toEqual({ run_id: first.id, session_id: session });
+
+      expect((await host.ui("/api/browser/control", { botId, action: "hand_back" })).status).toBe(
+        200,
+      );
+      await untilRun(routineId, "succeeded");
+      expect(host.messagesOf(session)).toHaveLength(2);
+      expect(host.messagesOf(session)[1]).toContain("finished the takeover");
+      expect(host.messagesOf(botId)).toEqual([]);
+      expect(await runs(routineId)).toHaveLength(1);
+    } finally {
+      await client.close();
+    }
   });
 });

@@ -17,6 +17,7 @@ import type {
 
 import {
   botFilesPath,
+  currentSession,
   getBot,
   listBots,
   newSession,
@@ -107,7 +108,7 @@ export interface Chats {
   updateExternal(botId: string, rows: ExternalRow[]): void;
   isWorking(botId: string): boolean;
   /** The routine run the bot's unattended turn belongs to, if one is running now: a chat-hosted or headless routine turn, including a double-loop bot's run in a session of its own. */
-  runOf(botId: string): string | undefined;
+  runOf(botId: string): { runId: string; sessionId: string | undefined } | undefined;
   botsEvent(): BotsEvent;
   currentBotId: () => string | undefined;
   announceBots: () => void;
@@ -524,7 +525,11 @@ export function createChats(deps: ChatsDeps): Chats {
     spec: WaitSpec<K>,
   ): Promise<{ wait: Wait; text: string }> {
     const { promise, resolve } = Promise.withResolvers<{ wait: Wait; text: string }>();
-    const { id } = deps.waits.open(chat.bot.id, { ...spec, runId: null });
+    const { id } = deps.waits.open(chat.bot.id, {
+      ...spec,
+      runId: null,
+      sessionId: currentSession(chat.bot),
+    });
     chat.awaiting.set(id, (wait, text) => resolve({ wait, text }));
     return promise;
   }
@@ -812,7 +817,12 @@ export function createChats(deps: ChatsDeps): Chats {
     },
     isWorking,
 
-    runOf: (botId) => chats.get(botId)?.routineRun ?? routineTurns.headlessRun(botId),
+    runOf(botId) {
+      const runId = chats.get(botId)?.routineRun;
+      return runId === undefined
+        ? routineTurns.headlessRun(botId)
+        : { runId, sessionId: undefined };
+    },
     botsEvent: chatsBotsEvent,
     announceBots,
     currentBotId: () => current?.bot.id,
