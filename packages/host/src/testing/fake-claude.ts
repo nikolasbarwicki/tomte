@@ -12,7 +12,8 @@
 // - `{ emit: <SDK message> }`: one stdout line; `session_id` and `uuid` are filled when missing. Use it for `system` `task_started` / `task_progress` / `task_notification`, `assistant` messages with `tool_use` blocks, `user` tool results, `rate_limit_event`.
 // - `{ text: "..." }`: `stream_event` deltas (message_start, content_block_start, one content_block_delta per word, content_block_stop, message_delta, message_stop), then the matching `assistant` message.
 // - `{ hook: "PreToolUse", input: {...}, tool_use_id?, ifDenied?: Step[] }`: sends a `hook_callback` control request to every callback id the initialize request registered for that event whose `matcher` (a regex against `tool_name`, else `agent_type`; none means all) matches, waits for the replies and appends one `{ hook, input, callback, response }` line per callback to `hook-results.jsonl` (`response` is the hook's output, or `{ error }`; `callback` is null, with a null `response`, when nothing is registered). `ifDenied` runs when a reply denies (`hookSpecificOutput.permissionDecision` "deny" or `decision` "block").
-// - `{ mcp: { server, tool, args? } }`: calls the in-process SDK MCP server named `server` (initialized once per server and launch), waits for the result and appends `{ server, tool, ...<MCP response message> }` to `tool-results.jsonl`.
+// - `{ canUseTool: { tool_name, input?, agent_id?, tool_use_id?, ifDenied?: Step[] } }`: sends a `can_use_tool` control request, as the CLI does when a tool call needs the host's permission (`agent_id` is the background agent making the call, as the CLI names it for a subagent's calls), waits for the host's answer and appends `{ tool_name, agent_id, response }` to `permission-results.jsonl` (`response` is the answer, `{ behavior: "allow" | "deny", ... }`, or `{ error }`). `ifDenied` runs when the host denies. The step waits for the answer, which for a user's approval card takes as long as the user does.
+// - `{ mcp: { server, tool, args?, tool_use_id? } }`: calls the in-process SDK MCP server named `server` (initialized once per server and launch; `tool_use_id` goes in the request's `_meta["claudecode/toolUseId"]`, as the CLI names the tool use), waits for the result and appends `{ server, tool, ...<MCP response message> }` to `tool-results.jsonl`.
 // - `{ result: "text" }`: emits the turn's `result` message; steps may follow (background work that reports after the turn).
 // - `{ sleep: ms }`; `{ waitFor: "<file name>" }` polls until that file exists in the directory (a test sequences steps with it); `{ exit: code }` ends the process, as a crash.
 // With a script run, the process also exits when stdin ends, instead of waiting for steps still running.
@@ -42,7 +43,7 @@ if (command === "auth") {
   process.exit(signedIn ? 0 : 1);
 }
 // `controls.jsonl` gets one line per `set_model`, `apply_flag_settings`, `interrupt` or `stop_task` control request the host sends: `{ subtype, model?, settings?, task_id? }`, which is how a test sees the effort and model changes that are not on the command line, an interrupt, and a task being stopped. Each is answered with a success `control_response`.
-// `launches.jsonl` gets one line per CLI launch: `{ cwd, appendSystemPrompt, mcpServers, env, argv }`. `argv` is the command line the CLI was started with, where the SDK puts `--settings` (the sandbox) and `--disallowedTools`. The servers are read from the --mcp-config file at startup, before the host removes it; the prompt arrives in the initialize request; `env` is the whole environment the CLI started with.
+// `launches.jsonl` gets one line per CLI launch: `{ cwd, appendSystemPrompt, agents, mcpServers, env, argv }`. `argv` is the command line the CLI was started with, where the SDK puts `--settings` (the sandbox) and `--disallowedTools`. The servers are read from the --mcp-config file at startup, before the host removes it; the prompt and `agents` (the agent definitions, by name) arrive in the initialize request; `env` is the whole environment the CLI started with.
 const arg = (name: string) =>
   process.argv.find((a) => a.startsWith(`${name}=`))?.slice(name.length + 1) ??
   process.argv[process.argv.indexOf(name) + 1];
@@ -82,7 +83,14 @@ type Step = {
   input?: Record<string, unknown>;
   tool_use_id?: string;
   ifDenied?: Step[];
-  mcp?: { server: string; tool: string; args?: Record<string, unknown> };
+  canUseTool?: {
+    tool_name: string;
+    input?: Record<string, unknown>;
+    agent_id?: string;
+    tool_use_id?: string;
+    ifDenied?: Step[];
+  };
+  mcp?: { server: string; tool: string; args?: Record<string, unknown>; tool_use_id?: string };
   result?: string;
   sleep?: number;
   waitFor?: string;
@@ -187,7 +195,12 @@ const mcpCall = async (server: string, message: Record<string, unknown>) => {
   });
   return reply.response?.mcp_response as Record<string, unknown> | undefined;
 };
-const callTool = async (server: string, tool: string, args: Record<string, unknown>) => {
+const callTool = async (
+  server: string,
+  tool: string,
+  args: Record<string, unknown>,
+  toolUseId?: string,
+) => {
   if (!handshakes.has(server))
     handshakes.set(
       server,
@@ -208,7 +221,11 @@ const callTool = async (server: string, tool: string, args: Record<string, unkno
   const response = await mcpCall(server, {
     id: ++rpcId,
     method: "tools/call",
-    params: { name: tool, arguments: args },
+    params: {
+      name: tool,
+      arguments: args,
+      ...(toolUseId !== undefined && { _meta: { "claudecode/toolUseId": toolUseId } }),
+    },
   });
   record("tool-results.jsonl", { server, tool, ...response });
 };
@@ -266,8 +283,22 @@ const runSteps = async (steps: Step[], vars: Substitutions): Promise<boolean> =>
         record("hook-results.jsonl", { hook: step.hook, input, callback: null, response: null });
       if (step.ifDenied && responses.some(denies))
         answered = (await runSteps(step.ifDenied, vars)) || answered;
+    } else if (step.canUseTool) {
+      const { tool_name, input = {}, agent_id, tool_use_id, ifDenied } = step.canUseTool;
+      const reply = await ask({
+        subtype: "can_use_tool",
+        tool_name,
+        input,
+        tool_use_id: tool_use_id ?? crypto.randomUUID(),
+        ...(agent_id !== undefined && { agent_id }),
+      });
+      const response =
+        reply.subtype === "error" ? { error: reply.error } : (reply.response ?? null);
+      record("permission-results.jsonl", { tool_name, agent_id, response });
+      if (ifDenied && (response as { behavior?: string } | null)?.behavior === "deny")
+        answered = (await runSteps(ifDenied, vars)) || answered;
     } else if (step.mcp) {
-      await callTool(step.mcp.server, step.mcp.tool, step.mcp.args ?? {});
+      await callTool(step.mcp.server, step.mcp.tool, step.mcp.args ?? {}, step.mcp.tool_use_id);
     } else if (step.result !== undefined) {
       out(resultMessage(step.result));
       answered = true;
@@ -313,6 +344,7 @@ for await (const line of createInterface({ input: process.stdin })) {
         JSON.stringify({
           cwd: process.cwd(),
           appendSystemPrompt: m.request.appendSystemPrompt,
+          agents: m.request.agents,
           mcpServers,
           env: process.env,
           argv: process.argv.slice(envDir ? 2 : 3),

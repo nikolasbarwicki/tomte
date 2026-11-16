@@ -9,6 +9,7 @@ import type { ServerEvent } from "@claudebot/contract/events";
 
 import { migrate } from "../platform/db.ts";
 import { ProgressAttribution } from "./agents.ts";
+import type { PathGuard } from "./guard.ts";
 import { Observer, REPORT_WAIT_MS, lastAssistantText } from "./observe.ts";
 import { createLoopStore, type SessionLog } from "./store.ts";
 import { Tasks } from "./tasks.ts";
@@ -81,10 +82,18 @@ const ended = (status: string, extra: Record<string, unknown> = {}, taskId = "t1
 
 async function hook(name: "PreToolUse" | "SubagentStop", input: Record<string, unknown>) {
   const callback = observer.hooks[name]?.[0]?.hooks[0] as HookCallback;
-  await callback({ hook_event_name: name, ...input } as never, undefined, {
+  return callback({ hook_event_name: name, ...input } as never, undefined, {
     signal: new AbortController().signal,
   });
 }
+const denial = (reason: string) =>
+  ({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: reason,
+    },
+  }) as const;
 const stopped = (text: string, agentId = "t1") =>
   hook("SubagentStop", {
     agent_id: agentId,
@@ -578,22 +587,125 @@ describe("a restart", () => {
     expect(reports()).toEqual([]);
   });
 
-  test("TaskStop on a running task, an ended one or an unknown id leaves the task rows to the CLI's notification", async () => {
+  test("TaskStop on a running or an ended agent leaves the task rows to the CLI's notification and lets the call run", async () => {
     started("run");
     started("gone");
     ended("completed", {}, "gone");
     await stopped("done", "gone");
     changed = 0;
-    for (const id of ["run", "gone", "nobody"])
-      await hook("PreToolUse", {
-        tool_name: "TaskStop",
-        tool_use_id: id,
-        tool_input: { task_id: id },
-      });
+    for (const id of ["run", "gone"])
+      expect(
+        await hook("PreToolUse", {
+          tool_name: "TaskStop",
+          tool_use_id: id,
+          tool_input: { task_id: id },
+        }),
+      ).toEqual({});
 
     expect(log.getTask("run")?.status).toBe("running");
     expect(log.getTask("gone")?.status).toBe("done");
     expect(changed).toBe(0);
+  });
+
+  test("TaskStop on an id that is no agent of this chat is refused, so it cannot stop anything else the CLI runs", async () => {
+    started("run");
+    const stop = (task_id: unknown) =>
+      hook("PreToolUse", { tool_name: "TaskStop", tool_use_id: "tu", tool_input: { task_id } });
+
+    expect(await stop("nobody")).toEqual(
+      denial('"nobody" is not a background task of this chat; stop only the ids in <work_state>.'),
+    );
+    // A shell id from the old parameter name, no id, and an id of the wrong type.
+    for (const bad of [undefined, 7, ""])
+      expect(await stop(bad)).toMatchObject({
+        hookSpecificOutput: { permissionDecision: "deny" },
+      });
+    expect(
+      await hook("PreToolUse", {
+        tool_name: "TaskStop",
+        tool_use_id: "tu",
+        tool_input: { shell_id: "run" },
+      }),
+    ).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    expect(log.getTask("run")?.status).toBe("running");
+    expect(changed).toBe(1);
+  });
+
+  test("TaskStop on a queue entry is refused with the tool that drops it", async () => {
+    log.putTask({ taskId: "q-1", goal: "later", status: "queued", startedAt: 1 }, 1);
+
+    expect(
+      await hook("PreToolUse", {
+        tool_name: "TaskStop",
+        tool_use_id: "tu",
+        tool_input: { task_id: "q-1" },
+      }),
+    ).toEqual(denial('"q-1" is queued and has not started; use cancel_queued to drop it.'));
+    expect(log.getTask("q-1")?.status).toBe("queued");
+  });
+});
+
+describe("an agent's calls", () => {
+  const guarded = (guard: PathGuard) => {
+    observer = new Observer({
+      log,
+      tasks,
+      attribution,
+      emit: (e) => emitted.push(e),
+      changed: () => changed++,
+      defaults: () => ({ model: "sonnet", effort: "medium" }),
+      guard,
+      now: () => clock,
+      logLine: () => {},
+    });
+  };
+  const call = (tool_name: string, tool_input: Record<string, unknown>, agent_id?: string) =>
+    hook("PreToolUse", { tool_name, tool_input, tool_use_id: `tu-${tool_name}`, agent_id });
+
+  test("a call the path guard refuses is denied with its reason and logged as refused, not as work done", async () => {
+    guarded((tool, input) =>
+      tool === "Write" && JSON.stringify(input).includes("/etc/") ? "/etc/x is outside" : undefined,
+    );
+    started("t1");
+
+    expect(await call("Write", { file_path: "/etc/x" }, "t1")).toEqual(denial("/etc/x is outside"));
+    expect(await call("Write", { file_path: "notes.md" }, "t1")).toEqual({});
+
+    expect(log.events("activity").map((e) => [e.type, e.text])).toEqual([
+      ["tool", "Write refused: /etc/x is outside"],
+      ["tool", "Write: notes.md"],
+    ]);
+  });
+
+  test("a guard that throws refuses the call instead of letting it through", async () => {
+    guarded(() => {
+      throw new Error("EACCES");
+    });
+    started("t1");
+
+    expect(await call("Read", { file_path: "a" }, "t1")).toMatchObject({
+      hookSpecificOutput: {
+        permissionDecision: "deny",
+        permissionDecisionReason: "the path check failed: Error: EACCES",
+      },
+    });
+  });
+
+  test("the front's own calls are not guarded", async () => {
+    guarded(() => "refused");
+
+    expect(await call("Read", { file_path: "/etc/x" })).toEqual({});
+  });
+
+  test("an ask_user call is attributed to its agent, once, so its card can name the task", async () => {
+    started("t1", { description: "tidy the invoices" });
+    await call("mcp__host__ask_user", { question: "Which folder?" }, "t1");
+
+    expect(observer.callerOf("tu-mcp__host__ask_user")).toBe("t1");
+    expect(observer.callerOf("tu-mcp__host__ask_user")).toBeUndefined();
+    expect(observer.callerOf(undefined)).toBeUndefined();
+    expect(observer.goalOf("t1")).toBe("tidy the invoices");
+    expect(observer.goalOf("nobody")).toBeUndefined();
   });
 });
 

@@ -41,16 +41,17 @@ afterEach(async () => {
 });
 
 /** A front session for the bot over the fake Claude CLI, with its own task log. */
-function openFront(
-  extra: {
-    idleMs?: number;
-    expiresAt?: () => Promise<number | undefined>;
-    now?: () => number;
-  } = {},
-) {
+function openFront({
+  expiresAt,
+  ...extra
+}: {
+  idleMs?: number;
+  expiresAt?: () => Promise<number | undefined>;
+  now?: () => number;
+} = {}) {
   const botRow = defined(getBot(host.dataRoot, bot), "bot");
   const context = frontContext(host.dataRoot, botRow);
-  const { persona, memory } = context;
+  const { persona, workerPersona, files, memory } = context;
   const sessionId = defined(context.sessionId, "session id");
   log = createLoopStore(host.db).session(bot, sessionId);
   const attribution = new ProgressAttribution();
@@ -79,7 +80,20 @@ function openFront(
     delegate: { askUser: async () => "", approve: async () => ({ behavior: "allow" }) },
     log: (l) => lines.push(l),
     persona,
+    workerPersona,
+    files,
     memory,
+    integrations: {
+      session: async () => ({
+        mcpServers: {},
+        disallowedTools: [],
+        plugins: [],
+        policyOf: () => undefined,
+        expiresAt: await expiresAt?.(),
+      }),
+      decide: () => undefined,
+      reconcile: () => {},
+    },
     observer,
     tasks,
     loopServer: createLoopServer({

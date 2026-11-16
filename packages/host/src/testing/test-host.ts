@@ -68,6 +68,11 @@ export interface HandoffHost {
   launches(): {
     cwd: string;
     appendSystemPrompt?: string;
+    /** The agent definitions of the launch, by name, as the CLI's initialize request carried them. */
+    agents?: Record<
+      string,
+      { description: string; prompt: string; tools?: string[]; disallowedTools?: string[] }
+    >;
     mcpServers: Record<string, { url: string; headers: { Authorization: string } }>;
     env: Record<string, string>;
     argv: string[];
@@ -111,6 +116,12 @@ export interface HandoffHost {
     tool: string;
     result?: { content: { text: string }[]; isError?: boolean };
   }[];
+  /** What the host answered to the script's `canUseTool` steps, oldest first. */
+  permissionResults(): {
+    tool_name: string;
+    agent_id?: string;
+    response: { behavior?: string; message?: string; error?: string } | null;
+  }[];
   /** The executable the host runs as its Claude CLI, and what its `auth status` reports from now on. */
   readonly cliPath: string;
   setSignedIn(signedIn: boolean): void;
@@ -147,6 +158,8 @@ export async function startHandoffHost(
   reveal?: HostServerOptions["reveal"],
   /** Overrides for the host's timing, so a test need not wait out the defaults. */
   timing?: Pick<HostServerOptions, "frontIdleMs">,
+  /** The environment the host's configuration is read from, such as `CLAUDEBOT_ASK_APPROVAL`. */
+  env: Record<string, string> = {},
 ): Promise<HandoffHost> {
   const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   const root = realpathSync(mkdtempSync(join(tmpdir(), "handoffs-test-")));
@@ -165,7 +178,7 @@ export async function startHandoffHost(
   );
   chmodSync(cliPath, 0o755);
 
-  let config = parseHostConfig(["--data-root", dataRoot, ...hostFlags], {}, LINUX).config;
+  let config = parseHostConfig(["--data-root", dataRoot, ...hostFlags], env, LINUX).config;
   const restoreEnv = () => {
     for (const k of ENV_KEYS)
       if (saved[k] === undefined) delete process.env[k];
@@ -283,6 +296,7 @@ export async function startHandoffHost(
     allow: (name) => writeFileSync(join(claudeDir, name), ""),
     hookResults: () => lines(join(claudeDir, "hook-results.jsonl")),
     loopCalls: () => lines(join(claudeDir, "tool-results.jsonl")),
+    permissionResults: () => lines(join(claudeDir, "permission-results.jsonl")),
     cliPath,
     setSignedIn: (signedIn) =>
       signedIn
@@ -315,7 +329,7 @@ export async function startHandoffHost(
       await Promise.all(clients.splice(0).map((c) => c.close()));
       await server.close();
       if (flags)
-        config = parseHostConfig(["--data-root", config.dataRoot, ...flags], {}, LINUX).config;
+        config = parseHostConfig(["--data-root", config.dataRoot, ...flags], env, LINUX).config;
       server = await startServer();
     },
     async stop() {

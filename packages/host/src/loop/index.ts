@@ -3,6 +3,7 @@ import type { Bot, MemoryScope, ServerEvent } from "@claudebot/contract/events";
 import { frontContext, type HostDelegate, type ThreadEnv } from "../bots/index.ts";
 import { ProgressAttribution, createLoopServer } from "./agents.ts";
 import { FrontSession, type FrontOptions } from "./front.ts";
+import { createPathGuard } from "./guard.ts";
 import { Observer } from "./observe.ts";
 import type { LoopStore } from "./store.ts";
 import { Tasks } from "./tasks.ts";
@@ -35,7 +36,7 @@ export function openFront(
     onEnd: FrontOptions["onEnd"];
   },
 ): FrontSession {
-  const { sessionId, persona, memory } = frontContext(dataRoot, bot);
+  const { sessionId, persona, workerPersona, files, memory } = frontContext(dataRoot, bot);
   if (sessionId === undefined) throw new Error(`bot ${bot.id} has no session`);
   const { store, emit, changed, dispatch, onMessage, ...rest } = opts;
   const log = store.session(bot.id, sessionId);
@@ -54,6 +55,8 @@ export function openFront(
       tasks.pump();
     },
     defaults: () => front.agentSettings,
+    // The worker's file tools stay in the workspace and the bot's files folder.
+    guard: createPathGuard({ cwd, roots: [cwd, files] }),
     logLine: opts.log,
   });
   front = new FrontSession({
@@ -65,6 +68,8 @@ export function openFront(
     env: () => botEnv(bot.id),
     approveAll,
     persona,
+    workerPersona,
+    files,
     memory,
     observer,
     tasks,
@@ -76,7 +81,7 @@ export function openFront(
     }),
     onStopped: () => observer.interruptRunning(),
     // Nothing closes the front for an expiring token while agents run; the session is read at open, as a standard thread's is.
-    expiresAt: async () => (await integrations.session()).expiresAt,
+    integrations,
     onMessage: (m) => {
       observer.onMessage(m);
       onMessage(m);

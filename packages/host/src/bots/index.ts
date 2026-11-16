@@ -26,6 +26,7 @@ export {
   createCanUseTool,
   createHostMcpServer,
   memorySections,
+  toolUseIdOf,
   type HostDelegate,
 } from "./session-kit.ts";
 export { readMemory, userMemoryPath, type MemoryPaths } from "./memory.ts";
@@ -213,12 +214,19 @@ export function botContext(dataRoot: string, bot: Bot) {
   };
 }
 
-/** What a bot's front session binds to: the bot's identity, session and memory, without the files folder, which the front has no tools to write to. */
+/**
+ * What a bot's front session binds to: the bot's identity, session and memory. The front itself has no tools to write files,
+ * so its persona leaves the files folder out; the background worker writes there, so `workerPersona` is the bot's full persona
+ * and `files` the folder.
+ */
 export function frontContext(dataRoot: string, bot: Bot) {
+  const full = botContext(dataRoot, bot);
   return {
-    sessionId: currentSession(bot),
+    sessionId: full.sessionId,
     persona: botIdentity(bot).join("\n"),
-    memory: botMemory(dataRoot, bot.id),
+    workerPersona: full.persona,
+    files: botFilesPath(dataRoot, bot.id),
+    memory: full.memory,
   };
 }
 

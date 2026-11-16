@@ -27,30 +27,32 @@ import {
   type HostServerLease,
   type ResolvedCli,
 } from "../harness/index.ts";
+import type { IntegrationsSource } from "../integrations/index.ts";
 import {
-  AGENT_BUILTIN_TOOLS,
   CANCEL_QUEUED,
-  FRONT_AGENT,
+  FRONT_BUILTIN_TOOLS,
+  HOST_SERVER_NAMES,
   LOOP_SERVER,
   QUEUE_TASK,
   RECORD_PROGRESS,
+  RESEARCH_TOOLS,
   agentDefinitions,
+  frontAgent,
+  sessionTools,
   type AgentSettings,
+  type WorkerSetup,
 } from "./agents.ts";
 import type { Observer } from "./observe.ts";
 import { FRONT_PROMPT } from "./prompt.ts";
 import type { Tasks } from "./tasks.ts";
 import { MAX_PARALLEL, restartNotice, workState } from "./work-state.ts";
 
-/** The built-in tools only the front uses; agents have their own. */
-const FRONT_TOOLS = ["Agent", "SendMessage", "TaskStop"];
-
-/** Tools the front and its agents use without asking: the front's own, its queue tools, agents' web research and their progress recorder. */
+/** Tools the front and its agents use without asking: the front's own, its queue tools, the researcher's web research and every agent's progress recorder. The worker's tools are not here: they follow Claudebot's rules. */
 const PRE_APPROVED = [
-  ...FRONT_TOOLS,
+  ...FRONT_BUILTIN_TOOLS,
   QUEUE_TASK,
   CANCEL_QUEUED,
-  ...AGENT_BUILTIN_TOOLS,
+  ...RESEARCH_TOOLS,
   RECORD_PROGRESS,
 ];
 
@@ -74,6 +76,10 @@ export interface FrontOptions {
   log?: (line: string) => void;
   /** Who the bot is; appended to the system prompt. */
   persona: string;
+  /** The bot's full persona, files folder included, which the worker's prompt ends with. */
+  workerPersona: string;
+  /** The bot's files folder: with `cwd`, the places its worker may read and write without asking. */
+  files: string;
   memory: MemoryPaths;
   /** Called with a scope's full memory file after the front changes it. */
   onMemory?: (scope: MemoryScope, text: string) => void;
@@ -89,8 +95,8 @@ export interface FrontOptions {
   onEnd: (error: Error) => void;
   /** The CLI process is gone, closed or ended, and every agent it ran with it. */
   onStopped?: () => void;
-  /** When the integration tokens the session would use run out (epoch ms); read whenever the session opens. Undefined means they never do. */
-  expiresAt?: () => Promise<number | undefined>;
+  /** The bot's integrations: their MCP servers are connected for the worker and kept off the front, and the user's rules decide each call. Read whenever the session opens. */
+  integrations: IntegrationsSource;
   now?: () => number;
 }
 
@@ -136,25 +142,53 @@ export class FrontSession {
     this.started = o.resume;
     this.now = o.now ?? Date.now;
     this.log = o.log ?? ((l) => console.error(l));
-    const base = createCanUseTool({
-      cwd: o.cwd,
-      roots: [resolve(o.cwd)],
-      approveAll: o.approveAll,
-      delegate: o.delegate,
-    });
-    // Nobody answers a permission prompt for an agent's web research or for the front's own agent calls, so those never ask.
+    const roots = [resolve(o.cwd), resolve(o.files)];
+    const rules = (delegate: HostDelegate) =>
+      createCanUseTool({
+        cwd: o.cwd,
+        roots,
+        integrations: o.integrations,
+        approveAll: o.approveAll,
+        delegate,
+      });
+    const own = rules(o.delegate);
+    // Nobody answers a permission prompt for an agent's web research or for the front's own agent calls, so those never ask. Every
+    // other call follows Claudebot's rules, and an agent's card says which task it is for.
     this.canUseTool = (name, input, options) =>
       PRE_APPROVED.includes(name)
         ? Promise.resolve({ behavior: "allow", updatedInput: input })
-        : base(name, input, options);
+        : (options.agentID ? rules(this.delegateFor(options.agentID)) : own)(name, input, options);
+  }
+
+  /** The user's delegate, worded for the task an agent works on, so a card that waits on its answer says whose it is. */
+  private delegateFor(taskId: string | undefined): HostDelegate {
+    const goal = taskId ? this.observer.goalOf(taskId) : undefined;
+    if (goal === undefined) return this.o.delegate;
+    const task = `"${goal.length > 120 ? `${goal.slice(0, 119)}…` : goal}"`;
+    return {
+      askUser: (question, options, eventId, toolUseId) =>
+        this.o.delegate.askUser(`Task ${task} asks: ${question}`, options, eventId, toolUseId),
+      approve: (tool, input, reason) =>
+        this.o.delegate.approve(tool, input, `${reason}, for the task ${task}`),
+    };
   }
 
   private async open(): Promise<Live> {
     const generation = this.generation;
     const input = new Inbox();
     await this.o.claude.requireSignIn();
-    const expiresAt = await this.o.expiresAt?.();
+    const session = await this.o.integrations.session();
     const lease = this.o.hostServers();
+    // An integration named like one of the host's own servers would shadow it, so it is left out of this session.
+    const integrationServers = Object.entries(session.mcpServers).filter(
+      ([name]) => !HOST_SERVER_NAMES.includes(name),
+    );
+    const worker: WorkerSetup = {
+      shell: lease.isolation?.shell !== "disabled",
+      integrationServers: integrationServers.map(([name]) => name),
+      context: this.o.workerPersona + memorySections(this.o.memory),
+    };
+    const agents = agentDefinitions(this.settings, worker);
     const append =
       FRONT_PROMPT +
       `\n\n${MEMORY_INSTRUCTIONS}` +
@@ -163,8 +197,14 @@ export class FrontSession {
       memorySections(this.o.memory);
     const launch = claudeHarness.launch({
       hostServers: lease.servers,
+      integrations: {
+        mcpServers: Object.fromEntries(integrationServers),
+        disallowedTools: session.disallowedTools,
+        plugins: [],
+      },
       systemPromptAppend: append,
       isolation: lease.isolation,
+      stopsAgents: true,
     });
     let live: Live;
     try {
@@ -178,9 +218,19 @@ export class FrontSession {
           persistSession: true,
           includePartialMessages: true,
           canUseTool: this.canUseTool,
-          // The front never blocks on the user, so its host server has no ask_user.
+          // Only the worker asks the user: the front never blocks on a question, and its own tool set (`frontAgent`) leaves ask_user out.
           mcpServers: {
             host: createHostMcpServer({
+              delegate: {
+                askUser: (question, options, eventId, toolUseId) =>
+                  this.delegateFor(this.observer.callerOf(toolUseId)).askUser(
+                    question,
+                    options,
+                    eventId,
+                    toolUseId,
+                  ),
+                approve: (tool, input, reason) => this.o.delegate.approve(tool, input, reason),
+              },
               memory: this.o.memory,
               onMemory: this.o.onMemory,
               log: this.log,
@@ -189,10 +239,10 @@ export class FrontSession {
           },
           ...launch.options,
           // The session's tools hold every agent's tools, because subagents only see what the session has; the main thread runs as
-          // the `front` agent, whose own tool set leaves the agents' tools out.
-          tools: [...FRONT_TOOLS, ...AGENT_BUILTIN_TOOLS],
+          // the `front` agent, which is denied all of them.
+          tools: sessionTools(agents),
           agent: "front",
-          agents: { ...agentDefinitions(this.settings), front: FRONT_AGENT },
+          agents: { ...agents, front: frontAgent(agents) },
           agentProgressSummaries: true,
           hooks: this.observer.hooks,
           model: FRONT_MODEL,
@@ -212,7 +262,7 @@ export class FrontSession {
         q.close();
         throw e;
       }
-      live = { q, input, lease, expiresAt, told: false };
+      live = { q, input, lease, expiresAt: session.expiresAt, told: false };
     } catch (e) {
       lease.release();
       throw e;
@@ -225,11 +275,21 @@ export class FrontSession {
     }
     this.started = true;
     this.live = live;
+    void this.reconcileIntegrations(live.q);
     void this.pump(live);
     this.log(
       `[host] front opened (${this.o.resume ? "resume" : "new"}) session=${this.o.sessionId}`,
     );
     return live;
+  }
+
+  /** Tells the integrations module what the CLI reports about each server, as a standard thread does after it opens. */
+  private async reconcileIntegrations(q: Query) {
+    try {
+      this.o.integrations.reconcile(await q.mcpServerStatus());
+    } catch (e) {
+      this.log(`[host] mcpServerStatus failed: ${(e as Error).message}`);
+    }
   }
 
   private ensureOpen(): Promise<Live> {

@@ -8,6 +8,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 
+import { toolUseIdOf } from "../bots/index.ts";
 import type { Progress } from "./store.ts";
 import type { QueueResult } from "./tasks.ts";
 
@@ -15,12 +16,16 @@ export const LOOP_SERVER = "loop";
 export const RECORD_PROGRESS = `mcp__${LOOP_SERVER}__record_progress`;
 export const QUEUE_TASK = `mcp__${LOOP_SERVER}__queue_task`;
 export const CANCEL_QUEUED = `mcp__${LOOP_SERVER}__cancel_queued`;
+export const ASK_USER = "mcp__host__ask_user";
+const REMEMBER = "mcp__host__remember";
+const REWRITE_MEMORY = "mcp__host__rewrite_memory";
 
 /** The agent types the front can start or queue. */
-const AGENT_TYPES = ["researcher"] as const;
+const AGENT_TYPES = ["researcher", "worker"] as const;
 
 /** Turns an agent may take before Claude Code stops it. */
 const RESEARCHER_MAX_TURNS = 60;
+const WORKER_MAX_TURNS = 80;
 
 const PROGRESS_RULES = `The user follows your work only through record_progress. Call it when your phase changes or you learn something concrete, in the same turn as your next tool calls, never as a step on its own.
 "finding" must be a specific fact you verified (or null); "next" is what you will do now.
@@ -43,8 +48,47 @@ ${PROGRESS_RULES}
 
 ${RESULT_RULES}`;
 
-/** The built-in tools every agent type uses. The front session's `tools` must hold them all: subagents only see what the session has. */
-export const AGENT_BUILTIN_TOOLS = ["WebSearch", "WebFetch"];
+/** The built-in tools of the researcher: what the front pre-approves, because nobody answers a card for web research. */
+export const RESEARCH_TOOLS = ["WebSearch", "WebFetch"];
+
+/** The built-in tools of the worker that read and write files, always inside its boundary (`loop/guard.ts`). */
+const WORKER_FILE_TOOLS = ["Read", "Write", "Edit", "NotebookEdit", "Glob", "Grep"];
+
+/** Built-in tools only the front uses; the session's `tools` hold them and the agents' own tools beside them. */
+export const FRONT_BUILTIN_TOOLS = ["Agent", "SendMessage", "TaskStop"];
+
+/**
+ * Everything the front itself may use (decision 5 of ADR-0009), besides the handoff tools the host's `bots` server adds. This is
+ * the one list the front's tool set is held to: whatever an agent has and is not here is denied to the front.
+ */
+const FRONT_TOOLS = [...FRONT_BUILTIN_TOOLS, QUEUE_TASK, CANCEL_QUEUED, REMEMBER, REWRITE_MEMORY];
+
+/** MCP servers the host itself defines; an integration of the same name would shadow one, so it is left out of the session. */
+export const HOST_SERVER_NAMES = ["host", "loop", "bots", "browser"];
+
+/** What the worker is set up with when the front session opens: the bot's shell, its integrations and who it is. */
+export interface WorkerSetup {
+  /** False when the bot's isolation disables its shell: the worker then has no Bash. */
+  shell: boolean;
+  /** Names of the integration MCP servers the session connects; the worker has every tool of each. */
+  integrationServers: string[];
+  /** The bot's persona and memory, which the worker's prompt ends with. */
+  context: string;
+}
+
+const workerPrompt = ({
+  shell,
+  context,
+}: WorkerSetup) => `You are a careful analyst and engineer doing a hands-on task for the assistant you work for: analysing data, writing and running scripts, producing files, and using the assistant's connected services.
+You work in your working directory and in the files folder named below; the file tools refuse every other place, so never try to reach outside them. ${shell ? "Shell commands run in a sandbox, and some may need the user's approval, which you wait for." : "You have no shell here: do the work with the file tools and the connected services."}
+Ask the user with ${ASK_USER} only when a wrong guess would cost them something and you cannot go on without the answer; the question waits for their reply while the other tasks continue. Otherwise do not ask: state your assumptions in your final reply.
+
+${PROGRESS_RULES}
+
+${RESULT_RULES}
+Name the files you produced.
+
+${context}`;
 
 /** The bot's own model and effort setting, which its background agents run on. */
 export interface AgentSettings {
@@ -53,10 +97,10 @@ export interface AgentSettings {
 }
 
 /** The agent types the front can start with the Agent tool, running on the bot's model and effort. */
-export function agentDefinitions({
-  model,
-  effort,
-}: AgentSettings): Record<string, AgentDefinition> {
+export function agentDefinitions(
+  { model, effort }: AgentSettings,
+  worker: WorkerSetup,
+): Record<string, AgentDefinition> {
   return {
     researcher: {
       description:
@@ -64,27 +108,56 @@ export function agentDefinitions({
       prompt: RESEARCHER_PROMPT,
       model,
       effort,
-      tools: [...AGENT_BUILTIN_TOOLS, RECORD_PROGRESS],
+      tools: [...RESEARCH_TOOLS, RECORD_PROGRESS],
       maxTurns: RESEARCHER_MAX_TURNS,
+      background: true,
+    },
+    worker: {
+      description: `Hands-on work in the bot's workspace and files folder: analysis, files${worker.shell ? ", scripts run in a sandbox" : ""} and the bot's connected services. No browser. May ask the user a question. Ends in a chat message with the results.`,
+      prompt: workerPrompt(worker),
+      model,
+      effort,
+      tools: [
+        ...WORKER_FILE_TOOLS,
+        ...(worker.shell ? ["Bash"] : []),
+        ...worker.integrationServers.map((name) => `mcp__${name}`),
+        ASK_USER,
+        RECORD_PROGRESS,
+      ],
+      maxTurns: WORKER_MAX_TURNS,
       background: true,
     },
   };
 }
 
-/**
- * The agent the main thread runs as, so its tool set is the front's and not the session's whole one: no web tools and no
- * progress reports, but the host's memory tools, the handoff tools and the rest of what the session holds. Its instructions
- * are the session's system prompt, which wins over an agent's own prompt.
- */
-export const FRONT_AGENT: AgentDefinition = {
-  description: "The chat voice itself. Never start it as a task.",
-  prompt: "You are the chat voice of the assistant.",
-  disallowedTools: [...AGENT_BUILTIN_TOOLS, RECORD_PROGRESS],
-};
+/** Every tool some agent has, as the agent definitions name them: built-in tools, MCP tools and whole MCP servers (`mcp__name`). */
+const agentTools = (agents: Record<string, AgentDefinition>) => [
+  ...new Set(Object.values(agents).flatMap((a) => a.tools ?? [])),
+];
+
+/** The session's built-in tools: the front's and those of every agent, because subagents only see what the session has. */
+export const sessionTools = (agents: Record<string, AgentDefinition>) => [
+  ...new Set([...FRONT_BUILTIN_TOOLS, ...agentTools(agents).filter((t) => !t.startsWith("mcp__"))]),
+];
 
 /**
- * Who called `record_progress`. The handler can't see its caller, so the PreToolUse hook notes every call first and the
- * handler takes the matching note: by tool use id when the CLI passes one, else by identical arguments.
+ * The agent the main thread runs as, so its tool set is the front's and not the session's whole one. It has no tool list of its
+ * own to be kept in step with: it is denied every tool an agent has that the front does not, computed from the agent
+ * definitions, so a tool added to an agent never reaches the front. What is left is the session's other tools: the front's own
+ * (`FRONT_TOOLS`) and the host's handoff tools. Its instructions are the session's system prompt, which wins over an agent's own.
+ */
+export function frontAgent(agents: Record<string, AgentDefinition>): AgentDefinition {
+  return {
+    description: "The chat voice itself. Never start it as a task.",
+    prompt: "You are the chat voice of the assistant.",
+    disallowedTools: agentTools(agents).filter((t) => !FRONT_TOOLS.includes(t)),
+  };
+}
+
+/**
+ * Which agent made a call: `record_progress` and `ask_user` are in-process MCP tools whose handler can't see its caller. The
+ * PreToolUse hook notes every such call first and the handler takes the matching note: by tool use id when the CLI passes one,
+ * else by identical arguments.
  */
 export class ProgressAttribution {
   private readonly pending: { toolUseId: string; agentId: string; input: unknown }[] = [];
@@ -105,14 +178,6 @@ const text = (s: string, isError = false) => ({
   content: [{ type: "text" as const, text: s }],
   isError,
 });
-
-/** The CLI passes the id of the tool use that called an in-process MCP tool in the call's metadata. */
-function toolUseIdOf(extra: unknown): string | undefined {
-  const id = (extra as { _meta?: Record<string, unknown> } | undefined)?._meta?.[
-    "claudecode/toolUseId"
-  ];
-  return typeof id === "string" ? id : undefined;
-}
 
 /** The in-process `loop` MCP server the front session hosts: `record_progress` for the agents, the queue tools for the front. */
 export function createLoopServer(o: {

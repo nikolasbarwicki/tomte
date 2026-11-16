@@ -9,7 +9,8 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import type { ServerEvent, TaskState } from "@claudebot/contract/events";
 
-import { RECORD_PROGRESS, type ProgressAttribution } from "./agents.ts";
+import { ASK_USER, RECORD_PROGRESS, type ProgressAttribution } from "./agents.ts";
+import type { PathGuard } from "./guard.ts";
 import { isFinal, type ActivityType, type Progress, type SessionLog } from "./store.ts";
 import { findingsOf, foldTasks, taskEvent, type Tasks } from "./tasks.ts";
 import type { TaskView } from "./work-state.ts";
@@ -31,6 +32,8 @@ export interface ObserverDeps {
   now?: () => number;
   /** Runs `fn` after `ms` and returns what cancels it. */
   schedule?: (fn: () => void, ms: number) => () => void;
+  /** Says why an agent's tool call must be refused (a file tool reaching outside its boundary), or undefined to let it run. */
+  guard?: PathGuard;
   logLine?: (line: string) => void;
 }
 
@@ -44,6 +47,15 @@ interface Launch {
 }
 
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+
+/** What a PreToolUse hook answers to stop the tool call; the model is told `reason`. */
+const deny = (reason: string) => ({
+  hookSpecificOutput: {
+    hookEventName: "PreToolUse" as const,
+    permissionDecision: "deny" as const,
+    permissionDecisionReason: reason,
+  },
+});
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 const END_STATUS = {
@@ -192,6 +204,7 @@ export class Observer {
       });
   }
 
+  /** The PreToolUse hook: notes who made a call, records an agent's activity, refuses what an agent may not do and what the front may not stop. */
   private onToolUse(input: {
     tool_name: string;
     tool_input: unknown;
@@ -200,9 +213,15 @@ export class Observer {
   }) {
     const args = (input.tool_input ?? {}) as Record<string, unknown>;
     const name = input.tool_name;
+    if (name === "TaskStop") return this.onStop(str(args.task_id) ?? "");
     if (input.agent_id) {
       const taskId = input.agent_id;
-      if (name === RECORD_PROGRESS)
+      const refusal = this.refusal(name, input.tool_input);
+      if (refusal) {
+        this.activity(taskId, "tool", `${name} refused: ${clip(refusal, 300)}`);
+        return deny(refusal);
+      }
+      if (name === RECORD_PROGRESS || name === ASK_USER)
         this.d.attribution.note(input.tool_use_id, taskId, input.tool_input);
       else if (name === "WebSearch") this.activity(taskId, "search", str(args.query) ?? "");
       else if (name === "WebFetch") this.activity(taskId, "open", str(args.url) ?? "");
@@ -225,19 +244,50 @@ export class Observer {
         }),
       });
     else if (name === "SendMessage") this.onSteer(input.tool_use_id, args);
-    else if (name === "TaskStop") this.onStop(str(args.task_id) ?? "");
     return {};
   }
 
-  /** An interrupted agent is not running, so the CLI's TaskStop fails for it and no notification follows: the stop request itself ends the task. */
+  /** Why an agent's call must not run, or undefined. A guard that cannot tell refuses. */
+  private refusal(toolName: string, input: unknown): string | undefined {
+    try {
+      return this.d.guard?.(toolName, input);
+    } catch (err) {
+      return `the path check failed: ${String(err)}`;
+    }
+  }
+
+  /**
+   * The front stops a background agent. Anything else is refused: `TaskStop` stops shell tasks too, and the front has none, nor
+   * a queue entry, which `cancel_queued` drops. An interrupted agent is not running, so the CLI's TaskStop fails for it and no
+   * notification follows: the stop request itself ends the task.
+   */
   private onStop(id: string) {
     const task = this.d.log.getTask(this.d.tasks.resolve(id));
-    if (task?.status !== "interrupted") return;
-    this.d.log.setStatus(task.taskId, "cancelled", this.now());
-    this.clearStatus(task.taskId);
-    this.emitTask(task.taskId);
-    this.d.changed();
+    if (!task)
+      return deny(
+        `${id ? `"${id}"` : "No id"} is not a background task of this chat; stop only the ids in <work_state>.`,
+      );
+    if (task.status === "queued")
+      return deny(`"${id}" is queued and has not started; use cancel_queued to drop it.`);
+    if (task.status === "interrupted") {
+      this.d.log.setStatus(task.taskId, "cancelled", this.now());
+      this.clearStatus(task.taskId);
+      this.emitTask(task.taskId);
+      this.d.changed();
+    }
+    return {};
   }
+
+  /** The task whose agent made a tool use, noted by the PreToolUse hook before the call ran; taking it twice finds nothing. */
+  callerOf(toolUseId: string | undefined): string | undefined {
+    return toolUseId === undefined ? undefined : this.d.attribution.take(toolUseId, undefined);
+  }
+
+  /** What a task was asked to do, as the store has it. */
+  goalOf(taskId: string): string | undefined {
+    return this.d.log.getTask(taskId)?.goal;
+  }
+
   /** The front gave a running task an instruction: it is logged as sent now, and as failed if the tool answers with an error. */
   private onSteer(toolUseId: string, args: Record<string, unknown>) {
     const taskId = this.d.tasks.resolve(str(args.to) ?? "");

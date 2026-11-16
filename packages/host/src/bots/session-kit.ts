@@ -16,14 +16,30 @@ import { appendMemory, readMemory, writeMemory, type MemoryPaths } from "./memor
 
 /** Decisions the host (its UI/user) owns. */
 export interface HostDelegate {
-  /** `eventId` is the external event the bot says the question is about; the host decides whether to believe it. */
-  askUser(question: string, options?: string[], eventId?: string): Promise<string>;
+  /**
+   * `eventId` is the external event the bot says the question is about; the host decides whether to believe it. `toolUseId` is
+   * the tool use that asked, when the CLI says which, so a session running several agents can tell who is asking.
+   */
+  askUser(
+    question: string,
+    options?: string[],
+    eventId?: string,
+    toolUseId?: string,
+  ): Promise<string>;
   /** Bash, or file writes outside the thread's roots. */
   approve(
     toolName: string,
     input: Record<string, unknown>,
     reason: string,
   ): Promise<PermissionResult>;
+}
+
+/** The CLI passes the id of the tool use that called an in-process MCP tool in the call's metadata. */
+export function toolUseIdOf(extra: unknown): string | undefined {
+  const id = (extra as { _meta?: Record<string, unknown> } | undefined)?._meta?.[
+    "claudecode/toolUseId"
+  ];
+  return typeof id === "string" ? id : undefined;
 }
 
 export const ASK_INSTRUCTIONS = [
@@ -156,9 +172,9 @@ export function createHostMcpServer(o: {
                 "The id of the external event this question is about, from its <<<EXTERNAL_EVENT>>> header; answering then closes that event",
               ),
           },
-          async ({ question, options, event_id }) => {
+          async ({ question, options, event_id }, extra) => {
             log(`[host] ask_user invoked in-process: ${JSON.stringify(question)}`);
-            const answer = await delegate.askUser(question, options, event_id);
+            const answer = await delegate.askUser(question, options, event_id, toolUseIdOf(extra));
             return { content: [{ type: "text" as const, text: answer }] };
           },
         ),

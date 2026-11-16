@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { z } from "zod";
 
+import { setChatMode } from "../bots/index.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
 const KEY_FILE = "/etc/claudebot-test/secrets.key";
@@ -154,6 +155,21 @@ describe("remote mode shell isolation", () => {
     );
     expect(disallowed).toContain(`Read(/${join(h.dataRoot, "secrets.enc")})`);
     expect(disallowed).toContain(`Read(/${join(h.dataRoot, "claude")}/**)`);
+  });
+
+  test("a double-loop bot without a sandbox has no shell tools either, but keeps TaskStop so its front can stop its agents", async () => {
+    const h = await start(REMOTE);
+    h.setSandboxAvailable(false);
+    const ada = h.createBot("Ada");
+    setChatMode(h.dataRoot, ada, "double_loop");
+    const { sandbox, disallowed } = await launchOf(h, ada);
+
+    expect(sandbox).toBeUndefined();
+    expect(disallowed).toEqual(expect.arrayContaining(["Bash", "PowerShell", "Monitor"]));
+    expect(disallowed).not.toContain("TaskStop");
+    // The worker has no shell to lose: its definition leaves Bash out and the session has no Bash tool.
+    expect(h.launches().at(-1)?.agents?.worker?.tools).not.toContain("Bash");
+    expect(h.launches().at(-1)?.argv.join(" ")).not.toMatch(/--tools=\S*Bash/);
   });
 
   test("a browser bot stays without shell tools when the sandbox cannot run", async () => {

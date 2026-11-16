@@ -118,7 +118,9 @@ describe("a double-loop bot's front session", () => {
     const launch = defined(host.launches()[0], "launch");
     expect(launch.argv).toContain("--model=claude-haiku-5-5");
     expect(launch.argv).toContain("--thinking=disabled");
-    expect(launch.argv).toContain("--tools=Agent,SendMessage,TaskStop,WebSearch,WebFetch");
+    expect(launch.argv).toContain(
+      "--tools=Agent,SendMessage,TaskStop,WebSearch,WebFetch,Read,Write,Edit,NotebookEdit,Glob,Grep,Bash",
+    );
     expect(launch.argv).toContain(`--session-id=${bot}`);
     expect(launch.env.CLAUDE_CODE_RESUME_INTERRUPTED_TURN).toBe("1");
     expect(launch.appendSystemPrompt).toContain("You are the chat voice of an assistant");

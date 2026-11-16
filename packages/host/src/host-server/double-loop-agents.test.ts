@@ -249,7 +249,9 @@ describe("a double-loop bot's researcher", () => {
 
     const launch = defined(host.launches()[0], "launch");
     expect(launch.argv.join(" ")).toMatch(/--agent[= ]front/);
-    expect(launch.argv).toContain("--tools=Agent,SendMessage,TaskStop,WebSearch,WebFetch");
+    expect(launch.argv).toContain(
+      "--tools=Agent,SendMessage,TaskStop,WebSearch,WebFetch,Read,Write,Edit,NotebookEdit,Glob,Grep,Bash",
+    );
     expect(launch.env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS).toBe("3");
     expect(launch.appendSystemPrompt).toContain('subagent_type "researcher"');
   });
