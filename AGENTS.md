@@ -1,6 +1,6 @@
 ## Checks
 
-`bun run check` is the full gate; run it before calling work done. It runs, in order and stopping at the first failure: `fmt:check` (oxfmt), `lint` (oxlint, type-aware), `knip` (dead files, exports and dependencies), `typecheck` (tsgo, per package), `depcheck` (dependency-cruiser, ADR 0003 layering) and `test` (`bun test`). Each is also a script of its own. `bun run fmt` rewrites formatting in place.
+`bun run check` is the full gate; run it before calling work done. It runs, in order and stopping at the first failure: `fmt:check` (oxfmt), `lint` (oxlint, type-aware), `knip` (dead files, exports and dependencies), `typecheck` (`tsc` per package, then `scripts/` through `scripts/tsconfig.json`, which has DOM types for the smokes' in-page callbacks), `depcheck` (dependency-cruiser, ADR 0003 layering) and `test` (`bun test`). Each is also a script of its own. `bun run fmt` rewrites formatting in place.
 
 `bun test` always runs with coverage (`bunfig.toml`: `coverage = true`, test files excluded, `text` and `lcov` reporters; `coverage/` is gitignored). Two gates apply, and `bun run test` (so `check` and CI) runs both:
 

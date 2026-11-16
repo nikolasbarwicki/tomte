@@ -20,7 +20,7 @@
     "smoke:scroll-ui": "bun scripts/smoke-scroll-ui.ts",
     "smoke:ui": "bun scripts/smoke-ui.ts",
     "eval:loop-routing": "bun scripts/eval-loop-routing.ts",
-    "typecheck": "bun --filter '*' typecheck",
+    "typecheck": "bun --filter '*' typecheck && tsc -p scripts",
     "test": "bun test && bun scripts/check-coverage.ts",
     "depcheck": "depcruise packages",
     "check": "bun run fmt:check && bun run lint && bun run knip && bun run typecheck && bun run depcheck && bun run test",
@@ -39,9 +39,12 @@
     "smoke:desktop:update": "bun scripts/smoke-desktop-update.ts"
   },
   "devDependencies": {
+    "@claudebot/contract": "workspace:*",
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
     "@swc/core": "^1.16.22",
+    "@types/bun": "^1.4.4",
+    "@types/node": "^26.6.6",
     "dependency-cruiser": "^18.7.2",
     "electron-builder": "^26.18.0",
     "knip": "^6.44.1",

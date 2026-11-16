@@ -319,10 +319,9 @@ describe("checkSignedMac", () => {
 describe("SIGNED_WIN", () => {
   // electron-builder's own rule for which file it signs, run on our configuration.
   const signs = (file: string) =>
-    WinPackager.prototype.shouldSignFile.call(
-      { platformSpecificBuildOptions: SIGNED_WIN } as unknown as WinPackager,
-      file,
-    );
+    (
+      WinPackager.prototype as unknown as { shouldSignFile(file: string): boolean }
+    ).shouldSignFile.call({ platformSpecificBuildOptions: SIGNED_WIN }, file);
   const resources = String.raw`C:\out\win-unpacked\resources`;
 
   test("signs the engine, Chrome's executables and every DLL of the browser", () => {

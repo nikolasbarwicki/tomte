@@ -62,7 +62,7 @@ async function compile(target: Target): Promise<void> {
     },
   });
   if (!result.success) {
-    for (const log of result.logs) console.error(String(log));
+    for (const log of result.logs) console.error(`${log.name}: ${log.message}`);
     throw new Error(`compiling ${target} failed`);
   }
   // The map is already embedded in the binary; the build also writes it beside the binary, where nothing reads it.
