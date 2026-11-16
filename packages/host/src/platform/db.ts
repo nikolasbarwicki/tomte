@@ -371,6 +371,52 @@ const SCHEMA_V21 = (db: Database) => {
     db.run("ALTER TABLE routines ADD COLUMN notify_result INTEGER NOT NULL DEFAULT 0");
 };
 
+// A routine the host stopped says why (`paused_reason`), and `notice` joins the kinds of external event: the host's own needs-you
+// items. SQLite cannot change a CHECK, so `external_events` is rebuilt as step 12 did, with its rows, rowids and the columns the
+// relay steps added kept; the indexes went with the old table and are made again. A database migrated again after its version was
+// set back (the old-database tests do) already has the column and the wider table; each is changed only when it needs it.
+const REBUILD_EXTERNAL_EVENTS = `
+CREATE TABLE external_events_v22 (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL,
+  key TEXT NOT NULL,                   -- the sender's dedupe key
+  source_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('question','blocked','failed','done','stopped','progress','notice')),
+  title TEXT NOT NULL,
+  body TEXT,
+  options TEXT,                        -- JSON array of suggested answers; questions only
+  received_at INTEGER NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('open','acted','dismissed','resolved','info')),
+  question_id TEXT,
+  reply TEXT,                          -- JSON ReplyTarget
+  relay_state TEXT NOT NULL DEFAULT 'none' CHECK (relay_state IN ('none','pending','relayed','failed')),
+  relay_attempts INTEGER NOT NULL DEFAULT 0,
+  relay_error TEXT,
+  relay_answer TEXT,
+  UNIQUE (bot_id, key)
+);
+INSERT INTO external_events_v22 (rowid, id, bot_id, key, source_id, kind, title, body, options, received_at, state, question_id, reply, relay_state, relay_attempts, relay_error, relay_answer)
+  SELECT rowid, id, bot_id, key, source_id, kind, title, body, options, received_at, state, question_id, reply, relay_state, relay_attempts, relay_error, relay_answer FROM external_events ORDER BY rowid;
+DROP TABLE external_events;
+ALTER TABLE external_events_v22 RENAME TO external_events;
+CREATE INDEX external_events_by_source ON external_events(bot_id, source_id, received_at);
+CREATE INDEX external_events_open ON external_events(bot_id) WHERE state = 'open';
+`;
+
+const SCHEMA_V22 = (db: Database) => {
+  const routines = db.query<{ name: string }, []>("PRAGMA table_info(routines)").all();
+  if (routines.length > 0 && !routines.some((c) => c.name === "paused_reason"))
+    db.run(
+      "ALTER TABLE routines ADD COLUMN paused_reason TEXT CHECK (paused_reason IN ('failures','absence'))",
+    );
+  const sql = db
+    .query<{ sql: string }, []>(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'external_events'",
+    )
+    .get()?.sql;
+  if (sql !== undefined && !sql.includes("'notice'")) db.run(REBUILD_EXTERNAL_EVENTS);
+};
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -398,6 +444,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V19,
     SCHEMA_V20,
     SCHEMA_V21,
+    SCHEMA_V22,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

@@ -35,6 +35,8 @@ export type HandoffStatus = z.infer<typeof HandoffStatus>;
  * What an external process reports about one event source. `progress` only refreshes the source's work snapshot and
  * never wakes the bot; every other kind does and, until the user acts on it or the source resolves it, needs the user.
  * `blocked`: the sender cannot go on until someone unblocks it; unlike `question` it offers no answers to pick from.
+ * `notice` is the host's own item about itself (a paused routine): only the host raises it, no sender can post one, the bot never
+ * receives it and it has no transcript row; the user can only dismiss it.
  */
 export const ExternalEventKind = z.enum([
   "question",
@@ -43,6 +45,7 @@ export const ExternalEventKind = z.enum([
   "done",
   "stopped",
   "progress",
+  "notice",
 ]);
 export type ExternalEventKind = z.infer<typeof ExternalEventKind>;
 
@@ -174,7 +177,7 @@ export const ServerEvent = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("external"),
     id: z.string(),
-    kind: ExternalEventKind.exclude(["progress"]),
+    kind: ExternalEventKind.exclude(["progress", "notice"]),
     source: z.string(),
     title: z.string(),
     state: ExternalEventState,
@@ -360,6 +363,8 @@ export const Routine = z.object({
   instruction: z.string(),
   schedule: Schedule,
   active: z.boolean(),
+  /** Why the host stopped the routine (`failures`: five failed runs in a row; `absence`: the owner was away); null when it is active or the owner paused it. */
+  pausedReason: z.enum(["failures", "absence"]).nullable(),
   catchUp: z.boolean(),
   notifyResult: z.boolean(),
   createdAt: z.number(),

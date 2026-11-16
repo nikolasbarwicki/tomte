@@ -38,6 +38,17 @@ let notices: string[];
 let ended: RunEnd[];
 /** Extra routine hosts a test made; stopped after it. */
 let onTestEnd: (() => void)[];
+/** The host's own needs-you items the routines raised. */
+let raised: { botId: string; key: string; title: string; body?: string }[];
+
+/** The host's own needs-you items, recorded in `raised`. */
+const events: Parameters<typeof createRoutines>[0]["events"] = {
+  notice: (bot, n) => {
+    raised.push({ botId: bot, ...n });
+    return { id: n.key, duplicate: false };
+  },
+  resolveNotices() {},
+};
 
 const execute: Executor = ({ prompt, runId, resumed }) => {
   const { promise, resolve, reject } = Promise.withResolvers<string>();
@@ -54,6 +65,7 @@ beforeEach(() => {
   told = [];
   notices = [];
   ended = [];
+  raised = [];
   changed = Promise.withResolvers();
   botId = createBot(cwd, "Bot").id;
   waits = createWaits({
@@ -70,6 +82,7 @@ beforeEach(() => {
     waits,
     notice: async (_bot, text) => void notices.push(text),
     deliver: async (_bot, text) => void told.push(text),
+    events,
     onChange: (id) => changed.resolve(id),
     onRunEnded: (end) => void ended.push(end),
   });
@@ -568,6 +581,7 @@ test("a run stopped by shutdown is left running, and the next start reports it a
     notice: async () => {},
     deliver: async () => {},
     onChange: () => {},
+    events,
     onRunEnded: (end) => void ended.push(end),
   });
   again.start();
@@ -586,6 +600,7 @@ test("a failing onRunEnded is logged and the run's final status stands", async (
     notice: async () => {},
     deliver: async () => {},
     onChange: () => {},
+    events,
     onRunEnded: () => {
       throw new Error("no channel");
     },
@@ -624,6 +639,7 @@ function capped(exited = "Claude Code exited before the turn produced a result")
     waits,
     notice: async () => {},
     deliver: async () => {},
+    events,
     onChange: (id) => changed.resolve(id),
     onRunEnded: () => {},
   });
@@ -659,6 +675,7 @@ test("a run whose executor never settles after stop still fails at the cap", asy
     waits,
     notice: async () => {},
     deliver: async () => {},
+    events,
     onChange: () => {},
     onRunEnded: () => {},
   });
@@ -710,4 +727,118 @@ test("deleting a running routine and shutting down leave no clock to fire", asyn
   timed.stop();
   await Bun.sleep(CAP * 3);
   expect(stopped).toEqual(["routine deleted", "shutdown"]);
+});
+
+/** Runs the routine by hand and fails its turn; resolves once the run has ended. */
+async function failRun(id: string, error = "the CLI crashed") {
+  routines.testRun(id);
+  defined(jobs.at(-1), "job").reject(new Error(error));
+  await until(() => !routines.get(id).running);
+  expect(routines.get(id).lastRun).toMatchObject({ status: "failed", error });
+}
+
+async function succeedRun(id: string) {
+  routines.testRun(id);
+  defined(jobs.at(-1), "job").resolve("fine");
+  await until(() => !routines.get(id).running);
+  expect(routines.get(id).lastRun?.status).toBe("succeeded");
+}
+
+const interrupted = (routineId: string, n: number) =>
+  store.insertRun(db, {
+    id: `int-${n}`,
+    routineId,
+    trigger: "manual",
+    scheduledFor: null,
+    status: "interrupted",
+    sessionId: null,
+    output: null,
+    error: "app stopped during run",
+    startedAt: clock,
+    finishedAt: clock,
+  });
+
+test("the fifth failed run in a row pauses the routine and tells its owner once, the fourth does not", async () => {
+  const r = routines.create(botId, { name: "digest", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 4; i++) await failRun(r.id);
+  expect(routines.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  expect(raised).toEqual([]);
+
+  await failRun(r.id, "the page is gone");
+  expect(routines.get(r.id)).toMatchObject({
+    active: false,
+    pausedReason: "failures",
+    nextRunAt: null,
+  });
+  expect(raised).toMatchObject([
+    { botId, title: "digest paused after 5 failed runs", body: "the page is gone" },
+  ]);
+});
+
+test("a succeeded run between failures resets the count", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 4; i++) await failRun(r.id);
+  await succeedRun(r.id);
+  for (let i = 0; i < 4; i++) await failRun(r.id);
+  expect(routines.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  await failRun(r.id);
+  expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: "failures" });
+});
+
+test("interrupted and skipped runs are neither failures nor a reset", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 4; i++) await failRun(r.id);
+  interrupted(r.id, 1);
+  clock = at("2026-01-01T10:30:00Z");
+  routines.start();
+  expect(routines.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  await failRun(r.id);
+  expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: "failures" });
+});
+
+test("a pause stands until the switch is turned on, which clears the reason and does not catch up", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 5; i++) await failRun(r.id);
+
+  routines.update(r.id, { name: "renamed", instruction: "new", schedule: hourly });
+  routines.update(r.id, { schedule: { kind: "cron", expr: "30 * * * *", tz: "UTC" } });
+  expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: "failures" });
+
+  clock = at("2026-01-01T15:10:00Z");
+  routines.update(r.id, { active: true });
+  expect(routines.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  const before = jobs.length;
+  routines.start();
+  expect(jobs).toHaveLength(before);
+});
+
+test("a routine its owner paused has no reason, and a failed manual run of a paused routine does not pause it again", async () => {
+  const r = routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.update(r.id, { active: false });
+  expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: null });
+  for (let i = 0; i < 5; i++) await failRun(r.id);
+  expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: null });
+  expect(raised).toEqual([]);
+});
+
+test("a run that exceeds the time limit is a failed run and counts toward the pause", async () => {
+  const { timed, turns } = capped();
+  const r = timed.create(botId, { name: "slow", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 4; i++) {
+    timed.testRun(r.id);
+    defined(turns[i]).reject(new Error("boom"));
+    await until(() => !timed.get(r.id).running);
+  }
+  expect(timed.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+
+  timed.testRun(r.id);
+  await until(() => !timed.get(r.id).running);
+  expect(timed.get(r.id)).toMatchObject({
+    active: false,
+    pausedReason: "failures",
+    lastRun: { error: "run exceeded the 40 ms time limit" },
+  });
+  expect(raised).toMatchObject([
+    { title: "slow paused after 5 failed runs", body: "run exceeded the 40 ms time limit" },
+  ]);
 });

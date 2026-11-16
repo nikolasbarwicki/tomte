@@ -359,6 +359,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     waits,
     notice: async (botId, text) => chats.emitTo(botId, { type: "info", text }),
     deliver: (botId, text) => chats.deliver(botId, text),
+    events: externalEvents,
     onChange: (botId) => {
       if (botId === chats.currentBotId()) broadcast(routinesEvent(botId));
     },

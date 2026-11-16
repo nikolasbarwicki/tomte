@@ -13,6 +13,7 @@ import {
   type Thread,
   type ThreadEnv,
 } from "../bots/index.ts";
+import type { Events } from "../events/index.ts";
 import { NotFound } from "../platform/errors.ts";
 import { waitTitle, type Wait, type Waits } from "../waits/index.ts";
 import { RoutineInput, RoutinePatch } from "./input.ts";
@@ -87,6 +88,10 @@ const LATE_NOTE_MS = 15 * 60_000;
 const DEFAULT_RUN_CAP_MS = 30 * 60_000;
 /** setTimeout's delay is a signed 32-bit int; longer waits re-arm in steps. */
 const MAX_TIMEOUT_MS = 2_147_000_000;
+/** A routine is paused when this many runs in a row, counting only those that succeeded or failed, failed. */
+const FAILURES_TO_PAUSE = 5;
+/** The key of a routine's pause notice, which `<routine id>:<failed run id>` follows: a second pause of the routine is a new notice. */
+const PAUSE_NOTICE = "routine-paused:";
 
 /** Runs a routine turn without the UI, for a bot that is not open, or whose run has a session of its own. `delegate` answers what the bot asks during the turn. */
 export function runHeadless(
@@ -163,6 +168,8 @@ export function createRoutines(deps: {
    * for a run stopped by `remove()` or by shutdown (the next start reports it as interrupted). A throw is logged and changes nothing.
    */
   onRunEnded(end: RunEnd): void;
+  /** The host's own needs-you items: a paused routine tells its owner through one, and resuming it closes it. */
+  events: Pick<Events, "notice" | "resolveNotices">;
 }) {
   const { db, dataRoot, onChange, execute, waits } = deps;
   const now = deps.now ?? Date.now;
@@ -372,6 +379,7 @@ export function createRoutines(deps: {
   /** Fails a run that has not ended and cancels what it still waits for, telling nobody (but `onRunEnded`); false when the run had ended. */
   function endRun(runId: string, error: string, expired: string[] = []): boolean {
     if (!store.finishRun(db, runId, "failed", { error, finishedAt: now() })) return false;
+    pauseAfterFailures(runId);
     waits.cancelRun(runId, error);
     ended(store.getRun(db, runId)!, expired);
     return true;
@@ -389,6 +397,23 @@ export function createRoutines(deps: {
       );
     }
     entry.expiry.reject(new Error(entry.expired));
+  }
+
+  /** A failed run that completes a streak of failures pauses its routine and tells the owner, who need not have the bot open. */
+  function pauseAfterFailures(runId: string) {
+    const row = store.getRun(db, runId);
+    const r = row && store.getRoutine(db, row.routineId);
+    if (!r?.active || !getBot(dataRoot, r.botId)) return;
+    const last = store.lastOutcomes(db, r.id, FAILURES_TO_PAUSE);
+    if (last.length < FAILURES_TO_PAUSE || last.some((o) => o.status !== "failed")) return;
+    if (!store.pauseRoutine(db, r.id, "failures", now())) return;
+    disarm(r.id);
+    deps.events.notice(r.botId, {
+      key: `${PAUSE_NOTICE}${r.id}:${runId}`,
+      title: `${r.name} paused after ${FAILURES_TO_PAUSE} failed runs`,
+      ...(last[0]?.error != null && { body: last[0].error }),
+    });
+    onChange(r.botId);
   }
 
   /** A parked run's answers are all in: runs its session on with them. The single place a run leaves `waiting` for `running`. */
@@ -498,6 +523,7 @@ export function createRoutines(deps: {
     const unfinished = store.unfinishedRunIds(db, id);
     store.deleteRoutine(db, id);
     for (const runId of unfinished) waits.cancelRun(runId, "the routine was deleted");
+    deps.events.resolveNotices(r.botId, `${PAUSE_NOTICE}${id}:`);
     onChange(r.botId);
   }
 
@@ -542,6 +568,7 @@ export function createRoutines(deps: {
         instruction: input.instruction,
         schedule: input.schedule,
         active: input.active ?? true,
+        pausedReason: null,
         catchUp: input.catchUp ?? true,
         notifyResult: input.notifyResult ?? false,
         lastScheduledFor: null,
@@ -565,6 +592,8 @@ export function createRoutines(deps: {
         notifyResult: patch.notifyResult ?? old.notifyResult,
         updatedAt: t,
       };
+      // Only the switch moves a routine out of a pause the host chose: an edit of the instruction or the schedule keeps it.
+      if (r.active || old.active) r.pausedReason = null;
       // Occurrences before an edit or while paused are not "missed": move the claim baseline to now.
       const rescheduled =
         patch.schedule !== undefined &&
@@ -573,6 +602,8 @@ export function createRoutines(deps: {
       else if (r.active && !old.active && r.schedule.kind === "cron")
         r.lastScheduledFor = Math.max(old.lastScheduledFor ?? 0, t);
       store.saveRoutine(db, r);
+      if (old.pausedReason === "failures" && r.active)
+        deps.events.resolveNotices(r.botId, `${PAUSE_NOTICE}${r.id}:`);
       arm(r);
       onChange(r.botId);
       return view(r);

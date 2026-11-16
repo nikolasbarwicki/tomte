@@ -15,6 +15,7 @@ export type RoutineRecord = {
   instruction: string;
   schedule: Schedule;
   active: boolean;
+  pausedReason: "failures" | "absence" | null;
   catchUp: boolean;
   notifyResult: boolean;
   lastScheduledFor: number | null;
@@ -29,6 +30,7 @@ type RoutineRow = {
   instruction: string;
   schedule: string;
   active: number;
+  paused_reason: "failures" | "absence" | null;
   catch_up: number;
   notify_result: number;
   last_scheduled_for: number | null;
@@ -56,6 +58,7 @@ const toRoutine = (r: RoutineRow): RoutineRecord => ({
   instruction: r.instruction,
   schedule: Schedule.parse(JSON.parse(r.schedule)),
   active: !!r.active,
+  pausedReason: r.paused_reason,
   catchUp: !!r.catch_up,
   notifyResult: !!r.notify_result,
   lastScheduledFor: r.last_scheduled_for,
@@ -111,16 +114,17 @@ export function insertRoutine(db: Database, r: RoutineRecord) {
   );
 }
 
-/** Overwrites the editable fields and `last_scheduled_for` of an existing routine. */
+/** Overwrites the editable fields, `paused_reason` and `last_scheduled_for` of an existing routine. */
 export function saveRoutine(db: Database, r: RoutineRecord) {
   db.query(
-    `UPDATE routines SET name = ?, instruction = ?, schedule = ?, active = ?, catch_up = ?, notify_result = ?, last_scheduled_for = ?, updated_at = ?
+    `UPDATE routines SET name = ?, instruction = ?, schedule = ?, active = ?, paused_reason = ?, catch_up = ?, notify_result = ?, last_scheduled_for = ?, updated_at = ?
      WHERE id = ?`,
   ).run(
     r.name,
     r.instruction,
     JSON.stringify(r.schedule),
     +r.active,
+    r.pausedReason,
     +r.catchUp,
     +r.notifyResult,
     r.lastScheduledFor,
@@ -146,6 +150,22 @@ export function claimOccurrence(db: Database, id: string, t: number): boolean {
 
 export function deactivateRoutine(db: Database, id: string, now: number) {
   db.query("UPDATE routines SET active = 0, updated_at = ? WHERE id = ?").run(now, id);
+}
+
+/** Stops an active routine because the host decided to, saying why; false when it was not active. */
+export function pauseRoutine(
+  db: Database,
+  id: string,
+  reason: "failures" | "absence",
+  now: number,
+): boolean {
+  return (
+    db
+      .query(
+        "UPDATE routines SET active = 0, paused_reason = ?, updated_at = ? WHERE id = ? AND active = 1",
+      )
+      .run(reason, now, id).changes > 0
+  );
 }
 
 export function insertRun(db: Database, r: RoutineRun) {
@@ -243,6 +263,19 @@ export function lastRun(db: Database, routineId: string): RoutineRun | null {
     )
     .get(routineId);
   return r ? toRun(r) : null;
+}
+
+/** The outcome of the routine's last `limit` runs that succeeded or failed, newest first; a skipped, interrupted or waiting run is not one. */
+export function lastOutcomes(
+  db: Database,
+  routineId: string,
+  limit: number,
+): { status: "succeeded" | "failed"; error: string | null }[] {
+  return db
+    .query<{ status: "succeeded" | "failed"; error: string | null }, [string, number]>(
+      "SELECT status, error FROM routine_runs WHERE routine_id = ? AND status IN ('succeeded', 'failed') ORDER BY started_at DESC, rowid DESC LIMIT ?",
+    )
+    .all(routineId, limit);
 }
 
 /** Newest first; `before` pages by `started_at`. */

@@ -161,7 +161,7 @@ export type ReplyTarget = z.infer<typeof ReplyTarget>;
  */
 export const ExternalEventInput = z
   .object({
-    kind: ExternalEventKind,
+    kind: ExternalEventKind.exclude(["notice"]),
     key: z.string().min(1).max(200),
     source: EventSource,
     title: z.string().max(200),

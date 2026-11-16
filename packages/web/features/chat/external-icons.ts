@@ -1,8 +1,9 @@
-import type { ServerEvent } from "@claudebot/contract/events";
+import type { ExternalEventKind } from "@claudebot/contract/events";
 import {
   CircleAlertIcon,
   CircleCheckIcon,
   HandIcon,
+  InfoIcon,
   MessageCircleQuestionIcon,
   OctagonXIcon,
   type LucideIcon,
@@ -15,4 +16,5 @@ export const EXTERNAL_ICONS = {
   failed: CircleAlertIcon,
   done: CircleCheckIcon,
   stopped: OctagonXIcon,
-} satisfies Record<Extract<ServerEvent, { type: "external" }>["kind"], LucideIcon>;
+  notice: InfoIcon,
+} satisfies Record<Exclude<ExternalEventKind, "progress">, LucideIcon>;

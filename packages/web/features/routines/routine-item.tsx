@@ -64,7 +64,9 @@ export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
   const status = r.running ? "running" : r.lastRun?.status;
   const parked = !r.running && r.lastRun?.status === "waiting";
   const next = !r.active
-    ? "Paused"
+    ? r.pausedReason === "failures"
+      ? "Paused after 5 failed runs"
+      : "Paused"
     : r.nextRunAt
       ? `Next run ${dateTime(r.nextRunAt)}`
       : "No runs left";
