@@ -1,4 +1,5 @@
 import type { BotSummary } from "@claudebot/contract/events";
+import { itemActions, type ItemAction } from "@claudebot/contract/item-actions";
 import { getRouteApi } from "@tanstack/react-router";
 import {
   BellRingIcon,
@@ -20,10 +21,8 @@ import { answer, answerWait, dismissItem } from "./api.ts";
 import { EXTERNAL_ICONS } from "./external-icons.ts";
 import {
   cardElementId,
-  itemActions,
   needsYouRows,
   rowLabels,
-  type ItemAction,
   type NeedsYouItem,
   type RequestAction,
   type RequestRow,
