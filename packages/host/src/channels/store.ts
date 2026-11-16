@@ -42,6 +42,10 @@ export function createChannelStore(db: Database) {
       db.query(
         "UPDATE channel_link_codes SET used_at = ? WHERE channel = ? AND code_digest = ?",
       ).run(at, channel, match);
+      // Cards were sent to the earlier account's chat: another account starts with none, so every open item reaches it.
+      db.query(
+        "DELETE FROM channel_cards WHERE channel = ? AND (SELECT account_id FROM channel_links WHERE channel = ?) IS NOT ?",
+      ).run(channel, channel, account.id);
       db.query(
         "INSERT OR REPLACE INTO channel_links (channel, account_id, label, linked_at) VALUES (?, ?, ?, ?)",
       ).run(channel, account.id, account.label, at);
@@ -84,6 +88,8 @@ export function createChannelStore(db: Database) {
     },
 
     unlink(channel: string): boolean {
+      // The cards belong to the chat that was linked; a later link starts again and sends every open item.
+      db.query("DELETE FROM channel_cards WHERE channel = ?").run(channel);
       return db.query("DELETE FROM channel_links WHERE channel = ?").run(channel).changes > 0;
     },
   };

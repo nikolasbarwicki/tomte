@@ -347,6 +347,22 @@ CREATE TABLE IF NOT EXISTS channel_link_codes (
 );
 `;
 
+// The card a channel sent for one needs-you item: an open external event (`event`) or a human wait (`wait`). A card is sent once per item
+// (the unique key), keeps the message reference its channel needs to edit it, and is closed once its item left `open` and the card was edited.
+const SCHEMA_V20 = `
+CREATE TABLE IF NOT EXISTS channel_cards (
+  channel TEXT NOT NULL,
+  item_kind TEXT NOT NULL CHECK (item_kind IN ('event', 'wait')),
+  item_id TEXT NOT NULL,
+  bot_id TEXT NOT NULL,
+  message_ref TEXT NOT NULL,
+  sent_at INTEGER NOT NULL,
+  closed_at INTEGER,
+  PRIMARY KEY (channel, item_kind, item_id)
+);
+CREATE INDEX IF NOT EXISTS channel_cards_by_ref ON channel_cards (channel, message_ref);
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -372,6 +388,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V17,
     SCHEMA_V18,
     SCHEMA_V19,
+    SCHEMA_V20,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

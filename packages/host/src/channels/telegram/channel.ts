@@ -95,11 +95,14 @@ export function createTelegramChannel(d: TelegramDeps): Channel {
   };
 
   // The sender: one call at a time, in order, at least `spacing` apart; a 429 is waited out and the call retried.
+  // A call made while `start` still reads the token waits for it, so what the host sends the moment it starts is not lost to that.
   let tail: Promise<unknown> = Promise.resolve();
+  let starting: Promise<unknown> = Promise.resolve();
   let lastCallAt = 0;
   function limited<T>(call: (a: TelegramApi, signal: AbortSignal) => Promise<T>): Promise<T> {
     const signal = lifetime.signal;
     const job = tail.then(async () => {
+      await starting;
       for (let attempt = 0; ; attempt++) {
         const wait = lastCallAt + spacing - Date.now();
         if (wait > 0) await sleep(wait, signal);
@@ -210,7 +213,7 @@ export function createTelegramChannel(d: TelegramDeps): Channel {
       started = true;
       lifetime = new AbortController();
       const mine = ++epoch;
-      void d.secrets.get(channelTokenSecretName(KIND)).then(
+      starting = d.secrets.get(channelTokenSecretName(KIND)).then(
         (token) => {
           if (mine !== epoch || !started) return;
           if (token === null) return setStatus({ state: "unconfigured", detail: null });

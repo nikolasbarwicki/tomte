@@ -28,6 +28,7 @@ import {
   type SandboxStatus,
 } from "../browser/index.ts";
 import {
+  createCards,
   createChannels,
   createTelegramChannel,
   type Channel,
@@ -63,6 +64,7 @@ import { pairRoute } from "./api/pair.ts";
 import { withBoundary } from "./boundary.ts";
 import { createChats } from "./chats.ts";
 import { createDeviceSessions } from "./device-sessions.ts";
+import { createEventCards } from "./event-cards.ts";
 import { createEventStream } from "./events.ts";
 import { agentRoutes, clientRoutes, createRequestListener } from "./http.ts";
 import { createHostIsolation } from "./isolation.ts";
@@ -98,6 +100,8 @@ export interface HostServerOptions {
   channelAdapters?: (receive: Channels["receive"]) => Channel[];
   /** The Telegram adapter's API base URL and timing; Telegram's own API with its own timing when omitted. Tests point it at a fake server. */
   telegram?: TelegramOptions;
+  /** Timing of the cards sent to channels; tests set it so a send that failed is tried again soon. */
+  cards?: { retryMs?: number };
   /** The clock device auth reads for pairing code expiry and human waits read for their 24-hour expiry, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
   /** How long an idle double-loop front stays open; 10 minutes when omitted. */
@@ -226,8 +230,11 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     onChange: (botId, changed) => {
       chats.updateExternal(botId, changed);
       if (botId === chats.currentBotId()) broadcast(externalEvents.work(botId));
+      // An item that left `open` has its card edited.
+      if (changed.length > 0) void cards.sync();
     },
     onNeedsYou: () => chats.announceBots(),
+    onOpened: () => void cards.sync(),
     deliver: (botId, text) =>
       void chats
         .deliver(botId, text)
@@ -259,6 +266,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     deleteAllowances(db, botId);
     loop.removeBot(botId);
     await externalEvents.removeBot(botId);
+    void cards.sync();
     await chats.drop(botId);
     await browser.removeBot(botId);
     botsChanged();
@@ -373,6 +381,17 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     createTelegramChannel({ secrets, receive, ...(o.telegram && { options: o.telegram }) }),
   );
   for (const adapter of o.channelAdapters?.(receive) ?? []) channels.register(adapter);
+  const cards = createCards({
+    db,
+    channels,
+    sources: [createEventCards({ events: externalEvents, chats })],
+    publicUrl: clientAt.publicUrl,
+    ...(o.now !== undefined && { now: o.now }),
+    ...(o.cards?.retryMs !== undefined && { retryMs: o.cards.retryMs }),
+  });
+  channels.handle((kind, inbound) => cards.receive(kind, inbound));
+  // A newly linked account gets the cards that waited for one.
+  channels.onLinked(() => void cards.sync());
   const sessions = createDeviceSessions();
   const api = createApi({
     botsChanged,
@@ -422,6 +441,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
 
   routines.start();
   channels.start();
+  // Items that arrived while the host or a channel was down get their cards now.
+  void cards.sync();
   handoffs.redeliverOpen();
   clientListener.serve(
     withBoundary(
@@ -452,6 +473,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       agentListener.pause();
       chats.close();
       waits.close();
+      await cards.stop();
       await channels.stop();
       await externalEvents.stop();
       routines.stop();

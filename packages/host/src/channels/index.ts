@@ -15,6 +15,8 @@ import type {
   TokenOutcome,
 } from "./types.ts";
 
+export { createCards } from "./cards/index.ts";
+export type { Answered, CardItem, CardSource } from "./cards/index.ts";
 export { createTelegramChannel, type TelegramOptions } from "./telegram/channel.ts";
 export type { Account, Channel, ChannelMessage, Inbound, MessageRef, Reply } from "./types.ts";
 
@@ -41,6 +43,8 @@ export interface Channels {
   register(channel: Channel): void;
   /** Sets what handles the linked account's updates; until then they get an empty reply. */
   handle(handler: LinkedHandler): void;
+  /** Calls `listener` with the channel's kind after an account has been linked to it, so what waited for a link (open cards) can be sent. */
+  onLinked(listener: (kind: string) => void): void;
   /** Starts every registered channel. */
   start(): void;
   /** Stops every registered channel. */
@@ -100,6 +104,7 @@ export function createChannels(deps: ChannelsDeps): Channels {
   const now = deps.now ?? Date.now;
   const registry = new Map<string, Channel>();
   let handler: LinkedHandler = async () => ({});
+  let linked: (kind: string) => void = () => {};
 
   const channel = (kind: string) => {
     const found = registry.get(kind);
@@ -119,6 +124,10 @@ export function createChannels(deps: ChannelsDeps): Channels {
 
     handle(h) {
       handler = h;
+    },
+
+    onLinked(listener) {
+      linked = listener;
     },
 
     start() {
@@ -171,8 +180,10 @@ export function createChannels(deps: ChannelsDeps): Channels {
       }
       const code = codeIn(inbound.text);
       if (code === undefined) return {};
-      const linked = store.link(kind, code, inbound.from, now());
-      return { send: [{ text: linked ? LINKED : REFUSED }] };
+      const linkedNow = store.link(kind, code, inbound.from, now());
+      // After the reply below reached the adapter's sender, so the confirmation comes before the cards that waited for the link.
+      if (linkedNow) setTimeout(() => linked(kind), 0);
+      return { send: [{ text: linkedNow ? LINKED : REFUSED }] };
     },
 
     async send(kind, message) {
