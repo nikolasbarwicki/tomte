@@ -213,7 +213,7 @@ ALTER TABLE external_events ADD COLUMN relay_error TEXT;
 ALTER TABLE external_events ADD COLUMN relay_answer TEXT;
 `;
 
-// The double-loop chat mode's task log (ADR-0009), keyed by bot and Claude Code session. `loop_tasks` holds each background
+// The double-loop chat mode's task log (ADR-0011), keyed by bot and Claude Code session. `loop_tasks` holds each background
 // task's current state; `loop_events` is the append-only log beside it: progress and findings, activity, steers and the reports
 // that never enter the front's CLI session, so a transcript replay reads them from here.
 const SCHEMA_V14 = `

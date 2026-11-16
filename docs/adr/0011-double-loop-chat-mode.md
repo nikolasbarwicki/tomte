@@ -1,4 +1,4 @@
-# 0009: Double-loop chat mode is a per-bot second chat mode, run by a long-lived front session and background agents
+# 0011: Double-loop chat mode is a per-bot second chat mode, run by a long-lived front session and background agents
 
 Status: accepted. Relates to [ADR-0002](0002-bot-handoffs-are-async-a2a-tasks-on-a-host-endpoint.md) (handoff results arrive through `deliver()`), [ADR-0003](0003-feature-modules-and-dependency-rules.md) (the new host feature module) and [ADR-0004](0004-web-feature-modules-and-host-store.md) (web feature modules and the host store). The spec is `docs/plans/double-loop-chat.md`; the prototype is `../double-loop/v3`, its design `../double-loop/docs/double-loop-design.md` (§ "v3 as built") and its plan `../double-loop/docs/v3-plan.md`.
 

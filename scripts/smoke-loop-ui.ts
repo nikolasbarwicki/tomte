@@ -1,4 +1,4 @@
-// Browser smoke of the double-loop chat mode (ADR-0009):
+// Browser smoke of the double-loop chat mode (ADR-0011):
 //   bun scripts/smoke-loop-ui.ts              (CHROME_PATH names a Chrome/Chromium binary; macOS's Google Chrome by default)
 // Same harness as the other smokes: a temporary web build served by the whole-host test harness (in-memory database and secrets,
 // temporary data root, `CLAUDEBOT_ASK_APPROVAL` on) driven by headless Chrome in a fresh profile. The "model" is the fake Claude

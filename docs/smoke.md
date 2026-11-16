@@ -1,6 +1,6 @@
 # Browser smokes
 
-Unit and host-seam tests passed while the real answer workflows were broken, so the answer path (ADR-0007 events, ADR-0008 relay) and the double-loop chat mode (ADR-0009) also have smokes that drive the built web UI in a real browser. They are scripts, not part of `bun run check`: they need Chrome and a web build.
+Unit and host-seam tests passed while the real answer workflows were broken, so the answer path (ADR-0007 events, ADR-0008 relay) and the double-loop chat mode (ADR-0011) also have smokes that drive the built web UI in a real browser. They are scripts, not part of `bun run check`: they need Chrome and a web build.
 
 | Command                      | What it runs                                                                                                                                                                              |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

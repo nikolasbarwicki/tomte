@@ -58,7 +58,7 @@ const WORKER_FILE_TOOLS = ["Read", "Write", "Edit", "NotebookEdit", "Glob", "Gre
 export const FRONT_BUILTIN_TOOLS = ["Agent", "SendMessage", "TaskStop"];
 
 /**
- * Everything the front itself may use (decision 5 of ADR-0009), besides the handoff tools the host's `bots` server adds. This is
+ * Everything the front itself may use (decision 5 of ADR-0011), besides the handoff tools the host's `bots` server adds. This is
  * the one list the front's tool set is held to: whatever an agent has and is not here is denied to the front.
  */
 const FRONT_TOOLS = [...FRONT_BUILTIN_TOOLS, QUEUE_TASK, CANCEL_QUEUED, REMEMBER, REWRITE_MEMORY];
