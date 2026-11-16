@@ -22,6 +22,8 @@ export interface FakeCall {
   params: Record<string, unknown>;
   /** The HTTP status the server answered; 200 for a call it served. */
   status: number;
+  /** The id the server gave a `sendMessage` it served, which a button press or a reply names. */
+  messageId?: number;
 }
 
 type Update = Record<string, unknown> & { update_id: number };
@@ -137,8 +139,9 @@ export function fakeTelegram(o: { token?: string; username?: string } = {}): Fak
                 retry_after: limited.retryAfter,
               });
             }
+            call.messageId = nextMessage++;
             return ok({
-              message_id: nextMessage++,
+              message_id: call.messageId,
               chat: { id: params.chat_id, type: "private" },
               text: params.text,
             });
