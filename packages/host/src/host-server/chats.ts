@@ -63,6 +63,8 @@ export interface ChatsDeps extends ThreadEnv {
   transcript: (bot: Bot) => Promise<Transcript>;
   /** The human waits: their cards are replayed into a rebuilt chat, and questions and approvals of the bot's sessions are opened and answered through them. */
   waits: Pick<Waits, "open" | "cards" | "list" | "find" | "answer" | "resolve" | "consumeApproval">;
+  /** The name of the routine a run belongs to, for the sidebar's Needs-you sources. */
+  routineName(runId: string): string | undefined;
   routinesEvent(botId: string): RoutinesEvent;
   workEvent(botId: string): WorkEvent;
   broadcast: (e: HostEvent) => void;
@@ -202,7 +204,12 @@ export function createChats(deps: ChatsDeps): Chats {
     const chat = chats.get(botId);
     return !!chat?.busy || (chat !== undefined && chat.presence !== "idle") || headless(botId);
   };
-  const chatsBotsEvent = () => botsEvent(dataRoot, db, isWorking, deps.events.needsYou);
+  const chatsBotsEvent = () =>
+    botsEvent(dataRoot, db, isWorking, deps.events.needsYou, {
+      list: () => deps.waits.list(),
+      routineName: (runId) => deps.routineName(runId),
+      eventOpen: (botId, id) => deps.items.isOpen(botId, id),
+    });
   const announceBots = () => broadcast(chatsBotsEvent());
 
   const queuedEvent = (e: UserEntry): ServerEvent =>

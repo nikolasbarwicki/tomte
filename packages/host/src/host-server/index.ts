@@ -280,6 +280,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     },
     transcript: (bot) => transcripts.transcript(bot),
     waits,
+    routineName: (runId) => routines.nameOfRun(runId),
     routinesEvent: (botId) => routinesEvent(botId),
     workEvent: (botId) => externalEvents.work(botId),
     broadcast,
@@ -298,6 +299,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   // A run's waits are told to the run: an answer resumes it, an expiry fails it.
   waits.subscribe((e) => {
     if (e.type === "closed") routines.waitClosed(e.wait);
+    // An open wait is a Needs-you item: the sidebar and the banner follow it as it opens and closes.
+    chats.announceBots();
   });
   const integrationsEvent = (): IntegrationsEvent => ({
     type: "integrations",

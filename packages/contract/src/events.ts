@@ -281,9 +281,11 @@ export type LastMessage = z.infer<typeof LastMessage>;
 export const BotStatus = z.enum(["idle", "working", "unseen"]);
 export type BotStatus = z.infer<typeof BotStatus>;
 /**
- * `needsYou`: how many of the bot's external-event items are open, waiting for the user. `needsYouSources`: the labels of
- * the sources they came from, the source of the newest open item first. `needsYouAt`: when the newest open item arrived
- * (epoch ms), 0 when none is open. The desktop app's banner reads only these.
+ * `needsYou`: how many items wait for the user: the bot's open external-event items plus its open human waits (an approval, a
+ * question, a takeover; a question about an open external event is that event's item and is not counted twice).
+ * `needsYouSources`: the labels of where they came from, newest first: an event's source, a routine's name for a wait of its
+ * run, otherwise what the wait asks for. `needsYouAt`: when the newest arrived (epoch ms), 0 when none is open. The desktop
+ * app's banner reads only these.
  */
 export const BotSummary = Bot.extend({
   last: LastMessage.nullable(),

@@ -460,6 +460,12 @@ export function createRoutines(deps: {
       return store.listRoutines(db, botId).map(view);
     },
 
+    /** The name of the routine a run belongs to; undefined when the run or its routine is gone. */
+    nameOfRun(runId: string): string | undefined {
+      const run = store.getRun(db, runId);
+      return run && store.getRoutine(db, run.routineId)?.name;
+    },
+
     get(id: string): Routine {
       return view(require(id));
     },
