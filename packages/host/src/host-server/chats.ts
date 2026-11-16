@@ -28,7 +28,7 @@ import {
 import type { Events, ExternalRow } from "../events/index.ts";
 import type { Handoffs, Mention } from "../handoffs/index.ts";
 import type { HostServersSource } from "../harness/index.ts";
-import { openFront, type FrontSession } from "../loop/index.ts";
+import { openFront, type FrontSession, type LoopStore } from "../loop/index.ts";
 import type { Executor } from "../routines/index.ts";
 import { createRoutineTurns } from "./routine-turns.ts";
 import { hostDelegate, openBotThread, type ThreadHooks } from "./threads.ts";
@@ -39,6 +39,8 @@ export interface ChatsDeps extends ThreadEnv {
   /** The host servers a double-loop bot's front session may use; `hostServers` is what a standard bot's thread gets. */
   frontServers: HostServersSource;
   db: Database;
+  /** Where a double-loop bot's tasks and reports are kept. */
+  loop: LoopStore;
   handoffs: Pick<Handoffs, "receivedCards" | "startDelivered">;
   events: Pick<Events, "split" | "needsYou">;
   /** External needs-you items, so chats can tie an answer to the one it answers. `acted` closes an item the user answered, with the answer to relay to the sender. */
@@ -225,6 +227,32 @@ export function createChats(deps: ChatsDeps): Chats {
     announceBots();
   }
 
+  /** Whether a message of the front's session is the front's own, not an agent's. */
+  const fromFront = (m: SDKMessage) =>
+    (m.type !== "assistant" && m.type !== "stream_event") ||
+    (!m.parent_tool_use_id && !("agent_id" in m && m.agent_id));
+
+  /** What a double-loop chat's presence says while its front is not streaming: working while agents run. */
+  const restingPresence = (chat: Chat): Presence =>
+    (chat.front?.observer.running() ?? 0) > 0 ? "working" : "idle";
+
+  /** An agent started or ended: the presence line follows, unless the front is streaming, whose result settles it. The front's turn on the task's notification follows, and its end releases an unshown chat. */
+  function tasksChanged(chat: Chat) {
+    if (chat.presence !== "typing") setPresence(chat, restingPresence(chat));
+  }
+
+  /** Shows what the loop observed: a task's snapshot and a report join the transcript, a status line is only shown live. */
+  function emitLoop(chat: Chat, e: ServerEvent) {
+    if (e.type === "task_status") {
+      if (chat === current) broadcast(e);
+      return;
+    }
+    emit(chat, e);
+    if (e.type !== "report") return;
+    recordMessage(db, chat.bot.id, { from: "bot", text: e.text, at: Date.now() });
+    announceBots();
+  }
+
   /** Starts every routine turn whose bot is free, then delivers queued inbox entries. */
   async function drain() {
     routineTurns.startReady(
@@ -311,10 +339,12 @@ export function createChats(deps: ChatsDeps): Chats {
 
   /** The front ends a turn on its own schedule, not once per message, so a result closes whatever turn is running. */
   function onFrontMessage(chat: Chat, m: SDKMessage) {
-    showMessage(chat, m);
-    if (m.type === "assistant" && !m.parent_tool_use_id)
+    // What an agent says and does is shown through its task, never as the front's own words or tool calls.
+    const own = fromFront(m);
+    if (own) showMessage(chat, m);
+    if (m.type === "assistant" && own)
       for (const blk of m.message.content) if (blk.type === "text") chat.frontText += blk.text;
-    if (m.type === "stream_event" || m.type === "assistant") setPresence(chat, "typing");
+    if ((m.type === "stream_event" || m.type === "assistant") && own) setPresence(chat, "typing");
     if (m.type !== "result") return;
     const said = m.subtype === "success" ? m.result || chat.frontText : "";
     chat.frontText = "";
@@ -328,7 +358,7 @@ export function createChats(deps: ChatsDeps): Chats {
       emit(chat, { type: "error", message: failure.message });
       settleWaiters(chat, failure);
     }
-    setPresence(chat, "idle");
+    setPresence(chat, restingPresence(chat));
     void afterFrontTurn(chat);
   }
 
@@ -494,6 +524,9 @@ export function createChats(deps: ChatsDeps): Chats {
       log: (l) => console.error(l),
       onMemory: hooks.onMemory,
       delegate: hostDelegate(hooks),
+      store: deps.loop,
+      emit: (e) => emitLoop(chat(), e),
+      changed: () => tasksChanged(chat()),
       onMessage: (m) => onFrontMessage(chat(), m),
       onEnd: (e) => frontFailed(chat(), e),
     });
@@ -536,7 +569,10 @@ export function createChats(deps: ChatsDeps): Chats {
   function show(chat: Chat) {
     broadcast({ type: "reset", botId: chat.bot.id });
     for (const e of chat.history) broadcast(e);
-    if (chat.front) broadcast({ type: "presence", state: chat.presence });
+    if (chat.front) {
+      for (const e of chat.front.observer.statusEvents()) broadcast(e);
+      broadcast({ type: "presence", state: chat.presence });
+    }
     announceBots();
     for (const e of memoryEvents(dataRoot, chat.bot.id)) broadcast(e);
     filesWatcher?.close();
@@ -656,10 +692,13 @@ export function createChats(deps: ChatsDeps): Chats {
       },
       async setModel(model) {
         await chat.thread.setModel(model);
+        // The background agents run on the bot's model; their definitions are read when the front next opens.
+        chat.front?.setAgentSettings({ model });
         emit(chat, { type: "info", text: `model → ${model}` });
       },
       async setEffort(effort) {
         await chat.thread.setEffort(effort);
+        chat.front?.setAgentSettings({ effort });
         emit(chat, { type: "info", text: `effort → ${effort}` });
       },
       newSession: () => startSession(chat),
@@ -730,7 +769,12 @@ export function createChats(deps: ChatsDeps): Chats {
             deps.workEvent(current.bot.id),
             { type: "reset", botId: current.bot.id },
             ...current.history,
-            ...(current.front ? [{ type: "presence" as const, state: current.presence }] : []),
+            ...(current.front
+              ? [
+                  ...current.front.observer.statusEvents(),
+                  { type: "presence" as const, state: current.presence },
+                ]
+              : []),
           ]
         : [],
     close() {

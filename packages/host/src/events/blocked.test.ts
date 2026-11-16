@@ -176,7 +176,7 @@ describe("the external events table", () => {
         .sort(),
     ).toEqual(["external_events_by_source", "external_events_open"]);
     expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()).toEqual({
-      user_version: 13,
+      user_version: 14,
     });
   });
 });

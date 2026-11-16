@@ -63,6 +63,20 @@ Chat mode dispatch lives in `host-server/chats.ts` (`send`, `deliver`, `reconfig
 
 **Evaluation.** The routing eval result and manual real-CLI timings are recorded in M7.
 
+**M3 decisions (researcher end to end).** Beyond the spec above:
+
+- The main thread runs as an agent named `front` (`agent: "front"`) whose `disallowedTools` deny `WebSearch`, `WebFetch` and `record_progress`; the session's `tools` hold every agent's built-in tools, because subagents only see what the session has. A deny list rather than an allowlist, since an agent allowlist needs exact MCP names and would couple `loop` to the handoff tool names.
+- `Agent`, `SendMessage`, `TaskStop`, `WebSearch`, `WebFetch` and `record_progress` are approved by the front's `canUseTool` wrapper, not by `allowedTools` (which makes the SDK warn that `canUseTool` is shadowed). Nobody answers a card for an agent's web research; this is a deliberate exception to Claudebot's permission rules, as in v3.
+- The agents' model and effort follow the bot's `setModel`/`setEffort` through `FrontSession.setAgentSettings`; they are read when the front next opens, so a change applies to agents defined from then on.
+- `loop_tasks.status` holds the task's current state (`running`, never `started` or `resumed`); a resume is a second `task_started` for a known task, which keeps its goal and start. `loop_events` holds `progress`, `activity`, `steer` and `report` rows; steer rows are written from M4.
+- A report is stored, then emitted (`report{taskId, text}`) and recorded as the bot's message. It is posted once per run of a task whichever of the `SubagentStop` hook and the `task_notification` comes first; when the notification comes first the report waits 5 seconds (`REPORT_WAIT_MS`) for the hook, then falls back to the agent's transcript, then to a placeholder. The same text twice in a row for one task is stored once.
+- A stopped agent's notification keeps an `interrupted` task interrupted, as does `reason: "worker_restart"`; neither posts a report.
+- Whenever the front's CLI stops (idle close, reconfigure, crash) its running tasks become `interrupted`, and `loop.interruptRunning` does the same for every session at host start, so a dead agent never blocks the mode switch. The 409 check reads `hasActive` (any `queued` or `running` task of the bot, in any session) from the store.
+- Replay of a double-loop session merges `loop_events` reports into the session file's messages by timestamp, each before the first message written after it, with the session's `task` rows at their start time. `task_status` is never part of history; a page that connects mid-run gets the current lines from the observer.
+- The snapshot a page gets ends with `presence`, after the status lines.
+- Presence is `typing` while the front streams its own message (messages from agents are not shown), `working` while any agent runs, else `idle`; a double-loop chat is kept alive while its presence is not `idle`.
+- The web shows a task as one row that follows its state and, while it runs, its status line; a report renders as the bot's message with a tooltip naming the task.
+
 ## Consequences
 
 - Both modes stay supported: the standard chat and its tests are unchanged, and every `chats.ts` path that touches `busy`, `inbox` or `drain` needs a mode branch.
@@ -71,4 +85,3 @@ Chat mode dispatch lives in `host-server/chats.ts` (`send`, `deliver`, `reconfig
 - A task that waits on an approval or `ask_user` card holds one of three parallel slots until the user answers.
 - Agents cannot use the browser, so browsing work stays with standard mode or the front's handoffs until the browser session has a lock.
 - Parallel agents spend the subscription faster; the rate-limit display is the only guard.
-- Fake-CLI tests cannot drive the mode until `testing/fake-claude.ts` is extended, which is scheduled with the first agent milestone.

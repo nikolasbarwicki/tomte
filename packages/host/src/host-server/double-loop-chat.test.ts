@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { botMemoryPath, getBot, readMemory, setChatMode } from "../bots/index.ts";
 import { defined } from "../testing/defined.ts";
+import { writeSession } from "../testing/session-file.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
@@ -102,9 +103,14 @@ describe("a double-loop bot's front session", () => {
     expect(first).toStartWith("first\n\n<work_state>\nrunning (0 of 3 slots): (none)\n");
     expect(first).toEndWith("</work_state>");
     expect(second).toStartWith("second\n\n<work_state>\n");
+    // The CLI takes a message mid-turn only with priority `next`, and treats one with a human origin as typed by the user.
+    expect(host.messageRecords(bot)).toMatchObject([
+      { priority: "next", origin: { kind: "human" } },
+      { priority: "next", origin: { kind: "human" } },
+    ]);
   });
 
-  test("a message is sent to the front's session, which opens on haiku with no built-in tools and the interrupted-turn flag", async () => {
+  test("a message is sent to the front's session, which opens on haiku with the front's tools and the interrupted-turn flag", async () => {
     const bot = await doubleLoopBot();
     await send("hello");
     await host.until(() => host.messagesOf(bot).length === 1);
@@ -112,7 +118,7 @@ describe("a double-loop bot's front session", () => {
     const launch = defined(host.launches()[0], "launch");
     expect(launch.argv).toContain("--model=claude-haiku-5-5");
     expect(launch.argv).toContain("--thinking=disabled");
-    expect(launch.argv).toContain("--tools=");
+    expect(launch.argv).toContain("--tools=Agent,SendMessage,TaskStop,WebSearch,WebFetch");
     expect(launch.argv).toContain(`--session-id=${bot}`);
     expect(launch.env.CLAUDE_CODE_RESUME_INTERRUPTED_TURN).toBe("1");
     expect(launch.appendSystemPrompt).toContain("You are the chat voice of an assistant");
@@ -152,6 +158,10 @@ describe("a double-loop bot's front session", () => {
     await host.until(() => host.messagesOf(bot).length === 2);
     expect(host.messagesOf(bot)[1]).toContain("<<<EXTERNAL_EVENT");
     expect(host.messagesOf(bot)[1]).toContain("</work_state>");
+    const [typed, app] = host.messageRecords(bot);
+    expect(typed).toMatchObject({ priority: "next", origin: { kind: "human" } });
+    expect(app).toMatchObject({ priority: "next", isSynthetic: true });
+    expect(app).not.toHaveProperty("origin");
 
     host.release();
     const events = await settled(bot);
@@ -236,44 +246,13 @@ describe("a double-loop bot's front session", () => {
 });
 
 describe("a double-loop bot's reloaded transcript", () => {
-  /** Writes a bot's Claude Code session file as the real CLI would have, one line per message. */
-  function writeSession(
-    botId: string,
-    messages: { role: "user" | "assistant"; text: string; extra?: Record<string, unknown> }[],
-  ) {
-    const dir = join(
-      process.env.CLAUDE_CONFIG_DIR!,
-      "projects",
-      host.cwd.replace(/[^a-zA-Z0-9]/g, "-"),
-    );
-    mkdirSync(dir, { recursive: true });
-    const lines = messages.map((m, i) => ({
-      uuid: `${botId}-${i}`,
-      parentUuid: i ? `${botId}-${i - 1}` : null,
-      sessionId: botId,
-      timestamp: new Date(1_700_000_000_000 + i * 1000).toISOString(),
-      cwd: host.cwd,
-      isSidechain: false,
-      type: m.role,
-      message:
-        m.role === "user"
-          ? { role: "user", content: m.text }
-          : { role: "assistant", content: [{ type: "text", text: m.text }] },
-      ...m.extra,
-    }));
-    writeFileSync(
-      join(dir, `${botId}.jsonl`),
-      lines.map((l) => JSON.stringify(l)).join("\n") + "\n",
-    );
-  }
-
   const state =
     "<work_state>\nrunning (0 of 3 slots): (none)\nqueued: (none)\nrecent (last 3 ended): (none)\n</work_state>";
 
   test("shows what the user typed and what the bot said, without the work state or the app's own messages", async () => {
     const id = host.createBot("Dev");
     setChatMode(host.dataRoot, id, "double_loop");
-    writeSession(id, [
+    writeSession(host, id, [
       { role: "user", text: `what is up?\n\n${state}`, extra: { origin: { kind: "human" } } },
       { role: "assistant", text: "Not much." },
       {
@@ -304,7 +283,7 @@ describe("a double-loop bot's reloaded transcript", () => {
 
   test("a session without work states is shown as before, whoever wrote its messages", async () => {
     const id = host.createBot("Dev");
-    writeSession(id, [
+    writeSession(host, id, [
       {
         role: "user",
         text: "plain <not a block>",

@@ -1,5 +1,5 @@
 /** Slots for agents running at once; the CLI enforces it through `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`. */
-const MAX_PARALLEL = 3;
+export const MAX_PARALLEL = 3;
 
 const RECENT_ENDED = 3;
 
@@ -26,7 +26,7 @@ export interface TaskView {
   ended: readonly WorkTask[];
 }
 
-export const NO_TASKS: TaskView = { running: [], queued: [], ended: [] };
+const NO_TASKS: TaskView = { running: [], queued: [], ended: [] };
 
 const elapsed = (ms: number) =>
   ms < 60_000

@@ -4,9 +4,11 @@ import { resolve } from "node:path";
 import {
   query,
   type CanUseTool,
+  type McpSdkServerConfigWithInstance,
   type Query,
   type SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import { DEFAULT_EFFORT, DEFAULT_MODEL } from "@claudebot/contract/api";
 import type { MemoryScope } from "@claudebot/contract/events";
 
 import {
@@ -25,8 +27,23 @@ import {
   type HostServerLease,
   type ResolvedCli,
 } from "../harness/index.ts";
+import {
+  AGENT_BUILTIN_TOOLS,
+  FRONT_AGENT,
+  LOOP_SERVER,
+  RECORD_PROGRESS,
+  agentDefinitions,
+  type AgentSettings,
+} from "./agents.ts";
+import type { Observer } from "./observe.ts";
 import { FRONT_PROMPT } from "./prompt.ts";
-import { NO_TASKS, workState, type TaskView } from "./work-state.ts";
+import { MAX_PARALLEL, workState } from "./work-state.ts";
+
+/** The built-in tools only the front uses; agents have their own. */
+const FRONT_TOOLS = ["Agent", "SendMessage", "TaskStop"];
+
+/** Tools the front and its agents use without asking: the front's own, agents' web research and their progress recorder. */
+const PRE_APPROVED = [...FRONT_TOOLS, ...AGENT_BUILTIN_TOOLS, RECORD_PROGRESS];
 
 /** The front answers in seconds and never needs to think, whatever model the bot itself is set to; the bot's model drives the background agents. */
 const FRONT_MODEL = "claude-haiku-5-5";
@@ -51,12 +68,16 @@ export interface FrontOptions {
   memory: MemoryPaths;
   /** Called with a scope's full memory file after the front changes it. */
   onMemory?: (scope: MemoryScope, text: string) => void;
-  /** The tasks the work state lists, read for every message; none until agents exist. */
-  tasks?: () => TaskView;
+  /** Turns the session's messages and hooks into task rows and reports, and says what the work state lists. */
+  observer: Observer;
+  /** The in-process `loop` MCP server agents report progress to. */
+  loopServer: McpSdkServerConfigWithInstance;
   /** Every SDK message of the session, in order. A throw is logged and never ends the session. */
   onMessage: (m: SDKMessage) => void;
   /** The CLI process ended without `close()`: the next `send()` reopens the session with `resume`. */
   onEnd: (error: Error) => void;
+  /** The CLI process is gone, closed or ended, and every agent it ran with it. */
+  onStopped?: () => void;
 }
 
 type Live = { q: Query; input: Inbox; lease: HostServerLease };
@@ -76,17 +97,27 @@ export class FrontSession {
   private turn = false;
   private idleTimer?: NodeJS.Timeout | undefined;
   private readonly canUseTool: CanUseTool;
+  private settings: AgentSettings = { model: DEFAULT_MODEL, effort: DEFAULT_EFFORT };
   private readonly log: (line: string) => void;
 
+  /** What the session's messages mean to the chat: the tasks it runs and the reports it owes. */
+  readonly observer: Observer;
+
   constructor(private readonly o: FrontOptions) {
+    this.observer = o.observer;
     this.started = o.resume;
     this.log = o.log ?? ((l) => console.error(l));
-    this.canUseTool = createCanUseTool({
+    const base = createCanUseTool({
       cwd: o.cwd,
       roots: [resolve(o.cwd)],
       approveAll: o.approveAll,
       delegate: o.delegate,
     });
+    // Nobody answers a permission prompt for an agent's web research or for the front's own agent calls, so those never ask.
+    this.canUseTool = (name, input, options) =>
+      PRE_APPROVED.includes(name)
+        ? Promise.resolve({ behavior: "allow", updatedInput: input })
+        : base(name, input, options);
   }
 
   private async open(): Promise<Live> {
@@ -124,16 +155,23 @@ export class FrontSession {
               onMemory: this.o.onMemory,
               log: this.log,
             }),
+            [LOOP_SERVER]: this.o.loopServer,
           },
           ...launch.options,
-          // No built-in tools: the front only talks, and keeps memory and handoffs through MCP.
-          tools: [],
+          // The session's tools hold every agent's tools, because subagents only see what the session has; the main thread runs as
+          // the `front` agent, whose own tool set leaves the agents' tools out.
+          tools: [...FRONT_TOOLS, ...AGENT_BUILTIN_TOOLS],
+          agent: "front",
+          agents: { ...agentDefinitions(this.settings), front: FRONT_AGENT },
+          agentProgressSummaries: true,
+          hooks: this.observer.hooks,
           model: FRONT_MODEL,
           thinking: { type: "disabled" },
           env: {
             ...this.o.claude.env(),
             ...(await this.o.env?.()),
             CLAUDE_CODE_RESUME_INTERRUPTED_TURN: "1",
+            CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: String(MAX_PARALLEL),
           },
           stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
         },
@@ -212,9 +250,18 @@ export class FrontSession {
     this.idleTimer = setTimeout(() => this.idleClose(), this.o.idleMs).unref();
   }
 
-  /** The one place a rule about what must outlive an idle front belongs: it stays open while a turn is running. */
+  /** The one place a rule about what must outlive an idle front belongs: it stays open while a turn is running or an agent runs, since closing it kills the agents. */
   private mayClose(): boolean {
-    return !this.turn;
+    return !this.turn && this.observer.running() === 0;
+  }
+
+  /** Model and effort the background agents run on; they apply to agents defined when the session next opens. */
+  setAgentSettings(patch: Partial<AgentSettings>) {
+    this.settings = { ...this.settings, ...patch };
+  }
+
+  get agentSettings(): AgentSettings {
+    return this.settings;
   }
 
   private idleClose() {
@@ -232,7 +279,7 @@ export class FrontSession {
       type: "user",
       message: {
         role: "user",
-        content: `${text}\n\n${workState(this.o.tasks?.() ?? NO_TASKS)}`,
+        content: `${text}\n\n${workState(this.observer.view())}`,
       },
       parent_tool_use_id: null,
       priority: "next",
@@ -252,6 +299,7 @@ export class FrontSession {
     live.input.end();
     live.q.close();
     live.lease.release();
+    this.o.onStopped?.();
   }
 
   close(reason = "close") {

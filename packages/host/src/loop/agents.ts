@@ -1,0 +1,142 @@
+import { isDeepStrictEqual } from "node:util";
+
+import {
+  createSdkMcpServer,
+  tool,
+  type AgentDefinition,
+  type EffortLevel,
+} from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+
+import type { Progress } from "./store.ts";
+
+export const LOOP_SERVER = "loop";
+export const RECORD_PROGRESS = `mcp__${LOOP_SERVER}__record_progress`;
+
+/** Turns an agent may take before Claude Code stops it. */
+const RESEARCHER_MAX_TURNS = 60;
+
+const PROGRESS_RULES = `The user follows your work only through record_progress. Call it when your phase changes or you learn something concrete, in the same turn as your next tool calls, never as a step on its own.
+"finding" must be a specific fact you verified (or null); "next" is what you will do now.
+
+Messages that arrive while you work come from the person who launched you. Treat each as a course correction and follow the latest one; if you had already stopped, continue where you stopped.`;
+
+/** The final reply is posted in the chat as the bot's own message, so it is written as one. */
+const RESULT_RULES = `Your final reply is posted to the user as a chat message, unedited, so write it as the message itself, in the first person.
+- Open with one or two plain sentences that give the answer: what you found, stated as the main conclusion ("The pricing comparison is done: both start at $20 a month."). Never open with a caveat or with how you worked.
+- Then the substance, compact: a table when comparing things, otherwise short paragraphs or a few bullets. Put source links inline next to the facts they back.
+- Then anything you noticed that the goal did not ask about but the user would want to know, in a sentence or two ("One thing I noticed: …"). If the findings point to a choice, say which option you would take and why ("I'd pick X, because Y").
+- Close with what you could not verify or what is not published, if anything.
+- No title, no headings, no account of your process, no offer of further help. Keep it to what fits comfortably in a chat; go long only when the goal asks for depth.
+That message ends the task.`;
+
+const RESEARCHER_PROMPT = `You are a meticulous research analyst answering the goal you are given with well-sourced facts.
+Search the web from several angles and open primary sources. State facts from sources only. Do not ask questions; state assumptions in your final reply.
+
+${PROGRESS_RULES}
+
+${RESULT_RULES}`;
+
+/** The built-in tools every agent type uses. The front session's `tools` must hold them all: subagents only see what the session has. */
+export const AGENT_BUILTIN_TOOLS = ["WebSearch", "WebFetch"];
+
+/** The bot's own model and effort setting, which its background agents run on. */
+export interface AgentSettings {
+  model: string;
+  effort: EffortLevel;
+}
+
+/** The agent types the front can start with the Agent tool, running on the bot's model and effort. */
+export function agentDefinitions({
+  model,
+  effort,
+}: AgentSettings): Record<string, AgentDefinition> {
+  return {
+    researcher: {
+      description:
+        "Web research that ends in a sourced answer, written as a chat message. Use for anything that needs searching and reading sources.",
+      prompt: RESEARCHER_PROMPT,
+      model,
+      effort,
+      tools: [...AGENT_BUILTIN_TOOLS, RECORD_PROGRESS],
+      maxTurns: RESEARCHER_MAX_TURNS,
+      background: true,
+    },
+  };
+}
+
+/**
+ * The agent the main thread runs as, so its tool set is the front's and not the session's whole one: no web tools and no
+ * progress reports, but the host's memory tools, the handoff tools and the rest of what the session holds. Its instructions
+ * are the session's system prompt, which wins over an agent's own prompt.
+ */
+export const FRONT_AGENT: AgentDefinition = {
+  description: "The chat voice itself. Never start it as a task.",
+  prompt: "You are the chat voice of the assistant.",
+  disallowedTools: [...AGENT_BUILTIN_TOOLS, RECORD_PROGRESS],
+};
+
+/**
+ * Who called `record_progress`. The handler can't see its caller, so the PreToolUse hook notes every call first and the
+ * handler takes the matching note: by tool use id when the CLI passes one, else by identical arguments.
+ */
+export class ProgressAttribution {
+  private readonly pending: { toolUseId: string; agentId: string; input: unknown }[] = [];
+
+  note(toolUseId: string, agentId: string, input: unknown): void {
+    this.pending.push({ toolUseId, agentId, input });
+    if (this.pending.length > 200) this.pending.shift();
+  }
+
+  take(toolUseId: string | undefined, args: unknown): string | undefined {
+    let i = toolUseId ? this.pending.findIndex((p) => p.toolUseId === toolUseId) : -1;
+    if (i === -1) i = this.pending.findIndex((p) => isDeepStrictEqual(p.input, args));
+    return i === -1 ? undefined : this.pending.splice(i, 1)[0]?.agentId;
+  }
+}
+
+const text = (s: string, isError = false) => ({
+  content: [{ type: "text" as const, text: s }],
+  isError,
+});
+
+/** The CLI passes the id of the tool use that called an in-process MCP tool in the call's metadata. */
+function toolUseIdOf(extra: unknown): string | undefined {
+  const id = (extra as { _meta?: Record<string, unknown> } | undefined)?._meta?.[
+    "claudecode/toolUseId"
+  ];
+  return typeof id === "string" ? id : undefined;
+}
+
+/** The in-process `loop` MCP server the front session hosts. Queue tools join `record_progress` with the queue. */
+export function createLoopServer(o: {
+  attribution: ProgressAttribution;
+  /** Stores a finding for the task the call was attributed to. */
+  onProgress: (taskId: string, progress: Progress) => void;
+}) {
+  let last: { taskId: string; progress: Progress } | undefined;
+  const recordProgress = tool(
+    "record_progress",
+    "Record where you are in the task and what you just learned. Shown to the user.",
+    {
+      phase: z.string().describe("Short name of the current phase, e.g. 'Checking Cursor docs'."),
+      finding: z
+        .string()
+        .nullable()
+        .describe("One verified, specific fact learned since the last call, or null."),
+      next: z.string().describe("What you will do next."),
+    },
+    async (args, extra) => {
+      const taskId = o.attribution.take(toolUseIdOf(extra), args);
+      if (!taskId)
+        return text("Not recorded: the call could not be matched to a running task.", true);
+      if (last?.taskId === taskId && isDeepStrictEqual(last.progress, args))
+        return text("Already recorded. Continue the task.");
+      last = { taskId, progress: args };
+      o.onProgress(taskId, args);
+      return text("Recorded. Continue the task.");
+    },
+    { annotations: { readOnlyHint: true }, alwaysLoad: true },
+  );
+  return createSdkMcpServer({ name: LOOP_SERVER, tools: [recordProgress] });
+}

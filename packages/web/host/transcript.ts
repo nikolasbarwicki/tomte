@@ -3,6 +3,7 @@ import type {
   HandoffStatus,
   Relay,
   ServerEvent,
+  TaskState,
   WaitAction,
 } from "@claudebot/contract/events";
 
@@ -58,7 +59,17 @@ export type Item =
       state: ExternalEventState;
       /** Whether the answer reached the sender's agent; only for items that name a reply target. */
       relay?: Relay | undefined;
-    };
+    }
+  /** A background task of a double-loop bot: where it stands and, while it runs, its live status line. */
+  | {
+      kind: "task";
+      taskId: string;
+      goal: string;
+      state: TaskState;
+      status?: string | undefined;
+    }
+  /** A background task's result, shown as the bot's own message; `task` is the goal of the task that produced it, when known. */
+  | { kind: "report"; taskId: string; text: string; task?: string | undefined };
 
 export function reduce(items: Item[], e: ServerEvent): Item[] {
   if (e.type === "queued")
@@ -175,10 +186,46 @@ function reduceLive(
           text: `Context compacted (${e.trigger}) · ${kTokens(e.preTokens)} tokens summarized`,
         },
       ];
+    case "task":
+      return upsertTask(items, e);
+    case "task_status":
+      return items.map((i) =>
+        i.kind === "task" && i.taskId === e.taskId ? { ...i, status: e.text || undefined } : i,
+      );
+    case "report":
+      return [
+        ...items,
+        {
+          kind: "report",
+          taskId: e.taskId,
+          text: e.text,
+          task: taskRow(items, e.taskId)?.goal,
+        },
+      ];
     case "done":
     case "reset":
     case "context":
     case "presence":
       return items;
   }
+}
+
+/** The row of a task, if the thread has one. */
+function taskRow(items: Item[], taskId: string): Extract<Item, { kind: "task" }> | undefined {
+  return items.find(
+    (i): i is Extract<Item, { kind: "task" }> => i.kind === "task" && i.taskId === taskId,
+  );
+}
+
+/** A task event is the task's whole state: it replaces the task's row, keeping its place, or adds one. A status line outlives only a running task. */
+function upsertTask(items: Item[], e: Extract<ServerEvent, { type: "task" }>): Item[] {
+  const current = taskRow(items, e.taskId);
+  const row: Item = {
+    kind: "task",
+    taskId: e.taskId,
+    goal: e.goal,
+    state: e.state,
+    status: e.state === "running" ? current?.status : undefined,
+  };
+  return current ? items.map((i) => (i === current ? row : i)) : [...items, row];
 }

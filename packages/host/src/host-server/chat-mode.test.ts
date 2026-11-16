@@ -3,14 +3,13 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { BotsEvent } from "@claudebot/contract/events";
 
 import { getBot } from "../bots/index.ts";
+import { createLoopStore } from "../loop/index.ts";
 import { defined } from "../testing/defined.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
 let host: HandoffHost;
-let activeTasks: boolean;
 beforeEach(async () => {
-  activeTasks = false;
-  host = await startHandoffHost([], undefined, undefined, () => activeTasks);
+  host = await startHandoffHost();
 });
 afterEach(() => host.stop());
 
@@ -100,8 +99,10 @@ test("a bot with running or queued background tasks refuses to switch, and nothi
   const bot = host.createBot("Ada");
   expect((await host.ui("/api/open", { botId: bot })).status).toBe(200);
   expect((await setMode(bot, "double_loop")).status).toBe(200);
+  const session = defined(getBot(host.dataRoot, bot)?.sessions.at(-1), "session");
+  const tasks = createLoopStore(host.db).session(bot, session);
+  tasks.putTask({ taskId: "t1", goal: "research", status: "running", startedAt: 1 }, 1);
 
-  activeTasks = true;
   const refused = await setMode(bot, "standard");
   expect(refused.status).toBe(409);
   expect(await refused.text()).toContain("stop the running tasks first");
@@ -110,7 +111,10 @@ test("a bot with running or queued background tasks refuses to switch, and nothi
 
   expect((await setMode(bot, "double_loop")).status).toBe(200);
 
-  activeTasks = false;
+  tasks.putTask({ taskId: "t1", goal: "research", status: "queued", startedAt: 1 }, 2);
+  expect((await setMode(bot, "standard")).status).toBe(409);
+
+  tasks.setStatus("t1", "done", 3);
   expect((await setMode(bot, "standard")).status).toBe(200);
 });
 

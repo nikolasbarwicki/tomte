@@ -52,6 +52,7 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Trace,
   TraceCollapsible,
@@ -261,6 +262,10 @@ function RowView({
         </div>
       );
     }
+    case "report":
+      return <Report text={row.text} task={row.task} />;
+    case "task":
+      return <TaskLine item={row} />;
     case "handoff":
       return <HandoffCard item={row} other={bots.find((b) => b.id === row.botId)} />;
     case "wait":
@@ -341,6 +346,50 @@ function UserMessage({
         )}
       </MessageContent>
     </Message>
+  );
+}
+
+/** A report is the bot's own message, written by a background task; hovering it names the task. */
+function Report({ text, task }: { text: string; task: string | undefined }) {
+  const message = (
+    <Message>
+      <MessageContent>
+        <Bubble variant="muted" className="max-w-[60%]">
+          <BubbleContent className="w-full">
+            <Streamdown linkSafety={{ enabled: false }}>{text}</Streamdown>
+          </BubbleContent>
+        </Bubble>
+      </MessageContent>
+    </Message>
+  );
+  if (task === undefined) return message;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<div />}>{message}</TooltipTrigger>
+      <TooltipContent>Result of the task: {task}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** One line for a background task: its goal and where it stands, with the live status line while it runs. */
+function TaskLine({ item }: { item: Extract<Item, { kind: "task" }> }) {
+  const running = item.state === "running";
+  const [icon, label] = {
+    queued: [<CircleOffIcon key="i" />, "Queued"],
+    running: [<Spinner key="i" className="text-primary" />, "Working on"],
+    interrupted: [<CircleOffIcon key="i" />, "Interrupted"],
+    done: [<CircleCheckIcon key="i" />, "Done"],
+    failed: [<CircleAlertIcon key="i" />, "Failed"],
+    cancelled: [<CircleOffIcon key="i" />, "Stopped"],
+  }[item.state];
+  return (
+    <Marker role={running ? "status" : undefined}>
+      <MarkerIcon>{icon}</MarkerIcon>
+      <MarkerContent className={cn("truncate", running && "shimmer")}>
+        {label}: <span className="text-foreground font-semibold">{item.goal}</span>
+        {running && item.status && <> · {item.status}</>}
+      </MarkerContent>
+    </Marker>
   );
 }
 

@@ -95,6 +95,17 @@ export type WorkSnapshot = z.infer<typeof WorkSnapshot>;
 export const Presence = z.enum(["idle", "typing", "working"]);
 export type Presence = z.infer<typeof Presence>;
 
+/** Where a background task stands: `interrupted` marks a running task a host restart cut off, which a steer can still continue. */
+export const TaskState = z.enum([
+  "queued",
+  "running",
+  "interrupted",
+  "done",
+  "failed",
+  "cancelled",
+]);
+export type TaskState = z.infer<typeof TaskState>;
+
 export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("user"), text: z.string(), mentions: Mentions.exactOptional() }),
   /** A user message sent while the bot was busy; it waits as pending until `dequeued`, then shows as `user` if it ran. */
@@ -181,6 +192,22 @@ export const ServerEvent = z.discriminatedUnion("type", [
   }),
   /** A double-loop bot's presence changed; ephemeral, so it is never in the replayed history, and a page connecting is sent the current one. */
   z.object({ type: z.literal("presence"), state: Presence }),
+  /** A background task of a double-loop bot started, resumed or ended; each event is the task's whole current state, so a later one replaces an earlier one with the same `taskId`. */
+  z.object({
+    type: z.literal("task"),
+    taskId: z.string(),
+    agentType: z.string().exactOptional(),
+    model: z.string().exactOptional(),
+    effort: z.string().exactOptional(),
+    goal: z.string(),
+    state: TaskState,
+    startedAt: z.number(),
+    endedAt: z.number().exactOptional(),
+  }),
+  /** The live status line of a running task, from the agent's progress summaries; ephemeral, so it is never in the replayed history. An empty `text` clears the line. */
+  z.object({ type: z.literal("task_status"), taskId: z.string(), text: z.string() }),
+  /** A background task's result, posted whole as the bot's own message; it never enters the front session. */
+  z.object({ type: z.literal("report"), taskId: z.string(), text: z.string() }),
   ContextEvent,
 ]);
 export type ServerEvent = z.infer<typeof ServerEvent>;
