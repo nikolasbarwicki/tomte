@@ -1,4 +1,4 @@
-import { ToolAllowances } from "@claudebot/contract/api";
+import { ToolAllowances, type BotProfileUpdate } from "@claudebot/contract/api";
 import type { BotAvatar } from "@claudebot/contract/avatars";
 
 import { act, errorOf, post, readJson } from "@/host/api.ts";
@@ -24,3 +24,6 @@ export async function fetchAllowances(botId: string): Promise<ToolAllowances | {
 /** Takes back an always-allow rule; the bot's next call to the tool asks again. */
 export const removeAllowance = (botId: string, tool: string) =>
   act("/api/bots/allowances/remove", { botId, tool });
+
+/** Replaces a bot's name, purpose and avatar; a new name or purpose reaches the bot from its next session. */
+export const updateProfile = (update: BotProfileUpdate) => post("/api/bots/profile", update);

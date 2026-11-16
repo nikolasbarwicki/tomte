@@ -1,17 +1,6 @@
-import type { HostInfo } from "@claudebot/contract/api";
 import type { BotStatus, BotSummary } from "@claudebot/contract/events";
-import { Link, useMatchRoute } from "@tanstack/react-router";
-import {
-  FolderIcon,
-  KeyRoundIcon,
-  LaptopIcon,
-  MoonIcon,
-  PlugIcon,
-  PlusIcon,
-  SunIcon,
-  Trash2Icon,
-} from "lucide-react";
-import { useTheme } from "next-themes";
+import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
+import { PlugIcon, PlusIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
@@ -35,10 +24,9 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { deleteBot } from "@/host/api.ts";
+import { usePublicHostInfo } from "@/host/hooks.ts";
 import { shortTime } from "@/lib/format.ts";
-import { withoutTransitions } from "@/lib/theme.ts";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<BotStatus, string> = {
@@ -66,6 +54,7 @@ function StatusAvatar({ bot, className }: { bot: BotSummary; className?: string 
 
 /** A bot's sidebar row; right-clicking it (or a long press) opens its actions. */
 function BotContextMenu({ bot, children }: { bot: BotSummary; children: ReactNode }) {
+  const navigate = useNavigate();
   const remove = async () => {
     const ok = await confirmAction({
       title: `Delete ${bot.name}?`,
@@ -81,6 +70,17 @@ function BotContextMenu({ bot, children }: { bot: BotSummary; children: ReactNod
       <ContextMenuTrigger render={<SidebarMenuItem />}>{children}</ContextMenuTrigger>
       <ContextMenuContent>
         <DropdownMenuItem
+          onClick={() =>
+            void navigate({
+              to: "/bots/$botId",
+              params: { botId: bot.id },
+              search: { panel: "settings", section: "profile" },
+            })
+          }
+        >
+          <SlidersHorizontalIcon /> Bot settings
+        </DropdownMenuItem>
+        <DropdownMenuItem
           variant="destructive"
           disabled={bot.status === "working"}
           onClick={() => void remove()}
@@ -94,17 +94,17 @@ function BotContextMenu({ bot, children }: { bot: BotSummary; children: ReactNod
 
 export function AppSidebar({
   bots,
-  info,
   integrationsNeedingAttention,
   onNewBot,
 }: {
   bots: BotSummary[];
-  info: HostInfo | undefined;
   integrationsNeedingAttention: number;
   onNewBot: () => void;
 }) {
   const { isMobile, setOpenMobile } = useSidebar();
   const matchRoute = useMatchRoute();
+  // A remote host whose Claude CLI is signed out cannot run any bot; Settings points at Models, where it says how to sign in.
+  const claudeSignedOut = usePublicHostInfo()?.claude === "signed-out";
   // On phones the sidebar is a sheet; picking a destination should reveal it.
   const reveal = () => {
     if (isMobile) setOpenMobile(false);
@@ -204,56 +204,31 @@ export function AppSidebar({
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
-              isActive={!!matchRoute({ to: "/credentials" })}
-              render={<Link to="/credentials" />}
+              isActive={!!matchRoute({ to: "/settings", fuzzy: true })}
+              render={
+                <Link
+                  to="/settings/$section"
+                  params={{ section: claudeSignedOut ? "models" : "general" }}
+                />
+              }
               onClick={reveal}
             >
-              <KeyRoundIcon />
-              <span>Credentials</span>
+              <SettingsIcon />
+              <span>Settings</span>
             </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              isActive={!!matchRoute({ to: "/devices" })}
-              render={<Link to="/devices" />}
-              onClick={reveal}
-            >
-              <LaptopIcon />
-              <span>Devices</span>
-            </SidebarMenuButton>
+            {claudeSignedOut && (
+              <SidebarMenuBadge
+                className="bg-destructive/10 text-destructive"
+                title="Claude is not signed in"
+                aria-label="Claude is not signed in"
+              >
+                !
+              </SidebarMenuBadge>
+            )}
           </SidebarMenuItem>
         </SidebarMenu>
-        <div className="text-muted-foreground flex items-center gap-1.5 border-t px-2 pt-2 text-xs">
-          <FolderIcon className="size-3.5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate" title={info?.cwd}>
-            {info?.cwd ?? "…"}
-          </span>
-          <ThemeToggle />
-        </div>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
-  );
-}
-
-function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const dark = resolvedTheme === "dark";
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={dark ? "Light theme" : "Dark theme"}
-            onClick={() => withoutTransitions(() => setTheme(dark ? "light" : "dark"))}
-          />
-        }
-      >
-        {dark ? <SunIcon /> : <MoonIcon />}
-      </TooltipTrigger>
-      <TooltipContent>{dark ? "Light theme" : "Dark theme"}</TooltipContent>
-    </Tooltip>
   );
 }

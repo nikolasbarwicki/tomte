@@ -1,16 +1,18 @@
 import { createRootRoute, createRoute, createRouter, Navigate } from "@tanstack/react-router";
 import { z } from "zod";
 
-import { PANEL_TABS } from "@/features/bots/index.ts";
+import { BOT_SECTIONS, PANEL_TABS } from "@/features/bots/index.ts";
 
 import { Shell } from "./shell.tsx";
 
 /**
- * `panel`, `draft` and `draftEvent` are optional hints: a value that does not parse is dropped, never an error. `draftEvent` is
- * the needs-you item a `draft` answers; the composer takes both at once, and the host checks the item is still open.
+ * `panel`, `section`, `draft` and `draftEvent` are optional hints: a value that does not parse is dropped, never an error.
+ * `section` is a page under the panel's Settings tab. `draftEvent` is the needs-you item a `draft` answers; the composer
+ * takes both at once, and the host checks the item is still open.
  */
 const botSearch = z.object({
   panel: z.enum(PANEL_TABS).optional().catch(undefined),
+  section: z.enum(BOT_SECTIONS).optional().catch(undefined),
   draft: z.string().optional().catch(undefined),
   draftEvent: z.string().optional().catch(undefined),
 });
@@ -40,15 +42,15 @@ const integrationRoute = createRoute({
   path: "/integrations/$integrationId",
 }).lazy(() => import("./routes/integration.lazy.tsx").then((d) => d.Route));
 
-const credentialsRoute = createRoute({
+const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/credentials",
-}).lazy(() => import("./routes/credentials.lazy.tsx").then((d) => d.Route));
+  path: "/settings",
+}).lazy(() => import("./routes/settings-index.lazy.tsx").then((d) => d.Route));
 
-const devicesRoute = createRoute({
+const settingsSectionRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/devices",
-}).lazy(() => import("./routes/devices.lazy.tsx").then((d) => d.Route));
+  path: "/settings/$section",
+}).lazy(() => import("./routes/settings.lazy.tsx").then((d) => d.Route));
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
@@ -56,8 +58,8 @@ export const router = createRouter({
     botRoute,
     integrationsRoute,
     integrationRoute,
-    credentialsRoute,
-    devicesRoute,
+    settingsRoute,
+    settingsSectionRoute,
   ]),
 });
 

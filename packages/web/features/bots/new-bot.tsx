@@ -1,4 +1,3 @@
-import { FACE_NAMES, STROKE_NAMES } from "@claudebot/contract/avatars";
 import { Bot } from "@claudebot/contract/events";
 import { useNavigate } from "@tanstack/react-router";
 import { useActionState, useState } from "react";
@@ -14,26 +13,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { errorOf, readJson } from "@/host/api.ts";
-import { randomAvatar, STROKES } from "@/lib/avatars.ts";
-import { cn } from "@/lib/utils";
+import { randomAvatar } from "@/lib/avatars.ts";
 
 import { createBot } from "./api.ts";
-
-const choice =
-  "relative grid cursor-pointer place-items-center rounded-lg ring-1 ring-transparent transition-colors hover:bg-muted has-checked:bg-muted has-checked:ring-foreground/40 has-focus-visible:ring-2 has-focus-visible:ring-ring";
+import { AvatarPicker } from "./avatar-picker.tsx";
 
 export function NewBotDialog({
   open,
@@ -94,44 +82,7 @@ export function NewBotDialog({
                 Optional. Other bots see it when they pick who to hand work to.
               </FieldDescription>
             </Field>
-            <FieldSet className="gap-2">
-              <FieldLegend variant="label">Avatar</FieldLegend>
-              <div className="grid grid-cols-5 gap-1">
-                {FACE_NAMES.map((face) => (
-                  <label key={face} className={cn(choice, "h-12")} title={face}>
-                    <input
-                      type="radio"
-                      name="bot-face"
-                      value={face}
-                      checked={avatar.face === face}
-                      onChange={() => setAvatar({ ...avatar, face })}
-                      className="sr-only"
-                    />
-                    <BotAvatar avatar={{ face, stroke: avatar.stroke }} className="size-10" />
-                    <span className="sr-only">{face}</span>
-                  </label>
-                ))}
-              </div>
-            </FieldSet>
-            <FieldSet className="gap-2">
-              <FieldLegend variant="label">Stroke color</FieldLegend>
-              <div className="flex flex-wrap gap-1">
-                {STROKE_NAMES.map((stroke) => (
-                  <label key={stroke} className={cn(choice, "size-8 rounded-full")} title={stroke}>
-                    <input
-                      type="radio"
-                      name="bot-stroke"
-                      value={stroke}
-                      checked={avatar.stroke === stroke}
-                      onChange={() => setAvatar({ ...avatar, stroke })}
-                      className="sr-only"
-                    />
-                    <span className="size-5 rounded-full" style={{ background: STROKES[stroke] }} />
-                    <span className="sr-only">{stroke}</span>
-                  </label>
-                ))}
-              </div>
-            </FieldSet>
+            <AvatarPicker avatar={avatar} onChange={setAvatar} />
             {error && <FieldError>{error}</FieldError>}
           </FieldGroup>
           <DialogFooter>

@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useMemo } from "react";
 import { BotPanel } from "@/features/bots/index.ts";
 import { BrowserTab } from "@/features/browser/index.ts";
 import { ChatSettings, ChatView } from "@/features/chat/index.ts";
+import { MemoryEditor } from "@/features/memory/index.ts";
 import { Routines } from "@/features/routines/index.ts";
 import { TasksTab } from "@/features/tasks/index.ts";
 import { Work } from "@/features/work/index.ts";
@@ -51,9 +52,26 @@ export const Route = createLazyRoute("/bots/$botId")({
             bot={bot}
             work={<Work botId={bot.id} />}
             tasks={<TasksTab />}
-            routines={<Routines botId={bot.id} />}
             browser={<BrowserTab bot={bot} />}
-            settings={<ChatSettings bot={bot} />}
+            chat={<ChatSettings bot={bot} />}
+            routines={<Routines botId={bot.id} />}
+            memory={
+              <div className="grid gap-6">
+                <MemoryEditor
+                  scope="user"
+                  title="About you"
+                  description="What every bot knows about you. Shared by all bots."
+                  empty="Nothing remembered yet."
+                />
+                <MemoryEditor
+                  scope="bot"
+                  botId={bot.id}
+                  title={`How ${bot.name} works`}
+                  description="Directions only this bot follows."
+                  empty="No directions yet."
+                />
+              </div>
+            }
             onClose={onClose}
           />
         )}
