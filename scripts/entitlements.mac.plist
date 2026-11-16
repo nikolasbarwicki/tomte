@@ -2,14 +2,31 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
-    <!-- One file for everything the release signs: the Electron app and its helpers (V8) and the bundled Bun-compiled
-         host (JavaScriptCore). Both JIT, which the hardened runtime that notarization requires blocks without these.
-         Nothing else is granted: no library-validation or DYLD escape. If a signed binary needs more, the host job's
-         smoke run (it runs the signed binary) fails; add the entitlement here, and keep HOST_ENTITLEMENTS in
-         scripts/signing-kit.ts in step. -->
+    <!-- One file for everything the release signs: the Electron app and its helpers, the bundled Bun-compiled host and the
+         bundled browser (agent-browser, Chrome for Testing, its Helper apps). electron-builder uses it for both
+         `entitlements` and `entitlementsInherit`, so every nested executable gets all of it, and `signing.ts sign-host`
+         signs the host with it. Keep MAC_ENTITLEMENT_KEYS in scripts/signing-kit.ts in step: `signing.ts verify` fails a
+         signed bundle whose host, Chrome or Helper apps lack any key below.
+
+         allow-jit: V8 (Electron, Chrome's renderer and GPU helpers) and JavaScriptCore (the host) map executable memory
+         at runtime, which the hardened runtime that notarization requires blocks.
+         allow-unsigned-executable-memory: the same engines write into that memory after mapping it (Chromium's plugin
+         helper entitlements carry it).
+         disable-library-validation: with it off, a process loads only libraries signed by Apple or by its own Team ID.
+         Chrome for Testing loads Google-signed code: the Widevine CDM (libwidevinecdm.dylib, Team ID EQHXZ8M8AV in the
+         pinned 157.0.8103.38 zip), and Chrome's component updater may replace it with a newer Google-signed copy, so a
+         Chrome re-signed under our Team ID could not load it. Chromium's plugin helper entitlements grant exactly this key
+         for the same reason.
+
+         Nothing else is granted: no camera, microphone, location, Bluetooth or USB (a headless automation browser needs
+         none of them; Chromium's defaults carry them for a consumer Chrome), and no DYLD environment escape. If a signed
+         binary needs more, the host job's smoke run (it runs the signed host) or the macOS smoke fails; add the
+         entitlement here and to MAC_ENTITLEMENT_KEYS. -->
     <key>com.apple.security.cs.allow-jit</key>
     <true/>
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
   </dict>
 </plist>
