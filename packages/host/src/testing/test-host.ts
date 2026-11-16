@@ -161,7 +161,10 @@ export async function startHandoffHost(
   /** Stands in for the OS file manager, so a test sees what the host would reveal and never launches one. */
   reveal?: HostServerOptions["reveal"],
   /** Overrides for the host's timing, so a test need not wait out the defaults, the channel adapters it runs and where Telegram's API is. */
-  timing?: Pick<HostServerOptions, "frontIdleMs" | "channelAdapters" | "telegram" | "cards">,
+  timing?: Pick<
+    HostServerOptions,
+    "frontIdleMs" | "channelAdapters" | "telegram" | "cards" | "notices"
+  >,
   /** The environment the host's configuration is read from, such as `CLAUDEBOT_ASK_APPROVAL`. */
   env: Record<string, string> = {},
 ): Promise<HandoffHost> {

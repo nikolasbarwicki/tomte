@@ -75,7 +75,11 @@ function setup(
 ) {
   const db = migrate(new Database(":memory:"));
   const fake = fakeChannel();
-  const channels = createChannels({ db, onActivity: () => {} });
+  const channels = createChannels({
+    db,
+    onActivity: () => {},
+    publicUrl: "https://claudebot.example",
+  });
   channels.register(fake.channel);
   fake.adapters((kind, inbound) => channels.receive(kind, inbound));
   const cards = createCards({

@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import type { ChannelStatus } from "@claudebot/contract/api";
 
 import { NotFound } from "../platform/errors.ts";
+import { noticeMessage, type Notice } from "./notices.ts";
 import { createChannelStore } from "./store.ts";
 import type {
   Account,
@@ -18,6 +19,7 @@ import type {
 export { createCards } from "./cards/index.ts";
 export type { Answered, CardItem, CardSource } from "./cards/index.ts";
 export { createTelegramChannel, type TelegramOptions } from "./telegram/channel.ts";
+export { Notice } from "./notices.ts";
 export type { Account, Channel, ChannelMessage, Inbound, MessageRef, Reply } from "./types.ts";
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -74,15 +76,28 @@ export interface Channels {
   send(kind: string, message: ChannelMessage): Promise<SendOutcome>;
   /** Edits a message the channel sent. */
   edit(kind: string, ref: MessageRef, message: ChannelMessage): Promise<void>;
+  /**
+   * Sends the notice to the linked account of every channel that has one, as plain text with a link to the web UI. A send that fails
+   * is tried again a few times, with a doubling wait, and then logged; the promise resolves when each channel is done and never rejects,
+   * so a caller that does not wait for it is never held up by a channel that is down. With no linked account nothing is sent.
+   */
+  notify(notice: Notice): Promise<void>;
 }
 
 export interface ChannelsDeps {
   db: Database;
   /** Called once for every update from a linked account, whatever it says, so feature 13's absence pause counts presence. */
   onActivity: () => void;
+  /** The URL users reach the host at: a notice links to the web UI under it. */
+  publicUrl: string;
   /** The clock, in epoch milliseconds. */
   now?: () => number;
+  /** How long to wait before a notice that failed to send is tried again, doubling each time; 2 seconds when omitted. */
+  noticeRetryMs?: number;
 }
+
+/** How many times a notice that failed is tried again after the first send. */
+const NOTICE_RETRIES = 4;
 
 const RUNNING: ChannelStatus = { state: "running", detail: null, username: null };
 
@@ -105,6 +120,21 @@ export function createChannels(deps: ChannelsDeps): Channels {
   const registry = new Map<string, Channel>();
   let handler: LinkedHandler = async () => ({});
   let linked: (kind: string) => void = () => {};
+  const noticeRetryMs = deps.noticeRetryMs ?? 2000;
+  /** Ends the waits of notices that are between two tries, so stopping does not wait for them. */
+  const retrying = new Set<() => void>();
+  let stopped = false;
+
+  const pause = (ms: number) =>
+    new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        retrying.delete(done);
+        resolve();
+      };
+      const timer = setTimeout(done, ms);
+      retrying.add(done);
+    });
 
   const channel = (kind: string) => {
     const found = registry.get(kind);
@@ -114,6 +144,13 @@ export function createChannels(deps: ChannelsDeps): Channels {
   const accountOf = (kind: string): Account | undefined => {
     const link = store.linkOf(kind);
     return link && { id: link.accountId, label: link.label };
+  };
+
+  const send: Channels["send"] = async (kind, message) => {
+    const adapter = channel(kind);
+    const to = accountOf(kind);
+    if (!to) return { delivered: false };
+    return { delivered: true, ref: await adapter.send(to, message) };
   };
 
   return {
@@ -131,10 +168,13 @@ export function createChannels(deps: ChannelsDeps): Channels {
     },
 
     start() {
+      stopped = false;
       for (const c of registry.values()) c.start();
     },
 
     async stop() {
+      stopped = true;
+      for (const done of retrying) done();
       await Promise.all([...registry.values()].map((c) => c.stop()));
     },
 
@@ -186,13 +226,34 @@ export function createChannels(deps: ChannelsDeps): Channels {
       return { send: [{ text: linkedNow ? LINKED : REFUSED }] };
     },
 
-    async send(kind, message) {
-      const adapter = channel(kind);
-      const to = accountOf(kind);
-      if (!to) return { delivered: false };
-      return { delivered: true, ref: await adapter.send(to, message) };
-    },
+    send,
 
     edit: (kind, ref, message) => channel(kind).edit(ref, message),
+
+    async notify(notice) {
+      const message = noticeMessage(notice, deps.publicUrl);
+      await Promise.all(
+        [...registry.keys()]
+          .filter((kind) => store.linkOf(kind) !== undefined)
+          .map(async (kind) => {
+            let wait = noticeRetryMs;
+            for (let tried = 0; ; tried++) {
+              try {
+                await send(kind, message);
+                return;
+              } catch (e) {
+                if (stopped || tried >= NOTICE_RETRIES) {
+                  console.error(
+                    `[channels] a ${notice.kind} notice was not delivered to ${kind}: ${e instanceof Error ? e.message : "unknown error"}`,
+                  );
+                  return;
+                }
+                await pause(wait);
+                wait *= 2;
+              }
+            }
+          }),
+      );
+    },
   };
 }

@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
 import { migrate } from "../platform/db.ts";
 import { fakeChannel } from "../testing/fake-channel.ts";
@@ -18,6 +18,8 @@ function setup() {
     db,
     now: () => clock,
     onActivity: () => void activity.count++,
+    publicUrl: "https://claudebot.example",
+    noticeRetryMs: 1,
   });
   channels.register(fake.channel);
   channels.handle(async (_kind, inbound) => {
@@ -203,7 +205,11 @@ describe("an update from the linked account", () => {
 
   test("gets an empty reply before any handler is registered", async () => {
     const db = migrate(new Database(":memory:"));
-    const channels = createChannels({ db, onActivity: () => {} });
+    const channels = createChannels({
+      db,
+      onActivity: () => {},
+      publicUrl: "https://claudebot.example",
+    });
     channels.register(fakeChannel().channel);
     await channels.receive("fake", { from: owner, text: channels.createLinkCode("fake") });
     expect(await channels.receive("fake", { from: owner, text: "hi" })).toEqual({});
@@ -265,5 +271,78 @@ describe("the registry", () => {
     expect(() => channels.createLinkCode("nope")).toThrow("no such channel");
     expect(() => channels.unlink("nope")).toThrow("no such channel");
     expect(channels.receive("nope", { from: owner, text: "x" })).rejects.toThrow("no such channel");
+  });
+});
+
+describe("notify", () => {
+  const failed = {
+    kind: "run_failed",
+    botId: "b1",
+    routine: "Digest",
+    error: "boom",
+    interrupted: false,
+  } as const;
+
+  test("sends one plain message with a link to the routines panel to the linked account", async () => {
+    const { channels, fake, link } = setup();
+    await link();
+    await channels.notify(failed);
+    expect(fake.sent).toMatchObject([
+      {
+        to: owner,
+        message: {
+          text: "Routine Digest failed: boom",
+          link: { url: "https://claudebot.example/bots/b1?panel=routines" },
+        },
+      },
+    ]);
+    expect(fake.sent[0]?.message.buttons).toBeUndefined();
+  });
+
+  test("with no linked account sends nothing and does not throw", async () => {
+    const { channels, fake } = setup();
+    await channels.notify(failed);
+    expect(fake.sent).toEqual([]);
+  });
+
+  test("tries a send that fails again, then logs and gives up without throwing", async () => {
+    const { channels, fake, link } = setup();
+    await link();
+    const quiet = spyOn(console, "error").mockImplementation(() => {});
+    let calls = 0;
+    fake.channel.send = async () => {
+      calls++;
+      throw new Error("channel is down");
+    };
+    await channels.notify(failed);
+    expect(calls).toBe(5);
+    expect(quiet).toHaveBeenCalledWith(expect.stringContaining("channel is down"));
+    quiet.mockRestore();
+  });
+
+  test("a send that works on a later try is delivered once", async () => {
+    const { channels, fake, link } = setup();
+    await link();
+    const send = fake.channel.send.bind(fake.channel);
+    let calls = 0;
+    fake.channel.send = async (to, message) => {
+      if (++calls < 3) throw new Error("starting");
+      return send(to, message);
+    };
+    await channels.notify(failed);
+    expect(fake.sent).toHaveLength(1);
+  });
+
+  test("stopping ends the retries at once", async () => {
+    const { channels, fake, link } = setup();
+    await link();
+    const quiet = spyOn(console, "error").mockImplementation(() => {});
+    fake.channel.send = async () => {
+      throw new Error("down");
+    };
+    const pending = channels.notify(failed);
+    await channels.stop();
+    await pending;
+    quiet.mockRestore();
   });
 });

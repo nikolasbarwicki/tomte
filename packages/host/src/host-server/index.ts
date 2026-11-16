@@ -69,6 +69,7 @@ import { createEventStream } from "./events.ts";
 import { agentRoutes, clientRoutes, createRequestListener } from "./http.ts";
 import { createHostIsolation } from "./isolation.ts";
 import { openListener } from "./listener.ts";
+import { runNotice } from "./run-notices.ts";
 import { createTranscripts } from "./transcript.ts";
 import { filesEvent, memoryEvents } from "./views.ts";
 
@@ -102,6 +103,8 @@ export interface HostServerOptions {
   telegram?: TelegramOptions;
   /** Timing of the cards sent to channels; tests set it so a send that failed is tried again soon. */
   cards?: { retryMs?: number };
+  /** Timing of the notices sent to channels (failed runs, expired parks); tests set it so a send that failed is tried again soon. */
+  notices?: { retryMs?: number };
   /** The clock device auth reads for pairing code expiry and human waits read for their 24-hour expiry, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
   /** How long an idle double-loop front stays open; 10 minutes when omitted. */
@@ -317,6 +320,20 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     workEvent: (botId) => externalEvents.work(botId),
     broadcast,
   });
+  // Before the routines, adapters included: a run that ends while the host starts (a park that expired during downtime) is reported through it.
+  const channels = createChannels({
+    db,
+    // Feature 13's absence pause counts it; until it exists, presence is not tracked.
+    onActivity: () => {},
+    publicUrl: clientAt.publicUrl,
+    ...(o.now !== undefined && { now: o.now }),
+    ...(o.notices?.retryMs !== undefined && { noticeRetryMs: o.notices.retryMs }),
+  });
+  const receive: Channels["receive"] = (kind, inbound) => channels.receive(kind, inbound);
+  channels.register(
+    createTelegramChannel({ secrets, receive, ...(o.telegram && { options: o.telegram }) }),
+  );
+  for (const adapter of o.channelAdapters?.(receive) ?? []) channels.register(adapter);
   const routines = createRoutines({
     db,
     dataRoot,
@@ -326,6 +343,11 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     deliver: (botId, text) => chats.deliver(botId, text),
     onChange: (botId) => {
       if (botId === chats.currentBotId()) broadcast(routinesEvent(botId));
+    },
+    // The run row is the record; a notice that cannot be sent never changes it.
+    onRunEnded: (end) => {
+      const notice = runNotice(end);
+      if (notice && getBot(dataRoot, end.routine.botId)) void channels.notify(notice);
     },
   });
   // A run's waits are told to the run: an answer resumes it, an expiry fails it.
@@ -370,17 +392,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const serveBuiltUi = serveUi(o.ui ?? { read: async () => undefined });
 
   const devices = createDeviceAuth({ db, ...(o.now !== undefined && { now: o.now }) });
-  const channels = createChannels({
-    db,
-    // Feature 13's absence pause counts it; until it exists, presence is not tracked.
-    onActivity: () => {},
-    ...(o.now !== undefined && { now: o.now }),
-  });
-  const receive: Channels["receive"] = (kind, inbound) => channels.receive(kind, inbound);
-  channels.register(
-    createTelegramChannel({ secrets, receive, ...(o.telegram && { options: o.telegram }) }),
-  );
-  for (const adapter of o.channelAdapters?.(receive) ?? []) channels.register(adapter);
   const cards = createCards({
     db,
     channels,

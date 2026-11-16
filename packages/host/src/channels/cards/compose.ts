@@ -11,7 +11,7 @@ const ELLIPSIS = "…";
 const REPLY_HINT = "Reply to this message to answer.";
 
 /** `text` cut to `max` characters with an ellipsis, never inside a surrogate pair; as it is when it fits. */
-function cut(text: string, max: number): string {
+export function cut(text: string, max: number): string {
   if (text.length <= max) return text;
   let end = max - ELLIPSIS.length;
   const last = text.charCodeAt(end - 1);
