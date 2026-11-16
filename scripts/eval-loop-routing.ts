@@ -35,6 +35,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
+import { DEFAULT_EFFORT, DEFAULT_MODEL } from "../packages/contract/src/events.ts";
 import { createBot, frontContext, headlessDelegate } from "../packages/host/src/bots/index.ts";
 import {
   claudeConfigDir,
@@ -379,6 +380,7 @@ async function runCase(c: Case, n: number, env: Env): Promise<Outcome> {
       decide: () => undefined,
       reconcile: () => {},
     },
+    agentSettings: { model: DEFAULT_MODEL, effort: DEFAULT_EFFORT },
     observer,
     tasks,
     loopServer: createLoopServer({

@@ -17,6 +17,7 @@
     "smoke:blocked-ui": "bun scripts/smoke-blocked-ui.ts",
     "smoke:answers": "bun scripts/smoke-answers.ts",
     "smoke:loop-ui": "bun scripts/smoke-loop-ui.ts",
+    "smoke:scroll-ui": "bun scripts/smoke-scroll-ui.ts",
     "smoke:ui": "bun scripts/smoke-ui.ts",
     "eval:loop-routing": "bun scripts/eval-loop-routing.ts",
     "typecheck": "bun --filter '*' typecheck",

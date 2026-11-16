@@ -241,6 +241,18 @@ export type BotBrowserSettings = z.infer<typeof BotBrowserSettings>;
 export const ChatMode = z.enum(["standard", "double_loop"]);
 export type ChatMode = z.infer<typeof ChatMode>;
 
+/** The models a bot can run on, as the Claude CLI's aliases name them. */
+export const BotModel = z.enum(["opus", "sonnet", "haiku"]);
+export type BotModel = z.infer<typeof BotModel>;
+
+/** The reasoning effort levels a bot can run at; the Claude Agent SDK's `EffortLevel`. */
+export const EffortLevel = z.enum(["low", "medium", "high", "xhigh", "max"]);
+export type EffortLevel = z.infer<typeof EffortLevel>;
+
+/** The model and effort a bot runs on until the user picks others. */
+export const DEFAULT_MODEL: BotModel = "sonnet";
+export const DEFAULT_EFFORT: EffortLevel = "medium";
+
 /** A specialized agent: a chain of Claude Code sessions (`sessions`, newest last) plus its own memory. */
 export const Bot = z.object({
   id: z.string(),
@@ -251,6 +263,9 @@ export const Bot = z.object({
   lastActive: z.number(),
   sessions: z.array(z.string()),
   chatMode: ChatMode,
+  /** What the bot's standard turns run on; in double-loop mode, what its background tasks run on (the front's replies always come from a fast model). */
+  model: BotModel,
+  effort: EffortLevel,
   browser: BotBrowserSettings,
 });
 export type Bot = z.infer<typeof Bot>;

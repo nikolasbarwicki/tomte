@@ -268,7 +268,8 @@ host.loopScript(
 // The page.
 const box = page.getByRole("textbox", { name: "Message Loop", exact: true });
 const sendButton = page.getByRole("button", { name: "Send", exact: true });
-const settings = page.getByRole("button", { name: "Chat settings", exact: true });
+const settingsTab = page.getByRole("tab", { name: "Settings" });
+const modeSwitch = page.getByRole("switch", { name: "Double-loop chat" });
 const tasksTab = page.getByRole("tab", { name: "Tasks" });
 const limits = page.getByTestId("rate-limits");
 const presenceLine = (text: string) => page.getByRole("status").filter({ hasText: text });
@@ -284,12 +285,19 @@ const say = async (text: string) => {
   await host.until(() => sends.length > before);
   return sends.at(-1)!;
 };
+/** Waits until the chat settings can switch the mode again: nothing runs and the bot is not replying. Leaves the Settings tab open. */
 const waitIdle = async () => {
-  await settings.waitFor();
+  await settingsTab.click();
+  await modeSwitch.waitFor();
   await page.waitForFunction(
     () => {
-      const el = document.querySelector('button[aria-label="Chat settings"]');
-      return el !== null && !el.hasAttribute("disabled");
+      const el = document.getElementById("double-loop");
+      return (
+        el !== null &&
+        !el.hasAttribute("disabled") &&
+        !el.hasAttribute("data-disabled") &&
+        el.getAttribute("aria-disabled") !== "true"
+      );
     },
     undefined,
     { timeout: 8000 },
@@ -305,9 +313,13 @@ try {
   check((await limits.count()) === 0, "no rate-limit indicator for a standard bot");
   check((await tasksTab.count()) === 0, "no Tasks tab for a standard bot");
 
-  console.log("the toggle");
-  await settings.click();
-  await page.getByRole("menuitemcheckbox", { name: "Double-loop chat" }).click();
+  console.log("the toggle, in the Settings tab");
+  await settingsTab.click();
+  check(
+    await page.getByText("Model", { exact: true }).first().isVisible(),
+    "a standard bot's settings name its model",
+  );
+  await modeSwitch.click();
   await page.getByRole("alertdialog").getByText("Switch to double-loop chat for Loop?").waitFor();
   await smoke.shot("confirm-switch");
   await page.getByRole("button", { name: "Switch and start new" }).click();
@@ -315,6 +327,14 @@ try {
   check(true, "the confirm dialog switches the bot, and the Tasks tab appears");
   const sessionId = currentSession(getBot(host.dataRoot, botId)!)!;
   check(sessionId !== botId, "switching started a new session");
+  await page.getByText("Background tasks", { exact: true }).waitFor();
+  check(true, "in double-loop mode the model and effort are the background tasks'");
+  const modelChoice = page.getByRole("group", { name: "Model" });
+  await modelChoice.getByRole("button", { name: "Opus" }).click();
+  await host.until(() => getBot(host.dataRoot, botId)?.model === "opus");
+  await modelChoice.getByRole("button", { name: "Opus", pressed: true }).waitFor();
+  check(true, "picking a model saves it with the bot, and the settings show it");
+  await smoke.shot("settings");
 
   console.log("two messages a second apart");
   const first = await say("first message");
@@ -372,10 +392,17 @@ try {
   host.allow("zebra-2");
   await task("agent-1").getByText("Reading the zebra report").waitFor();
   check(
-    await page.getByText("Working on:").first().isVisible(),
-    "the status line moved, and the transcript follows the task",
+    (await transcript.getByText("Working on:").count()) === 0 &&
+      (await presenceLine("Loop is working on 1 task").isVisible()),
+    "the transcript shows no task rows, and the presence line counts the running task",
   );
-  check((await settings.isDisabled()) === true, "the chat settings are locked while a task runs");
+  check(
+    (await transcript.getByText("Agent", { exact: true }).count()) === 0,
+    "the front's tool calls are not shown",
+  );
+  await settingsTab.click();
+  check((await modeSwitch.isDisabled()) === true, "the mode switch is locked while a task runs");
+  await tasksTab.click();
 
   console.log("a second task, a steer and a cancel");
   await say("research Quagga");
@@ -529,11 +556,10 @@ try {
   await said(ZEBRA_REPORT).waitFor();
   await reportsOnce("in a rebuilt chat");
   await noWorkState("in a rebuilt chat");
-  // "research Zebra" is both what the user typed and the goal on the task's own row.
   for (const [typed, times] of [
     ["first message", 1],
     ["second message", 1],
-    ["research Zebra", 2],
+    ["research Zebra", 1],
   ] as const)
     check((await shown(typed)) === times, `"${typed}" is shown as typed in the rebuilt chat`);
   await said(REPLIES["first message"]).waitFor();
@@ -559,8 +585,7 @@ try {
 
   console.log("leaving double-loop mode once nothing runs");
   await waitIdle();
-  await settings.click();
-  await page.getByRole("menuitemcheckbox", { name: "Double-loop chat" }).click();
+  await modeSwitch.click();
   await page.getByRole("alertdialog").getByText("Leave double-loop chat for Loop?").waitFor();
   await page.getByRole("button", { name: "Switch and start new" }).click();
   await tasksTab.waitFor({ state: "detached" });

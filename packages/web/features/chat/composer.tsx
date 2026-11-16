@@ -1,19 +1,9 @@
-import { DEFAULT_EFFORT, DEFAULT_MODEL, EffortLevel } from "@claudebot/contract/api";
 import type { BotSummary } from "@claudebot/contract/events";
 import { getRouteApi } from "@tanstack/react-router";
-import { ArrowUpIcon, ChevronDownIcon } from "lucide-react";
+import { ArrowUpIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   InputGroup,
   InputGroupAddon,
@@ -27,67 +17,10 @@ import { useWork } from "@/host/hooks.ts";
 import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
-import { setEffort, setModel } from "./api.ts";
 import { bindMentions, type MentionTarget } from "./mentions.ts";
 import { needsYouItems } from "./model.ts";
 
 const botRoute = getRouteApi("/bots/$botId");
-
-/** One of the open session's settings in the composer, after the Model Selector pattern. Starts at the host's default. */
-function SessionSetting({
-  label,
-  options,
-  initial,
-  apply,
-}: {
-  label: string;
-  options: readonly string[];
-  initial: string;
-  apply: (value: string) => Promise<boolean>;
-}) {
-  const [value, setValue] = useState(initial);
-  const [applying, startApplying] = useTransition();
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <InputGroupButton
-            size="xs"
-            variant="ghost"
-            className="text-xs"
-            disabled={applying}
-            aria-label={`${label}: ${value}`}
-          />
-        }
-      >
-        <span className="text-muted-foreground hidden sm:inline">{label}</span>
-        <span className="capitalize">{value}</span>
-        {applying ? <Spinner /> : <ChevronDownIcon />}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="top" className="w-36">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>{label}</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={value}
-            onValueChange={(v: string) =>
-              startApplying(async () => {
-                if (await apply(v)) setValue(v);
-              })
-            }
-          >
-            {options.map((o) => (
-              <DropdownMenuRadioItem key={o} value={o} closeOnClick className="capitalize">
-                {o}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-const MODELS = ["opus", "sonnet", "haiku"];
 
 export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] }) {
   const navigate = botRoute.useNavigate();
@@ -312,19 +245,7 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
               />
             </div>
             <InputGroupAddon align="block-end">
-              <SessionSetting
-                label="Model"
-                options={MODELS}
-                initial={DEFAULT_MODEL}
-                apply={setModel}
-              />
-              <SessionSetting
-                label="Effort"
-                options={EffortLevel.options}
-                initial={DEFAULT_EFFORT}
-                apply={setEffort}
-              />
-              <p className="ml-auto hidden items-center gap-1 text-xs font-normal whitespace-nowrap @xl:flex">
+              <p className="hidden items-center gap-1 text-xs font-normal whitespace-nowrap @xl:flex">
                 <Kbd>@</Kbd> hand off to a bot · <Kbd>Shift</Kbd>
                 <Kbd>Enter</Kbd> new line
               </p>
@@ -332,7 +253,7 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
                 type="submit"
                 variant="default"
                 size="icon-sm"
-                className="ml-auto rounded-full @xl:ml-0"
+                className="ml-auto rounded-full"
                 disabled={sending || !input.trim()}
                 aria-label="Send"
               >

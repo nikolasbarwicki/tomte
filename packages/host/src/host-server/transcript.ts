@@ -103,6 +103,8 @@ export function createTranscripts({
     const stamp = () => {
       while (stamps.length < out.length) stamps.push(at);
     };
+    // A double-loop front's messages carry a work state; its tool calls start and steer tasks, which the chat shows only as their reports.
+    let front = false;
     for (const m of await getSessionMessages(sessionId, { dir: cwd })) {
       stamp();
       at = writtenAt(m) ?? at;
@@ -118,7 +120,9 @@ export function createTranscripts({
               : [];
         // A double-loop front's messages end with the work state the app appended, which the user never saw. What the app itself wrote there (a queued task's dispatch, a restart notice) is not the user's text either; the cards its events and handoffs become still show.
         const stripped = texts.map(withoutWorkState);
-        const appText = writtenByApp(m) && stripped.some((t, i) => t !== texts[i]);
+        const hadWorkState = stripped.some((t, i) => t !== texts[i]);
+        front ||= hadWorkState;
+        const appText = writtenByApp(m) && hadWorkState;
         for (const piece of stripped.flatMap((t) => events.split(ownerId, t))) {
           if (typeof piece !== "string") out.push(piece);
           else {
@@ -147,7 +151,9 @@ export function createTranscripts({
           if (b.type === "text") out.push({ type: "text_start" }, { type: "delta", text: b.text });
           if (b.type === "tool_use")
             out.push(
-              { type: "tool", name: b.name, input: JSON.stringify(b.input) },
+              ...(front
+                ? []
+                : [{ type: "tool" as const, name: b.name, input: JSON.stringify(b.input) }]),
               ...handoffs.sentCards(b.name, ToolInput.parse(b.input), ownerId),
             );
         }

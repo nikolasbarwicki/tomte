@@ -43,14 +43,6 @@ import {
 } from "@/components/ui/item";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent } from "@/components/ui/message";
-import {
-  MessageScroller,
-  MessageScrollerButton,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerProvider,
-  MessageScrollerViewport,
-} from "@/components/ui/message-scroller";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -69,6 +61,7 @@ import { cn } from "@/lib/utils";
 import { answer, answerWait, cancelSend } from "./api.ts";
 import { EXTERNAL_ICONS } from "./external-icons.ts";
 import { bindMentions } from "./mentions.ts";
+import { Scroller, ScrollerItem } from "./scroller.tsx";
 
 type ToolItem = Extract<Item, { kind: "tool" }>;
 type QueuedItem = Extract<Item, { kind: "queued" }>;
@@ -90,20 +83,22 @@ function toRows(items: Item[]): Row[] {
   return rows;
 }
 
-/** The thread. Message Scroller follows new output while the reader is at the live edge and anchors each new user turn near the top. */
+/** The thread. It follows the newest output while the reader is at the end, and jumps there when the user sends a message. */
 export function Transcript({
   bot,
   bots,
   items,
   presence,
   onShowBrowser,
+  onShowTasks,
 }: {
   bot: BotSummary;
   bots: BotSummary[];
   items: Item[];
-  /** What the one presence line says: `typing` while a double-loop bot streams, `working` while a turn or agents run, nothing when idle. */
+  /** What the one presence line says: `typing` while a double-loop bot writes a reply, `working` while a turn or agents run, nothing when idle. */
   presence: Presence;
   onShowBrowser: () => void;
+  onShowTasks: () => void;
 }) {
   const busy = presence !== "idle";
   if (items.length === 0 && !busy) {
@@ -122,54 +117,60 @@ export function Transcript({
       </Empty>
     );
   }
-  const rows = toRows(items);
+  // A double-loop chat shows only the conversation: its tasks live in the Tasks tab, and their results arrive as messages.
+  const doubleLoop = bot.chatMode === "double_loop";
+  const rows = toRows(doubleLoop ? items.filter((i) => i.kind !== "task") : items);
+  const tasksRunning = doubleLoop
+    ? items.filter((i) => i.kind === "task" && i.state === "running").length
+    : 0;
   const queued = items.filter((i): i is QueuedItem => i.kind === "queued");
+  // Queued and delivered messages together: a send adds one, delivering a queued message only moves it.
+  const sent = items.filter((i) => i.kind === "user" || i.kind === "queued").length;
   return (
-    <MessageScrollerProvider autoScroll>
-      <MessageScroller className="flex-1">
-        <MessageScrollerViewport>
-          <MessageScrollerContent
-            aria-busy={busy}
-            className="mx-auto w-full max-w-3xl gap-4 px-4 py-6"
-          >
-            {rows.map((row, i) => (
-              <MessageScrollerItem
-                key={i}
-                messageId={String(i)}
-                scrollAnchor={row.kind === "user"}
-                className={cn(row.kind === "handoff" && UNCLIPPED)}
-              >
-                <RowView
-                  row={row}
-                  botId={bot.id}
-                  running={busy && i === rows.length - 1}
-                  bots={bots}
-                  onShowBrowser={onShowBrowser}
-                />
-              </MessageScrollerItem>
-            ))}
-            {busy && (
-              <MessageScrollerItem messageId="working">
-                <Marker role="status">
-                  <MarkerIcon>
-                    <Spinner className="text-primary" />
-                  </MarkerIcon>
-                  <MarkerContent className="shimmer">
-                    {bot.name} is {presence === "typing" ? "typing" : "working"}…
-                  </MarkerContent>
-                </Marker>
-              </MessageScrollerItem>
+    <Scroller
+      followKey={sent}
+      busy={busy}
+      className="flex-1"
+      contentClassName="mx-auto w-full max-w-3xl gap-4 px-4 py-6"
+    >
+      {rows.map((row, i) => (
+        <ScrollerItem key={i} className={cn(row.kind === "handoff" && UNCLIPPED)}>
+          <RowView
+            row={row}
+            botId={bot.id}
+            running={busy && i === rows.length - 1}
+            bots={bots}
+            onShowBrowser={onShowBrowser}
+          />
+        </ScrollerItem>
+      ))}
+      {busy && (
+        <ScrollerItem>
+          <Marker role="status">
+            <MarkerIcon>
+              <Spinner className="text-primary" />
+            </MarkerIcon>
+            <MarkerContent className="shimmer">
+              {bot.name} is {presence === "typing" ? "typing" : "working"}
+              {presence === "working" && tasksRunning > 0
+                ? ` on ${tasksRunning} ${tasksRunning === 1 ? "task" : "tasks"}`
+                : ""}
+              …
+            </MarkerContent>
+            {presence === "working" && tasksRunning > 0 && (
+              <Button variant="link" size="xs" className="h-auto p-0" onClick={onShowTasks}>
+                View tasks
+              </Button>
             )}
-            {queued.map((q) => (
-              <MessageScrollerItem key={q.id} messageId={`queued-${q.id}`}>
-                <UserMessage text={q.text} mentions={q.mentions} bots={bots} queuedId={q.id} />
-              </MessageScrollerItem>
-            ))}
-          </MessageScrollerContent>
-        </MessageScrollerViewport>
-        <MessageScrollerButton />
-      </MessageScroller>
-    </MessageScrollerProvider>
+          </Marker>
+        </ScrollerItem>
+      )}
+      {queued.map((q) => (
+        <ScrollerItem key={q.id}>
+          <UserMessage text={q.text} mentions={q.mentions} bots={bots} queuedId={q.id} />
+        </ScrollerItem>
+      ))}
+    </Scroller>
   );
 }
 

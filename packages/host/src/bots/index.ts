@@ -12,7 +12,16 @@ import { join } from "node:path";
 
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { BotAvatar, defaultAvatar } from "@claudebot/contract/avatars";
-import { Bot, BotBrowserSettings, ChatMode, type MemoryScope } from "@claudebot/contract/events";
+import {
+  Bot,
+  BotBrowserSettings,
+  BotModel,
+  ChatMode,
+  DEFAULT_EFFORT,
+  DEFAULT_MODEL,
+  EffortLevel,
+  type MemoryScope,
+} from "@claudebot/contract/events";
 import { z } from "zod";
 
 import { userMemoryPath } from "./memory.ts";
@@ -64,6 +73,8 @@ const StoredBot = Bot.extend({
   sessions: Bot.shape.sessions.min(1).optional(),
   avatar: BotAvatar.optional(),
   chatMode: ChatMode.default("standard"),
+  model: BotModel.default(DEFAULT_MODEL),
+  effort: EffortLevel.default(DEFAULT_EFFORT),
   browser: BotBrowserSettings.extend({ headed: z.boolean().default(false) }).default({
     enabled: false,
     headed: false,
@@ -81,6 +92,8 @@ function save(dataRoot: string, bot: Bot) {
   if (stored) {
     bot.browser = stored.browser;
     bot.chatMode = stored.chatMode;
+    bot.model = stored.model;
+    bot.effort = stored.effort;
   }
   write(dataRoot, bot);
 }
@@ -120,6 +133,8 @@ export function createBot(
     lastActive: now,
     sessions: [id],
     chatMode: "standard",
+    model: DEFAULT_MODEL,
+    effort: DEFAULT_EFFORT,
     browser: { enabled: false, headed: false },
   };
   save(dataRoot, bot);
@@ -159,6 +174,19 @@ export function setChatMode(dataRoot: string, id: string, chatMode: ChatMode): B
   const bot = getBot(dataRoot, id);
   if (!bot) return undefined;
   bot.chatMode = chatMode;
+  write(dataRoot, bot);
+  return bot;
+}
+
+/** The model and effort the bot runs on: its standard turns, or the background tasks of its double-loop chat. */
+export function setModelSettings(
+  dataRoot: string,
+  id: string,
+  patch: Partial<Pick<Bot, "model" | "effort">>,
+): Bot | undefined {
+  const bot = getBot(dataRoot, id);
+  if (!bot) return undefined;
+  Object.assign(bot, patch);
   write(dataRoot, bot);
   return bot;
 }
@@ -257,6 +285,8 @@ export function openThread(
     claude,
     cwd,
     ...botContext(dataRoot, bot),
+    model: bot.model,
+    effort: bot.effort,
     approveAll,
     integrations,
     hostServers: () => hostServers(bot.id),

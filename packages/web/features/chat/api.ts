@@ -1,4 +1,4 @@
-import type { ChatMode } from "@claudebot/contract/events";
+import type { BotModel, ChatMode, EffortLevel } from "@claudebot/contract/events";
 
 import { act } from "@/host/api.ts";
 
@@ -10,9 +10,10 @@ export const newSession = () => act("/api/session/new", {});
 export const setChatMode = (botId: string, chatMode: ChatMode) =>
   act("/api/bots/chat-mode", { botId, chatMode });
 
-export const setModel = (model: string) => act("/api/model", { model });
+/** Saves the open bot's model or effort; the host applies it to the running session, or to a double-loop bot's next task. */
+export const setModel = (model: BotModel) => act("/api/model", { model });
 
-export const setEffort = (effort: string) => act("/api/effort", { effort });
+export const setEffort = (effort: EffortLevel) => act("/api/effort", { effort });
 
 /** Answers a wait card with one of its action ids. */
 export const answerWait = (id: string, action: string) => act("/api/waits/answer", { id, action });

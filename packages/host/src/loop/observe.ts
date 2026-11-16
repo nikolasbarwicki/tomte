@@ -28,7 +28,7 @@ export interface ObserverDeps {
   emit: (e: ServerEvent) => void;
   /** Called after a task started, resumed or ended, so the chat can move its presence line. */
   changed: () => void;
-  /** Model and effort an agent type runs on when the Agent call names none. */
+  /** The bot's model and effort now, which an Agent call that names none is given: the agent definitions keep the settings of when the session opened. */
   defaults: (agentType: string | undefined) => { model: string; effort: string };
   now?: () => number;
   /** Runs `fn` after `ms` and returns what cancels it. */
@@ -245,11 +245,16 @@ export class Observer {
           "tool",
           `${name}: ${clip(str(args.command) ?? str(args.file_path) ?? str(args.pattern) ?? JSON.stringify(args), 300)}`,
         );
-    } else if (name === "Agent")
+    } else if (name === "Agent") {
+      // The front names a model or effort only when the user asked for one for this task; otherwise the task runs on what the bot
+      // is set to now, written into the call, so a change in the settings reaches the next task without reopening the session.
+      const defaults = this.d.defaults(str(args.subagent_type));
+      const model = str(args.model) ?? defaults.model;
+      const effort = str(args.effort) ?? defaults.effort;
       this.launches.set(input.tool_use_id, {
         agentType: str(args.subagent_type),
-        model: str(args.model),
-        effort: str(args.effort),
+        model,
+        effort,
         description: str(args.description),
         queuedId: this.d.tasks.claim({
           name: str(args.name),
@@ -257,7 +262,14 @@ export class Observer {
           prompt: str(args.prompt),
         }),
       });
-    else if (name === "SendMessage") this.onSteer(input.tool_use_id, args);
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse" as const,
+          permissionDecision: "allow" as const,
+          updatedInput: { ...args, model, effort },
+        },
+      };
+    } else if (name === "SendMessage") this.onSteer(input.tool_use_id, args);
     return {};
   }
 

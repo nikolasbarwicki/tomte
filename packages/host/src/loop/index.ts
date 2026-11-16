@@ -80,6 +80,7 @@ export function openFront(
       cancelQueued: (id) => tasks.cancelQueued(id),
     }),
     onStopped: () => observer.interruptRunning(),
+    agentSettings: { model: bot.model, effort: bot.effort },
     // Nothing closes the front for an expiring token while agents run; the session is read at open, as a standard thread's is.
     integrations,
     onMessage: (m) => {

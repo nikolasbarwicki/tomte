@@ -9,6 +9,8 @@ export interface SessionLine {
   /** When the message was written, in epoch milliseconds; one second apart from 1_700_000_000_000 when omitted. */
   at?: number;
   extra?: Record<string, unknown>;
+  /** An assistant message's content blocks after its text, such as a `tool_use`. */
+  blocks?: Record<string, unknown>[];
 }
 
 /**
@@ -39,7 +41,10 @@ export function writeSession(
     message:
       m.role === "user"
         ? { role: "user", content: m.text }
-        : { role: "assistant", content: [{ type: "text", text: m.text }] },
+        : {
+            role: "assistant",
+            content: [{ type: "text", text: m.text }, ...(m.blocks ?? [])],
+          },
     ...m.extra,
   }));
   writeFileSync(

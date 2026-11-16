@@ -1,4 +1,4 @@
-import type { BotSummary, Presence } from "@claudebot/contract/events";
+import type { BotSummary } from "@claudebot/contract/events";
 import { getRouteApi } from "@tanstack/react-router";
 import { MessageSquarePlusIcon, PanelRightIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useState, useTransition, type ReactNode } from "react";
@@ -15,9 +15,9 @@ import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
 import { newSession } from "./api.ts";
-import { ChatModeMenu } from "./chat-mode.tsx";
 import { Composer } from "./composer.tsx";
 import { ContextMeter } from "./context-meter.tsx";
+import { livePresence } from "./model.ts";
 import { NeedsYou } from "./needs-you.tsx";
 import { RateLimitMeter } from "./rate-limit-meter.tsx";
 import { Transcript } from "./transcript.tsx";
@@ -33,10 +33,10 @@ export function ChatView({
   bot: BotSummary;
   panel: (controls: { onClose: () => void }) => ReactNode;
 }) {
-  const { items, busy: turnRunning, presence, context, rateLimits } = useChat();
+  const chat = useChat();
+  const { items, context, rateLimits } = chat;
   // A double-loop bot never has a turn that blocks the chat: its one presence line says what it is doing.
-  const live: Presence =
-    bot.chatMode === "double_loop" ? presence : turnRunning ? "working" : "idle";
+  const live = livePresence(bot.chatMode, chat);
   const busy = live !== "idle";
   const bots = useBots() ?? [];
   const wide = useMediaQuery("(min-width: 1024px)");
@@ -47,10 +47,10 @@ export function ChatView({
   const panelOpen = wide ? pinned : sheetOpen;
   useEffect(() => localStorage.setItem(PANEL_KEY, pinned ? "open" : "closed"), [pinned]);
   const setPanelOpen = (open: boolean) => (wide ? setPinned(open) : setSheetOpen(open));
-  const selectBrowserTab = () =>
-    void navigate({ search: (prev) => ({ ...prev, panel: "browser" }), replace: true });
-  const showBrowser = () => {
-    selectBrowserTab();
+  const selectTab = (panel: "browser" | "tasks") =>
+    void navigate({ search: (prev) => ({ ...prev, panel }), replace: true });
+  const showTab = (panel: "browser" | "tasks") => {
+    selectTab(panel);
     setPanelOpen(true);
   };
 
@@ -65,7 +65,7 @@ export function ChatView({
     setShownTakeoverId(takeoverId);
     if (takeoverId) setPanelOpen(true);
   }
-  const onTakeover = useEffectEvent(selectBrowserTab);
+  const onTakeover = useEffectEvent(() => selectTab("browser"));
   useEffect(() => {
     if (takeoverId) onTakeover();
   }, [takeoverId]);
@@ -110,7 +110,6 @@ export function ChatView({
             </TooltipTrigger>
             <TooltipContent>New session</TooltipContent>
           </Tooltip>
-          <ChatModeMenu bot={bot} busy={busy} />
           <Tooltip>
             <TooltipTrigger
               render={
@@ -126,7 +125,7 @@ export function ChatView({
             >
               <PanelRightIcon />
             </TooltipTrigger>
-            <TooltipContent>Memory, files, routines and browser</TooltipContent>
+            <TooltipContent>Tasks, memory, files, routines and settings</TooltipContent>
           </Tooltip>
         </AppBar>
         <NeedsYou bot={bot} />
@@ -135,7 +134,8 @@ export function ChatView({
           bots={bots}
           items={items}
           presence={live}
-          onShowBrowser={showBrowser}
+          onShowBrowser={() => showTab("browser")}
+          onShowTasks={() => showTab("tasks")}
         />
         <Composer bot={bot} bots={bots} />
       </div>
@@ -154,7 +154,7 @@ export function ChatView({
           >
             <SheetTitle className="sr-only">{bot.name}</SheetTitle>
             <SheetDescription className="sr-only">
-              Memory, files, routines and browser
+              Tasks, memory, files, routines and settings
             </SheetDescription>
             {panelContent}
           </SheetContent>

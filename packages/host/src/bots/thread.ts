@@ -9,8 +9,7 @@ import {
   type SDKMessage,
   type SDKResultMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import { DEFAULT_EFFORT, DEFAULT_MODEL } from "@claudebot/contract/api";
-import type { MemoryScope } from "@claudebot/contract/events";
+import { DEFAULT_EFFORT, DEFAULT_MODEL, type MemoryScope } from "@claudebot/contract/events";
 
 import {
   claudeHarness,
@@ -64,6 +63,7 @@ export interface ThreadOptions {
   /** Extra environment variables for the CLI, added to `claude.env()`; read whenever a live query opens. */
   env?: () => Promise<Record<string, string>>;
   model?: string;
+  effort?: EffortLevel;
   idleMs?: number;
   /** Run every tool without asking the delegate. */
   approveAll?: boolean;
@@ -101,7 +101,7 @@ export class Thread {
   /** Set when `close()` lands while `send()` is still opening the query, which `close()` alone cannot reach. */
   private closedMidSend = false;
   private model: string;
-  private effort: EffortLevel = DEFAULT_EFFORT;
+  private effort: EffortLevel;
   private readonly canUseTool: CanUseTool;
   private readonly log: (l: string) => void;
 
@@ -109,6 +109,7 @@ export class Thread {
     this.sessionId = o.sessionId ?? randomUUID();
     this.started = !!o.resume;
     this.model = o.model ?? DEFAULT_MODEL;
+    this.effort = o.effort ?? DEFAULT_EFFORT;
     this.canUseTool = createCanUseTool({
       cwd: o.cwd,
       roots: [o.cwd, ...(o.additionalDirectories ?? [])].map((d) => resolve(d)),

@@ -3,7 +3,7 @@ import { useEffect, useEffectEvent, useMemo } from "react";
 
 import { BotPanel } from "@/features/bots/index.ts";
 import { BrowserTab } from "@/features/browser/index.ts";
-import { ChatView } from "@/features/chat/index.ts";
+import { ChatSettings, ChatView } from "@/features/chat/index.ts";
 import { Routines } from "@/features/routines/index.ts";
 import { TasksTab } from "@/features/tasks/index.ts";
 import { Work } from "@/features/work/index.ts";
@@ -53,6 +53,7 @@ export const Route = createLazyRoute("/bots/$botId")({
             tasks={<TasksTab />}
             routines={<Routines botId={bot.id} />}
             browser={<BrowserTab bot={bot} />}
+            settings={<ChatSettings bot={bot} />}
             onClose={onClose}
           />
         )}

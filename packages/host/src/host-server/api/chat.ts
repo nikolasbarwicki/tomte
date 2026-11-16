@@ -1,4 +1,4 @@
-import { EffortLevel } from "@claudebot/contract/api";
+import { BotModel, EffortLevel } from "@claudebot/contract/events";
 import { z } from "zod";
 
 import { getBot } from "../../bots/index.ts";
@@ -16,7 +16,7 @@ const Send = z.object({
 });
 const Id = z.object({ id: z.string() });
 const Answer = Id.extend({ value: z.string() });
-const Model = z.object({ model: z.string() });
+const Model = z.object({ model: BotModel });
 const Effort = z.object({ effort: EffortLevel });
 
 /** Routes that act on the chat the page shows. */

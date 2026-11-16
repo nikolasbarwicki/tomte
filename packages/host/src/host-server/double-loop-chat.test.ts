@@ -296,12 +296,16 @@ describe("a double-loop bot's reloaded transcript", () => {
   const state =
     "<work_state>\nrunning (0 of 3 slots): (none)\nqueued: (none)\nrecent (last 3 ended): (none)\n</work_state>";
 
-  test("shows what the user typed and what the bot said, without the work state or the app's own messages", async () => {
+  test("shows what the user typed and what the bot said, without the work state, the app's own messages or the front's tool calls", async () => {
     const id = host.createBot("Dev");
     setChatMode(host.dataRoot, id, "double_loop");
     writeSession(host, id, [
       { role: "user", text: `what is up?\n\n${state}`, extra: { origin: { kind: "human" } } },
-      { role: "assistant", text: "Not much." },
+      {
+        role: "assistant",
+        text: "Not much.",
+        blocks: [{ type: "tool_use", id: "tu-1", name: "Agent", input: { description: "x" } }],
+      },
       {
         role: "user",
         text: `The app restarted. Nothing was running.\n\n${state}`,
@@ -325,10 +329,11 @@ describe("a double-loop bot's reloaded transcript", () => {
       "delta: Same.",
     ]);
     expect(JSON.stringify(events.filter((e) => e.type !== "bots"))).not.toContain("work_state");
+    expect(events.some((e) => e.type === "tool")).toBe(false);
     expect(presenceOf(events)).toBe("idle");
   });
 
-  test("a session without work states is shown as before, whoever wrote its messages", async () => {
+  test("a session without work states is shown as before, whoever wrote its messages, tool calls included", async () => {
     const id = host.createBot("Dev");
     writeSession(host, id, [
       {
@@ -336,12 +341,17 @@ describe("a double-loop bot's reloaded transcript", () => {
         text: "plain <not a block>",
         extra: { origin: { kind: "task-notification" } },
       },
-      { role: "assistant", text: "ok" },
+      {
+        role: "assistant",
+        text: "ok",
+        blocks: [{ type: "tool_use", id: "tu-1", name: "Read", input: { file_path: "a" } }],
+      },
     ]);
     expect((await host.ui("/api/open", { id, botId: id })).status).toBe(200);
     const events = await pageEvents();
     expect(events.filter((e) => e.type === "user").map((e) => e.text)).toEqual([
       "plain <not a block>",
     ]);
+    expect(events.filter((e) => e.type === "tool").map((e) => e.name)).toEqual(["Read"]);
   });
 });

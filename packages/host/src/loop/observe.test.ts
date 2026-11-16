@@ -25,6 +25,8 @@ let changed: number;
 let clock: number;
 /** The waits the observer scheduled, which a test runs by hand instead of waiting. */
 let waits: { fn: () => void; ms: number; cancelled: boolean }[];
+/** What the bot is set to, which an Agent call that names no model or effort is given. */
+let settings: { model: string; effort: string };
 
 beforeEach(() => {
   log = createLoopStore(migrate(new Database(":memory:"))).session("bot", "session");
@@ -34,6 +36,7 @@ beforeEach(() => {
   changed = 0;
   clock = 1000;
   waits = [];
+  settings = { model: "sonnet", effort: "medium" };
   tasks = new Tasks({
     log,
     maxParallel: 3,
@@ -48,7 +51,7 @@ beforeEach(() => {
     attribution,
     emit: (e) => emitted.push(e),
     changed: () => changed++,
-    defaults: () => ({ model: "sonnet", effort: "medium" }),
+    defaults: () => settings,
     now: () => clock,
     schedule: (fn, ms) => {
       const wait = { fn, ms, cancelled: false };
@@ -143,6 +146,33 @@ describe("a task starting", () => {
       model: "sonnet",
       effort: "medium",
     });
+  });
+
+  test("an Agent call that names no model or effort is given what the bot is set to now; one that names them keeps them", async () => {
+    const call = (toolUseId: string, input: Record<string, unknown>) =>
+      hook("PreToolUse", {
+        tool_name: "Agent",
+        tool_use_id: toolUseId,
+        tool_input: { subagent_type: "researcher", description: "pricing of X", ...input },
+      });
+    const allowed = (input: Record<string, unknown>) =>
+      ({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "allow",
+          updatedInput: { subagent_type: "researcher", description: "pricing of X", ...input },
+        },
+      }) as const;
+
+    expect(await call("tu-1", {})).toEqual(allowed({ model: "sonnet", effort: "medium" }));
+    settings = { model: "opus", effort: "high" };
+    expect(await call("tu-2", {})).toEqual(allowed({ model: "opus", effort: "high" }));
+    expect(await call("tu-3", { model: "haiku" })).toEqual(
+      allowed({ model: "haiku", effort: "high" }),
+    );
+
+    started("t2", { tool_use_id: "tu-2" });
+    expect(log.getTask("t2")).toMatchObject({ model: "opus", effort: "high" });
   });
 
   test("is skipped for work that is not a top-level background agent", () => {

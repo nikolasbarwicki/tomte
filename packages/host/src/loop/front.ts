@@ -8,7 +8,6 @@ import {
   type Query,
   type SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import { DEFAULT_EFFORT, DEFAULT_MODEL } from "@claudebot/contract/api";
 import type { MemoryScope } from "@claudebot/contract/events";
 
 import {
@@ -97,6 +96,8 @@ export interface FrontOptions {
   onStopped?: () => void;
   /** The bot's integrations: their MCP servers are connected for the worker and kept off the front, and the user's rules decide each call. Read whenever the session opens. */
   integrations: IntegrationsSource;
+  /** The bot's model and effort, which its background agents run on. */
+  agentSettings: AgentSettings;
   now?: () => number;
 }
 
@@ -128,7 +129,7 @@ export class FrontSession {
   private pendingClose?: string | undefined;
   private readonly now: () => number;
   private readonly canUseTool: CanUseTool;
-  private settings: AgentSettings = { model: DEFAULT_MODEL, effort: DEFAULT_EFFORT };
+  private settings: AgentSettings;
   private readonly log: (line: string) => void;
 
   /** What the session's messages mean to the chat: the tasks it runs and the reports it owes. */
@@ -141,6 +142,7 @@ export class FrontSession {
     this.tasks = o.tasks;
     this.started = o.resume;
     this.now = o.now ?? Date.now;
+    this.settings = o.agentSettings;
     this.log = o.log ?? ((l) => console.error(l));
     const roots = [resolve(o.cwd), resolve(o.files)];
     const rules = (delegate: HostDelegate) =>
@@ -372,7 +374,7 @@ export class FrontSession {
     if (this.pendingClose !== undefined && this.idle()) this.close(this.pendingClose);
   }
 
-  /** Model and effort the background agents run on; they apply to agents defined when the session next opens. */
+  /** Model and effort the background agents run on; the next Agent call gets them (`Observer`), and agent definitions take them when the session next opens. */
   setAgentSettings(patch: Partial<AgentSettings>) {
     this.settings = { ...this.settings, ...patch };
   }

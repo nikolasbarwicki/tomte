@@ -108,6 +108,7 @@ function openFront({
     },
     onEnd: () => {},
     onStopped: () => observer.interruptRunning(),
+    agentSettings: { model: "sonnet", effort: "medium" },
     ...extra,
   });
   return session;

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { setChatMode } from "../bots/index.ts";
+import { getBot, setChatMode } from "../bots/index.ts";
 import { createLoopStore } from "../loop/index.ts";
 import { defined } from "../testing/defined.ts";
 import { writeSession } from "../testing/session-file.ts";
@@ -177,9 +177,23 @@ describe("a double-loop bot's researcher", () => {
     host.loopScript(researchScript);
     await send("research X");
 
-    // The front's Agent call and the task it started.
+    // The task the front's Agent call started; the call itself is not shown, the chat holds only what was said.
     await host.until(() => taskStates(watch.events()).includes("running"));
-    expect(watch.events().some((e) => e.type === "tool" && e.name === "Agent")).toBe(true);
+    expect(watch.events().some((e) => e.type === "tool")).toBe(false);
+    // The front's reply arrives whole, not word by word.
+    expect(
+      watch
+        .events()
+        .filter((e) => e.type === "delta")
+        .map((e) => e.text),
+    ).toEqual(["On it, looking into X."]);
+    // The call runs on what the bot is set to, which the hook writes into it.
+    expect(
+      host.hookResults().find((h) => h.hook === "PreToolUse" && h.input.tool_name === "Agent")
+        ?.response,
+    ).toMatchObject({
+      hookSpecificOutput: { updatedInput: { ...AGENT_CALL, model: "sonnet", effort: "medium" } },
+    });
     expect(watch.events().find((e) => e.type === "task")).toMatchObject({
       taskId: "agent-1",
       agentType: "researcher",
@@ -239,6 +253,28 @@ describe("a double-loop bot's researcher", () => {
     expect(events.filter((e) => e.type === "presence").at(-1)?.state).toBe("idle");
     // The report is not in the front's own session: only the user's message and the scripted ones reached the CLI.
     expect(host.messagesOf(bot)).toHaveLength(1);
+  });
+
+  test("a model and effort picked while the chat is open are saved and reach the next task, without a line in the chat", async () => {
+    const bot = await doubleLoopBot();
+    const watch = await watchEvents(host);
+    expect((await host.ui("/api/model", { model: "opus" })).status).toBe(200);
+    expect((await host.ui("/api/effort", { effort: "high" })).status).toBe(200);
+    expect(getBot(host.dataRoot, bot)).toMatchObject({ model: "opus", effort: "high" });
+
+    host.loopScript(researchScript);
+    await send("research X");
+    await host.until(() => taskStates(watch.events()).includes("running"));
+    expect(
+      host.hookResults().find((h) => h.hook === "PreToolUse" && h.input.tool_name === "Agent")
+        ?.response,
+    ).toMatchObject({ hookSpecificOutput: { updatedInput: { model: "opus", effort: "high" } } });
+    expect(watch.events().find((e) => e.type === "task")).toMatchObject({
+      model: "opus",
+      effort: "high",
+    });
+    expect(watch.events().some((e) => e.type === "info")).toBe(false);
+    watch.stop();
   });
 
   test("the front opens as the front agent with every agent's tools in the session and three agent slots", async () => {

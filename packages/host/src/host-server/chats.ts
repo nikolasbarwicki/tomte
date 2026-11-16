@@ -2,10 +2,12 @@ import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import type { FSWatcher } from "node:fs";
 
-import type { EffortLevel, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type {
   Bot,
+  BotModel,
   BotsEvent,
+  EffortLevel,
   HostEvent,
   Presence,
   RoutinesEvent,
@@ -19,6 +21,7 @@ import {
   listBots,
   newSession,
   recordMessage,
+  setModelSettings,
   touchBot,
   watchFiles,
   type Thread,
@@ -75,7 +78,8 @@ export interface OpenChat {
     eventId?: string,
     answer?: string,
   ): { answered: string } | { queued: string } | { start(): void } | { refused: string };
-  setModel(model: string): Promise<void>;
+  /** Saves the bot's model or effort and applies it: to the running standard session at once, and to the next background task of a double-loop chat. */
+  setModel(model: BotModel): Promise<void>;
   setEffort(effort: EffortLevel): Promise<void>;
   /** Starts a new session; false while a turn is running or a double-loop front is answering. */
   newSession(): boolean;
@@ -358,7 +362,7 @@ export function createChats(deps: ChatsDeps): Chats {
   function onFrontMessage(chat: Chat, m: SDKMessage) {
     // What an agent says and does is shown through its task, never as the front's own words or tool calls.
     const own = fromFront(m);
-    if (own) showMessage(chat, m);
+    if (own) showFrontMessage(chat, m);
     if (m.type === "assistant" && own)
       for (const blk of m.message.content) if (blk.type === "text") chat.frontText += blk.text;
     if ((m.type === "stream_event" || m.type === "assistant") && own) setPresence(chat, "typing");
@@ -390,14 +394,32 @@ export function createChats(deps: ChatsDeps): Chats {
     void drain();
   }
 
-  /** Shows what an SDK message means to the page: a compaction, a tool call, a streamed piece of text. */
-  function showMessage(chat: Chat, m: SDKMessage) {
+  function showCompaction(chat: Chat, m: SDKMessage) {
     if (m.type === "system" && m.subtype === "compact_boundary")
       emit(chat, {
         type: "compacted",
         trigger: m.compact_metadata.trigger,
         preTokens: m.compact_metadata.pre_tokens,
       });
+  }
+
+  /**
+   * What a double-loop chat shows of its front: each reply whole, once written, while the presence line says the bot is typing.
+   * Its tool calls start, steer and stop tasks, which the Tasks tab follows, so the conversation holds only what was said.
+   */
+  function showFrontMessage(chat: Chat, m: SDKMessage) {
+    showCompaction(chat, m);
+    if (m.type !== "assistant") return;
+    for (const blk of m.message.content)
+      if (blk.type === "text" && blk.text.trim()) {
+        emit(chat, { type: "text_start" });
+        emit(chat, { type: "delta", text: blk.text });
+      }
+  }
+
+  /** Shows what an SDK message of a standard turn means to the page: a compaction, a tool call, a streamed piece of text. */
+  function showMessage(chat: Chat, m: SDKMessage) {
+    showCompaction(chat, m);
     if (m.type === "assistant")
       for (const blk of m.message.content)
         if (blk.type === "tool_use")
@@ -726,15 +748,21 @@ export function createChats(deps: ChatsDeps): Chats {
         };
       },
       async setModel(model) {
+        setModelSettings(dataRoot, chat.bot.id, { model });
+        chat.bot.model = model;
         await chat.thread.setModel(model);
-        // The background agents run on the bot's model; their definitions are read when the front next opens.
         chat.front?.setAgentSettings({ model });
-        emit(chat, { type: "info", text: `model → ${model}` });
+        // A double-loop chat shows only the conversation; the setting is about its tasks, and the settings say where it stands.
+        if (!chat.front) emit(chat, { type: "info", text: `model → ${model}` });
+        announceBots();
       },
       async setEffort(effort) {
+        setModelSettings(dataRoot, chat.bot.id, { effort });
+        chat.bot.effort = effort;
         await chat.thread.setEffort(effort);
         chat.front?.setAgentSettings({ effort });
-        emit(chat, { type: "info", text: `effort → ${effort}` });
+        if (!chat.front) emit(chat, { type: "info", text: `effort → ${effort}` });
+        announceBots();
       },
       newSession: () => startSession(chat),
     };
