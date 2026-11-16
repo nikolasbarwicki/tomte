@@ -18,11 +18,11 @@ export type ResolvedCli = {
   needsShell: boolean;
 };
 
+/** musl ships its loader as `/lib/ld-musl-<arch>.so.1`; glibc's lives in `/lib64` on x86_64, so absence of a glibc path proves nothing. */
 export function isMusl(): boolean {
   return (
     process.platform === "linux" &&
-    !existsSync("/lib/ld-linux-x86-64.so.2") &&
-    !existsSync("/lib/ld-linux-aarch64.so.1")
+    existsSync(`/lib/ld-musl-${process.arch === "arm64" ? "aarch64" : "x86_64"}.so.1`)
   );
 }
 
