@@ -252,6 +252,32 @@ const SCHEMA_V15 = (db: Database) => {
     db.run("ALTER TABLE loop_tasks ADD COLUMN after_task TEXT");
 };
 
+// Human waits (ADR-0009): every tool approval, question, takeover and credential approval a bot raises, kept so an open wait survives
+// a restart. `payload` and `actions` are JSON, shaped by `kind`. `run_id` is null for an attended wait; it has no foreign key to
+// `routine_runs`, whose rebuild would otherwise cascade into this table. `outcome` is the action or answer picked, or `timeout`,
+// `expired` or `cancelled`; `note` is the owner's note, or why the host cancelled the wait. `consumed_at` marks an `allow` that the
+// bot's next call with the same input has used.
+const SCHEMA_V16 = `
+CREATE TABLE IF NOT EXISTS human_waits (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('tool_approval','question','takeover','credential')),
+  run_id TEXT,
+  session_id TEXT,
+  payload TEXT NOT NULL,
+  actions TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','answered','expired','cancelled')),
+  outcome TEXT,
+  note TEXT,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  resolved_at INTEGER,
+  consumed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS human_waits_open ON human_waits(bot_id, created_at) WHERE state = 'open';
+CREATE INDEX IF NOT EXISTS human_waits_by_run ON human_waits(run_id) WHERE run_id IS NOT NULL;
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -273,6 +299,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V13,
     SCHEMA_V14,
     SCHEMA_V15,
+    SCHEMA_V16,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

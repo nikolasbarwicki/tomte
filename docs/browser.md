@@ -62,13 +62,13 @@ The Browser tab shows a live picture of the bot's browser with its tabs and curr
 
 When the bot hits something it cannot do (CAPTCHA, 2FA code, passkey, a login it cannot finish), it requests a takeover with a one-line reason.
 
-1. A **Needs you** card appears in the bot's chat with the reason and three buttons: **Open browser**, **I'm done** and **Skip**. The side panel switches to the Browser tab on its own. The card survives closing and reopening the UI.
+1. A **Needs you** card appears in the bot's chat with the reason and the buttons **I'm done** and **Skip**. The side panel switches to the Browser tab on its own. The card survives closing and reopening the UI.
 2. You control the browser from the live view: click and type in the picture.
-3. **I'm done** resumes the bot with a note to take a fresh snapshot. **Skip** tells the bot you did not complete the step, so it can try something else or report back.
+3. **I'm done** resumes the bot with a note to take a fresh snapshot. **Skip** tells the bot you did not complete the step, so it can try something else or report back. The bot receives each outcome as a `<human-wait-result id="…">` message.
 
 You can also **Take control** at any time without a request, then **Hand back**. While you hold control the bot's browser calls are refused with "user has control", and a call already running finishes before you get control. A takeover you start yourself sends the bot no message, unless it was refused a call while you held control, in which case it is told control has returned.
 
-A takeover with no input from you for **30 minutes** ends on its own and counts as **Skip**.
+A takeover with no input from you for **30 minutes** ends on its own and counts as **Skip**. A takeover request is also a stored human wait that expires after 24 hours. Restarting claudebot closes the bot's browser, so an open takeover request is cancelled at the next start and the bot is told its browser session is gone, so it can ask again.
 
 What you type and click during a takeover is sent straight to the browser. It is never logged, never written to the transcript, and never shown to the bot. A password you type in a takeover stays private, but the page you land on afterwards is visible to the bot in its next snapshot.
 
@@ -80,7 +80,7 @@ Open **Credentials** to add website logins: a label, a sign-in URL, a username a
 - The password is stored **only in the host's secret store** (the OS keychain, or the encrypted secrets file in remote mode). It is not in claudebot's database or files, and no screen or API returns it. Editing an entry with an empty password keeps the old one.
 - A bot can list entries by label and site (never secrets) and sign in by naming one with `browser_login`. The password never reaches the model, transcript, tool arguments or tool output.
 - The engine fills the password only on a page matching the entry's origin.
-- **First use needs your approval.** The bot's chat shows an approval card (**Allow** / **Deny**). Allow creates a **grant** for that bot and that entry; the bot is told to call `browser_login` again. The grant is remembered.
+- **First use needs your approval.** The bot's chat shows an approval card (**Allow** / **Deny**). Allow creates a **grant** for that bot and that entry; the bot is told to call `browser_login` again. The grant is remembered. The approval is a stored human wait: it stays open across a claudebot restart, and an answer given afterwards still reaches the bot as a message. It expires after 24 hours without an answer.
 - **Revoke** a grant per entry or in "Access by bot" in the Credentials screen; the bot asks again next time. Deleting an entry removes its password and all its grants.
 - If the vault cannot finish a sign-in (multi-step login, OTP, passkey), the bot is told to request a takeover.
 

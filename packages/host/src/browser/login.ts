@@ -9,8 +9,8 @@ import type { Credentials } from "../credentials/index.ts";
 import type { HostOrigin } from "../platform/config.ts";
 import { isCompiledHost } from "../platform/launch.ts";
 import { credentialSecretName, type SecretStore } from "../platform/secrets.ts";
+import { waitResolvedCard, type WaitingForUser, type Waits } from "../waits/index.ts";
 import { EngineError, type PageData } from "./engine-cli.ts";
-import type { HumanWaits, WaitingForUser } from "./human-waits.ts";
 import type { PageState } from "./page-state.ts";
 import type { BotBrowser } from "./runtime.ts";
 
@@ -71,7 +71,7 @@ type LoginResult =
 export interface BrowserLoginDeps {
   credentials: Credentials;
   secrets: SecretStore;
-  waits: HumanWaits;
+  waits: Waits;
   botName(botId: string): string;
   /** Where the credential plugin reaches the host, e.g. `http://127.0.0.1:PORT/api/browser/credential-exchange`. */
   exchangeUrl(): string;
@@ -127,34 +127,46 @@ export const NEEDS_STEP =
 
 export function createBrowserLogin(deps: BrowserLoginDeps): BrowserLogin {
   const nonces = new LoginNonces(deps.now);
-  const asking = new Set<string>();
+
+  deps.waits.register("credential", {
+    card: (w) => ({
+      type: "wait",
+      id: w.id,
+      kind: "approval",
+      title: `Allow sign-in with "${w.payload.label}"?`,
+      detail: `${w.payload.botName} wants to sign in to ${w.payload.origin} with the stored credential "${w.payload.label}". It never sees the password.`,
+      actions: w.actions,
+    }),
+    closing: waitResolvedCard,
+    subject: (w) => `approval to sign in with "${w.payload.label}"`,
+    answered: (w) =>
+      w.outcome === "allow"
+        ? `The user allowed sign-in with "${w.payload.label}". Call browser_login("${w.payload.label}") again.`
+        : `The user denied sign-in with "${w.payload.label}". Do not ask again; continue without it or report what is blocked.`,
+    onResolve(w) {
+      if (w.outcome !== "allow") return;
+      try {
+        deps.credentials.grant(w.botId, w.payload.entryId);
+      } catch {
+        // The entry was deleted while the card was open.
+      }
+    },
+  });
 
   function ask(botId: string, entry: CredentialEntry): WaitingForUser {
-    const key = `${botId}\n${entry.id}`;
-    const wait = deps.waits.request(botId, {
-      kind: "approval",
-      title: `Allow sign-in with "${entry.label}"?`,
-      detail: `${deps.botName(botId)} wants to sign in to ${entry.origin} with the stored credential "${entry.label}". It never sees the password.`,
+    return deps.waits.open(botId, {
+      kind: "credential",
+      payload: {
+        entryId: entry.id,
+        label: entry.label,
+        origin: entry.origin,
+        botName: deps.botName(botId),
+      },
       actions: [
         { id: "allow", label: "Allow" },
         { id: "deny", label: "Deny" },
       ],
-      onResolve: (outcome) => {
-        asking.delete(key);
-        if (outcome !== "allow") return;
-        try {
-          deps.credentials.grant(botId, entry.id);
-        } catch {
-          // The entry was deleted while the card was open.
-        }
-      },
-      resume: (outcome) =>
-        outcome === "allow"
-          ? `The user allowed sign-in with "${entry.label}". Call browser_login("${entry.label}") again.`
-          : `The user denied sign-in with "${entry.label}". Do not ask again; continue without it or report what is blocked.`,
     });
-    asking.add(key);
-    return wait;
   }
 
   async function signIn(
@@ -230,7 +242,10 @@ export function createBrowserLogin(deps: BrowserLoginDeps): BrowserLogin {
       const [entry] = matches;
       if (!entry) throw new Error("unreachable: exactly one credential matched");
       if (!deps.credentials.hasGrant(botId, entry.id)) {
-        if (asking.has(`${botId}\n${entry.id}`))
+        const asking = deps.waits
+          .list(botId)
+          .some((w) => w.kind === "credential" && w.payload.entryId === entry.id);
+        if (asking)
           return {
             status: "failed",
             reason: `the user has not answered the request to use "${entry.label}" yet; end your turn and wait for their answer`,

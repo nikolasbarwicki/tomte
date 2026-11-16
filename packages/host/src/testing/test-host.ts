@@ -94,6 +94,10 @@ export interface HandoffHost {
   ): void;
   /** From now on, messages the fake CLI receives no longer make it call `ask_user`. */
   stopAsking(): void;
+  /** From now on, every message the fake CLI receives makes it ask the host for permission to run `tool` with `input`, and record the host's answer (see `permissionResults`). */
+  approveOnMessage(tool: string, input?: Record<string, unknown>): void;
+  /** From now on, messages the fake CLI receives no longer ask for a tool permission. */
+  stopApproving(): void;
   /** The text of each `ask_user` or `remember` result the fake CLI got back from the host, oldest first. */
   toolResults(): string[];
   /**
@@ -287,6 +291,9 @@ export async function startHandoffHost(
         }),
       ),
     stopAsking: () => rmSync(join(claudeDir, "ask.json"), { force: true }),
+    approveOnMessage: (tool, input = {}) =>
+      writeFileSync(join(claudeDir, "approve.json"), JSON.stringify({ tool, input })),
+    stopApproving: () => rmSync(join(claudeDir, "approve.json"), { force: true }),
     toolResults: () =>
       lines(join(claudeDir, "tool-results.jsonl")).map(
         (m: { result: { content: { text: string }[] } }) => m.result.content[0]?.text ?? "",

@@ -33,6 +33,13 @@ import type { Handoffs, Mention } from "../handoffs/index.ts";
 import type { HostServersSource } from "../harness/index.ts";
 import { openFront, type FrontSession, type LoopStore } from "../loop/index.ts";
 import type { Executor } from "../routines/index.ts";
+import {
+  canonicalInput,
+  type Wait,
+  type WaitKind,
+  type Waits,
+  type WaitSpec,
+} from "../waits/index.ts";
 import { createRoutineTurns } from "./routine-turns.ts";
 import { hostDelegate, openBotThread, type ThreadHooks } from "./threads.ts";
 import type { Transcript } from "./transcript.ts";
@@ -54,8 +61,8 @@ export interface ChatsDeps extends ThreadEnv {
     acted(botId: string, id: string, answer: string): void;
   };
   transcript: (bot: Bot) => Promise<Transcript>;
-  /** Human-wait cards still open for a bot, replayed into a rebuilt chat. */
-  pendingWaits: (botId: string) => ServerEvent[];
+  /** The human waits: their cards are replayed into a rebuilt chat, and questions and approvals of the bot's sessions are opened and answered through them. */
+  waits: Pick<Waits, "open" | "cards" | "list" | "find" | "answer" | "resolve" | "consumeApproval">;
   routinesEvent(botId: string): RoutinesEvent;
   workEvent(botId: string): WorkEvent;
   broadcast: (e: HostEvent) => void;
@@ -107,6 +114,8 @@ export interface Chats {
   drop(botId: string): Promise<void>;
   /** Answers a question or approval, and acknowledges the external event the question was linked to; false when there is no such question. */
   answer(id: string, value: string): boolean;
+  /** Hands a closed wait to the tool call of a session still waiting for it in this process, with the text the bot would have been sent; false when none waits, and the bot then gets the text as a message. */
+  claim(wait: Wait, text: string): boolean;
   /** The id of the bot's oldest pending question that was asked about this external event, if any. */
   pendingAskFor(botId: string, eventId: string): string | undefined;
   /** Takes back a queued user message; false when it already reached the bot. */
@@ -141,8 +150,8 @@ type Chat = {
   busy: boolean;
   /** True while a routine turn runs, so its questions and approvals are answered without the user. */
   routineTurn: boolean;
-  /** Questions and approvals waiting for the user, by id. A question asked about an external event keeps its id. */
-  pending: Map<string, { resolve: (value: string) => void; eventId?: string }>;
+  /** Tool calls of this session waiting in this process for a human wait, by wait id. A wait nobody awaits is answered with a message. */
+  awaiting: Map<string, (wait: Wait, text: string) => void>;
   /** External events that reached the bot's current session; the only ones a question may claim to be about. */
   delivered: Set<string>;
   /** Integration or bot settings changed during a standard turn; the thread reopens once the turn ends. A front has its own deferred close. */
@@ -217,6 +226,7 @@ export function createChats(deps: ChatsDeps): Chats {
   /** Closes whatever CLI sessions a chat holds: its thread, and the front of a double-loop bot. */
   function closeSessions(chat: Chat, reason: string) {
     chat.thread.close(reason);
+    dropAwaiting(chat);
     chat.front?.close(reason);
     chat.presence = "idle";
     chat.frontText = "";
@@ -454,7 +464,7 @@ export function createChats(deps: ChatsDeps): Chats {
     } finally {
       chat.busy = false;
       chat.routineTurn = false;
-      dropLinkedAsks(chat);
+      dropAwaiting(chat);
       if (chat.configStale) {
         chat.configStale = false;
         chat.thread.close("integrations changed");
@@ -466,34 +476,36 @@ export function createChats(deps: ChatsDeps): Chats {
     return out;
   }
 
-  /** A turn's end leaves no tool call waiting, so a question linked to an event can no longer reach the bot: answering it later must not acknowledge the event. */
-  function dropLinkedAsks(chat: Chat) {
-    for (const [id, p] of chat.pending)
-      if (p.eventId !== undefined) {
-        console.error(`[chat] question ${id} about event ${p.eventId} outlived its turn; dropped`);
-        chat.pending.delete(id);
-        emit(chat, { type: "ask_expired", id });
+  /**
+   * No tool call of the chat waits in this process any more: its turn ended or its session closed. Their waits stay open and an answer reaches the session as a message, except a question linked to an event: it can no longer reach the bot, so it ends and answering it later must not acknowledge the event.
+   */
+  function dropAwaiting(chat: Chat) {
+    if (!chat.awaiting.size) return;
+    chat.awaiting.clear();
+    for (const w of deps.waits.list(chat.bot.id))
+      if (w.kind === "question" && w.payload.eventId !== undefined) {
+        console.error(
+          `[chat] question ${w.id} about event ${w.payload.eventId} outlived its turn; dropped`,
+        );
+        deps.waits.resolve(w.id, "cancelled", "its turn ended");
       }
   }
 
-  /** Resolves a pending question, then closes the external event it was linked to, relaying `said` (the answer when omitted) to its sender, and cancels queued answers to that event, which the question's answer replaces. */
+  /** Answers an open question or approval, then closes the external event a question was linked to, relaying `said` (the answer when omitted) to its sender, and cancels queued answers to that event, which the question's answer replaces. */
   function answerAsk(id: string, value: string, said = value): boolean {
-    for (const c of chats.values()) {
-      const asked = c.pending.get(id);
-      if (!asked) continue;
-      c.pending.delete(id);
-      asked.resolve(value);
-      emit(c, { type: "answered", id, value });
-      if (asked.eventId !== undefined) {
-        const answers = c.inbox.filter(
-          (e): e is UserEntry => e.source === "user" && e.eventId === asked.eventId,
-        );
-        for (const e of answers) cancelEntry(c, e);
-        deps.items.acted(c.bot.id, asked.eventId, said);
-      }
-      return true;
+    const wait = deps.waits.find(id);
+    if (!wait || (wait.kind !== "question" && wait.kind !== "tool_approval")) return false;
+    if (!deps.waits.answer(id, value)) return false;
+    if (wait.kind === "question" && wait.payload.eventId !== undefined) {
+      const chat = chats.get(wait.botId);
+      const answers =
+        chat?.inbox.filter(
+          (e): e is UserEntry => e.source === "user" && e.eventId === wait.payload.eventId,
+        ) ?? [];
+      for (const e of answers) if (chat) cancelEntry(chat, e);
+      deps.items.acted(wait.botId, wait.payload.eventId, said);
     }
-    return false;
+    return true;
   }
 
   function cancelEntry(chat: Chat, entry: UserEntry) {
@@ -501,9 +513,11 @@ export function createChats(deps: ChatsDeps): Chats {
     emit(chat, { type: "dequeued", id: entry.id });
   }
 
-  /** The id of the bot's oldest pending question that was asked about this external event, if any. */
+  /** The id of the bot's oldest open question that was asked about this external event, if any. */
   function pendingAskFor(botId: string, eventId: string): string | undefined {
-    return [...(chats.get(botId)?.pending ?? [])].find(([, p]) => p.eventId === eventId)?.[0];
+    return deps.waits
+      .list(botId)
+      .find((w) => w.kind === "question" && w.payload.eventId === eventId)?.id;
   }
 
   /** The external events in the bot's current session: the rows after the last session marker of a transcript. */
@@ -517,13 +531,16 @@ export function createChats(deps: ChatsDeps): Chats {
     return ids;
   }
 
-  const waitForUser = (chat: Chat, event: (id: string) => ServerEvent, eventId?: string) => {
-    const id = randomUUID();
-    const { promise, resolve } = Promise.withResolvers<string>();
-    chat.pending.set(id, eventId === undefined ? { resolve } : { resolve, eventId });
-    emit(chat, event(id));
+  /** Opens a wait for a tool call of this chat's session and resolves, with the text the bot would have been sent, once the wait closes in this process. */
+  function waitFor<K extends WaitKind>(
+    chat: Chat,
+    spec: WaitSpec<K>,
+  ): Promise<{ wait: Wait; text: string }> {
+    const { promise, resolve } = Promise.withResolvers<{ wait: Wait; text: string }>();
+    const { id } = deps.waits.open(chat.bot.id, spec);
+    chat.awaiting.set(id, (wait, text) => resolve({ wait, text }));
     return promise;
-  };
+  }
 
   /** `chat` is read lazily: the sessions are created while their chat is being built. */
   const sessionHooks = (bot: Bot, chat: () => Chat): ThreadHooks => ({
@@ -541,7 +558,31 @@ export function createChats(deps: ChatsDeps): Chats {
       );
       return undefined;
     },
-    ask: (event, eventId) => waitForUser(chat(), event, eventId),
+    askQuestion: async (q) => {
+      const { wait, text } = await waitFor(chat(), { kind: "question", payload: q, actions: [] });
+      return wait.state === "answered" ? (wait.outcome ?? "") : text;
+    },
+    askApproval: async ({ tool, input, reason }) => {
+      const c = chat();
+      // An earlier `allow` the bot has not used yet covers exactly this call.
+      if (deps.waits.consumeApproval(c.bot.id, tool, input))
+        return { behavior: "allow", updatedInput: input };
+      const { wait, text } = await waitFor(c, {
+        kind: "tool_approval",
+        payload: { tool, input, canonical: canonicalInput(input), reason },
+        actions: [
+          { id: "allow", label: "Allow" },
+          { id: "deny", label: "Deny" },
+        ],
+      });
+      if (wait.outcome === "allow") return { behavior: "allow", updatedInput: input };
+      // A denial the user made keeps its short wording; a cancelled or expired wait says why.
+      const declined = wait.state === "answered";
+      return {
+        behavior: "deny",
+        message: declined ? `user declined${wait.note ? `: ${wait.note}` : ""}` : text,
+      };
+    },
   });
 
   const openThread = (bot: Bot, resume: boolean, chat: () => Chat): Thread =>
@@ -575,7 +616,7 @@ export function createChats(deps: ChatsDeps): Chats {
     { history, hasSession }: Transcript,
     inbox: InboxEntry[] = [],
   ): Chat {
-    history.push(...deps.pendingWaits(bot.id));
+    history.push(...deps.waits.cards(bot.id));
     const routine = routineTurns.headless(bot.id);
     if (routine)
       history.push({
@@ -588,7 +629,7 @@ export function createChats(deps: ChatsDeps): Chats {
       history,
       busy: false,
       routineTurn: false,
-      pending: new Map(),
+      awaiting: new Map(),
       delivered: deliveredIn(history),
       configStale: false,
       inbox,
@@ -800,6 +841,14 @@ export function createChats(deps: ChatsDeps): Chats {
     switchTo,
     drop,
     answer: answerAsk,
+    claim(wait, text) {
+      const chat = chats.get(wait.botId);
+      const waiting = chat?.awaiting.get(wait.id);
+      if (!chat || !waiting) return false;
+      chat.awaiting.delete(wait.id);
+      waiting(wait, text);
+      return true;
+    },
     pendingAskFor,
     cancelQueued(id) {
       for (const c of chats.values()) {

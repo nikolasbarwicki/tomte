@@ -1,12 +1,12 @@
+import { waitResolvedCard, type WaitingForUser, type Waits } from "../waits/index.ts";
 import { EngineError } from "./engine-cli.ts";
-import type { HumanWaits, WaitingForUser } from "./human-waits.ts";
 import type { BrowserRuntimes } from "./runtime.ts";
 
 export type ControlHolder = "bot" | "draining" | "user";
 
 export interface TakeoverOptions {
   runtimes: BrowserRuntimes;
-  waits: HumanWaits;
+  waits: Waits;
   /** Sends a host message into the bot's session (queued while it is busy). */
   deliver(botId: string, text: string): void;
   /** Control ends after this long without input. Default 30 minutes. */
@@ -36,6 +36,25 @@ export class Takeover {
 
   constructor(private o: TakeoverOptions) {
     this.inactivityMs = o.inactivityMs ?? DEFAULT_INACTIVITY_MS;
+    o.waits.register("takeover", {
+      card: (w) => ({
+        type: "wait",
+        id: w.id,
+        kind: "takeover",
+        title: "Needs you",
+        detail: w.payload.reason,
+        actions: w.actions,
+      }),
+      closing: waitResolvedCard,
+      subject: (w) => `takeover request "${w.payload.reason}"`,
+      answered: (w) =>
+        w.outcome === "done"
+          ? `The user finished the takeover. The page has probably changed; take a fresh snapshot before continuing.`
+          : w.outcome === "timeout"
+            ? `The takeover ended after 30 minutes without input and counts as skipped: the user did not handle "${w.payload.reason}". Take a fresh snapshot, then continue without it or report what is blocked.`
+            : `The user skipped the takeover: they did not handle "${w.payload.reason}". Take a fresh snapshot, then continue without it or report what is blocked.`,
+      onResolve: (w) => this.release(w.botId, false),
+    });
   }
 
   holder(botId: string): ControlHolder {
@@ -56,21 +75,13 @@ export class Takeover {
   /** The bot asks for help: the user gets control at once and a card with "I'm done" and "Skip". Called from inside a bot call, so it does not wait for the bot's calls to drain. */
   request(botId: string, reason: string): WaitingForUser {
     const browser = this.o.runtimes.forBot(botId);
-    const result = this.o.waits.request(botId, {
+    const result = this.o.waits.open(botId, {
       kind: "takeover",
-      title: "Needs you",
-      detail: reason,
+      payload: { reason },
       actions: [
         { id: "done", label: "I'm done" },
         { id: "skip", label: "Skip" },
       ],
-      onResolve: () => this.release(botId, false),
-      resume: (outcome) =>
-        outcome === "done"
-          ? `The user finished the takeover. The page has probably changed; take a fresh snapshot before continuing.`
-          : outcome === "timeout"
-            ? `The takeover ended after 30 minutes without input and counts as skipped: the user did not handle "${reason}". Take a fresh snapshot, then continue without it or report what is blocked.`
-            : `The user skipped the takeover: they did not handle "${reason}". Take a fresh snapshot, then continue without it or report what is blocked.`,
     });
     browser.holdControl();
     this.begin(botId, { phase: "user", waitId: result.id });
@@ -102,7 +113,7 @@ export class Takeover {
   handBack(botId: string): void {
     const c = this.controls.get(botId);
     if (!c) return;
-    if (c.waitId && this.o.waits.resolve(c.waitId, "done")) return;
+    if (c.waitId && this.o.waits.answer(c.waitId, "done")) return;
     this.release(botId, true);
   }
 
