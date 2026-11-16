@@ -51,6 +51,15 @@ function reject(res: ServerResponse, status: number, error: string) {
 /** The event stream every page and the desktop app's banner keep open: it says nothing about the owner being here, so it is never presence. */
 const EVENT_STREAM_PATH = "/api/events";
 
+/** Records the owner's presence. A failed write is logged and never fails the request it came with. */
+function touchPresence(presence: Pick<Presence, "touch">) {
+  try {
+    presence.touch();
+  } catch (e) {
+    console.error(`[presence] recording the owner's action failed: ${(e as Error).message}`);
+  }
+}
+
 /**
  * The one check every request to the client listener passes before it is routed, so a rejected request never
  * reaches a handler. In order: the Host names this host (403); a mutating request's Origin is the public URL's or
@@ -61,7 +70,7 @@ const EVENT_STREAM_PATH = "/api/events";
  */
 export function withBoundary(
   origin: HostOrigin,
-  devices: DeviceAuth,
+  devices: Pick<DeviceAuth, "authenticate">,
   sessions: DeviceSessions,
   presence: Pick<Presence, "touch">,
   next: RequestListener,
@@ -80,7 +89,7 @@ export function withBoundary(
       const token = presentedToken(req);
       const deviceId = token === undefined ? undefined : devices.authenticate(token);
       if (deviceId === undefined) return reject(res, 401, "pair this device first");
-      if (!(method === "GET" && path === EVENT_STREAM_PATH)) presence.touch();
+      if (!(method === "GET" && path === EVENT_STREAM_PATH)) touchPresence(presence);
       sessions.open(deviceId, req, res);
     }
     next(req, res);
