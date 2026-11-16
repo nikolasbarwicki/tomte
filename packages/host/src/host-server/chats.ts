@@ -73,23 +73,16 @@ export interface ChatsDeps extends ThreadEnv {
   broadcast: (e: HostEvent) => void;
 }
 
+/** What happened to a message the user sent, as the web UI and every channel see it. */
+export type SendOutcome =
+  | { outcome: "answered"; ask: string }
+  | { outcome: "queued"; queued: string }
+  | { outcome: "sent" }
+  | { outcome: "refused"; reason: string };
+
 /** The chat the page shows, with what the user can do in it. */
 export interface OpenChat {
   bot: Bot;
-  /**
-   * Gives the user's message to the bot, or resolves a question it asked, and returns what happened. With `eventId` the message answers that needs-you item, and the host decides where the answer goes:
-   * - `answered`: the bot has a pending question linked to this item; it receives `answer` (the message when omitted) as the question's answer, and the item is closed as acted. No chat message is created, and queued answers to the item are cancelled.
-   * - `queued`: the bot is busy; the item is closed only when the entry is delivered, never on queueing.
-   * - `start`: shows the message and runs the turn; the item is closed as it starts. A double-loop bot always answers `start` (its front takes the message even mid-turn) and never `queued`.
-   * - `refused`: the item is not open for this bot any more, or an answer to it is already queued.
-   */
-  send(
-    text: string,
-    shown: string,
-    mentions: Mention[],
-    eventId?: string,
-    answer?: string,
-  ): { answered: string } | { queued: string } | { start(): void } | { refused: string };
   /** Saves the bot's model or effort and applies it: to the running standard session at once, and to the next background task of a double-loop chat. */
   setModel(model: BotModel): Promise<void>;
   setEffort(effort: EffortLevel): Promise<void>;
@@ -102,6 +95,23 @@ export interface Chats {
   execute: Executor;
   /** Sends a host message into a bot's session: queued while the bot is busy, and the session reopens if it is closed. A double-loop bot's front takes it at once, as a synthetic message. */
   deliver(botId: string, text: string): Promise<void>;
+  /**
+   * Gives the user's message to a bot, shown or not, or resolves a question it asked, and returns what happened. The web route and every channel use this one function.
+   * With `eventId` the message answers that needs-you item, and the host decides where the answer goes:
+   * - `answered`: the bot has a pending question linked to this item; it receives `answer` (the message when omitted) as the question's answer, and the item is closed as acted. No chat message is created, and queued answers to the item are cancelled.
+   * - `queued`: the bot is busy; the item is closed only when the entry is delivered, never on queueing.
+   * - `sent`: the message is shown and the turn runs; the item is closed as it starts. A double-loop bot always answers `sent` (its front takes the message even mid-turn) and never `queued`.
+   * - `refused`: the bot does not exist, the item is not open for this bot any more, or an answer to it is already queued.
+   * A bot that has no chat open gets one for the message, released again when nothing is left running in it.
+   */
+  send(
+    botId: string,
+    text: string,
+    shown: string,
+    mentions: Mention[],
+    eventId?: string,
+    answer?: string,
+  ): Promise<SendOutcome>;
   /** Shows an event in a bot's chat if it has one. */
   emitTo(botId: string, e: ServerEvent): void;
   /** Gives the external-event rows already in a bot's chat their new state, shown live when the chat is. */
@@ -728,49 +738,73 @@ export function createChats(deps: ChatsDeps): Chats {
     return true;
   }
 
+  /** Gives a message to a bot's chat, whether or not the page shows it; see `Chats.send`. */
+  function sendIn(
+    chat: Chat,
+    text: string,
+    shown: string,
+    mentions: Mention[],
+    eventId?: string,
+    answer?: string,
+  ): SendOutcome {
+    if (eventId !== undefined) {
+      if (!deps.items.isOpen(chat.bot.id, eventId))
+        return { outcome: "refused", reason: "that item is already handled" };
+      const ask = pendingAskFor(chat.bot.id, eventId);
+      if (ask !== undefined && answerAsk(ask, answer ?? text, answer ?? shown))
+        return { outcome: "answered", ask };
+      if (chat.inbox.some((e) => e.source === "user" && e.eventId === eventId))
+        return { outcome: "refused", reason: "an answer to that item is already queued" };
+    }
+    if (chat.front) {
+      userSaid(chat, shown, mentions);
+      pushToFront(chat, text, false);
+      if (eventId !== undefined) deps.items.acted(chat.bot.id, eventId, answer ?? shown);
+      return { outcome: "sent" };
+    }
+    if (chat.busy || headless(chat.bot.id)) {
+      const entry: UserEntry = {
+        source: "user",
+        id: randomUUID(),
+        text,
+        shown,
+        mentions,
+        ...(eventId !== undefined && { eventId, said: answer ?? shown }),
+      };
+      chat.inbox.push(entry);
+      emit(chat, queuedEvent(entry));
+      return { outcome: "queued", queued: entry.id };
+    }
+    userSaid(chat, shown, mentions);
+    void turn(chat, text);
+    if (eventId !== undefined) deps.items.acted(chat.bot.id, eventId, answer ?? shown);
+    return { outcome: "sent" };
+  }
+
+  async function send(
+    botId: string,
+    text: string,
+    shown: string,
+    mentions: Mention[],
+    eventId?: string,
+    answer?: string,
+  ): Promise<SendOutcome> {
+    const bot = getBot(dataRoot, botId);
+    if (!bot) return { outcome: "refused", reason: "no such bot" };
+    let chat = chats.get(botId);
+    if (!chat) {
+      const t = await deps.transcript(bot);
+      chat = chats.get(botId) ?? createChat(bot, t);
+    }
+    const outcome = sendIn(chat, text, shown, mentions, eventId, answer);
+    // A chat opened only for this message is closed again unless the message started something in it.
+    release(chat);
+    return outcome;
+  }
+
   function openChat(chat: Chat): OpenChat {
     return {
       bot: chat.bot,
-      send(text, shown, mentions, eventId, answer) {
-        if (eventId !== undefined) {
-          if (!deps.items.isOpen(chat.bot.id, eventId))
-            return { refused: "that item is already handled" };
-          const ask = pendingAskFor(chat.bot.id, eventId);
-          if (ask !== undefined && answerAsk(ask, answer ?? text, answer ?? shown))
-            return { answered: ask };
-          if (chat.inbox.some((e) => e.source === "user" && e.eventId === eventId))
-            return { refused: "an answer to that item is already queued" };
-        }
-        if (chat.front) {
-          userSaid(chat, shown, mentions);
-          return {
-            start() {
-              pushToFront(chat, text, false);
-              if (eventId !== undefined) deps.items.acted(chat.bot.id, eventId, answer ?? shown);
-            },
-          };
-        }
-        if (chat.busy || headless(chat.bot.id)) {
-          const entry: UserEntry = {
-            source: "user",
-            id: randomUUID(),
-            text,
-            shown,
-            mentions,
-            ...(eventId !== undefined && { eventId, said: answer ?? shown }),
-          };
-          chat.inbox.push(entry);
-          emit(chat, queuedEvent(entry));
-          return { queued: entry.id };
-        }
-        userSaid(chat, shown, mentions);
-        return {
-          start() {
-            void turn(chat, text);
-            if (eventId !== undefined) deps.items.acted(chat.bot.id, eventId, answer ?? shown);
-          },
-        };
-      },
       async setModel(model) {
         setModelSettings(dataRoot, chat.bot.id, { model });
         chat.bot.model = model;
@@ -795,6 +829,7 @@ export function createChats(deps: ChatsDeps): Chats {
   return {
     execute: routineTurns.execute,
     deliver,
+    send,
     emitTo(botId, e) {
       const chat = chats.get(botId);
       if (chat) emit(chat, e);

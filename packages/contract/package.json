@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./item-actions": "./src/item-actions.ts",
     "./events": "./src/events.ts",
     "./avatars": "./src/avatars.ts",
     "./api": "./src/api.ts",
@@ -13,5 +14,8 @@
   },
   "dependencies": {
     "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4"
   }
 }

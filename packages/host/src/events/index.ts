@@ -5,11 +5,11 @@ import type { Relay as RelayStatus, WorkEvent } from "@claudebot/contract/events
 
 import type { SecretStore } from "../platform/secrets.ts";
 import { createRelay, MAX_RELAY_ANSWER, type RelayOptions } from "./relay.ts";
-import { createEventStore, type ExternalRow, type OpenItems } from "./store.ts";
+import { createEventStore, type EventItem, type ExternalRow, type OpenItems } from "./store.ts";
 import { createEventTokens } from "./token.ts";
 import { splitWrapped, wrapExternalEvent } from "./wrap.ts";
 
-export type { ExternalRow, OpenItems };
+export type { EventItem, ExternalRow, OpenItems };
 
 /** The events route's path for a bot: `POST` here with the bot's event token posts an external event to it. */
 export const eventsPath = (botId: string) => `/api/bots/${botId}/events`;
@@ -44,6 +44,11 @@ export interface EventsOptions {
    * by the user or by `resolves`. Not called for progress, archive or a duplicate.
    */
   onNeedsYou: (botId: string) => void;
+  /**
+   * Called once for each newly stored event that is not `progress` and not a duplicate, as a needs-you item that is now open: after it is
+   * stored and its `resolves` were applied, before it is delivered to the bot. A channel sends it as a card.
+   */
+  onOpened: (item: EventItem) => void;
   /** The clock for event times, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
   /** Where the operator's relay configuration is and whether the host runs in remote mode (ADR-0008). */
@@ -80,6 +85,10 @@ export interface Events {
   stop(): Promise<void>;
   /** True when the bot has needs-you item `id` in state `open`: not closed, resolved, a `progress` event or another bot's. */
   isOpen(botId: string, id: string): boolean;
+  /** An external event that is not `progress` by id, in any state, with everything needed to show it; `undefined` for an unknown id or a `progress` event. */
+  item(id: string): EventItem | undefined;
+  /** Every open needs-you item of every bot, oldest first. */
+  openItems(): EventItem[];
   /** What each bot has open (count, source labels newest first, arrival time of the newest); a bot with none is absent. One query over the open rows only. */
   needsYou(): ReadonlyMap<string, OpenItems>;
   /** A bot's event sources with their work snapshots and recent events: what the page that shows the bot is sent. */
@@ -154,7 +163,11 @@ export function createEvents(o: EventsOptions): Events {
       if (posted.duplicate) return posted;
       o.onChange(botId, rowsOf(botId, resolved));
       if (event.kind !== "progress" || resolved.length > 0) o.onNeedsYou(botId);
-      if (event.kind !== "progress") o.deliver(botId, wrapExternalEvent(posted.id, event));
+      if (event.kind !== "progress") {
+        const item = store.item(posted.id);
+        if (item) o.onOpened(item);
+        o.deliver(botId, wrapExternalEvent(posted.id, event));
+      }
       return posted;
     },
     answer(botId, id, said) {
@@ -196,6 +209,8 @@ export function createEvents(o: EventsOptions): Events {
       await Promise.all(inflight);
     },
     isOpen: store.isOpen,
+    item: (id) => store.item(id),
+    openItems: store.openItems,
     needsYou: store.needsYou,
     work: (botId) => ({ type: "work", botId, sources: store.sources(botId) }),
     archive(botId, sourceId) {

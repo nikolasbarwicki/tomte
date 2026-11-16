@@ -25,6 +25,7 @@ const routine = (schedule: Schedule, over: Partial<Routine> = {}): Routine => ({
   schedule,
   active: true,
   catchUp: false,
+  notifyResult: false,
   createdAt: 0,
   updatedAt: 0,
   nextRunAt: null,
@@ -101,11 +102,14 @@ test("a new routine's form starts as daily 09:00 in the browser zone, once-time 
     expr: "0 9 * * *",
     tz: browserZone(),
     catchUp: true,
+    notifyResult: false,
   });
 });
 
 test("an edited routine's form starts from its own schedule", () => {
-  const weekly = formFromRoutine(routine(cron("45 17 * * 3"), { catchUp: true }));
+  const weekly = formFromRoutine(
+    routine(cron("45 17 * * 3"), { catchUp: true, notifyResult: true }),
+  );
   expect(weekly).toMatchObject({
     name: "Digest",
     instruction: "Summarise",
@@ -114,10 +118,17 @@ test("an edited routine's form starts from its own schedule", () => {
     time: "17:45",
     tz: TZ,
     catchUp: true,
+    notifyResult: true,
   });
 
   const hourly = formFromRoutine(routine(cron("5 * * * *")));
-  expect(hourly).toMatchObject({ kind: "hourly", minute: 5, time: "09:00", catchUp: false });
+  expect(hourly).toMatchObject({
+    kind: "hourly",
+    minute: 5,
+    time: "09:00",
+    catchUp: false,
+    notifyResult: false,
+  });
 
   const custom = formFromRoutine(routine(cron("*/5 * * * *")));
   expect(custom).toMatchObject({ kind: "custom", expr: "*/5 * * * *", tz: TZ });
@@ -139,6 +150,7 @@ test("presetFromForm reads only the fields its kind uses", () => {
     expr: "1 2 3 4 5",
     tz: TZ,
     catchUp: true,
+    notifyResult: false,
   };
   expect(presetFromForm({ ...base, kind: "hourly" })).toEqual({ kind: "hourly", minute: 7 });
   expect(presetFromForm({ ...base, kind: "daily" })).toEqual({ kind: "daily", time: "10:15" });

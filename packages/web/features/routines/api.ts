@@ -7,6 +7,7 @@ export type RoutineFields = {
   instruction: string;
   schedule: Schedule;
   catchUp: boolean;
+  notifyResult: boolean;
 };
 
 export const createRoutine = (botId: string, fields: RoutineFields) =>

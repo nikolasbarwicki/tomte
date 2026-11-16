@@ -93,6 +93,8 @@ export interface Waits {
   cancelBot(botId: string, reason: string): number;
   /** The open wait with this id. */
   find(id: string): Wait | undefined;
+  /** The wait with this id in any state, open or closed; undefined once its bot is deleted. A channel reads a closed wait to edit its card. */
+  get(id: string): Wait | undefined;
   /** Open waits, oldest first; every bot's when `botId` is omitted. */
   list(botId?: string): Wait[];
   /** Told when a wait opens and when it closes. */
@@ -148,6 +150,20 @@ export function waitResolvedCard(w: Wait): ServerEvent {
     w.actions.find((a) => a.id === w.outcome)?.label ??
     (w.outcome === "cancelled" ? "Cancelled" : w.outcome === "expired" ? "Expired" : "Timed out");
   return { type: "wait_resolved", id: w.id, label };
+}
+
+/** What a wait asks, in a few words: the heading of a message about it (a notice that its park expired). */
+export function waitTitle(w: Wait): string {
+  switch (w.kind) {
+    case "tool_approval":
+      return `approval for ${w.payload.tool}`;
+    case "question":
+      return `question ${quote(w.payload.question)}`;
+    case "takeover":
+      return "browser takeover";
+    case "credential":
+      return `sign-in with "${w.payload.label}"`;
+  }
 }
 
 const quote = (s: string) => `"${s.length > 120 ? `${s.slice(0, 119)}…` : s}"`;
@@ -310,6 +326,7 @@ export function createWaits(o: WaitsOptions): Waits {
         waits.map((w) => w.id),
         now(),
       ),
+    get: (id) => store.get(id),
     find(id) {
       const w = store.get(id);
       return w?.state === "open" ? w : undefined;
