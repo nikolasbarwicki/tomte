@@ -8,8 +8,9 @@ import type { Browser } from "../../browser/index.ts";
 import type { Credentials } from "../../credentials/index.ts";
 import type { DeviceAuth } from "../../device-auth/index.ts";
 import type { Events as ExternalEvents } from "../../events/index.ts";
-import type { ResolvedCli } from "../../harness/index.ts";
+import type { ClaudeAccess, ResolvedCli } from "../../harness/index.ts";
 import type { Integrations } from "../../integrations/index.ts";
+import type { HostConfig } from "../../platform/config.ts";
 import type { Routines } from "../../routines/index.ts";
 import type { Chats, OpenChat } from "../chats.ts";
 import type { DeviceSessions } from "../device-sessions.ts";
@@ -26,6 +27,10 @@ export interface ApiContext {
   /** True while the bot has background tasks running or queued; changing its chat mode is refused then. */
   hasActiveTasks: (botId: string) => boolean;
   cli: ResolvedCli;
+  /** The Claude CLI's environment and sign-in. */
+  claude: ClaudeAccess;
+  /** How this host was started: its mode and secrets backend name the sign-in command. */
+  config: HostConfig;
   db: Database;
   chats: Chats;
   /** Called after a bot is created, so sessions open before it pick up what depends on the set of bots. */

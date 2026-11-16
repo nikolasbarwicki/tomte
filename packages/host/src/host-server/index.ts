@@ -355,6 +355,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     hasActiveTasks: (botId) => loop.hasActive(botId),
     dataRoot,
     cli,
+    claude,
+    config: o.config,
     db,
     chats,
     browser,

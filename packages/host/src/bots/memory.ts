@@ -8,6 +8,9 @@ export type MemoryPaths = Record<MemoryScope, string>;
 /** Facts and preferences about the user; shared by every bot in every workspace. Lives in the data root. */
 export const userMemoryPath = (dataRoot: string) => join(dataRoot, "memory.md");
 
+/** What the user tells every bot, in every session's system prompt. Lives in the data root. */
+export const instructionsPath = (dataRoot: string) => join(dataRoot, "instructions.md");
+
 export function readMemory(path: string): string {
   return existsSync(path) ? readFileSync(path, "utf8") : "";
 }

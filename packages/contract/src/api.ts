@@ -2,6 +2,7 @@
 // an event stream (`Bot`, `Routine`, `Integration`, ...) lives in events.ts, whichever endpoint returns it.
 import { z } from "zod";
 
+import { BotAvatar } from "./avatars.ts";
 import { EventSource, ExternalEventKind, WorkSnapshot } from "./events.ts";
 
 /** Whether bots can get a browser on this host, and why not. */
@@ -164,3 +165,58 @@ export type EventItemRequest = z.infer<typeof EventItemRequest>;
 /** How an external process posts to one bot: the events route's URL and the bot's event token. */
 export const EventAccess = z.object({ url: z.string(), token: z.string() });
 export type EventAccess = z.infer<typeof EventAccess>;
+
+/** The `/api/bots/profile` request: a bot's name, purpose and avatar, all replaced at once. */
+export const BotProfileUpdate = z.object({
+  botId: z.string().min(1),
+  name: z.string().trim().min(1, "name required").max(100),
+  purpose: z.string().trim().max(2000),
+  ...BotAvatar.shape,
+});
+export type BotProfileUpdate = z.infer<typeof BotProfileUpdate>;
+
+/** The largest memory file or instructions text the UI may save, in characters. */
+export const MAX_TEXT_DOCUMENT = 32 * 1024;
+
+/**
+ * The `/api/memory/update` request: the whole new text of one memory file. `user` is the memory every bot shares, `bot`
+ * the named bot's own. The new text reaches the page as a `memory` event.
+ */
+export const MemoryUpdate = z.discriminatedUnion("scope", [
+  z.object({ scope: z.literal("user"), text: z.string().max(MAX_TEXT_DOCUMENT) }),
+  z.object({
+    scope: z.literal("bot"),
+    botId: z.string().min(1),
+    text: z.string().max(MAX_TEXT_DOCUMENT),
+  }),
+]);
+export type MemoryUpdate = z.infer<typeof MemoryUpdate>;
+
+/** The `/api/instructions` response and `/api/instructions/update` request: what the user tells every bot, in every session's system prompt. */
+export const Instructions = z.object({ text: z.string().max(MAX_TEXT_DOCUMENT) });
+export type Instructions = z.infer<typeof Instructions>;
+
+/** Whether the host can reach a model provider: `connected`, `disconnected`, or `unknown` when it could not tell. */
+export const ProviderStatus = z.enum(["connected", "disconnected", "unknown"]);
+export type ProviderStatus = z.infer<typeof ProviderStatus>;
+
+/**
+ * A model provider the host runs bots on. Claude is the only one today; the list is how the UI is told about more.
+ * `access` is how the host reaches it (`subscription`: a sign-in of the provider's CLI). `connect` is the one step that
+ * signs the host in, shown while it is not connected. `models` are the ids a bot may pick.
+ */
+export const ModelProvider = z.object({
+  id: z.string(),
+  name: z.string(),
+  vendor: z.string(),
+  access: z.enum(["subscription", "api_key"]),
+  status: ProviderStatus,
+  detail: z.string(),
+  connect: z.string(),
+  models: z.array(z.string()),
+});
+export type ModelProvider = z.infer<typeof ModelProvider>;
+
+/** The `/api/providers` response. */
+export const ModelProviders = z.object({ providers: z.array(ModelProvider) });
+export type ModelProviders = z.infer<typeof ModelProviders>;
