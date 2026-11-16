@@ -197,20 +197,26 @@ function RunRow({ run }: { run: RoutineRun }) {
   const used = runUsage(run);
   return (
     <Collapsible disabled={!hasBody}>
-      <CollapsibleTrigger className="group/run hover:bg-muted/60 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-xs disabled:hover:bg-transparent">
+      <CollapsibleTrigger className="group/run hover:bg-muted/60 flex w-full items-start gap-2 rounded-md px-1 py-1 text-left text-xs disabled:hover:bg-transparent">
         <ChevronRightIcon
           className={cn(
-            "size-3 shrink-0 text-muted-foreground transition-transform group-data-panel-open/run:rotate-90",
+            "mt-0.5 size-3 shrink-0 text-muted-foreground transition-transform group-data-panel-open/run:rotate-90",
             !hasBody && "invisible",
           )}
         />
         <RunBadge status={run.status} />
-        <span className="text-muted-foreground truncate">
-          {[
-            dateTime(run.startedAt),
-            run.trigger === "manual" ? "test run" : "scheduled",
-            ...used,
-          ].join(" · ")}
+        <span className="grid min-w-0 gap-0.5">
+          <span className="text-muted-foreground truncate">
+            {dateTime(run.startedAt)} · {run.trigger === "manual" ? "test run" : "scheduled"}
+          </span>
+          {used.length > 0 && (
+            <span
+              className="text-muted-foreground/80 text-[11px]"
+              title="Estimated at API prices; not money spent on a Claude plan"
+            >
+              {used.join(" · ")}
+            </span>
+          )}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent>
