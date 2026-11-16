@@ -33,6 +33,9 @@ export {
   type SandboxStatus,
 };
 
+/** Looked at three times, so a wall gets about six seconds to clear: well under the 30 s lane wait. */
+const DEFAULT_WALL_PAUSE_MS = 2_000;
+
 export interface BrowserOptions {
   /** The human waits the takeover and the credential approval raise. */
   waits: Waits;
@@ -125,6 +128,7 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
     tokens: o.tokens,
     takeover,
     login,
+    wallPauseMs: o.runtime?.wallPauseMs ?? DEFAULT_WALL_PAUSE_MS,
     host: o.agent,
     isEnabled: (botId) => enabled(botId) && sandboxOf().status === "available",
     runtimes,

@@ -111,7 +111,11 @@ const makeServer = () =>
     cli: { path: FAKE_CLAUDE, source: "CLAUDE_PATH", needsShell: false },
     db,
     secrets: memorySecrets(),
-    browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir }, laneWaitMs: serverOptions.laneWaitMs },
+    browser: {
+      env: { FAKE_AGENT_BROWSER_DIR: fakeDir },
+      laneWaitMs: serverOptions.laneWaitMs,
+      wallPauseMs: 0,
+    },
     now: () => clock,
   });
 
@@ -187,6 +191,12 @@ const runs = async (id: string) =>
     status: string;
   }[];
 
+const untilRun = async (routineId: string, status: string) => {
+  for (let i = 0; i < 160 && (await runs(routineId))[0]?.status !== status; i++)
+    await Bun.sleep(25);
+  expect((await runs(routineId))[0]?.status).toBe(status);
+};
+
 describe.each([
   ["chat-hosted", true],
   ["headless", false],
@@ -242,11 +252,6 @@ describe.each([
     await untilRun(routineId, "waiting");
     return { ...bot, routineId, wait };
   }
-  const untilRun = async (routineId: string, status: string) => {
-    for (let i = 0; i < 160 && (await runs(routineId))[0]?.status !== status; i++)
-      await Bun.sleep(25);
-    expect((await runs(routineId))[0]?.status).toBe(status);
-  };
 
   test("parks the run and holds the browser; a hand-back resumes the same session and the run succeeds", async () => {
     const { botId, call, connect, routineId } = await park();
@@ -317,11 +322,6 @@ describe.each([
   ["chat-hosted", true],
   ["headless", false],
 ])("%s routine sign-in", (_label, openChat) => {
-  const untilRun = async (routineId: string, status: string) => {
-    for (let i = 0; i < 160 && (await runs(routineId))[0]?.status !== status; i++)
-      await Bun.sleep(25);
-    expect((await runs(routineId))[0]?.status).toBe(status);
-  };
   const loginCalls = () =>
     (existsSync(join(fakeDir, "calls.jsonl"))
       ? readFileSync(join(fakeDir, "calls.jsonl"), "utf8").trim().split("\n").filter(Boolean)
@@ -436,6 +436,21 @@ describe.each([
     expect(loginCalls()).toHaveLength(0);
   });
 
+  test("a sign-in page says browser_login will ask while the entry is ungranted, and names the entry once Allow granted it", async () => {
+    const { call, routineId, entry } = await start();
+    const ungranted = await call("browser_open", { url: SIGN_IN });
+    expect(ungranted.text).toContain("will ask the owner");
+    expect(ungranted.text).toContain('"Example"');
+
+    await grant(call, routineId, entry);
+    await runAgain(routineId);
+    const granted = await call("browser_open", { url: SIGN_IN });
+    expect(granted.text).toContain('call browser_login with entry "Example"');
+    expect(granted.text).not.toContain("will ask the owner");
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "succeeded");
+  });
+
   test("a sign-in that needs a code tells the bot to request a takeover, which parks the run", async () => {
     const { call, routineId, entry } = await start(loginScript(`${SITE}/otp`));
     await grant(call, routineId, entry);
@@ -511,6 +526,116 @@ describe("login wall in a routine", () => {
       status: "succeeded",
       output: "Login wall at example.com; could not check the dashboard.",
     });
+  });
+});
+
+const WALL_URL = "https://walls.test/";
+const SIGN_IN_URL = "https://walls.test/login";
+const CLOUDFLARE =
+  '- heading "walls.test" [level=1]\n- paragraph: Performing security verification\n- paragraph: This website uses a security service to protect against malicious bots.';
+const WALL_SIGN_IN =
+  '- heading "Sign in" [level=1]\n- textbox "Username" [ref=e1]\n- textbox "Password" [ref=e2]\n- button "Sign in" [ref=e3]';
+const OPEN_ROLES = '- heading "Open roles" [level=1]\n- link "Backend engineer" [ref=e1]';
+const NOTE = "Note from the host";
+
+const snapshotCalls = () =>
+  readFileSync(join(fakeDir, "calls.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l) as { argv: string[] })
+    .filter((c) => c.argv.includes("snapshot"));
+
+describe.each([
+  ["chat-hosted", true],
+  ["headless", false],
+])("%s routine page walls", (_label, openChat) => {
+  /** A routine whose turn is held open, so the bot's tools run inside the run. */
+  async function inRoutine(script: object) {
+    await startServer(script);
+    const bot = await setup(openChat);
+    writeFileSync(join(claudeDir, "hold"), "");
+    const routineId = await startRoutine(bot.botId);
+    await until(() => messages().length === 1);
+    return { ...bot, routineId };
+  }
+
+  test("a bot wall that clears while it is waited out returns the clear page with no note", async () => {
+    const { call } = await inRoutine({
+      pages: {
+        [WALL_URL]: {
+          title: "Just a moment...",
+          snapshot: CLOUDFLARE,
+          later: [{ title: "Jobs", snapshot: OPEN_ROLES }],
+        },
+      },
+    });
+    const opened = await call("browser_open", { url: WALL_URL });
+    expect(opened.isError).toBe(false);
+    expect(opened.text).toContain("Open roles");
+    expect(opened.text).toContain("Title: Jobs");
+    expect(opened.text).not.toContain(NOTE);
+    expect(opened.text).not.toContain("security verification");
+    expect(snapshotCalls()).toHaveLength(2);
+  });
+
+  test("a bot wall that stays comes back with the vendor note, and a takeover request then parks the run", async () => {
+    const { call, routineId } = await inRoutine({
+      pages: { [WALL_URL]: { title: "Just a moment...", snapshot: CLOUDFLARE } },
+    });
+    const opened = await call("browser_open", { url: WALL_URL });
+    expect(opened.isError).toBe(false);
+    expect(opened.text).toContain(NOTE);
+    expect(opened.text).toContain("Cloudflare bot protection");
+    expect(opened.text).toContain("browser_request_takeover");
+    expect(snapshotCalls().length).toBeGreaterThan(1);
+    // Nothing started the takeover by itself.
+    expect((await runs(routineId))[0]?.status).toBe("running");
+
+    const requested = await call("browser_request_takeover", { reason: "Cloudflare check" });
+    expect(JSON.parse(requested.text).status).toBe("waiting_for_user");
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "waiting");
+  });
+
+  test("a sign-in page with no stored credential is a source unavailable: no park, the run succeeds with the bot's report", async () => {
+    const report = "Unavailable: walls.test (login required)";
+    writeFileSync(join(claudeDir, "result.txt"), report);
+    const { call, routineId } = await inRoutine({
+      pages: { [SIGN_IN_URL]: { title: "Sign in", snapshot: WALL_SIGN_IN } },
+    });
+    const opened = await call("browser_open", { url: SIGN_IN_URL });
+    expect(opened.text).toContain("source unavailable");
+    expect(opened.text).toContain("Do not try to sign in");
+    expect(opened.text).not.toContain("browser_request_takeover");
+
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "succeeded");
+    expect((await runs(routineId))[0]).toMatchObject({ output: report, error: null });
+    expect(messages()).toHaveLength(1);
+  });
+
+  test("a page that only mentions Cloudflare in a long text gets no note", async () => {
+    const essay = Array.from(
+      { length: 30 },
+      (_, i) =>
+        `- paragraph: Part ${i} of an essay about how a site is protected, with a good many words.`,
+    );
+    const { call } = await inRoutine({
+      pages: {
+        [WALL_URL]: {
+          title: "Just a moment: notes on CDNs",
+          snapshot: [
+            '- heading "Notes on CDNs" [level=1]',
+            ...essay,
+            '- paragraph: The page said "Just a moment..." and showed a Cloudflare Ray ID.',
+          ].join("\n"),
+        },
+      },
+    });
+    const opened = await call("browser_open", { url: WALL_URL });
+    expect(opened.text).toContain("Notes on CDNs");
+    expect(opened.text).not.toContain(NOTE);
+    expect(snapshotCalls()).toHaveLength(1);
   });
 });
 

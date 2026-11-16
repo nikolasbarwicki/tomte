@@ -393,6 +393,7 @@ describe("sign out and bot deletion", () => {
         botName: () => "bot",
         exchangeUrl: () => "http://127.0.0.1:1/x",
       }),
+      wallPauseMs: 0,
     });
     const token = defined(endpoint.lease(BOT).servers[0], "server").token;
     const rejected = () => fetch(`http://127.0.0.1:1/x`).catch(() => undefined);

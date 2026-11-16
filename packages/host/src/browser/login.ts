@@ -68,6 +68,12 @@ type LoginResult =
   | { status: "needs_another_step"; site: string }
   | { status: "failed"; reason: string };
 
+/** What the vault holds for one origin, from one bot's point of view. */
+type OriginCoverage =
+  | { status: "granted"; label: string }
+  | { status: "ungranted"; label: string }
+  | { status: "none" };
+
 export interface BrowserLoginDeps {
   credentials: Credentials;
   secrets: SecretStore;
@@ -81,6 +87,8 @@ export interface BrowserLoginDeps {
 export interface BrowserLogin {
   /** Labels and sites of the entries a bot may ask to sign in with; nothing else about them. */
   list(): { label: string; site: string }[];
+  /** What the vault holds for a page's origin as seen by one bot: a granted entry, an entry the bot has no grant for, or nothing. The match is the exact origin. */
+  coverage(botId: string, origin: string): OriginCoverage;
   /** Signs the bot's browser in with the entry called `label`, asking the user the first time. */
   login(botId: string, browser: BotBrowser, page: PageState, label: string): Promise<LoginResult>;
   /** The plugin's request: a username and password for a valid nonce, or nothing. */
@@ -101,9 +109,9 @@ const PLUGIN_SCRIPT = fileURLToPath(new URL("./credential-plugin.ts", import.met
 const pluginArgs = (exchangeUrl: string) =>
   isCompiledHost() ? [CREDENTIAL_PLUGIN_COMMAND, exchangeUrl] : [PLUGIN_SCRIPT, exchangeUrl];
 
-const FIELD = /^\s*- (?:textbox|searchbox|combobox|spinbutton)\s+"([^"]*)"/;
+export const FIELD = /^\s*- (?:textbox|searchbox|combobox|spinbutton)\s+"([^"]*)"/;
 const CODE_FIELD = /code|otp|verif|token|passcode|authenticator|2fa|\bpin\b|one.?time/i;
-const PASSWORD_FIELD = /pass/i;
+export const PASSWORD_FIELD = /pass/i;
 
 /**
  * Decides what a sign-in left behind. The engine reports success as soon as it submitted the form, so the
@@ -224,6 +232,14 @@ export function createBrowserLogin(deps: BrowserLoginDeps): BrowserLogin {
 
   return {
     list: () => deps.credentials.list().map((e) => ({ label: e.label, site: e.origin })),
+
+    coverage(botId, origin) {
+      const here = deps.credentials.list().filter((e) => e.origin === origin);
+      const granted = here.find((e) => deps.credentials.hasGrant(botId, e.id));
+      if (granted) return { status: "granted", label: granted.label };
+      const [first] = here;
+      return first ? { status: "ungranted", label: first.label } : { status: "none" };
+    },
 
     async login(botId, browser, page, label) {
       const matches = deps.credentials
