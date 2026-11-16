@@ -61,6 +61,7 @@ import { cn } from "@/lib/utils";
 import { answer, answerWait, cancelSend } from "./api.ts";
 import { EXTERNAL_ICONS } from "./external-icons.ts";
 import { bindMentions } from "./mentions.ts";
+import { cardElementId } from "./model.ts";
 import { Scroller, ScrollerItem } from "./scroller.tsx";
 
 type ToolItem = Extract<Item, { kind: "tool" }>;
@@ -70,6 +71,9 @@ type Row = Exclude<Item, ToolItem | QueuedItem> | { kind: "steps"; tools: ToolIt
 
 /** Scroller items use `content-visibility: auto`, whose paint containment would clip a handoff card's shadow. */
 const UNCLIPPED = "[content-visibility:visible]";
+
+const isRequest = (row: Row): row is Extract<Row, { kind: "wait" | "approve" | "ask" }> =>
+  row.kind === "wait" || row.kind === "approve" || row.kind === "ask";
 
 function toRows(items: Item[]): Row[] {
   const rows: Row[] = [];
@@ -134,7 +138,11 @@ export function Transcript({
       contentClassName="mx-auto w-full max-w-3xl gap-4 px-4 py-6"
     >
       {rows.map((row, i) => (
-        <ScrollerItem key={i} className={cn(row.kind === "handoff" && UNCLIPPED)}>
+        <ScrollerItem
+          key={i}
+          {...(isRequest(row) && { id: cardElementId(row.id) })}
+          className={cn(row.kind === "handoff" && UNCLIPPED)}
+        >
           <RowView
             row={row}
             botId={bot.id}

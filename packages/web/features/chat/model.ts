@@ -1,5 +1,7 @@
 import type { ChatMode, Presence, ServerEvent, WorkEvent } from "@claudebot/contract/events";
 
+import type { Item } from "@/host/transcript.ts";
+
 /** What the bot is doing for the chat: a double-loop bot says it itself, a standard bot is working while its turn runs. */
 export const livePresence = (
   mode: ChatMode,
@@ -50,9 +52,100 @@ export function needsYouItems(work: WorkEvent | undefined, botId: string): Needs
     .sort((a, b) => a.receivedAt - b.receivedAt);
 }
 
-/** The labels of the sources that have items, each once, in the order of the oldest item. */
-export const sourceLabels = (items: NeedsYouItem[]): string[] => [
-  ...new Set(items.map((i) => i.source)),
+/** A button of a request card: `value` is what the host's answer route takes (a wait's action id, "allow" or "deny", or an option's text). */
+export type RequestAction = { label: string; value: string };
+
+/** A card in the chat the bot is blocked on, unresolved: a `wait`, an `approve` or an `ask`. */
+export type RequestRow = {
+  kind: "wait" | "approve" | "ask";
+  /** The card's id, also its wait's id on the host. */
+  id: string;
+  /** What kind of request it is: "Takeover", "Approval" or "Question". */
+  label: string;
+  title: string;
+  /** The card's own buttons. A question without options has none: it is answered in its card. */
+  actions: RequestAction[];
+};
+
+/** One row of the Needs you bar: an external item, or a request card of the chat. */
+export type NeedsYouRow =
+  | { type: "event"; item: NeedsYouItem }
+  | { type: "request"; request: RequestRow };
+
+/** The buttons of a tool approval card, in the order the bar shows them. */
+const APPROVE_ACTIONS: RequestAction[] = [
+  { label: "Allow", value: "allow" },
+  { label: "Deny", value: "deny" },
+];
+
+const WAIT_LABELS: Record<string, string> = { takeover: "Takeover", approval: "Approval" };
+
+/** The request a transcript item is while it is unresolved; none for a resolved or expired card, or any other item. */
+function requestOf(item: Item): RequestRow | undefined {
+  switch (item.kind) {
+    case "approve":
+      return item.answer !== undefined
+        ? undefined
+        : {
+            kind: "approve",
+            id: item.id,
+            label: "Approval",
+            title: `Allow ${item.tool}?`,
+            actions: APPROVE_ACTIONS,
+          };
+    case "ask":
+      return item.answer !== undefined || item.expired
+        ? undefined
+        : {
+            kind: "ask",
+            id: item.id,
+            label: "Question",
+            title: item.question,
+            actions: (item.options ?? []).map((o) => ({ label: o, value: o })),
+          };
+    case "wait":
+      return item.resolved !== undefined
+        ? undefined
+        : {
+            kind: "wait",
+            id: item.id,
+            label: WAIT_LABELS[item.waitKind] ?? item.waitKind,
+            title: (item.waitKind === "takeover" && item.detail) || item.title,
+            actions: item.actions.map((a) => ({ label: a.label, value: a.id })),
+          };
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * What the Needs you bar lists: the open external items, oldest first, then the unresolved request cards of the chat in the
+ * order they came. A question about an external event is that event's item and is not listed again while the item is open.
+ */
+export function needsYouRows(
+  work: WorkEvent | undefined,
+  botId: string,
+  chat: Item[],
+): NeedsYouRow[] {
+  const events = needsYouItems(work, botId);
+  const open = new Set(events.map((i) => i.id));
+  const requests = chat.flatMap((item): RequestRow[] => {
+    if (item.kind === "ask" && item.eventId !== undefined && open.has(item.eventId)) return [];
+    const request = requestOf(item);
+    return request ? [request] : [];
+  });
+  return [
+    ...events.map((item): NeedsYouRow => ({ type: "event", item })),
+    ...requests.map((request): NeedsYouRow => ({ type: "request", request })),
+  ];
+}
+
+/** The id of the transcript element that holds a request card, which the bar scrolls to. */
+export const cardElementId = (requestId: string) => `card-${requestId}`;
+
+/** The labels of what the rows are, each once, in row order: an item's source, a request's kind. */
+export const rowLabels = (rows: NeedsYouRow[]): string[] => [
+  ...new Set(rows.map((r) => (r.type === "event" ? r.item.source : r.request.label))),
 ];
 
 /** An item's buttons, the primary one first: Enter runs it. Every message reads as something the user typed. */

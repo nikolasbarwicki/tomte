@@ -25,6 +25,8 @@ export type Item =
       id: string;
       question: string;
       options?: string[];
+      /** The external needs-you item the question is about; that item is in the Needs you bar already. */
+      eventId?: string;
       answer?: string;
       /** Its turn ended before an answer: nobody is waiting for one any more. */
       expired?: true;
@@ -116,6 +118,7 @@ function reduceLive(
           id: e.id,
           question: e.question,
           ...(e.options && { options: e.options }),
+          ...(e.eventId && { eventId: e.eventId }),
         },
       ];
     case "approve":
