@@ -90,10 +90,22 @@ export type RevokeDeviceRequest = z.infer<typeof RevokeDeviceRequest>;
 export const PairingCodeResponse = z.object({ code: z.string() });
 export type PairingCodeResponse = z.infer<typeof PairingCodeResponse>;
 
-/** A channel in the `/api/channels/list` response: its kind (`telegram`) and the account linked to it, or null. */
+/**
+ * What a channel's transport is doing, for the Channels page: `unconfigured` (no bot token yet), `starting`, `running` (with the bot's
+ * `username` when the channel has one) or `failed`, with `detail` saying why in words a person can act on.
+ */
+export const ChannelStatus = z.object({
+  state: z.enum(["unconfigured", "starting", "running", "failed"]),
+  detail: z.string().nullable(),
+  username: z.string().nullable(),
+});
+export type ChannelStatus = z.infer<typeof ChannelStatus>;
+
+/** A channel in the `/api/channels/list` response: its kind (`telegram`), the account linked to it, or null, and its status. */
 export const ChannelEntry = z.object({
   kind: z.string(),
   link: z.object({ label: z.string(), linkedAt: z.number() }).nullable(),
+  status: ChannelStatus,
 });
 export type ChannelEntry = z.infer<typeof ChannelEntry>;
 
@@ -105,9 +117,13 @@ export type ChannelList = z.infer<typeof ChannelList>;
 export const ChannelRequest = z.object({ channel: z.string().min(1) });
 export type ChannelRequest = z.infer<typeof ChannelRequest>;
 
-/** The `/api/channels/link-code` response: a new single-use code, in groups of four, which is shown only here. */
-export const ChannelLinkCodeResponse = z.object({ code: z.string() });
+/** The `/api/channels/link-code` response: a new single-use code, in groups of four, which is shown only here, and a link that opens the channel's bot with it (null when the channel has none). */
+export const ChannelLinkCodeResponse = z.object({ code: z.string(), url: z.string().nullable() });
 export type ChannelLinkCodeResponse = z.infer<typeof ChannelLinkCodeResponse>;
+
+/** The `/api/channels/telegram/token` request: the bot token from BotFather. It is checked, stored in the secrets backend and never returned. */
+export const ChannelTokenRequest = z.object({ token: z.string().trim().min(1).max(256) });
+export type ChannelTokenRequest = z.infer<typeof ChannelTokenRequest>;
 
 /** The largest `/api/bots/<botId>/events` request body in bytes; a larger one gets 413. */
 export const MAX_EVENT_BODY_BYTES = 64 * 1024;

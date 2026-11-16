@@ -27,7 +27,13 @@ import {
   type LiveViewOptions,
   type SandboxStatus,
 } from "../browser/index.ts";
-import { createChannels, type Channel, type Channels } from "../channels/index.ts";
+import {
+  createChannels,
+  createTelegramChannel,
+  type Channel,
+  type Channels,
+  type TelegramOptions,
+} from "../channels/index.ts";
 import { createCredentials } from "../credentials/index.ts";
 import { createDeviceAuth, type DeviceAuth } from "../device-auth/index.ts";
 import { createEvents, eventsPath } from "../events/index.ts";
@@ -86,10 +92,12 @@ export interface HostServerOptions {
   /** The built web UI the client listener serves; every request no route claims answers 404 without it. Ignored when `config.vite` is on. */
   ui?: UiAssets;
   /**
-   * The channel adapters to run, given the function that hands an update to the host (`Channels.receive`); none when omitted.
+   * Channel adapters to run besides Telegram, given the function that hands an update to the host (`Channels.receive`); none when omitted.
    * Tests pass a fake channel here.
    */
   channelAdapters?: (receive: Channels["receive"]) => Channel[];
+  /** The Telegram adapter's API base URL and timing; Telegram's own API with its own timing when omitted. Tests point it at a fake server. */
+  telegram?: TelegramOptions;
   /** The clock device auth reads for pairing code expiry and human waits read for their 24-hour expiry, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
   /** How long an idle double-loop front stays open; 10 minutes when omitted. */
@@ -360,9 +368,11 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     onActivity: () => {},
     ...(o.now !== undefined && { now: o.now }),
   });
-  for (const adapter of o.channelAdapters?.((kind, inbound) => channels.receive(kind, inbound)) ??
-    [])
-    channels.register(adapter);
+  const receive: Channels["receive"] = (kind, inbound) => channels.receive(kind, inbound);
+  channels.register(
+    createTelegramChannel({ secrets, receive, ...(o.telegram && { options: o.telegram }) }),
+  );
+  for (const adapter of o.channelAdapters?.(receive) ?? []) channels.register(adapter);
   const sessions = createDeviceSessions();
   const api = createApi({
     botsChanged,

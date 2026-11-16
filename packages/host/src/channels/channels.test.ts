@@ -97,7 +97,11 @@ describe("a link code", () => {
     await link(stranger);
     expect(channels.linkOf("fake")).toEqual(stranger);
     expect(channels.list()).toEqual([
-      { kind: "fake", link: { label: "Stranger", linkedAt: expect.any(Number) } },
+      {
+        kind: "fake",
+        link: { label: "Stranger", linkedAt: expect.any(Number) },
+        status: { state: "running", detail: null, username: null },
+      },
     ]);
   });
 

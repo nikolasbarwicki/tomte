@@ -31,3 +31,6 @@ export const secretName = (integrationId: string) => `integration:${integrationI
 export const credentialSecretName = (entryId: string) => `browser-credential:${entryId}`;
 
 export const eventTokenSecretName = (botId: string) => `events-token:${botId}`;
+
+/** The bot token of a channel (`telegram`), held like the event tokens: only in the secrets backend. */
+export const channelTokenSecretName = (kind: string) => `channel-token:${kind}`;

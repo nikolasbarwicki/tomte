@@ -1,55 +1,28 @@
 import type { Database } from "bun:sqlite";
 import { randomBytes } from "node:crypto";
 
+import type { ChannelStatus } from "@claudebot/contract/api";
+
 import { NotFound } from "../platform/errors.ts";
 import { createChannelStore } from "./store.ts";
+import type {
+  Account,
+  Channel,
+  ChannelMessage,
+  Inbound,
+  MessageRef,
+  Reply,
+  TokenOutcome,
+} from "./types.ts";
+
+export { createTelegramChannel, type TelegramOptions } from "./telegram/channel.ts";
+export type { Account, Channel, ChannelMessage, Inbound, MessageRef, Reply } from "./types.ts";
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const CODE_LENGTH = 12;
 const GROUP = 4;
 /** Longer text is never a code, so it is not normalized at all. */
 const MAX_CODE_TEXT = 64;
-
-/** A person on a channel, as the channel names them: its own stable id and a name for the Channels page. */
-export type Account = { id: string; label: string };
-
-/** A message a channel sent, in the channel's own terms and opaque to the host; an adapter reads it back to edit the message. */
-export type MessageRef = string;
-
-/** What a channel shows: plain text (never formatted), rows of buttons that come back as `Inbound.button.data` (opaque, at most 64 bytes) and one link. */
-export type ChannelMessage = {
-  text: string;
-  buttons?: { label: string; data: string }[][];
-  link?: { label: string; url: string };
-};
-
-/** One update from a channel, in the host's terms: who sent it and what they did. */
-export type Inbound = {
-  from: Account;
-  text?: string;
-  button?: { data: string; on: MessageRef };
-  replyTo?: MessageRef;
-};
-
-/** What the channel sends back for one update, through the same adapter that received it. */
-export type Reply = {
-  toast?: string;
-  send?: ChannelMessage[];
-  edit?: { ref: MessageRef; message: ChannelMessage }[];
-};
-
-/**
- * A transport to one kind of account (Telegram first). The host calls `send` and `edit`; an adapter hands every update it receives to
- * `Channels.receive(kind, inbound)` and carries out the `Reply` it gets back. It is constructed with that function by the composition root.
- */
-export interface Channel {
-  readonly kind: string;
-  /** Begins receiving; a transport detail. Never throws: a transport that cannot run reports it through its own state. */
-  start(): void;
-  stop(): Promise<void>;
-  send(to: Account, message: ChannelMessage): Promise<MessageRef>;
-  edit(ref: MessageRef, message: ChannelMessage): Promise<void>;
-}
 
 /** What handles an update from the linked account. Later features (cards, answers) register one; it never sees a stranger's update. */
 type LinkedHandler = (kind: string, inbound: Inbound) => Promise<Reply>;
@@ -58,6 +31,7 @@ type LinkedHandler = (kind: string, inbound: Inbound) => Promise<Reply>;
 interface ChannelSummary {
   kind: string;
   link: { label: string; linkedAt: number } | null;
+  status: ChannelStatus;
 }
 
 type SendOutcome = { delivered: true; ref: MessageRef } | { delivered: false };
@@ -82,6 +56,10 @@ export interface Channels {
   createLinkCode(kind: string): string;
   /** Deletes the channel's link; false when it had none. Throws `NotFound` for an unknown channel. */
   unlink(kind: string): boolean;
+  /** A link that opens the channel's bot with the link code filled in; undefined when the channel has none. Throws `NotFound` for an unknown channel. */
+  linkUrl(kind: string, code: string): string | undefined;
+  /** Gives the channel its credential; see `Channel.setToken`. Throws `NotFound` for an unknown channel and for one that takes no credential. */
+  setToken(kind: string, token: string): Promise<TokenOutcome>;
   /**
    * The one transport-independent handler of an update.
    * From the linked account it counts as activity and goes to the handler. From anyone else, text with the shape of a link code is an attempt
@@ -101,6 +79,8 @@ export interface ChannelsDeps {
   /** The clock, in epoch milliseconds. */
   now?: () => number;
 }
+
+const RUNNING: ChannelStatus = { state: "running", detail: null, username: null };
 
 const LINKED =
   "Linked. This chat is now connected to Claudebot. You can unlink it on the Channels page.";
@@ -150,10 +130,22 @@ export function createChannels(deps: ChannelsDeps): Channels {
     },
 
     list() {
-      return [...registry.keys()].map((kind) => {
+      return [...registry.entries()].map(([kind, c]) => {
         const link = store.linkOf(kind);
-        return { kind, link: link ? { label: link.label, linkedAt: link.linkedAt } : null };
+        return {
+          kind,
+          link: link ? { label: link.label, linkedAt: link.linkedAt } : null,
+          status: c.status?.() ?? RUNNING,
+        };
       });
+    },
+
+    linkUrl: (kind, code) => channel(kind).linkUrl?.(code),
+
+    async setToken(kind, token) {
+      const adapter = channel(kind);
+      if (!adapter.setToken) throw new NotFound(`channel ${kind} takes no token`);
+      return adapter.setToken(token);
     },
 
     linkOf: accountOf,
