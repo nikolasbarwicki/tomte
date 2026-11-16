@@ -104,8 +104,6 @@ export interface Chats {
   /** Gives the external-event rows already in a bot's chat their new state, shown live when the chat is. */
   updateExternal(botId: string, rows: ExternalRow[]): void;
   isWorking(botId: string): boolean;
-  /** True while no human is watching the bot's turn: a routine turn or a headless run. */
-  unattended(botId: string): boolean;
   /** The routine run the bot's unattended turn belongs to, if one is running now: a standard bot's chat-hosted or headless routine turn. A double-loop bot's routine turn answers like an attended turn and has none. */
   runOf(botId: string): string | undefined;
   botsEvent(): BotsEvent;
@@ -841,7 +839,6 @@ export function createChats(deps: ChatsDeps): Chats {
       }
     },
     isWorking,
-    unattended: (botId) => chats.get(botId)?.routineRun !== undefined || headless(botId),
     runOf: (botId) => chats.get(botId)?.routineRun ?? routineTurns.headlessRun(botId),
     botsEvent: chatsBotsEvent,
     announceBots,

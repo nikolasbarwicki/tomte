@@ -4,9 +4,6 @@ import { z } from "zod";
 import type { BrowserToolContext } from "./context.ts";
 import { textResult } from "./result.ts";
 
-export const UNATTENDED_MESSAGE =
-  "not available in unattended runs; report the login wall or CAPTCHA in your result instead";
-
 export function registerTakeoverTools(mcp: McpServer, ctx: BrowserToolContext) {
   mcp.registerTool(
     "browser_request_takeover",

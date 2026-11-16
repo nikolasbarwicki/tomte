@@ -4,14 +4,17 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { CredentialEntry } from "@claudebot/contract/events";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
@@ -30,9 +33,35 @@ const ENV_KEYS = [
   "AGENT_BROWSER_EXECUTABLE_PATH",
   "FAKE_CLAUDE_DIR",
 ] as const;
-const UNATTENDED =
-  "not available in unattended runs; report the login wall or CAPTCHA in your result instead";
+const PASSWORD = "Zq7-correct-horse-battery";
+const SITE = "http://localhost:3999";
+const SIGN_IN = `${SITE}/login`;
+const HOME = `${SITE}/home`;
+const LOGIN_PAGES = {
+  [SIGN_IN]: {
+    title: "Sign in",
+    snapshot:
+      '- heading "Sign in" [level=1, ref=e1]\n- textbox "Username" [ref=e2]\n- textbox "Password" [ref=e3]\n- button "Sign in" [ref=e4]',
+  },
+  [HOME]: {
+    title: "Home",
+    snapshot: '- heading "Welcome" [level=1, ref=e1]\n- link "Sign out" [ref=e2]',
+  },
+  [`${SITE}/otp`]: {
+    title: "Verify",
+    snapshot:
+      '- heading "Two-step verification" [level=1, ref=e1]\n- textbox "Verification code" [ref=e2]\n- button "Verify" [ref=e3]',
+  },
+};
+const loginScript = (next = HOME) => ({
+  pages: LOGIN_PAGES,
+  logins: { [SIGN_IN]: { username: "alice", password: PASSWORD, next } },
+});
 const DAY = 24 * 60 * 60_000;
+type BotCall = (
+  name: string,
+  args?: Record<string, unknown>,
+) => Promise<{ isError: boolean; text: string }>;
 
 let root: string;
 let cwd: string;
@@ -162,7 +191,7 @@ describe.each([
   ["chat-hosted", true],
   ["headless", false],
 ])("%s routine turn", (_label, openChat) => {
-  test("browsing works; browser_login is still refused with the unattended message", async () => {
+  test("browsing works", async () => {
     await startServer();
     const { botId, call } = await setup(openChat);
     writeFileSync(join(claudeDir, "hold"), "");
@@ -171,10 +200,6 @@ describe.each([
 
     expect((await call("browser_open", { url: "https://example.com" })).isError).toBe(false);
     expect((await call("browser_snapshot")).isError).toBe(false);
-    expect(await call("browser_login", { entry: "Example" })).toEqual({
-      isError: true,
-      text: UNATTENDED,
-    });
   });
 
   test("the tools work again once the routine is over", async () => {
@@ -285,6 +310,181 @@ describe.each([
       arguments: { reason: "again" },
     });
     expect(again.isError).not.toBe(true);
+  });
+});
+
+describe.each([
+  ["chat-hosted", true],
+  ["headless", false],
+])("%s routine sign-in", (_label, openChat) => {
+  const untilRun = async (routineId: string, status: string) => {
+    for (let i = 0; i < 160 && (await runs(routineId))[0]?.status !== status; i++)
+      await Bun.sleep(25);
+    expect((await runs(routineId))[0]?.status).toBe(status);
+  };
+  const loginCalls = () =>
+    (existsSync(join(fakeDir, "calls.jsonl"))
+      ? readFileSync(join(fakeDir, "calls.jsonl"), "utf8").trim().split("\n").filter(Boolean)
+      : []
+    ).filter((l) => JSON.parse(l).argv.includes("auth"));
+  const grantsOf = async (entryId: string) =>
+    ((await (await ui("/api/credentials/list", {})).json()) as CredentialEntry[]).find(
+      (e) => e.id === entryId,
+    )?.grants ?? [];
+
+  /** A bot with a stored entry and a routine whose first run is in progress, held in its turn so the test can call the bot's tools. */
+  async function start(script: object = loginScript()) {
+    await startServer(script);
+    const bot = await setup(openChat);
+    const added = await ui("/api/credentials/add", {
+      label: "Example",
+      signInUrl: SIGN_IN,
+      username: "alice",
+      password: PASSWORD,
+    });
+    expect(added.status).toBe(200);
+    const entry = (await added.json()) as CredentialEntry;
+    writeFileSync(join(claudeDir, "hold"), "");
+    const routineId = await startRoutine(bot.botId);
+    await until(() => messages().length === 1);
+    return { ...bot, entry, routineId };
+  }
+
+  /** Runs the routine again while its bot's turn is held. */
+  async function runAgain(routineId: string) {
+    const before = messages().length;
+    writeFileSync(join(claudeDir, "hold"), "");
+    expect((await ui("/api/routines/run", { id: routineId })).status).toBe(200);
+    await until(() => messages().length === before + 1);
+  }
+
+  /** The bot asks for the entry in the held run, the turn ends and the run parks on the approval. */
+  async function parkOnLogin(call: BotCall, routineId: string) {
+    const asked = await call("browser_login", { entry: "Example" });
+    expect(asked.isError).toBe(false);
+    const wait = JSON.parse(asked.text) as { status: string; id: string; instruction: string };
+    expect(wait.status).toBe("waiting_for_user");
+    expect(wait.instruction).toContain("End your turn");
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "waiting");
+    return wait;
+  }
+
+  /** First run parks on the approval and Allow resumes it to success: the entry is granted afterwards. */
+  async function grant(call: BotCall, routineId: string, entry: CredentialEntry) {
+    const wait = await parkOnLogin(call, routineId);
+    expect((await ui("/api/waits/answer", { id: wait.id, action: "allow" })).status).toBe(200);
+    await untilRun(routineId, "succeeded");
+    expect(await grantsOf(entry.id)).toHaveLength(1);
+  }
+
+  test("an ungranted entry parks the run; Allow grants it and resumes the run with the instruction to call browser_login again", async () => {
+    const { call, routineId, entry } = await start();
+    const wait = await parkOnLogin(call, routineId);
+    expect(loginCalls()).toHaveLength(0);
+    expect(await grantsOf(entry.id)).toEqual([]);
+    expect((await runs(routineId))[0]?.output).toBeNull();
+
+    expect((await ui("/api/waits/answer", { id: wait.id, action: "allow" })).status).toBe(200);
+    await untilRun(routineId, "succeeded");
+    expect(messages()).toHaveLength(2);
+    expect(messages()[1]).toContain('Call browser_login("Example") again');
+    expect(messages()[1]).not.toContain("<scheduled-routine");
+    expect(await grantsOf(entry.id)).toHaveLength(1);
+    expect(await runs(routineId)).toHaveLength(1);
+  });
+
+  test("after Allow the next run signs in with a granted entry and opens no wait", async () => {
+    const { call, routineId, entry } = await start();
+    await grant(call, routineId, entry);
+    expect(loginCalls()).toHaveLength(0);
+
+    await runAgain(routineId);
+    const r = await call("browser_login", { entry: "Example" });
+    expect(r.isError).toBe(false);
+    expect(JSON.parse(r.text)).toMatchObject({ status: "signed_in", site: SITE });
+    expect(loginCalls()).toHaveLength(1);
+    expect(JSON.parse(loginCalls()[0]!).argv).toEqual(
+      expect.arrayContaining(["auth", "login", entry.id]),
+    );
+
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "succeeded");
+    expect(await runs(routineId)).toHaveLength(2);
+  });
+
+  test("revoking the grant makes the next run park again", async () => {
+    const { call, botId, routineId, entry } = await start();
+    await grant(call, routineId, entry);
+    expect((await ui("/api/credentials/revoke", { id: entry.id, botId })).status).toBe(200);
+
+    await runAgain(routineId);
+    await parkOnLogin(call, routineId);
+    expect(loginCalls()).toHaveLength(0);
+    expect(await grantsOf(entry.id)).toEqual([]);
+  });
+
+  test("Deny resumes the run with the denial and creates no grant", async () => {
+    const { call, routineId, entry } = await start();
+    const wait = await parkOnLogin(call, routineId);
+    expect((await ui("/api/waits/answer", { id: wait.id, action: "deny" })).status).toBe(200);
+    await untilRun(routineId, "succeeded");
+    expect(messages()).toHaveLength(2);
+    expect(messages()[1]).toContain('denied sign-in with "Example"');
+    expect(messages()[1]).toContain("Do not ask again");
+    expect(await grantsOf(entry.id)).toEqual([]);
+    expect(loginCalls()).toHaveLength(0);
+  });
+
+  test("a sign-in that needs a code tells the bot to request a takeover, which parks the run", async () => {
+    const { call, routineId, entry } = await start(loginScript(`${SITE}/otp`));
+    await grant(call, routineId, entry);
+
+    await runAgain(routineId);
+    const r = await call("browser_login", { entry: "Example" });
+    expect(r.isError).toBe(false);
+    expect(JSON.parse(r.text).status).toBe("needs_another_step");
+    expect(r.text).toContain("browser_request_takeover");
+    const taken = JSON.parse(
+      (await call("browser_request_takeover", { reason: "enter the code" })).text,
+    );
+    expect(taken.status).toBe("waiting_for_user");
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "waiting");
+  });
+
+  test("the password reaches no tool result, message, run output or file", async () => {
+    const { call, routineId } = await start();
+    const results: string[] = [];
+    const tracked = async (name: string, args: Record<string, unknown> = {}) => {
+      const r = await call(name, args);
+      results.push(r.text);
+      return r;
+    };
+    const wait = JSON.parse((await tracked("browser_login", { entry: "Example" })).text) as {
+      id: string;
+    };
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "waiting");
+    await ui("/api/waits/answer", { id: wait.id, action: "allow" });
+    await untilRun(routineId, "succeeded");
+    await runAgain(routineId);
+    expect(JSON.parse((await tracked("browser_login", { entry: "Example" })).text).status).toBe(
+      "signed_in",
+    );
+    await tracked("browser_snapshot");
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "succeeded");
+
+    const everything = [...results, ...messages(), JSON.stringify(await runs(routineId))];
+    for (const text of everything) expect(text).not.toContain(PASSWORD);
+    const scan = (dir: string): string[] =>
+      readdirSync(dir).flatMap((name) => {
+        const path = join(dir, name);
+        return statSync(path).isDirectory() ? scan(path) : [path];
+      });
+    for (const file of scan(cwd).filter((f) => f !== join(fakeDir, "script.json")))
+      expect(readFileSync(file).includes(PASSWORD), file).toBe(false);
   });
 });
 

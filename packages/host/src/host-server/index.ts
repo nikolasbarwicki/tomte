@@ -168,7 +168,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     agent: agentAt,
     bot: (botId) => getBot(dataRoot, botId),
     filesDir: (botId) => botFilesPath(dataRoot, botId),
-    unattended: (botId) => chats.unattended(botId),
     waits,
     deliver: (botId, text) => void chats.deliver(botId, text),
     sandbox,

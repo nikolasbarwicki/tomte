@@ -18,6 +18,4 @@ export interface BrowserToolContext {
   takeover: Pick<Takeover, "request">;
   /** Stored credentials and sign-in. */
   login: Pick<BrowserLogin, "list" | "login">;
-  /** True while the bot runs without the user (a routine); human waits are refused then. */
-  unattended(): boolean;
 }

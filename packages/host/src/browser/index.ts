@@ -50,8 +50,6 @@ export interface BrowserOptions {
   /** Whether a bot may run headed Chrome. When false, Chrome launches headless whatever a bot's stored setting says. */
   headedAllowed: boolean;
   filesDir: (botId: string) => string;
-  /** True while no human is watching the bot's turn. */
-  unattended: (botId: string) => boolean;
   /** Whether the shell sandbox can run; checks this platform when omitted. */
   sandbox?: () => SandboxStatus;
   /** Overrides for the browser engine, Chrome and the engine's environment. */
@@ -127,7 +125,6 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
     tokens: o.tokens,
     takeover,
     login,
-    unattended: o.unattended,
     host: o.agent,
     isEnabled: (botId) => enabled(botId) && sandboxOf().status === "available",
     runtimes,
