@@ -24,7 +24,8 @@ async function start() {
   const list = async () => {
     const res = await post("/api/channels/list");
     expect(res.status).toBe(200);
-    return ChannelList.parse(await res.json());
+    // The host always runs Telegram too (its own tests are telegram.test.ts); these tests are about the fake channel.
+    return ChannelList.parse(await res.json()).filter((c) => c.kind === "fake");
   };
   const linkCode = async () => {
     const res = await post("/api/channels/link-code", { channel: "fake" });
@@ -51,7 +52,9 @@ describe("the channel routes", () => {
 
   test("list every registered channel as not linked at first", async () => {
     const { list } = await start();
-    expect(await list()).toEqual([{ kind: "fake", link: null }]);
+    expect(await list()).toEqual([
+      { kind: "fake", link: null, status: { state: "running", detail: null, username: null } },
+    ]);
   });
 
   test("a code sent as the channel's account links it, and the page's list shows the account", async () => {
@@ -64,7 +67,11 @@ describe("the channel routes", () => {
     expect(reply.send).toHaveLength(1);
 
     const [entry] = await list();
-    expect(entry).toEqual({ kind: "fake", link: { label: "Owner", linkedAt: expect.any(Number) } });
+    expect(entry).toEqual({
+      kind: "fake",
+      link: { label: "Owner", linkedAt: expect.any(Number) },
+      status: { state: "running", detail: null, username: null },
+    });
     expect(entry!.link!.linkedAt).toBeGreaterThanOrEqual(before - 1000);
 
     // Used once: the same code from another account links nothing.
