@@ -149,3 +149,29 @@ test("presence follows the host's events, never a turn, and a reset clears it", 
   expect(play([{ type: "presence", state: "idle" }], talking).chat.presence).toBe("idle");
   expect(play([{ type: "reset", botId: "b2" }], talking).chat.presence).toBe("idle");
 });
+
+test("task events build the task rows without touching the turn or the presence, and findings arrive with the task", () => {
+  const working = play([{ type: "presence", state: "working" }]);
+  const s = play(
+    [
+      { type: "task", taskId: "t1", goal: "research X", state: "running", startedAt: 1 },
+      { type: "task_status", taskId: "t1", text: "Reading" },
+      {
+        type: "task",
+        taskId: "t1",
+        goal: "research X",
+        state: "running",
+        startedAt: 1,
+        findings: ["X costs $20."],
+      },
+      { type: "task", taskId: "q-1", goal: "next", state: "queued", startedAt: 2, after: "t1" },
+    ],
+    working,
+  );
+  expect(s.chat.busy).toBe(false);
+  expect(s.chat.presence).toBe("working");
+  expect(s.chat.items).toMatchObject([
+    { kind: "task", taskId: "t1", status: "Reading", findings: ["X costs $20."] },
+    { kind: "task", taskId: "q-1", state: "queued", after: "t1" },
+  ]);
+});

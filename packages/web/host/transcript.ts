@@ -60,12 +60,17 @@ export type Item =
       /** Whether the answer reached the sender's agent; only for items that name a reply target. */
       relay?: Relay | undefined;
     }
-  /** A background task of a double-loop bot: where it stands and, while it runs, its live status line. */
+  /** A background task of a double-loop bot: where it stands and, while it runs, its live status line; `findings` are what its agent verified, newest last, and `after` is the task a queued one waits for. */
   | {
       kind: "task";
       taskId: string;
       goal: string;
       state: TaskState;
+      startedAt: number;
+      endedAt?: number | undefined;
+      agentType?: string | undefined;
+      after?: string | undefined;
+      findings?: string[] | undefined;
       status?: string | undefined;
     }
   /** A background task's result, shown as the bot's own message; `task` is the goal of the task that produced it, when known. */
@@ -217,15 +222,29 @@ function taskRow(items: Item[], taskId: string): Extract<Item, { kind: "task" }>
   );
 }
 
-/** A task event is the task's whole state: it replaces the task's row, keeping its place, or adds one. A status line outlives only a running task. */
+/**
+ * A task event is the task's whole state: it replaces the task's row, keeping its place, or adds one. A task that replaces a queue
+ * entry (`queuedId`) takes the entry's row, and the queued tasks that waited for the entry wait for it now. A status line outlives
+ * only a running task.
+ */
 function upsertTask(items: Item[], e: Extract<ServerEvent, { type: "task" }>): Item[] {
-  const current = taskRow(items, e.taskId);
+  const current =
+    taskRow(items, e.taskId) ?? (e.queuedId === undefined ? undefined : taskRow(items, e.queuedId));
   const row: Item = {
     kind: "task",
     taskId: e.taskId,
     goal: e.goal,
     state: e.state,
+    startedAt: e.startedAt,
+    endedAt: e.endedAt,
+    agentType: e.agentType,
+    after: e.after,
+    findings: e.findings,
     status: e.state === "running" ? current?.status : undefined,
   };
-  return current ? items.map((i) => (i === current ? row : i)) : [...items, row];
+  const next = current ? items.map((i) => (i === current ? row : i)) : [...items, row];
+  if (e.queuedId === undefined) return next;
+  return next.map((i) =>
+    i.kind === "task" && i.after === e.queuedId ? { ...i, after: e.taskId } : i,
+  );
 }

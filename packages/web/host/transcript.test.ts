@@ -54,7 +54,7 @@ test("a task is one row that follows its state, and keeps its place in the threa
   ]);
   expect(items).toEqual([
     { kind: "user", text: "research X", mentions: undefined },
-    { kind: "task", taskId: "t1", goal: "research X", state: "done", status: undefined },
+    { kind: "task", taskId: "t1", goal: "research X", state: "done", startedAt: 1 },
     { kind: "assistant", text: "On it." },
   ]);
 });
@@ -75,8 +75,80 @@ test("a task's status line follows its status events, an empty one clears it, an
   });
   // A status for a task the thread does not show changes nothing.
   expect(play([task("running"), { type: "task_status", taskId: "other", text: "x" }])).toEqual([
-    { kind: "task", taskId: "t1", goal: "research X", state: "running", status: undefined },
+    { kind: "task", taskId: "t1", goal: "research X", state: "running", startedAt: 1 },
   ]);
+});
+
+test("a task row carries its findings, its wait and its end, as the latest event says", () => {
+  const [row] = play([
+    { type: "task", taskId: "q", goal: "g", state: "queued", startedAt: 1, after: "t1" },
+    {
+      type: "task",
+      taskId: "q",
+      goal: "g",
+      state: "failed",
+      startedAt: 1,
+      endedAt: 9,
+      findings: ["a", "b"],
+      agentType: "researcher",
+    },
+  ]);
+  expect(row).toEqual({
+    kind: "task",
+    taskId: "q",
+    goal: "g",
+    state: "failed",
+    startedAt: 1,
+    endedAt: 9,
+    findings: ["a", "b"],
+    agentType: "researcher",
+  });
+});
+
+test("a task that starts from a queue entry takes the entry's row, and what waited for the entry waits for the task", () => {
+  const queued = (taskId: string, after?: string) =>
+    ({
+      type: "task",
+      taskId,
+      goal: taskId,
+      state: "queued",
+      startedAt: 1,
+      ...(after && { after }),
+    }) as const;
+  const items = play([
+    { type: "user", text: "later" },
+    queued("q-1"),
+    queued("q-2", "q-1"),
+    { type: "text_start" },
+    { type: "delta", text: "Queued." },
+    {
+      type: "task",
+      taskId: "agent-1",
+      goal: "q-1",
+      state: "running",
+      startedAt: 5,
+      queuedId: "q-1",
+    },
+  ]);
+  expect(items.map((i) => (i.kind === "task" ? [i.taskId, i.state, i.after] : i.kind))).toEqual([
+    "user",
+    ["agent-1", "running", undefined],
+    ["q-2", "queued", "agent-1"],
+    "assistant",
+  ]);
+});
+
+test("a task event with a queue id the thread does not know adds the task, and one that is already shown updates it", () => {
+  const started = {
+    type: "task",
+    taskId: "agent-1",
+    goal: "g",
+    state: "running",
+    startedAt: 5,
+    queuedId: "q-gone",
+  } as const;
+  expect(play([started])).toHaveLength(1);
+  expect(play([started, { ...started, state: "done" }])).toMatchObject([{ state: "done" }]);
 });
 
 test("a report is a row of its own, after the task, naming the task's goal when the thread knows it", () => {
