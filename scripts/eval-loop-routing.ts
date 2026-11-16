@@ -36,7 +36,7 @@ import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from "../packages/contract/src/events.ts";
-import { createBot, frontContext, headlessDelegate } from "../packages/host/src/bots/index.ts";
+import { createBot, frontContext, type HostDelegate } from "../packages/host/src/bots/index.ts";
 import {
   claudeConfigDir,
   createClaudeAccess,
@@ -63,6 +63,12 @@ const A = "a1b2c3d4e5f60718";
 const B = "b5e6f7a8091a2b3c";
 const C = "c9d0e1f2a3b4c5d6";
 const Q = "q-7f3a9c";
+
+/** The eval refuses every tool call and answers no question, so no agent starts and nothing waits on a person. */
+const refuseAll: HostDelegate = {
+  askUser: async () => "No one can answer during this evaluation.",
+  approve: async () => ({ behavior: "deny", message: "no tool runs during this evaluation" }),
+};
 
 /** A task row and its findings, as the store holds them; `agoMs` is how long before the run it started. */
 type SeedTask = {
@@ -362,7 +368,7 @@ async function runCase(c: Case, n: number, env: Env): Promise<Outcome> {
     resume: false,
     hostServers: () => ({ servers: [], release: () => {} }),
     env: async () => ({ FAKE_CLAUDE_DIR: fakeDir }),
-    delegate: headlessDelegate,
+    delegate: refuseAll,
     log: () => {},
     persona,
     workerPersona,

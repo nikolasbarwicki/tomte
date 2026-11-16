@@ -51,6 +51,12 @@ export type RoutinePreview = z.infer<typeof RoutinePreview>;
 export const OAuthStart = z.object({ authorizeUrl: z.string() });
 export type OAuthStart = z.infer<typeof OAuthStart>;
 
+/** The `/api/bots/allowances` response: the tools the bot is always allowed to use, oldest first. */
+export const ToolAllowances = z.object({
+  allowances: z.array(z.object({ tool: z.string(), createdAt: z.number() })),
+});
+export type ToolAllowances = z.infer<typeof ToolAllowances>;
+
 /** The `/api/pair` request: a pairing code from `host pair` and the name the new device will show. */
 export const PairingRequest = z.object({
   code: z.string().min(1),

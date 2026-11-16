@@ -24,11 +24,11 @@ import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { defined } from "../testing/defined.ts";
 import { clientPost, pairDevice } from "../testing/paired-device.ts";
+import { createWaits } from "../waits/index.ts";
 import { removeBotBrowser } from "./cleanup.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
 import { createBrowserEndpoint } from "./endpoint.ts";
 import { sessionName } from "./engine-cli.ts";
-import { createHumanWaits } from "./human-waits.ts";
 import { createBrowserLogin } from "./login.ts";
 import { isAlive } from "./process.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./runtime.ts";
@@ -368,7 +368,8 @@ describe("sign out and bot deletion", () => {
       password: "pw-pw-pw",
     });
     credentials.grant(BOT, entry.id);
-    const waits = createHumanWaits({
+    const waits = createWaits({
+      db: migrate(new Database(":memory:")),
       emit() {},
       deliver: (_botId, text) => void delivered.push(text),
     });
@@ -392,7 +393,7 @@ describe("sign out and bot deletion", () => {
         botName: () => "bot",
         exchangeUrl: () => "http://127.0.0.1:1/x",
       }),
-      unattended: () => false,
+      wallPauseMs: 0,
     });
     const token = defined(endpoint.lease(BOT).servers[0], "server").token;
     const rejected = () => fetch(`http://127.0.0.1:1/x`).catch(() => undefined);
@@ -401,9 +402,9 @@ describe("sign out and bot deletion", () => {
     expect(credentials.hasGrant(BOT, entry.id)).toBe(true);
 
     takeover.request(BOT, "solve the CAPTCHA");
-    await removeBotBrowser({ endpoint, runtimes: rt, takeover, credentials }, BOT);
+    await removeBotBrowser({ endpoint, runtimes: rt, takeover, credentials, waits }, BOT);
     expect(delivered.join("\n")).toContain("cancelled");
-    expect(waits.pending(BOT)).toEqual([]);
+    expect(waits.list(BOT)).toEqual([]);
     expect(rt.forBot(BOT).controlHeld()).toBe(false);
 
     expect(closedSessions()).toEqual([sessionName(BOT)]);

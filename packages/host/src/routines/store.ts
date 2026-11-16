@@ -161,15 +161,74 @@ export function insertRun(db: Database, r: RoutineRun) {
   );
 }
 
+/** Ends a run that has not ended; false when it already had (a deleted run, or one another path finished first). */
 export function finishRun(
   db: Database,
   id: string,
-  status: Exclude<RunStatus, "running">,
+  status: Exclude<RunStatus, "running" | "waiting">,
   fields: { output?: string; error?: string; finishedAt: number },
-) {
-  db.query(
-    "UPDATE routine_runs SET status = ?, output = ?, error = ?, finished_at = ? WHERE id = ?",
-  ).run(status, fields.output ?? null, fields.error ?? null, fields.finishedAt, id);
+): boolean {
+  return (
+    db
+      .query(
+        "UPDATE routine_runs SET status = ?, output = ?, error = ?, finished_at = ? WHERE id = ? AND status IN ('running', 'waiting')",
+      )
+      .run(status, fields.output ?? null, fields.error ?? null, fields.finishedAt, id).changes > 0
+  );
+}
+
+export function getRun(db: Database, id: string): RoutineRun | undefined {
+  const r = db.query<RunRow, [string]>("SELECT * FROM routine_runs WHERE id = ?").get(id);
+  return r ? toRun(r) : undefined;
+}
+
+/** A running run whose turn ended on a request to the owner becomes `waiting`; false when it was not running. */
+export function parkRun(db: Database, id: string): boolean {
+  return (
+    db
+      .query("UPDATE routine_runs SET status = 'waiting' WHERE id = ? AND status = 'running'")
+      .run(id).changes > 0
+  );
+}
+
+/** A waiting run runs again; false when it was not waiting. */
+export function unparkRun(db: Database, id: string): boolean {
+  return (
+    db
+      .query("UPDATE routine_runs SET status = 'running' WHERE id = ? AND status = 'waiting'")
+      .run(id).changes > 0
+  );
+}
+
+/** The routine's run that waits for its owner, if any; a routine has at most one run in flight. */
+export function waitingRun(db: Database, routineId: string): RoutineRun | null {
+  const r = db
+    .query<RunRow, [string]>(
+      "SELECT * FROM routine_runs WHERE routine_id = ? AND status = 'waiting' ORDER BY started_at DESC, rowid DESC LIMIT 1",
+    )
+    .get(routineId);
+  return r ? toRun(r) : null;
+}
+
+/** Every run of the bot's routines that waits for its owner. */
+export function waitingRunsOfBot(db: Database, botId: string): RoutineRun[] {
+  return db
+    .query<RunRow, [string]>(
+      `SELECT routine_runs.* FROM routine_runs JOIN routines ON routines.id = routine_runs.routine_id
+       WHERE routines.bot_id = ? AND routine_runs.status = 'waiting' ORDER BY routine_runs.started_at, routine_runs.rowid`,
+    )
+    .all(botId)
+    .map(toRun);
+}
+
+/** Ids of the routine's runs that have not ended: running or waiting. */
+export function unfinishedRunIds(db: Database, routineId: string): string[] {
+  return db
+    .query<{ id: string }, [string]>(
+      "SELECT id FROM routine_runs WHERE routine_id = ? AND status IN ('running', 'waiting')",
+    )
+    .all(routineId)
+    .map((r) => r.id);
 }
 
 export function lastRun(db: Database, routineId: string): RoutineRun | null {
@@ -196,9 +255,12 @@ export function listRuns(
     .map(toRun);
 }
 
-/** Marks runs left `running` by a previous process as interrupted; `live` lists run ids this process still owns. */
-export function interruptStaleRuns(db: Database, now: number, live: string[]) {
-  db.query(
-    "UPDATE routine_runs SET status = 'interrupted', error = 'app stopped during run', finished_at = ? WHERE status = 'running' AND id NOT IN (SELECT value FROM json_each(?))",
-  ).run(now, JSON.stringify(live));
+/** Marks runs left `running` by a previous process as interrupted, and returns their ids; `live` lists run ids this process still owns. A `waiting` run has no process and is left alone. */
+export function interruptStaleRuns(db: Database, now: number, live: string[]): string[] {
+  return db
+    .query<{ id: string }, [number, string]>(
+      "UPDATE routine_runs SET status = 'interrupted', error = 'app stopped during run', finished_at = ? WHERE status = 'running' AND id NOT IN (SELECT value FROM json_each(?)) RETURNING id",
+    )
+    .all(now, JSON.stringify(live))
+    .map((r) => r.id);
 }

@@ -71,6 +71,8 @@ export interface FrontOptions {
   env?: () => Promise<Record<string, string>>;
   idleMs?: number;
   approveAll?: boolean;
+  /** Whether the owner always allows the bot a tool; see `createCanUseTool`. */
+  allows?: (tool: string) => boolean;
   delegate: HostDelegate;
   log?: (line: string) => void;
   /** Who the bot is; appended to the system prompt. */
@@ -151,6 +153,7 @@ export class FrontSession {
         roots,
         integrations: o.integrations,
         approveAll: o.approveAll,
+        allows: o.allows,
         delegate,
       });
     const own = rules(o.delegate);

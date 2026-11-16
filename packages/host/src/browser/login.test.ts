@@ -474,27 +474,6 @@ describe("browser_login", () => {
     >;
     expect(Object.values(state)).toEqual([evil]);
   });
-
-  test("is refused in an unattended routine run", async () => {
-    script();
-    const { call, botId } = await setup();
-    await addEntry();
-    writeFileSync(join(claudeDir, "hold"), "");
-    closers.push(() => rmSync(join(claudeDir, "hold"), { force: true }));
-    const created = await ui("/api/routines/create", {
-      botId,
-      name: "nightly",
-      instruction: "check",
-      schedule: { kind: "cron", expr: "0 3 * * *", tz: "UTC" },
-    });
-    const routine = (await created.json()) as { id: string };
-    await ui("/api/routines/run", { id: routine.id });
-    await until(() => messages().length === 1);
-    const r = await call("browser_login", { entry: "Example" });
-    expect(r.isError).toBe(true);
-    expect(r.text).toContain("unattended");
-    expect(engineCalls()).toEqual([]);
-  });
 });
 
 describe("the password stays in the keychain", () => {

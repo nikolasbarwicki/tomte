@@ -35,6 +35,8 @@ export interface BrowserRuntimeOptions {
   headed?: (botId: string) => boolean;
   /** How long a second call waits for the bot's lane before failing. Default 30 s. */
   laneWaitMs?: number | undefined;
+  /** How long the page tools pause between looks at a page behind a bot wall (three looks). Default 2 s, so the whole wait stays well under `laneWaitMs`; tests set it to 0. */
+  wallPauseMs?: number | undefined;
   /** A browser unused this long is closed, keeping saved logins. Default 10 minutes. */
   idleMs?: number;
   /** Time the engine gets to close the browser before its processes are killed. Default 10 s. */

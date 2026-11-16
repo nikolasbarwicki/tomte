@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { z } from "zod";
 
-import type { HumanWaits } from "./human-waits.ts";
+import type { Waits } from "../waits/index.ts";
 import { toEngineInput } from "./input.ts";
 import type { LiveView } from "./live-view.ts";
 import type { Takeover } from "./takeover.ts";
@@ -23,7 +23,7 @@ const WaitAnswer = z.object({ id: z.string(), action: z.string() });
 export interface BrowserUiRoutesOptions {
   isEnabled(botId: string): boolean;
   takeover: Takeover;
-  waits: HumanWaits;
+  waits: Waits;
   liveView: LiveView;
 }
 
@@ -45,7 +45,12 @@ export function createBrowserUiRoutes(o: BrowserUiRoutesOptions) {
 
     if (path === WAIT_ANSWER_PATH) {
       const answer = WaitAnswer.safeParse(body);
-      const answered = answer.success && o.waits.answer(answer.data.id, answer.data.action);
+      // Takeover and sign-in cards only: questions and approvals are answered through /api/answer.
+      const kind = answer.success ? o.waits.find(answer.data.id)?.kind : undefined;
+      const answered =
+        answer.success &&
+        (kind === "takeover" || kind === "credential") &&
+        o.waits.answer(answer.data.id, answer.data.action);
       return answered ? ok(res) : rejectRequest(res, 404, "no such pending request");
     }
     const ref = BotRef.safeParse(body);

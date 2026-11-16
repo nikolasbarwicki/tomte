@@ -25,8 +25,8 @@ export interface BrowserEndpointDeps {
   egress: EgressProxy;
   takeover: Takeover;
   login: BrowserLogin;
-  /** True while the bot runs a routine, with no user present. */
-  unattended: (botId: string) => boolean;
+  /** The pause between looks at a page behind a bot wall. */
+  wallPauseMs: number;
   /** The host-wide token registry shared with the other host endpoints; a private one when omitted. */
   tokens?: TokenRegistry;
 }
@@ -65,7 +65,7 @@ export function createBrowserEndpoint(deps: BrowserEndpointDeps): BrowserEndpoin
             filesDir: deps.filesDir(botId),
             takeover: deps.takeover,
             login: deps.login,
-            unattended: () => deps.unattended(botId),
+            wallPauseMs: deps.wallPauseMs,
           }),
       }),
 

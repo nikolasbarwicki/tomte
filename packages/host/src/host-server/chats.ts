@@ -17,6 +17,7 @@ import type {
 
 import {
   botFilesPath,
+  currentSession,
   getBot,
   listBots,
   newSession,
@@ -32,7 +33,16 @@ import type { Events, ExternalRow } from "../events/index.ts";
 import type { Handoffs, Mention } from "../handoffs/index.ts";
 import type { HostServersSource } from "../harness/index.ts";
 import { openFront, type FrontSession, type LoopStore } from "../loop/index.ts";
-import type { Executor } from "../routines/index.ts";
+import { parkingDelegate, type Executor } from "../routines/index.ts";
+import {
+  approvalActions,
+  canonicalInput,
+  isApproved,
+  type Wait,
+  type WaitKind,
+  type Waits,
+  type WaitSpec,
+} from "../waits/index.ts";
 import { createRoutineTurns } from "./routine-turns.ts";
 import { hostDelegate, openBotThread, type ThreadHooks } from "./threads.ts";
 import type { Transcript } from "./transcript.ts";
@@ -54,8 +64,10 @@ export interface ChatsDeps extends ThreadEnv {
     acted(botId: string, id: string, answer: string): void;
   };
   transcript: (bot: Bot) => Promise<Transcript>;
-  /** Human-wait cards still open for a bot, replayed into a rebuilt chat. */
-  pendingWaits: (botId: string) => ServerEvent[];
+  /** The human waits: their cards are replayed into a rebuilt chat, and questions and approvals of the bot's sessions are opened and answered through them. */
+  waits: Pick<Waits, "open" | "cards" | "list" | "find" | "answer" | "resolve" | "consumeApproval">;
+  /** The name of the routine a run belongs to, for the sidebar's Needs-you sources. */
+  routineName(runId: string): string | undefined;
   routinesEvent(botId: string): RoutinesEvent;
   workEvent(botId: string): WorkEvent;
   broadcast: (e: HostEvent) => void;
@@ -95,8 +107,8 @@ export interface Chats {
   /** Gives the external-event rows already in a bot's chat their new state, shown live when the chat is. */
   updateExternal(botId: string, rows: ExternalRow[]): void;
   isWorking(botId: string): boolean;
-  /** True while no human is watching the bot's turn: a routine turn or a headless run. */
-  unattended(botId: string): boolean;
+  /** The routine run the bot's unattended turn belongs to, if one is running now: a chat-hosted or headless routine turn, including a double-loop bot's run in a session of its own. */
+  runOf(botId: string): { runId: string; sessionId: string | undefined } | undefined;
   botsEvent(): BotsEvent;
   currentBotId: () => string | undefined;
   announceBots: () => void;
@@ -105,8 +117,10 @@ export interface Chats {
   switchTo(bot: Bot): Promise<void>;
   /** Closes and forgets a deleted bot's chat; when it was the shown one, shows the most recently active bot, or nothing. */
   drop(botId: string): Promise<void>;
-  /** Answers a question or approval, and acknowledges the external event the question was linked to; false when there is no such question. */
-  answer(id: string, value: string): boolean;
+  /** Answers a question or approval (with a note for the bot, for either), and acknowledges the external event the question was linked to; false when there is no such question. */
+  answer(id: string, value: string, note?: string): boolean;
+  /** Hands a closed wait to the tool call of a session still waiting for it in this process, with the text the bot would have been sent; false when none waits, and the bot then gets the text as a message. */
+  claim(wait: Wait, text: string): boolean;
   /** The id of the bot's oldest pending question that was asked about this external event, if any. */
   pendingAskFor(botId: string, eventId: string): string | undefined;
   /** Takes back a queued user message; false when it already reached the bot. */
@@ -139,10 +153,10 @@ type Chat = {
   /** Transcript events, replayed when the page (re)connects or switches back to this bot. */
   history: ServerEvent[];
   busy: boolean;
-  /** True while a routine turn runs, so its questions and approvals are answered without the user. */
-  routineTurn: boolean;
-  /** Questions and approvals waiting for the user, by id. A question asked about an external event keeps its id. */
-  pending: Map<string, { resolve: (value: string) => void; eventId?: string }>;
+  /** The routine run whose turn is running, so its questions and approvals park the run instead of waiting for the user. */
+  routineRun: string | undefined;
+  /** Tool calls of this session waiting in this process for a human wait, by wait id. A wait nobody awaits is answered with a message. */
+  awaiting: Map<string, (wait: Wait, text: string) => void>;
   /** External events that reached the bot's current session; the only ones a question may claim to be about. */
   delivered: Set<string>;
   /** Integration or bot settings changed during a standard turn; the thread reopens once the turn ends. A front has its own deferred close. */
@@ -155,10 +169,6 @@ type Chat = {
   presence: Presence;
   /** What the front has said in the turn running now, for when its result carries no text of its own. */
   frontText: string;
-  /** Routine turns waiting for the front's next result. */
-  frontWaiters: ((r: TurnResult | Error) => void)[];
-  /** Host messages for the front that wait out a headless routine run writing the same session. */
-  held: string[];
 };
 
 export function createChats(deps: ChatsDeps): Chats {
@@ -189,9 +199,18 @@ export function createChats(deps: ChatsDeps): Chats {
   };
   const isWorking = (botId: string) => {
     const chat = chats.get(botId);
-    return !!chat?.busy || (chat !== undefined && chat.presence !== "idle") || headless(botId);
+    return (
+      !!chat?.busy ||
+      (chat !== undefined && chat.presence !== "idle") ||
+      routineTurns.headlessRun(botId) !== undefined
+    );
   };
-  const chatsBotsEvent = () => botsEvent(dataRoot, db, isWorking, deps.events.needsYou);
+  const chatsBotsEvent = () =>
+    botsEvent(dataRoot, db, isWorking, deps.events.needsYou, {
+      list: () => deps.waits.list(),
+      routineName: (runId) => deps.routineName(runId),
+      eventOpen: (botId, id) => deps.items.isOpen(botId, id),
+    });
   const announceBots = () => broadcast(chatsBotsEvent());
 
   const queuedEvent = (e: UserEntry): ServerEvent =>
@@ -217,14 +236,10 @@ export function createChats(deps: ChatsDeps): Chats {
   /** Closes whatever CLI sessions a chat holds: its thread, and the front of a double-loop bot. */
   function closeSessions(chat: Chat, reason: string) {
     chat.thread.close(reason);
+    dropAwaiting(chat);
     chat.front?.close(reason);
     chat.presence = "idle";
     chat.frontText = "";
-    settleWaiters(chat, new Error(reason));
-  }
-
-  function settleWaiters(chat: Chat, result: TurnResult | Error) {
-    for (const waiter of chat.frontWaiters.splice(0)) waiter(result);
   }
 
   /** The latest rate limit report of each window. The limits belong to the account, not to a chat, so they outlive a new session and a reload; only a double-loop bot's page is sent them. */
@@ -274,25 +289,14 @@ export function createChats(deps: ChatsDeps): Chats {
     routineTurns.startReady(
       (botId) => chats.get(botId),
       (chat, job) => {
-        emit(chat, {
-          type: "routine",
-          name: job.routine.name,
-          trigger: job.prompt.includes('trigger="manual"') ? "manual" : "schedule",
-        });
-        if (chat.front) {
-          // A double-loop chat has no turn of its own: the routine's prompt goes to the front, and the routine ends with the front's next result.
-          const { promise, resolve } = Promise.withResolvers<TurnResult | Error>();
-          chat.frontWaiters.push(resolve);
-          pushToFront(chat, job.prompt, true);
-          return { done: promise, stop: (reason) => closeSessions(chat, reason) };
-        }
-        chat.routineTurn = true;
+        // A resumed run continues the turn the chat already shows the start of; its prompt is the owner's answers.
+        if (!job.resumed)
+          emit(chat, { type: "routine", name: job.routine.name, trigger: job.trigger });
+        chat.routineRun = job.runId;
         return { done: turn(chat, job.prompt), stop: (reason) => chat.thread.close(reason) };
       },
     );
     for (const chat of chats.values()) {
-      if (chat.front && chat.held.length && !headless(chat.bot.id))
-        for (const text of chat.held.splice(0)) pushToFront(chat, text, true);
       if (!chat.inbox.length || chat.busy || headless(chat.bot.id)) continue;
       const entries = chat.inbox.splice(0);
       for (const e of entries) {
@@ -326,17 +330,11 @@ export function createChats(deps: ChatsDeps): Chats {
     }
     if (chat.front) {
       showDelivered(chat, text);
-      messageFront(chat, text);
+      pushToFront(chat, text, true);
       return;
     }
     chat.inbox.push({ source: "host", text });
     await drain();
-  }
-
-  /** Gives a double-loop bot's front a message the app wrote; it waits while a scheduled run is writing the conversation. */
-  function messageFront(chat: Chat, text: string) {
-    if (headless(chat.bot.id)) chat.held.push(text);
-    else pushToFront(chat, text, true);
   }
 
   /** Gives a double-loop bot's front a message, which it takes mid-turn if it is busy; the reply streams through `onFrontMessage`. */
@@ -352,7 +350,6 @@ export function createChats(deps: ChatsDeps): Chats {
   function frontFailed(chat: Chat, e: Error) {
     emit(chat, { type: "error", message: e.message });
     chat.frontText = "";
-    settleWaiters(chat, e);
     setPresence(chat, restingPresence(chat));
     release(chat);
     void drain();
@@ -372,12 +369,9 @@ export function createChats(deps: ChatsDeps): Chats {
     if (m.subtype === "success" && !m.is_error) {
       emit(chat, { type: "done" });
       if (said.trim()) recordMessage(db, chat.bot.id, { from: "bot", text: said, at: Date.now() });
-      settleWaiters(chat, { result: m, text: said, toolsUsed: [] });
     } else {
       const detail = "errors" in m ? m.errors.join("; ") : m.result;
-      const failure = new Error(`turn failed (${m.subtype}): ${detail}`);
-      emit(chat, { type: "error", message: failure.message });
-      settleWaiters(chat, failure);
+      emit(chat, { type: "error", message: `turn failed (${m.subtype}): ${detail}` });
     }
     setPresence(chat, restingPresence(chat));
     void afterFrontTurn(chat);
@@ -453,8 +447,8 @@ export function createChats(deps: ChatsDeps): Chats {
       emit(chat, { type: "error", message: out.message });
     } finally {
       chat.busy = false;
-      chat.routineTurn = false;
-      dropLinkedAsks(chat);
+      chat.routineRun = undefined;
+      dropAwaiting(chat);
       if (chat.configStale) {
         chat.configStale = false;
         chat.thread.close("integrations changed");
@@ -466,34 +460,36 @@ export function createChats(deps: ChatsDeps): Chats {
     return out;
   }
 
-  /** A turn's end leaves no tool call waiting, so a question linked to an event can no longer reach the bot: answering it later must not acknowledge the event. */
-  function dropLinkedAsks(chat: Chat) {
-    for (const [id, p] of chat.pending)
-      if (p.eventId !== undefined) {
-        console.error(`[chat] question ${id} about event ${p.eventId} outlived its turn; dropped`);
-        chat.pending.delete(id);
-        emit(chat, { type: "ask_expired", id });
+  /**
+   * No tool call of the chat waits in this process any more: its turn ended or its session closed. Their waits stay open and an answer reaches the session as a message, except a question linked to an event: it can no longer reach the bot, so it ends and answering it later must not acknowledge the event.
+   */
+  function dropAwaiting(chat: Chat) {
+    if (!chat.awaiting.size) return;
+    chat.awaiting.clear();
+    for (const w of deps.waits.list(chat.bot.id))
+      if (w.kind === "question" && w.payload.eventId !== undefined) {
+        console.error(
+          `[chat] question ${w.id} about event ${w.payload.eventId} outlived its turn; dropped`,
+        );
+        deps.waits.resolve(w.id, "cancelled", "its turn ended");
       }
   }
 
-  /** Resolves a pending question, then closes the external event it was linked to, relaying `said` (the answer when omitted) to its sender, and cancels queued answers to that event, which the question's answer replaces. */
-  function answerAsk(id: string, value: string, said = value): boolean {
-    for (const c of chats.values()) {
-      const asked = c.pending.get(id);
-      if (!asked) continue;
-      c.pending.delete(id);
-      asked.resolve(value);
-      emit(c, { type: "answered", id, value });
-      if (asked.eventId !== undefined) {
-        const answers = c.inbox.filter(
-          (e): e is UserEntry => e.source === "user" && e.eventId === asked.eventId,
-        );
-        for (const e of answers) cancelEntry(c, e);
-        deps.items.acted(c.bot.id, asked.eventId, said);
-      }
-      return true;
+  /** Answers an open question or approval, then closes the external event a question was linked to, relaying `said` (the answer when omitted) to its sender, and cancels queued answers to that event, which the question's answer replaces. */
+  function answerAsk(id: string, value: string, said = value, note?: string): boolean {
+    const wait = deps.waits.find(id);
+    if (!wait || (wait.kind !== "question" && wait.kind !== "tool_approval")) return false;
+    if (!deps.waits.answer(id, value, note)) return false;
+    if (wait.kind === "question" && wait.payload.eventId !== undefined) {
+      const chat = chats.get(wait.botId);
+      const answers =
+        chat?.inbox.filter(
+          (e): e is UserEntry => e.source === "user" && e.eventId === wait.payload.eventId,
+        ) ?? [];
+      for (const e of answers) if (chat) cancelEntry(chat, e);
+      deps.items.acted(wait.botId, wait.payload.eventId, said);
     }
-    return false;
+    return true;
   }
 
   function cancelEntry(chat: Chat, entry: UserEntry) {
@@ -501,9 +497,11 @@ export function createChats(deps: ChatsDeps): Chats {
     emit(chat, { type: "dequeued", id: entry.id });
   }
 
-  /** The id of the bot's oldest pending question that was asked about this external event, if any. */
+  /** The id of the bot's oldest open question that was asked about this external event, if any. */
   function pendingAskFor(botId: string, eventId: string): string | undefined {
-    return [...(chats.get(botId)?.pending ?? [])].find(([, p]) => p.eventId === eventId)?.[0];
+    return deps.waits
+      .list(botId)
+      .find((w) => w.kind === "question" && w.payload.eventId === eventId)?.id;
   }
 
   /** The external events in the bot's current session: the rows after the last session marker of a transcript. */
@@ -517,13 +515,24 @@ export function createChats(deps: ChatsDeps): Chats {
     return ids;
   }
 
-  const waitForUser = (chat: Chat, event: (id: string) => ServerEvent, eventId?: string) => {
-    const id = randomUUID();
-    const { promise, resolve } = Promise.withResolvers<string>();
-    chat.pending.set(id, eventId === undefined ? { resolve } : { resolve, eventId });
-    emit(chat, event(id));
+  /**
+   * Opens a wait for a tool call of this chat's session and resolves, with the text the bot would have been sent, once the wait
+   * closes in this process. It belongs to no run: a double-loop front can ask while a routine run of the bot is parked or working
+   * in a session of its own.
+   */
+  function waitFor<K extends WaitKind>(
+    chat: Chat,
+    spec: WaitSpec<K>,
+  ): Promise<{ wait: Wait; text: string }> {
+    const { promise, resolve } = Promise.withResolvers<{ wait: Wait; text: string }>();
+    const { id } = deps.waits.open(chat.bot.id, {
+      ...spec,
+      runId: null,
+      sessionId: currentSession(chat.bot),
+    });
+    chat.awaiting.set(id, (wait, text) => resolve({ wait, text }));
     return promise;
-  };
+  }
 
   /** `chat` is read lazily: the sessions are created while their chat is being built. */
   const sessionHooks = (bot: Bot, chat: () => Chat): ThreadHooks => ({
@@ -531,7 +540,8 @@ export function createChats(deps: ChatsDeps): Chats {
       if (scope === "user" || current?.bot.id === bot.id)
         broadcast({ type: "memory", scope, text });
     },
-    unattended: () => chat().routineTurn,
+    unattended: () => chat().routineRun !== undefined,
+    park: parkingDelegate(deps.waits, bot.id),
     ownedEvent(claimed) {
       if (claimed === undefined) return undefined;
       const { bot: owner, delivered } = chat();
@@ -541,7 +551,28 @@ export function createChats(deps: ChatsDeps): Chats {
       );
       return undefined;
     },
-    ask: (event, eventId) => waitForUser(chat(), event, eventId),
+    askQuestion: async (q) => {
+      const { wait, text } = await waitFor(chat(), { kind: "question", payload: q, actions: [] });
+      return wait.state === "answered" ? (wait.outcome ?? "") : text;
+    },
+    askApproval: async ({ tool, input, reason }) => {
+      const c = chat();
+      // An earlier `allow` the bot has not used yet covers exactly this call.
+      if (deps.waits.consumeApproval(c.bot.id, tool, input))
+        return { behavior: "allow", updatedInput: input };
+      const { wait, text } = await waitFor(c, {
+        kind: "tool_approval",
+        payload: { tool, input, canonical: canonicalInput(input), reason },
+        actions: approvalActions(tool),
+      });
+      if (isApproved(wait.outcome)) return { behavior: "allow", updatedInput: input };
+      // A denial the user made keeps its short wording; a cancelled or expired wait says why.
+      const declined = wait.state === "answered";
+      return {
+        behavior: "deny",
+        message: declined ? `user declined${wait.note ? `: ${wait.note}` : ""}` : text,
+      };
+    },
   });
 
   const openThread = (bot: Bot, resume: boolean, chat: () => Chat): Thread =>
@@ -564,7 +595,7 @@ export function createChats(deps: ChatsDeps): Chats {
       store: deps.loop,
       emit: (e) => emitLoop(chat(), e),
       changed: () => tasksChanged(chat()),
-      dispatch: (text) => messageFront(chat(), text),
+      dispatch: (text) => pushToFront(chat(), text, true),
       onMessage: (m) => onFrontMessage(chat(), m),
       onEnd: (e) => frontFailed(chat(), e),
     });
@@ -575,7 +606,7 @@ export function createChats(deps: ChatsDeps): Chats {
     { history, hasSession }: Transcript,
     inbox: InboxEntry[] = [],
   ): Chat {
-    history.push(...deps.pendingWaits(bot.id));
+    history.push(...deps.waits.cards(bot.id));
     const routine = routineTurns.headless(bot.id);
     if (routine)
       history.push({
@@ -587,16 +618,14 @@ export function createChats(deps: ChatsDeps): Chats {
       bot,
       history,
       busy: false,
-      routineTurn: false,
-      pending: new Map(),
+      routineRun: undefined,
+      awaiting: new Map(),
       delivered: deliveredIn(history),
       configStale: false,
       inbox,
       front: openFrontSession(bot, hasSession, () => chat),
       presence: "idle",
       frontText: "",
-      frontWaiters: [],
-      held: [],
       thread: openThread(bot, hasSession, () => chat),
     };
     chats.set(bot.id, chat);
@@ -624,10 +653,10 @@ export function createChats(deps: ChatsDeps): Chats {
     recoverFront(chat);
   }
 
-  /** A chat opening after an app restart (or a front that died) tells its front about the agents that were cut off, so it resumes them. A scheduled run writing the conversation delays it until the chat is shown again. */
+  /** A chat opening after an app restart (or a front that died) tells its front about the agents that were cut off, so it resumes them. */
   function recoverFront(chat: Chat) {
     const front = chat.front;
-    if (!front?.needsRecovery() || headless(chat.bot.id)) return;
+    if (!front?.needsRecovery()) return;
     setPresence(chat, "typing");
     front.recover().then(
       (told) => {
@@ -692,7 +721,6 @@ export function createChats(deps: ChatsDeps): Chats {
     closeSessions(chat, "new session");
     newSession(dataRoot, chat.bot);
     chat.delivered.clear();
-    chat.held = [];
     chat.thread = openThread(chat.bot, false, () => chat);
     // Saving the bot refreshed its mode, so the new session is the mode the bot is in now.
     chat.front = openFrontSession(chat.bot, false, () => chat);
@@ -714,10 +742,6 @@ export function createChats(deps: ChatsDeps): Chats {
             return { refused: "an answer to that item is already queued" };
         }
         if (chat.front) {
-          if (headless(chat.bot.id))
-            return {
-              refused: "a scheduled run is writing this conversation; try again when it ends",
-            };
           userSaid(chat, shown, mentions);
           return {
             start() {
@@ -792,14 +816,28 @@ export function createChats(deps: ChatsDeps): Chats {
       }
     },
     isWorking,
-    unattended: (botId) => !!chats.get(botId)?.routineTurn || headless(botId),
+
+    runOf(botId) {
+      const runId = chats.get(botId)?.routineRun;
+      return runId === undefined
+        ? routineTurns.headlessRun(botId)
+        : { runId, sessionId: undefined };
+    },
     botsEvent: chatsBotsEvent,
     announceBots,
     currentBotId: () => current?.bot.id,
     open: () => current && openChat(current),
     switchTo,
     drop,
-    answer: answerAsk,
+    answer: (id, value, note) => answerAsk(id, value, undefined, note),
+    claim(wait, text) {
+      const chat = chats.get(wait.botId);
+      const waiting = chat?.awaiting.get(wait.id);
+      if (!chat || !waiting) return false;
+      chat.awaiting.delete(wait.id);
+      waiting(wait, text);
+      return true;
+    },
     pendingAskFor,
     cancelQueued(id) {
       for (const c of chats.values()) {

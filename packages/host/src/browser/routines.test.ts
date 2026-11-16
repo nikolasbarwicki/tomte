@@ -4,14 +4,17 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { CredentialEntry } from "@claudebot/contract/events";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
@@ -30,8 +33,35 @@ const ENV_KEYS = [
   "AGENT_BROWSER_EXECUTABLE_PATH",
   "FAKE_CLAUDE_DIR",
 ] as const;
-const UNATTENDED =
-  "not available in unattended runs; report the login wall or CAPTCHA in your result instead";
+const PASSWORD = "Zq7-correct-horse-battery";
+const SITE = "http://localhost:3999";
+const SIGN_IN = `${SITE}/login`;
+const HOME = `${SITE}/home`;
+const LOGIN_PAGES = {
+  [SIGN_IN]: {
+    title: "Sign in",
+    snapshot:
+      '- heading "Sign in" [level=1, ref=e1]\n- textbox "Username" [ref=e2]\n- textbox "Password" [ref=e3]\n- button "Sign in" [ref=e4]',
+  },
+  [HOME]: {
+    title: "Home",
+    snapshot: '- heading "Welcome" [level=1, ref=e1]\n- link "Sign out" [ref=e2]',
+  },
+  [`${SITE}/otp`]: {
+    title: "Verify",
+    snapshot:
+      '- heading "Two-step verification" [level=1, ref=e1]\n- textbox "Verification code" [ref=e2]\n- button "Verify" [ref=e3]',
+  },
+};
+const loginScript = (next = HOME) => ({
+  pages: LOGIN_PAGES,
+  logins: { [SIGN_IN]: { username: "alice", password: PASSWORD, next } },
+});
+const DAY = 24 * 60 * 60_000;
+type BotCall = (
+  name: string,
+  args?: Record<string, unknown>,
+) => Promise<{ isError: boolean; text: string }>;
 
 let root: string;
 let cwd: string;
@@ -39,6 +69,9 @@ let fakeDir: string;
 let claudeDir: string;
 let server: HostServer;
 let device: string;
+let db: Database;
+let clock = Date.now();
+let serverOptions: { script: object; laneWaitMs?: number | undefined };
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 const closers: (() => unknown)[] = [];
 
@@ -72,16 +105,33 @@ afterEach(async () => {
   await server.close();
 });
 
-async function startServer(script: object = {}, laneWaitMs?: number) {
-  writeFileSync(join(fakeDir, "script.json"), JSON.stringify(script));
-  server = await createHostServer({
+const makeServer = () =>
+  createHostServer({
     config: parseHostConfig(["--data-root", cwd], {}).config,
     cli: { path: FAKE_CLAUDE, source: "CLAUDE_PATH", needsShell: false },
-    db: migrate(new Database(":memory:")),
+    db,
     secrets: memorySecrets(),
-    browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir }, laneWaitMs },
+    browser: {
+      env: { FAKE_AGENT_BROWSER_DIR: fakeDir },
+      laneWaitMs: serverOptions.laneWaitMs,
+      wallPauseMs: 0,
+    },
+    now: () => clock,
   });
+
+async function startServer(script: object = {}, laneWaitMs?: number) {
+  serverOptions = { script, laneWaitMs };
+  writeFileSync(join(fakeDir, "script.json"), JSON.stringify(script));
+  db = migrate(new Database(":memory:"));
+  clock = Date.now();
+  server = await makeServer();
   device = pairDevice(server);
+}
+
+/** Stops the host and starts it again on the same data root and database, as a restart or a deploy does. */
+async function restartServer() {
+  await server.close();
+  server = await makeServer();
 }
 
 const until = async (check: () => boolean, ms = 4000) => {
@@ -137,14 +187,21 @@ async function startRoutine(botId: string) {
 const runs = async (id: string) =>
   (await (await ui("/api/routines/runs", { id })).json()) as {
     output: string | null;
+    error: string | null;
     status: string;
   }[];
+
+const untilRun = async (routineId: string, status: string) => {
+  for (let i = 0; i < 160 && (await runs(routineId))[0]?.status !== status; i++)
+    await Bun.sleep(25);
+  expect((await runs(routineId))[0]?.status).toBe(status);
+};
 
 describe.each([
   ["chat-hosted", true],
   ["headless", false],
 ])("%s routine turn", (_label, openChat) => {
-  test("browsing works; browser_request_takeover and browser_login are refused with the unattended message", async () => {
+  test("browsing works", async () => {
     await startServer();
     const { botId, call } = await setup(openChat);
     writeFileSync(join(claudeDir, "hold"), "");
@@ -153,14 +210,6 @@ describe.each([
 
     expect((await call("browser_open", { url: "https://example.com" })).isError).toBe(false);
     expect((await call("browser_snapshot")).isError).toBe(false);
-    expect(await call("browser_request_takeover", { reason: "CAPTCHA" })).toEqual({
-      isError: true,
-      text: UNATTENDED,
-    });
-    expect(await call("browser_login", { entry: "Example" })).toEqual({
-      isError: true,
-      text: UNATTENDED,
-    });
   });
 
   test("the tools work again once the routine is over", async () => {
@@ -175,7 +224,282 @@ describe.each([
     }
     expect(done).toBe(true);
     const r = await call("browser_request_takeover", { reason: "CAPTCHA" });
-    expect(r.text).not.toContain("unattended");
+    expect(r.isError).toBe(false);
+    expect(JSON.parse(r.text).status).toBe("waiting_for_user");
+  });
+});
+
+describe.each([
+  ["chat-hosted", true],
+  ["headless", false],
+])("%s routine takeover", (_label, openChat) => {
+  /** A routine turn that requested a takeover and ended: the run is parked and its bot's browser is held. */
+  async function park(reason = "solve the CAPTCHA") {
+    await startServer();
+    const bot = await setup(openChat);
+    writeFileSync(join(claudeDir, "hold"), "");
+    const routineId = await startRoutine(bot.botId);
+    await until(() => messages().length === 1);
+    expect((await bot.call("browser_open", { url: "https://example.com" })).isError).toBe(false);
+
+    const requested = await bot.call("browser_request_takeover", { reason });
+    expect(requested.isError).toBe(false);
+    const wait = JSON.parse(requested.text) as { status: string; id: string; instruction: string };
+    expect(wait.status).toBe("waiting_for_user");
+    expect(wait.instruction).toContain("End your turn");
+
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "waiting");
+    return { ...bot, routineId, wait };
+  }
+
+  test("parks the run and holds the browser; a hand-back resumes the same session and the run succeeds", async () => {
+    const { botId, call, connect, routineId } = await park();
+    expect(messages()).toHaveLength(1);
+    expect((await runs(routineId))[0]?.output).toBeNull();
+
+    // Another caller of the bot's browser meanwhile is refused.
+    const second = await connect();
+    expect(await second("browser_snapshot")).toEqual({ isError: true, text: "user has control" });
+
+    expect((await ui("/api/browser/control", { botId, action: "hand_back" })).status).toBe(200);
+    await untilRun(routineId, "succeeded");
+    expect(messages()).toHaveLength(2);
+    expect(messages()[1]).toContain("finished the takeover");
+    expect(messages()[1]).toContain("fresh snapshot");
+    expect(messages()[1]).not.toContain("<scheduled-routine");
+    expect(await runs(routineId)).toHaveLength(1);
+    expect((await call("browser_snapshot")).isError).toBe(false);
+  });
+
+  test("Skip resumes the run and tells the bot the user did not handle it", async () => {
+    const { call, routineId, wait } = await park("enter the 2FA code");
+    expect((await ui("/api/waits/answer", { id: wait.id, action: "skip" })).status).toBe(200);
+    await untilRun(routineId, "succeeded");
+    expect(messages()).toHaveLength(2);
+    expect(messages()[1]).toContain("skipped");
+    expect(messages()[1]).toContain("enter the 2FA code");
+    expect((await call("browser_snapshot")).isError).toBe(false);
+  });
+
+  test("a takeover nobody handles for 24 hours fails the run with 'approval expired' and releases the browser", async () => {
+    const { call, routineId, wait } = await park();
+    clock += DAY + 1000;
+    expect((await ui("/api/waits/answer", { id: wait.id, action: "done" })).status).toBe(404);
+    await untilRun(routineId, "failed");
+    expect((await runs(routineId))[0]).toMatchObject({ error: "approval expired" });
+    await until(() => messages().length === 2);
+    expect(messages()[1]).toContain("nothing was approved");
+    expect((await call("browser_snapshot")).isError).toBe(false);
+  });
+
+  test("a restart cancels the takeover and resumes the run with a message that the browser session is gone", async () => {
+    const { botId, routineId } = await park();
+    await restartServer();
+    await untilRun(routineId, "succeeded");
+    await until(() => messages().length === 2);
+    expect(messages()[1]).toContain("browser session is gone");
+    expect(messages()[1]).toContain("request the takeover again");
+
+    // The bot may ask again: its browser works and a new request is an ordinary wait.
+    const s = defined(server.browser.lease(botId).servers[0], "server");
+    const client = new Client({ name: "test", version: "1.0.0" });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(s.url), {
+        requestInit: { headers: { Authorization: `Bearer ${s.token}` } },
+      }),
+    );
+    closers.push(() => client.close());
+    const again = await client.callTool({
+      name: "browser_request_takeover",
+      arguments: { reason: "again" },
+    });
+    expect(again.isError).not.toBe(true);
+  });
+});
+
+describe.each([
+  ["chat-hosted", true],
+  ["headless", false],
+])("%s routine sign-in", (_label, openChat) => {
+  const loginCalls = () =>
+    (existsSync(join(fakeDir, "calls.jsonl"))
+      ? readFileSync(join(fakeDir, "calls.jsonl"), "utf8").trim().split("\n").filter(Boolean)
+      : []
+    ).filter((l) => JSON.parse(l).argv.includes("auth"));
+  const grantsOf = async (entryId: string) =>
+    ((await (await ui("/api/credentials/list", {})).json()) as CredentialEntry[]).find(
+      (e) => e.id === entryId,
+    )?.grants ?? [];
+
+  /** A bot with a stored entry and a routine whose first run is in progress, held in its turn so the test can call the bot's tools. */
+  async function start(script: object = loginScript()) {
+    await startServer(script);
+    const bot = await setup(openChat);
+    const added = await ui("/api/credentials/add", {
+      label: "Example",
+      signInUrl: SIGN_IN,
+      username: "alice",
+      password: PASSWORD,
+    });
+    expect(added.status).toBe(200);
+    const entry = (await added.json()) as CredentialEntry;
+    writeFileSync(join(claudeDir, "hold"), "");
+    const routineId = await startRoutine(bot.botId);
+    await until(() => messages().length === 1);
+    return { ...bot, entry, routineId };
+  }
+
+  /** Runs the routine again while its bot's turn is held. */
+  async function runAgain(routineId: string) {
+    const before = messages().length;
+    writeFileSync(join(claudeDir, "hold"), "");
+    expect((await ui("/api/routines/run", { id: routineId })).status).toBe(200);
+    await until(() => messages().length === before + 1);
+  }
+
+  /** The bot asks for the entry in the held run, the turn ends and the run parks on the approval. */
+  async function parkOnLogin(call: BotCall, routineId: string) {
+    const asked = await call("browser_login", { entry: "Example" });
+    expect(asked.isError).toBe(false);
+    const wait = JSON.parse(asked.text) as { status: string; id: string; instruction: string };
+    expect(wait.status).toBe("waiting_for_user");
+    expect(wait.instruction).toContain("End your turn");
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "waiting");
+    return wait;
+  }
+
+  /** First run parks on the approval and Allow resumes it to success: the entry is granted afterwards. */
+  async function grant(call: BotCall, routineId: string, entry: CredentialEntry) {
+    const wait = await parkOnLogin(call, routineId);
+    expect((await ui("/api/waits/answer", { id: wait.id, action: "allow" })).status).toBe(200);
+    await untilRun(routineId, "succeeded");
+    expect(await grantsOf(entry.id)).toHaveLength(1);
+  }
+
+  test("an ungranted entry parks the run; Allow grants it and resumes the run with the instruction to call browser_login again", async () => {
+    const { call, routineId, entry } = await start();
+    const wait = await parkOnLogin(call, routineId);
+    expect(loginCalls()).toHaveLength(0);
+    expect(await grantsOf(entry.id)).toEqual([]);
+    expect((await runs(routineId))[0]?.output).toBeNull();
+
+    expect((await ui("/api/waits/answer", { id: wait.id, action: "allow" })).status).toBe(200);
+    await untilRun(routineId, "succeeded");
+    expect(messages()).toHaveLength(2);
+    expect(messages()[1]).toContain('Call browser_login("Example") again');
+    expect(messages()[1]).not.toContain("<scheduled-routine");
+    expect(await grantsOf(entry.id)).toHaveLength(1);
+    expect(await runs(routineId)).toHaveLength(1);
+  });
+
+  test("after Allow the next run signs in with a granted entry and opens no wait", async () => {
+    const { call, routineId, entry } = await start();
+    await grant(call, routineId, entry);
+    expect(loginCalls()).toHaveLength(0);
+
+    await runAgain(routineId);
+    const r = await call("browser_login", { entry: "Example" });
+    expect(r.isError).toBe(false);
+    expect(JSON.parse(r.text)).toMatchObject({ status: "signed_in", site: SITE });
+    expect(loginCalls()).toHaveLength(1);
+    expect(JSON.parse(loginCalls()[0]!).argv).toEqual(
+      expect.arrayContaining(["auth", "login", entry.id]),
+    );
+
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "succeeded");
+    expect(await runs(routineId)).toHaveLength(2);
+  });
+
+  test("revoking the grant makes the next run park again", async () => {
+    const { call, botId, routineId, entry } = await start();
+    await grant(call, routineId, entry);
+    expect((await ui("/api/credentials/revoke", { id: entry.id, botId })).status).toBe(200);
+
+    await runAgain(routineId);
+    await parkOnLogin(call, routineId);
+    expect(loginCalls()).toHaveLength(0);
+    expect(await grantsOf(entry.id)).toEqual([]);
+  });
+
+  test("Deny resumes the run with the denial and creates no grant", async () => {
+    const { call, routineId, entry } = await start();
+    const wait = await parkOnLogin(call, routineId);
+    expect((await ui("/api/waits/answer", { id: wait.id, action: "deny" })).status).toBe(200);
+    await untilRun(routineId, "succeeded");
+    expect(messages()).toHaveLength(2);
+    expect(messages()[1]).toContain('denied sign-in with "Example"');
+    expect(messages()[1]).toContain("Do not ask again");
+    expect(await grantsOf(entry.id)).toEqual([]);
+    expect(loginCalls()).toHaveLength(0);
+  });
+
+  test("a sign-in page says browser_login will ask while the entry is ungranted, and names the entry once Allow granted it", async () => {
+    const { call, routineId, entry } = await start();
+    const ungranted = await call("browser_open", { url: SIGN_IN });
+    expect(ungranted.text).toContain("will ask the owner");
+    expect(ungranted.text).toContain('"Example"');
+
+    await grant(call, routineId, entry);
+    await runAgain(routineId);
+    const granted = await call("browser_open", { url: SIGN_IN });
+    expect(granted.text).toContain('call browser_login with entry "Example"');
+    expect(granted.text).not.toContain("will ask the owner");
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "succeeded");
+  });
+
+  test("a sign-in that needs a code tells the bot to request a takeover, which parks the run", async () => {
+    const { call, routineId, entry } = await start(loginScript(`${SITE}/otp`));
+    await grant(call, routineId, entry);
+
+    await runAgain(routineId);
+    const r = await call("browser_login", { entry: "Example" });
+    expect(r.isError).toBe(false);
+    expect(JSON.parse(r.text).status).toBe("needs_another_step");
+    expect(r.text).toContain("browser_request_takeover");
+    const taken = JSON.parse(
+      (await call("browser_request_takeover", { reason: "enter the code" })).text,
+    );
+    expect(taken.status).toBe("waiting_for_user");
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "waiting");
+  });
+
+  test("the password reaches no tool result, message, run output or file", async () => {
+    const { call, routineId } = await start();
+    const results: string[] = [];
+    const tracked = async (name: string, args: Record<string, unknown> = {}) => {
+      const r = await call(name, args);
+      results.push(r.text);
+      return r;
+    };
+    const wait = JSON.parse((await tracked("browser_login", { entry: "Example" })).text) as {
+      id: string;
+    };
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "waiting");
+    await ui("/api/waits/answer", { id: wait.id, action: "allow" });
+    await untilRun(routineId, "succeeded");
+    await runAgain(routineId);
+    expect(JSON.parse((await tracked("browser_login", { entry: "Example" })).text).status).toBe(
+      "signed_in",
+    );
+    await tracked("browser_snapshot");
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "succeeded");
+
+    const everything = [...results, ...messages(), JSON.stringify(await runs(routineId))];
+    for (const text of everything) expect(text).not.toContain(PASSWORD);
+    const scan = (dir: string): string[] =>
+      readdirSync(dir).flatMap((name) => {
+        const path = join(dir, name);
+        return statSync(path).isDirectory() ? scan(path) : [path];
+      });
+    for (const file of scan(cwd).filter((f) => f !== join(fakeDir, "script.json")))
+      expect(readFileSync(file).includes(PASSWORD), file).toBe(false);
   });
 });
 
@@ -202,6 +526,116 @@ describe("login wall in a routine", () => {
       status: "succeeded",
       output: "Login wall at example.com; could not check the dashboard.",
     });
+  });
+});
+
+const WALL_URL = "https://walls.test/";
+const SIGN_IN_URL = "https://walls.test/login";
+const CLOUDFLARE =
+  '- heading "walls.test" [level=1]\n- paragraph: Performing security verification\n- paragraph: This website uses a security service to protect against malicious bots.';
+const WALL_SIGN_IN =
+  '- heading "Sign in" [level=1]\n- textbox "Username" [ref=e1]\n- textbox "Password" [ref=e2]\n- button "Sign in" [ref=e3]';
+const OPEN_ROLES = '- heading "Open roles" [level=1]\n- link "Backend engineer" [ref=e1]';
+const NOTE = "Note from the host";
+
+const snapshotCalls = () =>
+  readFileSync(join(fakeDir, "calls.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l) as { argv: string[] })
+    .filter((c) => c.argv.includes("snapshot"));
+
+describe.each([
+  ["chat-hosted", true],
+  ["headless", false],
+])("%s routine page walls", (_label, openChat) => {
+  /** A routine whose turn is held open, so the bot's tools run inside the run. */
+  async function inRoutine(script: object) {
+    await startServer(script);
+    const bot = await setup(openChat);
+    writeFileSync(join(claudeDir, "hold"), "");
+    const routineId = await startRoutine(bot.botId);
+    await until(() => messages().length === 1);
+    return { ...bot, routineId };
+  }
+
+  test("a bot wall that clears while it is waited out returns the clear page with no note", async () => {
+    const { call } = await inRoutine({
+      pages: {
+        [WALL_URL]: {
+          title: "Just a moment...",
+          snapshot: CLOUDFLARE,
+          later: [{ title: "Jobs", snapshot: OPEN_ROLES }],
+        },
+      },
+    });
+    const opened = await call("browser_open", { url: WALL_URL });
+    expect(opened.isError).toBe(false);
+    expect(opened.text).toContain("Open roles");
+    expect(opened.text).toContain("Title: Jobs");
+    expect(opened.text).not.toContain(NOTE);
+    expect(opened.text).not.toContain("security verification");
+    expect(snapshotCalls()).toHaveLength(2);
+  });
+
+  test("a bot wall that stays comes back with the vendor note, and a takeover request then parks the run", async () => {
+    const { call, routineId } = await inRoutine({
+      pages: { [WALL_URL]: { title: "Just a moment...", snapshot: CLOUDFLARE } },
+    });
+    const opened = await call("browser_open", { url: WALL_URL });
+    expect(opened.isError).toBe(false);
+    expect(opened.text).toContain(NOTE);
+    expect(opened.text).toContain("Cloudflare bot protection");
+    expect(opened.text).toContain("browser_request_takeover");
+    expect(snapshotCalls().length).toBeGreaterThan(1);
+    // Nothing started the takeover by itself.
+    expect((await runs(routineId))[0]?.status).toBe("running");
+
+    const requested = await call("browser_request_takeover", { reason: "Cloudflare check" });
+    expect(JSON.parse(requested.text).status).toBe("waiting_for_user");
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "waiting");
+  });
+
+  test("a sign-in page with no stored credential is a source unavailable: no park, the run succeeds with the bot's report", async () => {
+    const report = "Unavailable: walls.test (login required)";
+    writeFileSync(join(claudeDir, "result.txt"), report);
+    const { call, routineId } = await inRoutine({
+      pages: { [SIGN_IN_URL]: { title: "Sign in", snapshot: WALL_SIGN_IN } },
+    });
+    const opened = await call("browser_open", { url: SIGN_IN_URL });
+    expect(opened.text).toContain("source unavailable");
+    expect(opened.text).toContain("Do not try to sign in");
+    expect(opened.text).not.toContain("browser_request_takeover");
+
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "succeeded");
+    expect((await runs(routineId))[0]).toMatchObject({ output: report, error: null });
+    expect(messages()).toHaveLength(1);
+  });
+
+  test("a page that only mentions Cloudflare in a long text gets no note", async () => {
+    const essay = Array.from(
+      { length: 30 },
+      (_, i) =>
+        `- paragraph: Part ${i} of an essay about how a site is protected, with a good many words.`,
+    );
+    const { call } = await inRoutine({
+      pages: {
+        [WALL_URL]: {
+          title: "Just a moment: notes on CDNs",
+          snapshot: [
+            '- heading "Notes on CDNs" [level=1]',
+            ...essay,
+            '- paragraph: The page said "Just a moment..." and showed a Cloudflare Ray ID.',
+          ].join("\n"),
+        },
+      },
+    });
+    const opened = await call("browser_open", { url: WALL_URL });
+    expect(opened.text).toContain("Notes on CDNs");
+    expect(opened.text).not.toContain(NOTE);
+    expect(snapshotCalls()).toHaveLength(1);
   });
 });
 

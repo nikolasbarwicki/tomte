@@ -3,6 +3,7 @@
 // The directory comes from FAKE_CLAUDE_DIR, or else from the first argument. It holds: `messages.jsonl` (one line per user message received: `{ sessionId, text }`, plus the message's `isSynthetic`, `priority` and `origin` when it has them; the session taken from the CLI's argv) and an optional `hold` file:
 // while it exists, a received user message is not answered, which keeps the turn running. An optional `result.txt` is the text each turn answers with (default "ok").
 // An optional `remember.json` (`{ scope, line }`) makes each user message call the host's in-process `remember` tool over the control protocol before the turn is answered. An optional `ask.json` (`{ question, options?, event_id?, linkDelivered?, afterHold?, crash? }`) does the same with `ask_user`; `linkDelivered` makes the call pass the id of the external event wrapped in the message it answers, as a bot following the host's instructions would, `afterHold` makes the calls (and the file's content they use) wait until `hold` is gone, and `crash` makes the process exit shortly after calling, with the question unanswered.
+// An optional `approve.json` (`{ tool, input? }`) makes each user message send a `can_use_tool` control request for that tool and input, as the CLI does when a tool call needs the host's permission, wait for the host's answer and append `{ tool_name, agent_id, response }` to `permission-results.jsonl` (`response` is `{ behavior: "allow" | "deny", ... }`, or `{ error }`). Like a pending `ask_user`, an approval keeps the turn running for as long as the user takes; the turn is answered once the host has answered.
 // A turn is answered only once every tool it called has its result, as with the real CLI: a pending `ask_user` keeps the turn running.
 // Every tool result the host sends back for those calls is appended to `tool-results.jsonl` as the MCP response message.
 // `auth status` prints the real CLI's JSON and exits 1 while a `signed-out` file exists, else exits 0. `auth login` exits with the code in the optional `login-exit` file (default 0).
@@ -439,6 +440,14 @@ for await (const line of createInterface({ input: process.stdin })) {
         process.exit(1);
       }
       if (late) called = callTools();
+      const approveFile = join(dir, "approve.json");
+      if (existsSync(approveFile)) {
+        const { tool, input } = JSON.parse(readFileSync(approveFile, "utf8"));
+        await runSteps([{ canUseTool: { tool_name: tool, input: input ?? {} } }], {
+          n,
+          queued: "",
+        });
+      }
       // Like the real CLI, the turn ends only once every tool it called has its result.
       while (results < done + called) await Bun.sleep(25);
       out(resultMessage(defaultResult()));

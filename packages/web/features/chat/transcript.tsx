@@ -61,6 +61,7 @@ import { cn } from "@/lib/utils";
 import { answer, answerWait, cancelSend } from "./api.ts";
 import { EXTERNAL_ICONS } from "./external-icons.ts";
 import { bindMentions } from "./mentions.ts";
+import { approvalAnswerLabel, approvalButtons, cardElementId } from "./model.ts";
 import { Scroller, ScrollerItem } from "./scroller.tsx";
 
 type ToolItem = Extract<Item, { kind: "tool" }>;
@@ -70,6 +71,9 @@ type Row = Exclude<Item, ToolItem | QueuedItem> | { kind: "steps"; tools: ToolIt
 
 /** Scroller items use `content-visibility: auto`, whose paint containment would clip a handoff card's shadow. */
 const UNCLIPPED = "[content-visibility:visible]";
+
+const isRequest = (row: Row): row is Extract<Row, { kind: "wait" | "approve" | "ask" }> =>
+  row.kind === "wait" || row.kind === "approve" || row.kind === "ask";
 
 function toRows(items: Item[]): Row[] {
   const rows: Row[] = [];
@@ -134,7 +138,11 @@ export function Transcript({
       contentClassName="mx-auto w-full max-w-3xl gap-4 px-4 py-6"
     >
       {rows.map((row, i) => (
-        <ScrollerItem key={i} className={cn(row.kind === "handoff" && UNCLIPPED)}>
+        <ScrollerItem
+          key={i}
+          {...(isRequest(row) && { id: cardElementId(row.id) })}
+          className={cn(row.kind === "handoff" && UNCLIPPED)}
+        >
           <RowView
             row={row}
             botId={bot.id}
@@ -589,6 +597,8 @@ function AskCard({ item }: { item: Extract<Item, { kind: "ask" }> }) {
 
 function ApproveCard({ item }: { item: Extract<Item, { kind: "approve" }> }) {
   const { pending, pressed, press } = useCardCommand();
+  const [note, setNote] = useState("");
+  const open = item.answer === undefined;
   return (
     <Request
       icon={<ShieldQuestionIcon />}
@@ -598,32 +608,37 @@ function ApproveCard({ item }: { item: Extract<Item, { kind: "approve" }> }) {
         </span>
       }
       description={item.reason}
-      answer={item.answer === "allow" ? "Allowed" : item.answer === "deny" ? "Denied" : item.answer}
-      actions={
-        <>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={pending}
-            onClick={() => press("deny", () => answer(item.id, "deny"))}
-          >
-            {pending && pressed === "deny" && <Spinner data-icon="inline-start" />}
-            Deny
-          </Button>
-          <Button
-            size="sm"
-            disabled={pending}
-            onClick={() => press("allow", () => answer(item.id, "allow"))}
-          >
-            {pending && pressed === "allow" && <Spinner data-icon="inline-start" />}
-            Allow
-          </Button>
-        </>
-      }
+      answer={item.answer === undefined ? undefined : approvalAnswerLabel(item.answer)}
+      actions={approvalButtons(item.actions).map((a) => (
+        <Button
+          key={a.id}
+          size="sm"
+          variant={a.main ? "default" : "outline"}
+          disabled={pending}
+          onClick={() =>
+            press(a.id, () => (a.takesNote ? answer(item.id, a.id, note) : answer(item.id, a.id)))
+          }
+        >
+          {pending && pressed === a.id && <Spinner data-icon="inline-start" />}
+          {a.label}
+        </Button>
+      ))}
       footer={
-        <pre className="bg-muted/60 max-h-60 w-full overflow-auto rounded-md p-3 font-mono text-xs whitespace-pre-wrap">
-          {item.input}
-        </pre>
+        <div className="flex w-full flex-col gap-2">
+          {open && (
+            <Input
+              aria-label="Note for the bot if you deny"
+              placeholder="Note for the bot if you deny (optional)"
+              maxLength={500}
+              value={note}
+              disabled={pending}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          )}
+          <pre className="bg-muted/60 max-h-60 w-full overflow-auto rounded-md p-3 font-mono text-xs whitespace-pre-wrap">
+            {item.input}
+          </pre>
+        </div>
       }
     />
   );

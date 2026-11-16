@@ -252,6 +252,82 @@ const SCHEMA_V15 = (db: Database) => {
     db.run("ALTER TABLE loop_tasks ADD COLUMN after_task TEXT");
 };
 
+// Human waits (ADR-0009): every tool approval, question, takeover and credential approval a bot raises, kept so an open wait survives
+// a restart. `payload` and `actions` are JSON, shaped by `kind`. `run_id` is null for an attended wait; it has no foreign key to
+// `routine_runs`, whose rebuild would otherwise cascade into this table. `outcome` is the action or answer picked, or `timeout`,
+// `expired` or `cancelled`; `note` is the owner's note, or why the host cancelled the wait. `consumed_at` marks an `allow` that the
+// bot's next call with the same input has used.
+const SCHEMA_V16 = `
+CREATE TABLE IF NOT EXISTS human_waits (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('tool_approval','question','takeover','credential')),
+  run_id TEXT,
+  session_id TEXT,
+  payload TEXT NOT NULL,
+  actions TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open','answered','expired','cancelled')),
+  outcome TEXT,
+  note TEXT,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  resolved_at INTEGER,
+  consumed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS human_waits_open ON human_waits(bot_id, created_at) WHERE state = 'open';
+CREATE INDEX IF NOT EXISTS human_waits_by_run ON human_waits(run_id) WHERE run_id IS NOT NULL;
+`;
+
+// A routine run can park (ADR-0009): `waiting` joins the run statuses. SQLite cannot change a CHECK, so `routine_runs` is rebuilt with
+// its rows and rowids kept; the index went with the old table and is made again. `human_waits` has no foreign key to it, so the drop
+// cascades nowhere. `human_waits.delivered_at` marks a wait of a run whose outcome the run has given the bot (in a resume message,
+// or by continuing at once), so a restart between two answers of one park still delivers both together. A database migrated again
+// after its version was set back (the old-database tests do) already has the wider table and the column, and one made by hand may
+// have neither table; each is changed only when it needs it.
+const REBUILD_ROUTINE_RUNS = `
+CREATE TABLE routine_runs_v17 (
+  id TEXT PRIMARY KEY,
+  routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+  trigger TEXT NOT NULL CHECK (trigger IN ('schedule','manual')),
+  scheduled_for INTEGER,               -- NULL for manual runs
+  status TEXT NOT NULL CHECK (status IN ('running','waiting','succeeded','failed','interrupted','skipped')),
+  session_id TEXT,
+  output TEXT,
+  error TEXT,
+  started_at INTEGER NOT NULL,
+  finished_at INTEGER,
+  UNIQUE (routine_id, scheduled_for)   -- NULLs do not collide, so manual runs are unlimited
+);
+INSERT INTO routine_runs_v17 (rowid, id, routine_id, trigger, scheduled_for, status, session_id, output, error, started_at, finished_at)
+  SELECT rowid, id, routine_id, trigger, scheduled_for, status, session_id, output, error, started_at, finished_at FROM routine_runs ORDER BY rowid;
+DROP TABLE routine_runs;
+ALTER TABLE routine_runs_v17 RENAME TO routine_runs;
+CREATE INDEX routine_runs_by_routine ON routine_runs(routine_id, started_at DESC);
+`;
+
+const SCHEMA_V17 = (db: Database) => {
+  const sql = db
+    .query<{ sql: string }, []>(
+      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'routine_runs'",
+    )
+    .get()?.sql;
+  if (sql !== undefined && !sql.includes("'waiting'")) db.run(REBUILD_ROUTINE_RUNS);
+  const columns = db.query<{ name: string }, []>("PRAGMA table_info(human_waits)").all();
+  if (columns.length > 0 && !columns.some((c) => c.name === "delivered_at"))
+    db.run("ALTER TABLE human_waits ADD COLUMN delivered_at INTEGER");
+};
+
+// Tools the owner chose "Always allow for this bot" on (ADR-0009): a rule is the tool's name and nothing more, kept per bot, and is
+// read wherever a tool call would otherwise ask. Switching a tool off in Integrations still wins over it.
+const SCHEMA_V18 = `
+CREATE TABLE IF NOT EXISTS tool_allowances (
+  bot_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (bot_id, tool_name)
+);
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -273,6 +349,9 @@ export function migrate(db: Database): Database {
     SCHEMA_V13,
     SCHEMA_V14,
     SCHEMA_V15,
+    SCHEMA_V16,
+    SCHEMA_V17,
+    SCHEMA_V18,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;
