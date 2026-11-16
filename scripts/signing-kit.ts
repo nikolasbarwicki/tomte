@@ -13,7 +13,7 @@ export type SigningPlatform = "darwin" | "win32";
 /** Repository variable (`vars.CLAUDEBOT_REQUIRE_SIGNING`) that turns a missing secret into a failed release. */
 const REQUIRE_SIGNING_VAR = "CLAUDEBOT_REQUIRE_SIGNING";
 
-/** The entitlements file for everything the release signs on macOS (Electron app, helpers and the bundled host). */
+/** The entitlements file for everything the release signs on macOS (Electron app, helpers, the bundled host and the bundled browser). */
 export const MAC_ENTITLEMENTS = join(import.meta.dir, "entitlements.mac.plist");
 
 /**
@@ -151,24 +151,42 @@ export interface SignedMacCode {
   info: CodesignInfo;
 }
 
-/** The entitlements the bundled host needs to run under the hardened runtime: Bun's JavaScript engine JITs. */
-const HOST_ENTITLEMENTS = [
+/** One Mach-O or bundle inside the bundled browser: its signature, and its entitlements when it must hold them. */
+export interface SignedMacPart extends SignedMacCode {
+  /** `codesign -d --entitlements :-` output; present for the code that runs (Chrome and its Helper apps), absent for libraries and the engine. */
+  entitlements?: string;
+}
+
+/**
+ * The entitlements `scripts/entitlements.mac.plist` grants, and so what every signed executable that carries them must
+ * hold: the host (Bun's JavaScript engine JITs) and the browser's Chrome and Helper apps (V8 JITs; and Chrome loads
+ * Google-signed libraries, which library validation would refuse once Chrome is re-signed under our Team ID). Keep this
+ * list and the plist in step.
+ */
+const MAC_ENTITLEMENT_KEYS = [
   "com.apple.security.cs.allow-jit",
   "com.apple.security.cs.allow-unsigned-executable-memory",
+  "com.apple.security.cs.disable-library-validation",
 ] as const;
 
 /**
- * What a signed macOS app must look like: the app and the bundled host are each signed with a Developer ID
- * Application certificate (not ad-hoc), the hardened runtime and a secure timestamp (both required to notarize), and
- * both by the same certificate, so the Team IDs and the leaf authority agree. Returns the problems, empty when fine.
+ * What a signed macOS app must look like: the app, the bundled host and every part of the bundled browser (the engine,
+ * Chrome for Testing, its framework, Helper apps and libraries) are each signed with a Developer ID Application
+ * certificate (not ad-hoc), the hardened runtime and a secure timestamp (both required to notarize), and all by the same
+ * certificate, so the Team IDs and the leaf authority agree. The host and the parts that carry entitlements must hold
+ * {@link MAC_ENTITLEMENT_KEYS}. A bundle with no browser parts is a problem: a signed release without its browser is
+ * broken. Returns the problems, empty when fine.
  */
 export function checkSignedMac(
   app: SignedMacCode,
   host: SignedMacCode,
   hostEntitlements: string,
+  browser: readonly SignedMacPart[],
 ): string[] {
   const problems: string[] = [];
-  for (const { label, info } of [app, host]) {
+  if (browser.length === 0) problems.push("the bundle has no browser parts to check");
+  const others = [host, ...browser];
+  for (const { label, info } of [app, ...others]) {
     if (info.adhoc) problems.push(`${label} is ad-hoc signed`);
     if (!info.authorities[0]?.startsWith("Developer ID Application:")) {
       problems.push(
@@ -179,19 +197,27 @@ export function checkSignedMac(
     if (!info.hardenedRuntime) problems.push(`${label} does not have the hardened runtime`);
     if (!info.secureTimestamp) problems.push(`${label} has no secure timestamp`);
   }
-  if (app.info.teamId !== host.info.teamId) {
-    problems.push(
-      `the host's Team ID (${host.info.teamId ?? "none"}) differs from the app's (${app.info.teamId ?? "none"})`,
-    );
+  for (const { label, info } of others) {
+    if (app.info.teamId !== info.teamId) {
+      problems.push(
+        `${label}'s Team ID (${info.teamId ?? "none"}) differs from the app's (${app.info.teamId ?? "none"})`,
+      );
+    }
+    if (app.info.authorities[0] !== info.authorities[0]) {
+      problems.push(
+        `${label} is signed by "${info.authorities[0] ?? "none"}", the app by "${app.info.authorities[0] ?? "none"}"`,
+      );
+    }
   }
-  if (app.info.authorities[0] !== host.info.authorities[0]) {
-    problems.push(
-      `the host is signed by "${host.info.authorities[0] ?? "none"}", the app by "${app.info.authorities[0] ?? "none"}"`,
-    );
+  const held: [string, string][] = [[host.label, hostEntitlements]];
+  for (const part of browser) {
+    if (part.entitlements !== undefined) held.push([part.label, part.entitlements]);
   }
-  for (const key of HOST_ENTITLEMENTS) {
-    if (!hasEntitlement(hostEntitlements, key))
-      problems.push(`the host lacks the ${key} entitlement`);
+  for (const [label, entitlements] of held) {
+    for (const key of MAC_ENTITLEMENT_KEYS) {
+      if (!hasEntitlement(entitlements, key))
+        problems.push(`${label} lacks the ${key} entitlement`);
+    }
   }
   return problems;
 }

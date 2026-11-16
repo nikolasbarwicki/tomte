@@ -10,6 +10,7 @@ import {
   parseDeveloperIdIdentity,
   planSigning,
   localMacSigning,
+  MAC_ENTITLEMENTS,
   SIGNING_SECRETS,
   SigningError,
   signingRequired,
@@ -147,6 +148,10 @@ const ENTITLEMENTS = `<?xml version="1.0" encoding="UTF-8"?>
 <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
 <true/>
 </dict></plist>`;
+const ALL_ENTITLEMENTS = ENTITLEMENTS.replace(
+  "</dict>",
+  "<key>com.apple.security.cs.disable-library-validation</key>\n<true/>\n</dict>",
+);
 
 describe("parseCodesignDetails", () => {
   test("reads the team, the authorities, the hardened runtime and the secure timestamp", () => {
@@ -203,9 +208,16 @@ describe("hasEntitlement", () => {
 describe("checkSignedMac", () => {
   const app = { label: "the app", info: parseCodesignDetails(SIGNED) };
   const host = { label: "the host", info: parseCodesignDetails(SIGNED) };
+  const engine = { label: "browser-engine/agent-browser", info: parseCodesignDetails(SIGNED) };
+  const chrome = {
+    label: "browser-engine/chrome/Chrome.app",
+    info: parseCodesignDetails(SIGNED),
+    entitlements: ALL_ENTITLEMENTS,
+  };
+  const browser = [engine, chrome];
 
-  test("accepts an app and a host signed by the same Developer ID with the host's entitlements", () => {
-    expect(checkSignedMac(app, host, ENTITLEMENTS)).toEqual([]);
+  test("accepts an app, a host and a browser signed by the same Developer ID with their entitlements", () => {
+    expect(checkSignedMac(app, host, ALL_ENTITLEMENTS, browser)).toEqual([]);
   });
 
   test("rejects a host signed by another team or another certificate", () => {
@@ -217,7 +229,7 @@ describe("checkSignedMac", () => {
         authorities: ["Developer ID Application: Other (ZZZZZ99999)"],
       },
     };
-    const problems = checkSignedMac(app, other, ENTITLEMENTS);
+    const problems = checkSignedMac(app, other, ALL_ENTITLEMENTS, browser);
     expect(problems).toContain(
       "the host's Team ID (ZZZZZ99999) differs from the app's (ABCDE12345)",
     );
@@ -226,7 +238,7 @@ describe("checkSignedMac", () => {
 
   test("rejects an ad-hoc host, one without the hardened runtime or a timestamp, and a missing entitlement", () => {
     const adhoc = { label: "the host", info: parseCodesignDetails(ADHOC) };
-    const problems = checkSignedMac(app, adhoc, "<plist><dict></dict></plist>");
+    const problems = checkSignedMac(app, adhoc, "<plist><dict></dict></plist>", browser);
     expect(problems).toContain("the host is ad-hoc signed");
     expect(problems).toContain("the host has no Team ID");
     expect(problems).toContain("the host does not have the hardened runtime");
@@ -239,8 +251,64 @@ describe("checkSignedMac", () => {
       label: "the app",
       info: { ...app.info, authorities: ["Apple Development: Someone (ABCDE12345)"] },
     };
-    expect(checkSignedMac(dev, host, ENTITLEMENTS).join("\n")).toContain(
+    expect(checkSignedMac(dev, host, ALL_ENTITLEMENTS, browser).join("\n")).toContain(
       "the app is not signed with a Developer ID Application certificate",
+    );
+  });
+
+  test("rejects an unsigned or ad-hoc part of the browser", () => {
+    const bad = { label: "browser-engine/agent-browser", info: parseCodesignDetails(ADHOC) };
+    const problems = checkSignedMac(app, host, ALL_ENTITLEMENTS, [bad, chrome]);
+    expect(problems).toContain("browser-engine/agent-browser is ad-hoc signed");
+    expect(problems).toContain("browser-engine/agent-browser has no secure timestamp");
+    expect(problems).toContain("browser-engine/agent-browser does not have the hardened runtime");
+  });
+
+  test("rejects Chrome signed by another team than the app", () => {
+    const google = {
+      ...chrome,
+      info: {
+        ...chrome.info,
+        teamId: "EQHXZ8M8AV",
+        authorities: ["Developer ID Application: Google LLC (EQHXZ8M8AV)"],
+      },
+    };
+    const problems = checkSignedMac(app, host, ALL_ENTITLEMENTS, [engine, google]);
+    expect(problems).toContain(
+      "browser-engine/chrome/Chrome.app's Team ID (EQHXZ8M8AV) differs from the app's (ABCDE12345)",
+    );
+  });
+
+  test("rejects Chrome without disable-library-validation, which it needs to load Google-signed code", () => {
+    const problems = checkSignedMac(app, host, ALL_ENTITLEMENTS, [
+      engine,
+      { ...chrome, entitlements: ENTITLEMENTS },
+    ]);
+    expect(problems).toEqual([
+      "browser-engine/chrome/Chrome.app lacks the com.apple.security.cs.disable-library-validation entitlement",
+    ]);
+  });
+
+  test("a host signed with the entitlements file before it granted disable-library-validation fails too", () => {
+    expect(checkSignedMac(app, host, ENTITLEMENTS, browser)).toEqual([
+      "the host lacks the com.apple.security.cs.disable-library-validation entitlement",
+    ]);
+  });
+
+  test("reads no entitlements off a part that was not asked for them", () => {
+    expect(checkSignedMac(app, host, ALL_ENTITLEMENTS, [engine])).toEqual([]);
+  });
+
+  test("rejects a bundle with no browser to check", () => {
+    expect(checkSignedMac(app, host, ALL_ENTITLEMENTS, [])).toEqual([
+      "the bundle has no browser parts to check",
+    ]);
+  });
+
+  test("what scripts/entitlements.mac.plist grants is what the check requires", async () => {
+    const plist = await Bun.file(MAC_ENTITLEMENTS).text();
+    expect(checkSignedMac(app, host, plist, [{ ...chrome, entitlements: plist }, engine])).toEqual(
+      [],
     );
   });
 });

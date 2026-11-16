@@ -32,7 +32,13 @@ import {
   show,
   withoutKeychain,
 } from "./local-signing-kit.ts";
-import { dmgCommands, macAppCommands, verifyDmg, verifyMacBundle } from "./mac-verify.ts";
+import {
+  dmgCommands,
+  macAppCommands,
+  macPartCommands,
+  verifyDmg,
+  verifyMacBundle,
+} from "./mac-verify.ts";
 import { type ProcessRow, processesUnder, refusal } from "./process-guard.ts";
 import { sha256, writeChecksums } from "./release-kit.ts";
 import { sha512Base64, parseUpdateMetadata } from "./release-verify.ts";
@@ -542,13 +548,23 @@ function buildSteps(config: LocalConfig): Step[] {
     {
       kind: "internal",
       title:
-        "Verify the app and the app inside the update zip, host Team ID, hardened runtime, entitlements",
+        "Verify the app and the app inside the update zip, the host and every part of the bundled browser: Team ID, hardened runtime, entitlements",
       touches: "a temporary folder (the zip is unpacked there and removed)",
-      commands: () => [
-        ...Object.values(macAppCommands(p.app)),
-        ["ditto", "-x", "-k", p.zip, "<temporary folder>"],
-        ...Object.values(macAppCommands("<temporary folder>/Claudebot.app")),
-      ],
+      commands: () => {
+        const browserParts = Object.values(
+          macPartCommands(
+            "<each Helper app, Helper executable and library in the Chrome framework>",
+            "app",
+          ),
+        );
+        return [
+          ...Object.values(macAppCommands(p.app, "arm64")),
+          ...browserParts,
+          ["ditto", "-x", "-k", p.zip, "<temporary folder>"],
+          ...Object.values(macAppCommands("<temporary folder>/Claudebot.app", "arm64")),
+          ...browserParts,
+        ];
+      },
       run: async (c, d) => {
         const teams = await verifyMacBundle(d.run, p.bundleDir, config.version, ["arm64"], d.log);
         if (new Set(teams).size !== 1) {

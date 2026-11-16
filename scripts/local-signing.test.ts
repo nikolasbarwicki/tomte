@@ -5,6 +5,7 @@ import { appendFile, chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
+import { macBrowserFiles } from "./browser-fixture.ts";
 import { CommandError, type Ran, type Runner } from "./command-runner.ts";
 import { hostBinaryName } from "./desktop-kit.ts";
 import {
@@ -43,6 +44,7 @@ TeamIdentifier=ABCDE12345
 const ENTITLEMENTS = `<plist><dict>
 <key>com.apple.security.cs.allow-jit</key><true/>
 <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+<key>com.apple.security.cs.disable-library-validation</key><true/>
 </dict></plist>`;
 
 const sh = (cmd: string[], cwd: string) => {
@@ -62,6 +64,10 @@ interface Behavior {
   ascRejectExitsZero?: boolean;
   /** With the asc backend, `asc notarization log` fails. */
   ascLogFails?: boolean;
+  /** `codesign -dvv` of Chrome reports this Team ID instead of the app's. */
+  chromeTeam?: string;
+  /** The packaged app holds no browser at all. */
+  noBrowser?: boolean;
   /** Runs before a command whose argv contains `when`. */
   before?: { when: string; run: (fake: FakeMac) => void | Promise<void> };
 }
@@ -93,7 +99,11 @@ class FakeMac {
         if (last.endsWith(".dmg")) await appendFile(last, "+signed");
         return ok();
       }
-      if (sub === "-dvv") return ok("", DETAILS);
+      if (sub === "-dvv") {
+        const team = this.behavior.chromeTeam;
+        const other = team !== undefined && last.endsWith("Google Chrome for Testing.app");
+        return ok("", other ? DETAILS.replaceAll("ABCDE12345", team) : DETAILS);
+      }
       if (sub === "-d") return ok(ENTITLEMENTS);
       return ok();
     }
@@ -201,6 +211,11 @@ class FakeMac {
       await readFile(join(flag("--host-dir"), hostBinaryName("darwin", "arm64"))),
     );
     await chmod(host, 0o755);
+    for (const rel of this.behavior.noBrowser ? [] : macBrowserFiles("arm64")) {
+      const file = join(app, "Contents/Resources", rel);
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, "SYNTHETIC BROWSER FILE");
+    }
     const dmg = join(bundle, `Claudebot-${version}-arm64.dmg`);
     const zip = join(bundle, `Claudebot-${version}-arm64-mac.zip`);
     await writeFile(dmg, "SYNTHETIC DMG");
@@ -483,6 +498,23 @@ describe("runLocalSigning", () => {
     await expect(runLocalSigning(config, h.deps)).rejects.toThrow(/exactly one|2/);
     expect(h.fake.calls.some((c) => c[0] === "codesign")).toBe(false);
     expect(await exists(config.paths.signingDir)).toBe(false);
+  });
+
+  test("a browser left under another Team ID than the app fails the run and writes no artifacts", async () => {
+    const h = harness({ chromeTeam: "ZZZZZ99999" });
+    const config = await configure();
+    await expect(runLocalSigning(config, h.deps)).rejects.toThrow(
+      "Google Chrome for Testing.app's Team ID (ZZZZZ99999) differs from the app's (ABCDE12345)",
+    );
+    expect(await exists(config.paths.artifacts)).toBe(false);
+    expect(await exists(config.paths.signingDir)).toBe(false);
+  });
+
+  test("an app packaged without its browser fails the run", async () => {
+    const h = harness({ noBrowser: true });
+    await expect(runLocalSigning(await configure(), h.deps)).rejects.toThrow(
+      "the bundled browser is incomplete",
+    );
   });
 
   test("a rejected notarization fails with Apple's log, cleans up and never staples or writes artifacts", async () => {
