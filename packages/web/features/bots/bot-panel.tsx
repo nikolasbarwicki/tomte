@@ -5,6 +5,7 @@ import {
   EllipsisIcon,
   FileIcon,
   FolderOpenIcon,
+  Settings2Icon,
   TrashIcon,
   XIcon,
 } from "lucide-react";
@@ -35,7 +36,15 @@ import { cn } from "@/lib/utils";
 
 import { deleteFile, downloadUrl, revealFile } from "./api.ts";
 
-export const PANEL_TABS = ["work", "memory", "files", "routines", "browser"] as const;
+export const PANEL_TABS = [
+  "work",
+  "tasks",
+  "memory",
+  "files",
+  "routines",
+  "browser",
+  "settings",
+] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
 const isPanelTab = (v: unknown): v is PanelTab => PANEL_TABS.some((t) => t === v);
 
@@ -47,14 +56,20 @@ const useCanReveal = () => usePublicHostInfo()?.capabilities.reveal === true;
 export function BotPanel({
   bot,
   work,
+  tasks,
   routines,
   browser,
+  settings,
   onClose,
 }: {
   bot: BotSummary;
   work: ReactNode;
+  /** The Tasks tab, shown for a double-loop bot only. */
+  tasks: ReactNode;
   routines: ReactNode;
   browser: ReactNode;
+  /** How the bot chats and what it runs on. */
+  settings: ReactNode;
   onClose: () => void;
 }) {
   const navigate = botRoute.useNavigate();
@@ -62,7 +77,14 @@ export function BotPanel({
   const botWork = useWork();
   // Work leads once the bot has sources; before that it comes last, so the events URL stays one tab away.
   const hasSources = botWork?.botId === bot.id && botWork.sources.length > 0;
-  const tab = explicitTab ?? (hasSources ? "work" : "memory");
+  const hasTasks = bot.chatMode === "double_loop";
+  // A link to the Tasks tab of a bot that is not in double-loop mode (any more) opens the default tab.
+  const tab =
+    explicitTab !== undefined && (hasTasks || explicitTab !== "tasks")
+      ? explicitTab
+      : hasSources
+        ? "work"
+        : "memory";
   const workTrigger = (
     <TabsTrigger value="work">
       Work
@@ -91,6 +113,7 @@ export function BotPanel({
       <div className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
         <TabsList className="min-w-0 flex-1">
           {hasSources && workTrigger}
+          {hasTasks && <TabsTrigger value="tasks">Tasks</TabsTrigger>}
           <TabsTrigger value="memory">Memory</TabsTrigger>
           <TabsTrigger value="files">
             Files <Count n={files.files.length} />
@@ -105,6 +128,9 @@ export function BotPanel({
             )}
           </TabsTrigger>
           {!hasSources && workTrigger}
+          <TabsTrigger value="settings" aria-label="Settings" title="Settings">
+            <Settings2Icon />
+          </TabsTrigger>
         </TabsList>
         <Button variant="ghost" size="icon-sm" aria-label="Close panel" onClick={onClose}>
           <XIcon />
@@ -113,6 +139,11 @@ export function BotPanel({
       <TabsContent value="work" className="min-h-0 overflow-y-auto p-4">
         {work}
       </TabsContent>
+      {hasTasks && (
+        <TabsContent value="tasks" className="min-h-0 overflow-y-auto p-4">
+          {tasks}
+        </TabsContent>
+      )}
       <TabsContent value="memory" className="min-h-0 overflow-y-auto p-4">
         <Memory bot={bot} />
       </TabsContent>
@@ -130,6 +161,9 @@ export function BotPanel({
       </TabsContent>
       <TabsContent value="browser" className="min-h-0 overflow-y-auto p-4">
         {browser}
+      </TabsContent>
+      <TabsContent value="settings" className="min-h-0 overflow-y-auto p-4">
+        {settings}
       </TabsContent>
     </Tabs>
   );

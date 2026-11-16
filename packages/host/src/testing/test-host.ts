@@ -47,6 +47,8 @@ export interface HandoffHost {
   cwd: string;
   /** The data root the host runs on. */
   dataRoot: string;
+  /** The host's database. */
+  db: Database;
   /** Creates a bot; its first session id is its bot id. */
   createBot(name: string, purpose?: string): string;
   /** Names of the secrets the host holds in its (in-memory) secret store. */
@@ -55,10 +57,22 @@ export interface HandoffHost {
   actAs(botId: string): Promise<{ call: BotCaller; token: string; url: string; revoke(): void }>;
   /** Texts the fake CLI received for the bot's first session, oldest first. */
   messagesOf(botId: string): string[];
+  /** The user messages the fake CLI received for the bot's first session, with the flags the host sent them with. */
+  messageRecords(botId: string): {
+    text: string;
+    isSynthetic?: boolean;
+    priority?: string;
+    origin?: { kind: string };
+  }[];
   /** CLI launches the fake CLI recorded: the directory it ran in, the system prompt addition, the MCP servers it was given, the whole environment it started with and its command line. */
   launches(): {
     cwd: string;
     appendSystemPrompt?: string;
+    /** The agent definitions of the launch, by name, as the CLI's initialize request carried them. */
+    agents?: Record<
+      string,
+      { description: string; prompt: string; tools?: string[]; disallowedTools?: string[] }
+    >;
     mcpServers: Record<string, { url: string; headers: { Authorization: string } }>;
     env: Record<string, string>;
     argv: string[];
@@ -82,6 +96,32 @@ export interface HandoffHost {
   stopAsking(): void;
   /** The text of each `ask_user` or `remember` result the fake CLI got back from the host, oldest first. */
   toolResults(): string[];
+  /**
+   * Scripts what the fake CLI emits per user message, as the double-loop front's query would (see the header of `fake-claude.ts`
+   * for the steps). Each script runs for one message; a message takes the first unused script whose `match` it contains.
+   */
+  loopScript(...scripts: { match?: string; steps: Record<string, unknown>[] }[]): void;
+  /** Lets a script step `waitFor` the file `name` stop waiting. */
+  allow(name: string): void;
+  /** What the host's hooks answered to the script's hook calls, oldest first. */
+  hookResults(): {
+    hook: string;
+    input: Record<string, unknown>;
+    callback: string | null;
+    response: unknown;
+  }[];
+  /** What the host's in-process MCP servers answered to the script's tool calls, oldest first. */
+  loopCalls(): {
+    server: string;
+    tool: string;
+    result?: { content: { text: string }[]; isError?: boolean };
+  }[];
+  /** What the host answered to the script's `canUseTool` steps, oldest first. */
+  permissionResults(): {
+    tool_name: string;
+    agent_id?: string;
+    response: { behavior?: string; message?: string; error?: string } | null;
+  }[];
   /** The executable the host runs as its Claude CLI, and what its `auth status` reports from now on. */
   readonly cliPath: string;
   setSignedIn(signedIn: boolean): void;
@@ -116,6 +156,10 @@ export async function startHandoffHost(
   ui?: UiAssets,
   /** Stands in for the OS file manager, so a test sees what the host would reveal and never launches one. */
   reveal?: HostServerOptions["reveal"],
+  /** Overrides for the host's timing, so a test need not wait out the defaults. */
+  timing?: Pick<HostServerOptions, "frontIdleMs">,
+  /** The environment the host's configuration is read from, such as `CLAUDEBOT_ASK_APPROVAL`. */
+  env: Record<string, string> = {},
 ): Promise<HandoffHost> {
   const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   const root = realpathSync(mkdtempSync(join(tmpdir(), "handoffs-test-")));
@@ -134,7 +178,7 @@ export async function startHandoffHost(
   );
   chmodSync(cliPath, 0o755);
 
-  let config = parseHostConfig(["--data-root", dataRoot, ...hostFlags], {}, LINUX).config;
+  let config = parseHostConfig(["--data-root", dataRoot, ...hostFlags], env, LINUX).config;
   const restoreEnv = () => {
     for (const k of ENV_KEYS)
       if (saved[k] === undefined) delete process.env[k];
@@ -167,6 +211,7 @@ export async function startHandoffHost(
           ? { status: "available" }
           : { status: "unavailable", reason: "no sandbox in this test" },
       ...(reveal !== undefined && { reveal }),
+      ...timing,
       now: () => clock,
       ...(ui !== undefined && { ui }),
     });
@@ -197,6 +242,7 @@ export async function startHandoffHost(
     authHeaders: asDevice(deviceToken),
     cwd,
     dataRoot: config.dataRoot,
+    db,
     createBot: (name, purpose) => createBot(config.dataRoot, name, purpose).id,
     async actAs(botId) {
       const lease = server.bots.lease(botId);
@@ -219,6 +265,10 @@ export async function startHandoffHost(
       lines(join(claudeDir, "messages.jsonl"))
         .filter((m: { sessionId: string }) => m.sessionId === botId)
         .map((m: { text: string }) => m.text),
+    messageRecords: (botId) =>
+      lines(join(claudeDir, "messages.jsonl")).filter(
+        (m: { sessionId: string }) => m.sessionId === botId,
+      ),
     launches: () => lines(join(claudeDir, "launches.jsonl")),
     controls: () => lines(join(claudeDir, "controls.jsonl")),
     engineCalls: () => lines(join(fakeDir, "calls.jsonl")),
@@ -241,6 +291,12 @@ export async function startHandoffHost(
       lines(join(claudeDir, "tool-results.jsonl")).map(
         (m: { result: { content: { text: string }[] } }) => m.result.content[0]?.text ?? "",
       ),
+    loopScript: (...scripts) =>
+      writeFileSync(join(claudeDir, "loop.json"), JSON.stringify({ scripts })),
+    allow: (name) => writeFileSync(join(claudeDir, name), ""),
+    hookResults: () => lines(join(claudeDir, "hook-results.jsonl")),
+    loopCalls: () => lines(join(claudeDir, "tool-results.jsonl")),
+    permissionResults: () => lines(join(claudeDir, "permission-results.jsonl")),
     cliPath,
     setSignedIn: (signedIn) =>
       signedIn
@@ -273,7 +329,7 @@ export async function startHandoffHost(
       await Promise.all(clients.splice(0).map((c) => c.close()));
       await server.close();
       if (flags)
-        config = parseHostConfig(["--data-root", config.dataRoot, ...flags], {}, LINUX).config;
+        config = parseHostConfig(["--data-root", config.dataRoot, ...flags], env, LINUX).config;
       server = await startServer();
     },
     async stop() {

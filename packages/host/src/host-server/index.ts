@@ -28,6 +28,7 @@ import {
   type SignInState,
 } from "../harness/index.ts";
 import { createIntegrations } from "../integrations/index.ts";
+import { createLoopStore } from "../loop/index.ts";
 import { AGENT_ADDRESS, clientOrigin, agentOrigin, type HostConfig } from "../platform/config.ts";
 import { openFileSecrets } from "../platform/file-secrets.ts";
 import { keychainSecrets, type SecretStore } from "../platform/secrets.ts";
@@ -73,6 +74,8 @@ export interface HostServerOptions {
   ui?: UiAssets;
   /** The clock device auth reads for pairing code expiry, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
+  /** How long an idle double-loop front stays open; 10 minutes when omitted. */
+  frontIdleMs?: number;
 }
 
 export interface HostServer {
@@ -109,6 +112,9 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const cwd = ensureWorkspace(dataRoot);
   const initial = o.botId ? getBot(dataRoot, o.botId) : listBots(dataRoot)[0];
   if (o.botId && !initial) throw new Error(`no bot ${o.botId} in ${dataRoot}`);
+  const loop = createLoopStore(db);
+  // No agent survives a host that went down, so whatever the log says still runs was cut off.
+  loop.interruptRunning(Date.now());
 
   const clientListener = await openListener(o.config.bind.address, o.config.bind.port);
   const agentListener = await openListener(AGENT_ADDRESS, 0).catch(async (e) => {
@@ -189,6 +195,9 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       handoffs.endpoint.lease(botId),
       isolation(botId),
     ]);
+  /** A double-loop front only talks and hands off: no browser, and the same isolation as the bot's own thread. */
+  const frontServers: HostServersSource = (botId) =>
+    combineLeases([handoffs.endpoint.lease(botId), isolation(botId)]);
   /** Other bots' directories are on every bot's deny-read list, so a bot that appears or goes reaches the open sessions. */
   const botsChanged = () => {
     if (o.config.isolateAllBots) chats.reconfigure(undefined, "bots changed");
@@ -200,6 +209,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     // After the trash move the bot no longer exists, so messages the browser cleanup sends it (a cancelled takeover) go nowhere.
     trashBot(dataRoot, botId);
     deleteActivity(db, botId);
+    loop.removeBot(botId);
     await externalEvents.removeBot(botId);
     await chats.drop(botId);
     await browser.removeBot(botId);
@@ -215,7 +225,14 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       chats.reconfigure(undefined, "integrations changed");
     },
   });
-  const transcripts = createTranscripts({ cwd, dataRoot, db, handoffs, events: externalEvents });
+  const transcripts = createTranscripts({
+    cwd,
+    dataRoot,
+    db,
+    handoffs,
+    events: externalEvents,
+    loop,
+  });
   const claude = createClaudeAccess(o.config, cli);
   const chats = createChats({
     cwd,
@@ -224,7 +241,10 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     claude,
     db,
     integrations,
+    ...(o.frontIdleMs !== undefined && { frontIdleMs: o.frontIdleMs }),
     hostServers,
+    frontServers,
+    loop,
     botEnv: (botId) => externalEvents.env(botId),
     approveAll: !o.config.askApproval,
     handoffs,
@@ -287,6 +307,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     removeBot,
     cwd,
     headedBrowser: o.config.headedBrowser,
+    hasActiveTasks: (botId) => loop.hasActive(botId),
     dataRoot,
     cli,
     db,

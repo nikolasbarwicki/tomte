@@ -17,7 +17,9 @@ import { cn } from "@/lib/utils";
 import { newSession } from "./api.ts";
 import { Composer } from "./composer.tsx";
 import { ContextMeter } from "./context-meter.tsx";
+import { livePresence } from "./model.ts";
 import { NeedsYou } from "./needs-you.tsx";
+import { RateLimitMeter } from "./rate-limit-meter.tsx";
 import { Transcript } from "./transcript.tsx";
 
 const PANEL_KEY = "claudebot:panel";
@@ -31,7 +33,11 @@ export function ChatView({
   bot: BotSummary;
   panel: (controls: { onClose: () => void }) => ReactNode;
 }) {
-  const { items, busy, context } = useChat();
+  const chat = useChat();
+  const { items, context, rateLimits } = chat;
+  // A double-loop bot never has a turn that blocks the chat: its one presence line says what it is doing.
+  const live = livePresence(bot.chatMode, chat);
+  const busy = live !== "idle";
   const bots = useBots() ?? [];
   const wide = useMediaQuery("(min-width: 1024px)");
   const [pinned, setPinned] = useState(() => localStorage.getItem(PANEL_KEY) !== "closed");
@@ -41,10 +47,10 @@ export function ChatView({
   const panelOpen = wide ? pinned : sheetOpen;
   useEffect(() => localStorage.setItem(PANEL_KEY, pinned ? "open" : "closed"), [pinned]);
   const setPanelOpen = (open: boolean) => (wide ? setPinned(open) : setSheetOpen(open));
-  const selectBrowserTab = () =>
-    void navigate({ search: (prev) => ({ ...prev, panel: "browser" }), replace: true });
-  const showBrowser = () => {
-    selectBrowserTab();
+  const selectTab = (panel: "browser" | "tasks") =>
+    void navigate({ search: (prev) => ({ ...prev, panel }), replace: true });
+  const showTab = (panel: "browser" | "tasks") => {
+    selectTab(panel);
     setPanelOpen(true);
   };
 
@@ -59,7 +65,7 @@ export function ChatView({
     setShownTakeoverId(takeoverId);
     if (takeoverId) setPanelOpen(true);
   }
-  const onTakeover = useEffectEvent(selectBrowserTab);
+  const onTakeover = useEffectEvent(() => selectTab("browser"));
   useEffect(() => {
     if (takeoverId) onTakeover();
   }, [takeoverId]);
@@ -86,6 +92,7 @@ export function ChatView({
             <h1 className="truncate text-sm font-medium">{bot.name}</h1>
             {bot.purpose && <p className="text-muted-foreground truncate text-xs">{bot.purpose}</p>}
           </div>
+          {bot.chatMode === "double_loop" && <RateLimitMeter limits={rateLimits} />}
           <ContextMeter context={context} />
           <Tooltip>
             <TooltipTrigger
@@ -118,11 +125,18 @@ export function ChatView({
             >
               <PanelRightIcon />
             </TooltipTrigger>
-            <TooltipContent>Memory, files, routines and browser</TooltipContent>
+            <TooltipContent>Tasks, memory, files, routines and settings</TooltipContent>
           </Tooltip>
         </AppBar>
         <NeedsYou bot={bot} />
-        <Transcript bot={bot} bots={bots} items={items} busy={busy} onShowBrowser={showBrowser} />
+        <Transcript
+          bot={bot}
+          bots={bots}
+          items={items}
+          presence={live}
+          onShowBrowser={() => showTab("browser")}
+          onShowTasks={() => showTab("tasks")}
+        />
         <Composer bot={bot} bots={bots} />
       </div>
       {wide ? (
@@ -140,7 +154,7 @@ export function ChatView({
           >
             <SheetTitle className="sr-only">{bot.name}</SheetTitle>
             <SheetDescription className="sr-only">
-              Memory, files, routines and browser
+              Tasks, memory, files, routines and settings
             </SheetDescription>
             {panelContent}
           </SheetContent>

@@ -1,6 +1,10 @@
 import type { Database } from "bun:sqlite";
 
-import { getSessionInfo, getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
+import {
+  getSessionInfo,
+  getSessionMessages,
+  type SessionMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import {
   RunTrigger,
   type Bot,
@@ -12,6 +16,13 @@ import { z } from "zod";
 import { currentSession, listBots, markSeen, getActivity, recordMessage } from "../bots/index.ts";
 import type { Events } from "../events/index.ts";
 import { parseMentions, type Handoffs } from "../handoffs/index.ts";
+import {
+  findingsOf,
+  taskEvent,
+  withoutWorkState,
+  type LoopStore,
+  type SessionLog,
+} from "../loop/index.ts";
 
 export type Transcript = { history: ServerEvent[]; hasSession: boolean };
 
@@ -27,6 +38,46 @@ const ToolInput = z
     ),
   );
 
+/** Whether the app wrote a user message, not the user: a message that did not come from a person carries another origin than `human` in the session file (`getSessionMessages` already leaves out the ones Claude Code marks as meta). The field is not in the SDK's type. */
+function writtenByApp(m: SessionMessage): boolean {
+  const { origin } = m as SessionMessage & { origin?: { kind?: string } };
+  return origin !== undefined && origin.kind !== "human";
+}
+
+/** When Claude Code wrote a session message, in epoch milliseconds; the field is not in the SDK's type. */
+function writtenAt(m: SessionMessage): number | undefined {
+  const { timestamp } = m as SessionMessage & { timestamp?: unknown };
+  const ms = typeof timestamp === "string" ? Date.parse(timestamp) : Number.NaN;
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
+/**
+ * A session's replayed events with what the loop stored for it: each task joins at its start and each report at its post time,
+ * before the first event written after it. Reports never enter the CLI's session file, so this is where they come from.
+ */
+function withLoopLog(events: ServerEvent[], stamps: number[], log: SessionLog): ServerEvent[] {
+  const stored: { at: number; event: ServerEvent }[] = [
+    ...log
+      .tasks()
+      .map((t) => ({ at: t.startedAt, event: taskEvent(t, findingsOf(log, t.taskId)) })),
+    ...log.events("report").map((r) => ({
+      at: r.at,
+      event: { type: "report" as const, taskId: r.taskId, text: r.text },
+    })),
+  ].sort((a, b) => a.at - b.at);
+  const merged: ServerEvent[] = [];
+  let next = 0;
+  const post = (before: number) => {
+    for (let s = stored[next]; s && s.at < before; s = stored[++next]) merged.push(s.event);
+  };
+  for (const [i, e] of events.entries()) {
+    post(stamps[i] ?? 0);
+    merged.push(e);
+  }
+  post(Number.POSITIVE_INFINITY);
+  return merged;
+}
+
 /** Rebuilds UI transcripts from Claude Code's own session files. */
 export function createTranscripts({
   cwd,
@@ -34,17 +85,29 @@ export function createTranscripts({
   db,
   handoffs,
   events,
+  loop: store,
 }: {
   cwd: string;
   dataRoot: string;
   db: Database;
   handoffs: Pick<Handoffs, "receivedCards" | "sentCards">;
   events: Pick<Events, "split">;
+  loop: LoopStore;
 }) {
   /** Rebuild the UI transcript of a bot's session from Claude Code's own session file. */
   async function replay(sessionId: string, ownerId: string): Promise<ServerEvent[]> {
     const out: ServerEvent[] = [];
+    /** When the message each event of `out` came from was written, parallel to `out`. */
+    const stamps: number[] = [];
+    let at = 0;
+    const stamp = () => {
+      while (stamps.length < out.length) stamps.push(at);
+    };
+    // A double-loop front's messages carry a work state; its tool calls start and steer tasks, which the chat shows only as their reports.
+    let front = false;
     for (const m of await getSessionMessages(sessionId, { dir: cwd })) {
+      stamp();
+      at = writtenAt(m) ?? at;
       const msg = m.message;
       const content = msg && typeof msg === "object" && "content" in msg ? msg.content : undefined;
       if (m.parent_tool_use_id) continue;
@@ -55,7 +118,12 @@ export function createTranscripts({
             : Array.isArray(content)
               ? content.flatMap((b) => (b.type === "text" ? [b.text] : []))
               : [];
-        for (const piece of texts.flatMap((t) => events.split(ownerId, t))) {
+        // A double-loop front's messages end with the work state the app appended, which the user never saw. What the app itself wrote there (a queued task's dispatch, a restart notice) is not the user's text either; the cards its events and handoffs become still show.
+        const stripped = texts.map(withoutWorkState);
+        const hadWorkState = stripped.some((t, i) => t !== texts[i]);
+        front ||= hadWorkState;
+        const appText = writtenByApp(m) && hadWorkState;
+        for (const piece of stripped.flatMap((t) => events.split(ownerId, t))) {
           if (typeof piece !== "string") out.push(piece);
           else {
             const routine = piece.match(ROUTINE_TAG);
@@ -67,6 +135,7 @@ export function createTranscripts({
               });
             else if (/^<handoff(-update)? /.test(piece))
               out.push(...handoffs.receivedCards(piece, ownerId));
+            else if (appText) continue;
             else if (!piece.startsWith("<") || piece.startsWith("<mention ")) {
               const { text: typed, mentions } = parseMentions(piece);
               out.push(
@@ -82,14 +151,18 @@ export function createTranscripts({
           if (b.type === "text") out.push({ type: "text_start" }, { type: "delta", text: b.text });
           if (b.type === "tool_use")
             out.push(
-              { type: "tool", name: b.name, input: JSON.stringify(b.input) },
+              ...(front
+                ? []
+                : [{ type: "tool" as const, name: b.name, input: JSON.stringify(b.input) }]),
               ...handoffs.sentCards(b.name, ToolInput.parse(b.input), ownerId),
             );
         }
       }
     }
-    if (out.length) out.push({ type: "done" });
-    return out;
+    stamp();
+    const merged = withLoopLog(out, stamps, store.session(ownerId, sessionId));
+    if (merged.length) merged.push({ type: "done" });
+    return merged;
   }
 
   return {

@@ -173,7 +173,7 @@ describe("the relay columns", () => {
     expect(after.row("bot", id)).toMatchObject({ id, state: "open" });
     expect(after.row("bot", id)?.relay).toBeUndefined();
     expect(old.query<{ user_version: number }, []>("PRAGMA user_version").get()).toEqual({
-      user_version: 13,
+      user_version: 15,
     });
   });
 });

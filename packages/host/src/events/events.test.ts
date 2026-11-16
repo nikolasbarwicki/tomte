@@ -5,7 +5,8 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { DEFAULT_EFFORT, DEFAULT_MODEL, type EventAccess } from "@claudebot/contract/api";
+import { type EventAccess } from "@claudebot/contract/api";
+import { DEFAULT_EFFORT, DEFAULT_MODEL } from "@claudebot/contract/events";
 
 import { listBots } from "../bots/index.ts";
 import { defined } from "../testing/defined.ts";

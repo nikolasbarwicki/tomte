@@ -1,4 +1,4 @@
-// Shared harness of the browser smokes (smoke-answer-ui, smoke-needs-you-ui, smoke-blocked-ui, smoke-answers).
+// Shared harness of the browser smokes (smoke-answer-ui, smoke-needs-you-ui, smoke-blocked-ui, smoke-answers, smoke-loop-ui).
 // A smoke gets a fresh run directory under the OS temp folder, a web build in it (or the one named by SMOKE_WEB_DIST, which the
 // wrapper smoke-ui.ts builds once), the whole-host test harness (temporary data root, in-memory database and secrets, fake
 // Claude CLI), and headless Chrome in a fresh profile with the paired device's cookie. Nothing touches real app data, the
@@ -59,6 +59,8 @@ export interface Smoke {
 export interface SmokeOptions {
   /** Host flags, from the run directory (a relay configuration file lives in it). */
   hostFlags?: (runDir: string) => string[] | Promise<string[]>;
+  /** The environment the host's configuration is read from, such as `CLAUDEBOT_ASK_APPROVAL`; the process environment is left alone. */
+  env?: Record<string, string>;
 }
 
 interface Session {
@@ -107,7 +109,13 @@ export async function startSmoke(name: string, options: SmokeOptions = {}): Prom
     const dist = sharedDist ?? join(runDir, "web");
     if (sharedDist === undefined) buildWeb(dist);
     const flags = (await options.hostFlags?.(runDir)) ?? [];
-    const startedHost = await startHandoffHost(flags, directoryAssets(dist));
+    const startedHost = await startHandoffHost(
+      flags,
+      directoryAssets(dist),
+      undefined,
+      undefined,
+      options.env,
+    );
     host = startedHost;
     const startedBrowser = await chromium.launch({ executablePath: CHROME, headless: true });
     browser = startedBrowser;

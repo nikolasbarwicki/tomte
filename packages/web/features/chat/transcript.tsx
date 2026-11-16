@@ -1,4 +1,4 @@
-import type { BotSummary, HandoffStatus } from "@claudebot/contract/events";
+import type { BotSummary, HandoffStatus, Presence } from "@claudebot/contract/events";
 import { Link } from "@tanstack/react-router";
 import {
   AlarmClockIcon,
@@ -43,15 +43,8 @@ import {
 } from "@/components/ui/item";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent } from "@/components/ui/message";
-import {
-  MessageScroller,
-  MessageScrollerButton,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerProvider,
-  MessageScrollerViewport,
-} from "@/components/ui/message-scroller";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Trace,
   TraceCollapsible,
@@ -68,6 +61,7 @@ import { cn } from "@/lib/utils";
 import { answer, answerWait, cancelSend } from "./api.ts";
 import { EXTERNAL_ICONS } from "./external-icons.ts";
 import { bindMentions } from "./mentions.ts";
+import { Scroller, ScrollerItem } from "./scroller.tsx";
 
 type ToolItem = Extract<Item, { kind: "tool" }>;
 type QueuedItem = Extract<Item, { kind: "queued" }>;
@@ -89,20 +83,24 @@ function toRows(items: Item[]): Row[] {
   return rows;
 }
 
-/** The thread. Message Scroller follows new output while the reader is at the live edge and anchors each new user turn near the top. */
+/** The thread. It follows the newest output while the reader is at the end, and jumps there when the user sends a message. */
 export function Transcript({
   bot,
   bots,
   items,
-  busy,
+  presence,
   onShowBrowser,
+  onShowTasks,
 }: {
   bot: BotSummary;
   bots: BotSummary[];
   items: Item[];
-  busy: boolean;
+  /** What the one presence line says: `typing` while a double-loop bot writes a reply, `working` while a turn or agents run, nothing when idle. */
+  presence: Presence;
   onShowBrowser: () => void;
+  onShowTasks: () => void;
 }) {
+  const busy = presence !== "idle";
   if (items.length === 0 && !busy) {
     return (
       <Empty className="min-h-0 flex-1">
@@ -119,52 +117,60 @@ export function Transcript({
       </Empty>
     );
   }
-  const rows = toRows(items);
+  // A double-loop chat shows only the conversation: its tasks live in the Tasks tab, and their results arrive as messages.
+  const doubleLoop = bot.chatMode === "double_loop";
+  const rows = toRows(doubleLoop ? items.filter((i) => i.kind !== "task") : items);
+  const tasksRunning = doubleLoop
+    ? items.filter((i) => i.kind === "task" && i.state === "running").length
+    : 0;
   const queued = items.filter((i): i is QueuedItem => i.kind === "queued");
+  // Queued and delivered messages together: a send adds one, delivering a queued message only moves it.
+  const sent = items.filter((i) => i.kind === "user" || i.kind === "queued").length;
   return (
-    <MessageScrollerProvider autoScroll>
-      <MessageScroller className="flex-1">
-        <MessageScrollerViewport>
-          <MessageScrollerContent
-            aria-busy={busy}
-            className="mx-auto w-full max-w-3xl gap-4 px-4 py-6"
-          >
-            {rows.map((row, i) => (
-              <MessageScrollerItem
-                key={i}
-                messageId={String(i)}
-                scrollAnchor={row.kind === "user"}
-                className={cn(row.kind === "handoff" && UNCLIPPED)}
-              >
-                <RowView
-                  row={row}
-                  botId={bot.id}
-                  running={busy && i === rows.length - 1}
-                  bots={bots}
-                  onShowBrowser={onShowBrowser}
-                />
-              </MessageScrollerItem>
-            ))}
-            {busy && (
-              <MessageScrollerItem messageId="working">
-                <Marker role="status">
-                  <MarkerIcon>
-                    <Spinner className="text-primary" />
-                  </MarkerIcon>
-                  <MarkerContent className="shimmer">{bot.name} is working…</MarkerContent>
-                </Marker>
-              </MessageScrollerItem>
+    <Scroller
+      followKey={sent}
+      busy={busy}
+      className="flex-1"
+      contentClassName="mx-auto w-full max-w-3xl gap-4 px-4 py-6"
+    >
+      {rows.map((row, i) => (
+        <ScrollerItem key={i} className={cn(row.kind === "handoff" && UNCLIPPED)}>
+          <RowView
+            row={row}
+            botId={bot.id}
+            running={busy && i === rows.length - 1}
+            bots={bots}
+            onShowBrowser={onShowBrowser}
+          />
+        </ScrollerItem>
+      ))}
+      {busy && (
+        <ScrollerItem>
+          <Marker role="status">
+            <MarkerIcon>
+              <Spinner className="text-primary" />
+            </MarkerIcon>
+            <MarkerContent className="shimmer">
+              {bot.name} is {presence === "typing" ? "typing" : "working"}
+              {presence === "working" && tasksRunning > 0
+                ? ` on ${tasksRunning} ${tasksRunning === 1 ? "task" : "tasks"}`
+                : ""}
+              …
+            </MarkerContent>
+            {presence === "working" && tasksRunning > 0 && (
+              <Button variant="link" size="xs" className="h-auto p-0" onClick={onShowTasks}>
+                View tasks
+              </Button>
             )}
-            {queued.map((q) => (
-              <MessageScrollerItem key={q.id} messageId={`queued-${q.id}`}>
-                <UserMessage text={q.text} mentions={q.mentions} bots={bots} queuedId={q.id} />
-              </MessageScrollerItem>
-            ))}
-          </MessageScrollerContent>
-        </MessageScrollerViewport>
-        <MessageScrollerButton />
-      </MessageScroller>
-    </MessageScrollerProvider>
+          </Marker>
+        </ScrollerItem>
+      )}
+      {queued.map((q) => (
+        <ScrollerItem key={q.id}>
+          <UserMessage text={q.text} mentions={q.mentions} bots={bots} queuedId={q.id} />
+        </ScrollerItem>
+      ))}
+    </Scroller>
   );
 }
 
@@ -257,6 +263,10 @@ function RowView({
         </div>
       );
     }
+    case "report":
+      return <Report text={row.text} task={row.task} />;
+    case "task":
+      return <TaskLine item={row} />;
     case "handoff":
       return <HandoffCard item={row} other={bots.find((b) => b.id === row.botId)} />;
     case "wait":
@@ -337,6 +347,50 @@ function UserMessage({
         )}
       </MessageContent>
     </Message>
+  );
+}
+
+/** A report is the bot's own message, written by a background task; hovering it names the task. */
+function Report({ text, task }: { text: string; task: string | undefined }) {
+  const message = (
+    <Message>
+      <MessageContent>
+        <Bubble variant="muted" className="max-w-[60%]">
+          <BubbleContent className="w-full">
+            <Streamdown linkSafety={{ enabled: false }}>{text}</Streamdown>
+          </BubbleContent>
+        </Bubble>
+      </MessageContent>
+    </Message>
+  );
+  if (task === undefined) return message;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<div />}>{message}</TooltipTrigger>
+      <TooltipContent>Result of the task: {task}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** One line for a background task: its goal and where it stands, with the live status line while it runs. */
+function TaskLine({ item }: { item: Extract<Item, { kind: "task" }> }) {
+  const running = item.state === "running";
+  const [icon, label] = {
+    queued: [<CircleOffIcon key="i" />, "Queued"],
+    running: [<Spinner key="i" className="text-primary" />, "Working on"],
+    interrupted: [<CircleOffIcon key="i" />, "Interrupted"],
+    done: [<CircleCheckIcon key="i" />, "Done"],
+    failed: [<CircleAlertIcon key="i" />, "Failed"],
+    cancelled: [<CircleOffIcon key="i" />, "Stopped"],
+  }[item.state];
+  return (
+    <Marker role={running ? "status" : undefined}>
+      <MarkerIcon>{icon}</MarkerIcon>
+      <MarkerContent className={cn("truncate", running && "shimmer")}>
+        {label}: <span className="text-foreground font-semibold">{item.goal}</span>
+        {running && item.status && <> · {item.status}</>}
+      </MarkerContent>
+    </Marker>
   );
 }
 

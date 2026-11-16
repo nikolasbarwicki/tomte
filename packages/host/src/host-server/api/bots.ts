@@ -1,4 +1,5 @@
 import { BotAvatar } from "@claudebot/contract/avatars";
+import { ChatMode } from "@claudebot/contract/events";
 import { z } from "zod";
 
 import {
@@ -7,6 +8,7 @@ import {
   markSeen,
   setBrowserEnabled,
   setBrowserHeaded,
+  setChatMode,
 } from "../../bots/index.ts";
 import { json } from "../http.ts";
 import type { ApiContext, ApiRoutes } from "./context.ts";
@@ -19,6 +21,7 @@ const NewBot = z.object({
 });
 const BrowserEnabled = BotId.extend({ enabled: z.boolean() });
 const BrowserHeaded = BotId.extend({ headed: z.boolean() });
+const ChatModeChange = BotId.extend({ chatMode: ChatMode });
 
 /** Routes that address a bot by id, or none; they work whether or not a bot is open. */
 export function botRoutes({
@@ -29,6 +32,7 @@ export function botRoutes({
   chats,
   browser,
   headedBrowser,
+  hasActiveTasks,
   botsChanged,
   removeBot,
 }: ApiContext): ApiRoutes {
@@ -89,6 +93,21 @@ export function botRoutes({
       setBrowserHeaded(dataRoot, bot.id, headed);
       // The window is chosen when the engine launches Chrome, so a running browser must restart to pick it up.
       await browser.restart(bot.id);
+      chats.announceBots();
+      return json(res, { ok: true });
+    },
+    "/api/bots/chat-mode": async ({ res, parse }) => {
+      const { botId, chatMode } = parse(ChatModeChange);
+      const bot = getBot(dataRoot, botId);
+      if (!bot) return json(res, { error: "no such bot" }, 404);
+      if (bot.chatMode === chatMode) return json(res, { ok: true });
+      if (hasActiveTasks(bot.id)) return json(res, { error: "stop the running tasks first" }, 409);
+      if (chats.isWorking(bot.id))
+        return json(res, { error: "a turn is running; wait for it to finish" }, 409);
+      setChatMode(dataRoot, bot.id, chatMode);
+      // The two modes keep different sessions, so switching starts a new conversation.
+      chats.newSession(bot.id);
+      browser.cancelTakeover(bot.id, "a new session started");
       chats.announceBots();
       return json(res, { ok: true });
     },

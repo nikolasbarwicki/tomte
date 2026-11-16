@@ -91,6 +91,21 @@ export const WorkSnapshot = z.object({
 });
 export type WorkSnapshot = z.infer<typeof WorkSnapshot>;
 
+/** What a double-loop bot's chat shows as its one presence line: `typing` while the front streams, `working` while background agents run. */
+export const Presence = z.enum(["idle", "typing", "working"]);
+export type Presence = z.infer<typeof Presence>;
+
+/** Where a background task stands: `interrupted` marks a running task a host restart cut off, which a steer can still continue. */
+export const TaskState = z.enum([
+  "queued",
+  "running",
+  "interrupted",
+  "done",
+  "failed",
+  "cancelled",
+]);
+export type TaskState = z.infer<typeof TaskState>;
+
 export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("user"), text: z.string(), mentions: Mentions.exactOptional() }),
   /** A user message sent while the bot was busy; it waits as pending until `dequeued`, then shows as `user` if it ran. */
@@ -175,6 +190,45 @@ export const ServerEvent = z.discriminatedUnion("type", [
     trigger: z.enum(["manual", "auto"]),
     preTokens: z.number(),
   }),
+  /** A double-loop bot's presence changed; ephemeral, so it is never in the replayed history, and a page connecting is sent the current one. */
+  z.object({ type: z.literal("presence"), state: Presence }),
+  /**
+   * A background task of a double-loop bot was queued, started, resumed or ended; each event is the task's whole current state, so a
+   * later one replaces an earlier one with the same `taskId`. `findings` are what its agent verified so far, newest last, and
+   * `after` is the task a queued task waits for. `queuedId` marks the start of a queued task: the row of that id is this task now.
+   */
+  z.object({
+    type: z.literal("task"),
+    taskId: z.string(),
+    agentType: z.string().exactOptional(),
+    model: z.string().exactOptional(),
+    effort: z.string().exactOptional(),
+    goal: z.string(),
+    state: TaskState,
+    startedAt: z.number(),
+    endedAt: z.number().exactOptional(),
+    after: z.string().exactOptional(),
+    findings: z.array(z.string()).exactOptional(),
+    queuedId: z.string().exactOptional(),
+  }),
+  /** The live status line of a running task, from the agent's progress summaries; ephemeral, so it is never in the replayed history. An empty `text` clears the line. */
+  z.object({ type: z.literal("task_status"), taskId: z.string(), text: z.string() }),
+  /**
+   * The subscription's rate limit as Claude Code last reported it for one window, shown beside the context meter of a double-loop
+   * bot, whose parallel agents spend the 5-hour and weekly limits faster. `window` is the CLI's `rateLimitType` (`five_hour`,
+   * `seven_day`, ...; a string, so a window a newer CLI adds still parses); `utilization` is the used fraction (0 to 1) and
+   * `resetsAt` when the window resets, in epoch milliseconds. Ephemeral like `presence`: never in the replayed history, and a page
+   * connecting is sent the latest of each window.
+   */
+  z.object({
+    type: z.literal("rate_limit"),
+    status: z.enum(["allowed", "allowed_warning", "rejected"]),
+    window: z.string().exactOptional(),
+    utilization: z.number().exactOptional(),
+    resetsAt: z.number().exactOptional(),
+  }),
+  /** A background task's result, posted whole as the bot's own message; it never enters the front session. */
+  z.object({ type: z.literal("report"), taskId: z.string(), text: z.string() }),
   ContextEvent,
 ]);
 export type ServerEvent = z.infer<typeof ServerEvent>;
@@ -182,6 +236,22 @@ export type ServerEvent = z.infer<typeof ServerEvent>;
 /** Per-bot settings the user switches on; everything is off by default. */
 export const BotBrowserSettings = z.object({ enabled: z.boolean(), headed: z.boolean() });
 export type BotBrowserSettings = z.infer<typeof BotBrowserSettings>;
+
+/** How a bot chats: `standard` is one turn per message; `double_loop` keeps a fast front session and runs heavy work in background tasks. */
+export const ChatMode = z.enum(["standard", "double_loop"]);
+export type ChatMode = z.infer<typeof ChatMode>;
+
+/** The models a bot can run on, as the Claude CLI's aliases name them. */
+export const BotModel = z.enum(["opus", "sonnet", "haiku"]);
+export type BotModel = z.infer<typeof BotModel>;
+
+/** The reasoning effort levels a bot can run at; the Claude Agent SDK's `EffortLevel`. */
+export const EffortLevel = z.enum(["low", "medium", "high", "xhigh", "max"]);
+export type EffortLevel = z.infer<typeof EffortLevel>;
+
+/** The model and effort a bot runs on until the user picks others. */
+export const DEFAULT_MODEL: BotModel = "sonnet";
+export const DEFAULT_EFFORT: EffortLevel = "medium";
 
 /** A specialized agent: a chain of Claude Code sessions (`sessions`, newest last) plus its own memory. */
 export const Bot = z.object({
@@ -192,6 +262,10 @@ export const Bot = z.object({
   createdAt: z.number(),
   lastActive: z.number(),
   sessions: z.array(z.string()),
+  chatMode: ChatMode,
+  /** What the bot's standard turns run on; in double-loop mode, what its background tasks run on (the front's replies always come from a fast model). */
+  model: BotModel,
+  effort: EffortLevel,
   browser: BotBrowserSettings,
 });
 export type Bot = z.infer<typeof Bot>;

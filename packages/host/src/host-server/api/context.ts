@@ -23,6 +23,8 @@ export interface ApiContext {
   dataRoot: string;
   /** Whether a bot may run headed Chrome; see `HostConfig.headedBrowser`. */
   headedBrowser: boolean;
+  /** True while the bot has background tasks running or queued; changing its chat mode is refused then. */
+  hasActiveTasks: (botId: string) => boolean;
   cli: ResolvedCli;
   db: Database;
   chats: Chats;

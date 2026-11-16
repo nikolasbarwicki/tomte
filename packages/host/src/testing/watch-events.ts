@@ -5,6 +5,8 @@ type PageEvent = { type: string; [k: string]: unknown };
 /** What a page saw on its event stream, by event id and bot id. */
 export interface EventsWatch {
   stop(): void;
+  /** Every event the stream carried, in order. */
+  events(): { type: string; [k: string]: unknown }[];
   rowOf(id: string): { [k: string]: unknown } | undefined;
   stateOf(id: string): unknown;
   /** Source id to Work status, as of the latest `work` event of the bot. */
@@ -40,6 +42,7 @@ export async function watchEvents(
   })();
   return {
     stop: () => abort.abort(),
+    events: () => [...seen],
     rowOf: (id: string) => seen.find((e) => e.type === "external" && e.id === id),
     stateOf: (id: string) =>
       seen
