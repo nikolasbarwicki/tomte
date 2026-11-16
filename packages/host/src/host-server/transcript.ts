@@ -1,6 +1,10 @@
 import type { Database } from "bun:sqlite";
 
-import { getSessionInfo, getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
+import {
+  getSessionInfo,
+  getSessionMessages,
+  type SessionMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import {
   RunTrigger,
   type Bot,
@@ -12,6 +16,7 @@ import { z } from "zod";
 import { currentSession, listBots, markSeen, getActivity, recordMessage } from "../bots/index.ts";
 import type { Events } from "../events/index.ts";
 import { parseMentions, type Handoffs } from "../handoffs/index.ts";
+import { withoutWorkState } from "../loop/index.ts";
 
 export type Transcript = { history: ServerEvent[]; hasSession: boolean };
 
@@ -26,6 +31,12 @@ const ToolInput = z
       Object.entries(input).filter((e): e is [string, string] => typeof e[1] === "string"),
     ),
   );
+
+/** Whether the app wrote a user message, not the user: a message that did not come from a person carries another origin than `human` in the session file (`getSessionMessages` already leaves out the ones Claude Code marks as meta). The field is not in the SDK's type. */
+function writtenByApp(m: SessionMessage): boolean {
+  const { origin } = m as SessionMessage & { origin?: { kind?: string } };
+  return origin !== undefined && origin.kind !== "human";
+}
 
 /** Rebuilds UI transcripts from Claude Code's own session files. */
 export function createTranscripts({
@@ -55,7 +66,10 @@ export function createTranscripts({
             : Array.isArray(content)
               ? content.flatMap((b) => (b.type === "text" ? [b.text] : []))
               : [];
-        for (const piece of texts.flatMap((t) => events.split(ownerId, t))) {
+        // A double-loop front's messages end with the work state the app appended, which the user never saw. What the app itself wrote there (a queued task's dispatch, a restart notice) is not the user's text either; the cards its events and handoffs become still show.
+        const stripped = texts.map(withoutWorkState);
+        const appText = writtenByApp(m) && stripped.some((t, i) => t !== texts[i]);
+        for (const piece of stripped.flatMap((t) => events.split(ownerId, t))) {
           if (typeof piece !== "string") out.push(piece);
           else {
             const routine = piece.match(ROUTINE_TAG);
@@ -67,6 +81,7 @@ export function createTranscripts({
               });
             else if (/^<handoff(-update)? /.test(piece))
               out.push(...handoffs.receivedCards(piece, ownerId));
+            else if (appText) continue;
             else if (!piece.startsWith("<") || piece.startsWith("<mention ")) {
               const { text: typed, mentions } = parseMentions(piece);
               out.push(

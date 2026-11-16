@@ -16,10 +16,19 @@ import { Bot, BotBrowserSettings, ChatMode, type MemoryScope } from "@claudebot/
 import { z } from "zod";
 
 import { userMemoryPath } from "./memory.ts";
-import { Thread, type HostDelegate, type ThreadEnv } from "./thread.ts";
+import { type HostDelegate } from "./session-kit.ts";
+import { Thread, type ThreadEnv } from "./thread.ts";
 
-export { Thread, type HostDelegate, type ThreadEnv, type TurnResult } from "./thread.ts";
-export { readMemory, userMemoryPath } from "./memory.ts";
+export { Thread, type ThreadEnv, type TurnResult } from "./thread.ts";
+export {
+  Inbox,
+  MEMORY_INSTRUCTIONS,
+  createCanUseTool,
+  createHostMcpServer,
+  memorySections,
+  type HostDelegate,
+} from "./session-kit.ts";
+export { readMemory, userMemoryPath, type MemoryPaths } from "./memory.ts";
 export { deleteActivity, getActivity, markSeen, recordMessage } from "./activity-store.ts";
 export {
   deleteFile,
@@ -170,16 +179,28 @@ export function touchBot(dataRoot: string, bot: Bot) {
   save(dataRoot, bot);
 }
 
-/** Thread options that bind a thread to a bot's identity, session, memory and files folder; user memory is the data root's. */
-export function botContext(dataRoot: string, bot: Bot) {
-  const files = botFilesPath(dataRoot, bot.id);
-  mkdirSync(files, { recursive: true });
-  const persona = [
+/** Who the bot is, as the system prompt tells every session of it. */
+function botIdentity(bot: Bot): string[] {
+  return [
     `# This bot`,
     `You are "${bot.name}", one of several specialized bots the user runs; each bot is a single long-running conversation dedicated to its own job.`,
     bot.purpose
       ? `Your job: ${bot.purpose}`
       : "No job description was given; infer it from the conversation and bot memory.",
+  ];
+}
+
+const botMemory = (dataRoot: string, id: string) => ({
+  user: userMemoryPath(dataRoot),
+  bot: botMemoryPath(dataRoot, id),
+});
+
+/** Thread options that bind a thread to a bot's identity, session, memory and files folder; user memory is the data root's. */
+export function botContext(dataRoot: string, bot: Bot) {
+  const files = botFilesPath(dataRoot, bot.id);
+  mkdirSync(files, { recursive: true });
+  const persona = [
+    ...botIdentity(bot),
     "",
     `## Your files`,
     `Your own files folder is ${files}. The user browses it in the app's sidebar.`,
@@ -188,7 +209,16 @@ export function botContext(dataRoot: string, bot: Bot) {
   return {
     sessionId: currentSession(bot),
     persona,
-    memory: { user: userMemoryPath(dataRoot), bot: botMemoryPath(dataRoot, bot.id) },
+    memory: botMemory(dataRoot, bot.id),
+  };
+}
+
+/** What a bot's front session binds to: the bot's identity, session and memory, without the files folder, which the front has no tools to write to. */
+export function frontContext(dataRoot: string, bot: Bot) {
+  return {
+    sessionId: currentSession(bot),
+    persona: botIdentity(bot).join("\n"),
+    memory: botMemory(dataRoot, bot.id),
   };
 }
 

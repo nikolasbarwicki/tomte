@@ -1,4 +1,4 @@
-import type { BotSummary, HandoffStatus } from "@claudebot/contract/events";
+import type { BotSummary, HandoffStatus, Presence } from "@claudebot/contract/events";
 import { Link } from "@tanstack/react-router";
 import {
   AlarmClockIcon,
@@ -94,15 +94,17 @@ export function Transcript({
   bot,
   bots,
   items,
-  busy,
+  presence,
   onShowBrowser,
 }: {
   bot: BotSummary;
   bots: BotSummary[];
   items: Item[];
-  busy: boolean;
+  /** What the one presence line says: `typing` while a double-loop bot streams, `working` while a turn or agents run, nothing when idle. */
+  presence: Presence;
   onShowBrowser: () => void;
 }) {
+  const busy = presence !== "idle";
   if (items.length === 0 && !busy) {
     return (
       <Empty className="min-h-0 flex-1">
@@ -151,7 +153,9 @@ export function Transcript({
                   <MarkerIcon>
                     <Spinner className="text-primary" />
                   </MarkerIcon>
-                  <MarkerContent className="shimmer">{bot.name} is working…</MarkerContent>
+                  <MarkerContent className="shimmer">
+                    {bot.name} is {presence === "typing" ? "typing" : "working"}…
+                  </MarkerContent>
                 </Marker>
               </MessageScrollerItem>
             )}

@@ -1,24 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { resolve, relative, isAbsolute } from "node:path";
+import { resolve } from "node:path";
 
 import {
-  createSdkMcpServer,
   query,
-  tool,
   type CanUseTool,
   type EffortLevel,
-  type PermissionResult,
   type Query,
   type SDKMessage,
   type SDKResultMessage,
-  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from "@claudebot/contract/api";
 import type { MemoryScope } from "@claudebot/contract/events";
-import { z } from "zod";
 
 import {
-  VERSION,
   claudeHarness,
   cmdExeSpawner,
   type ClaudeAccess,
@@ -27,19 +21,16 @@ import {
   type ResolvedCli,
 } from "../harness/index.ts";
 import type { IntegrationsSource } from "../integrations/index.ts";
-import { appendMemory, readMemory, writeMemory, type MemoryPaths } from "./memory.ts";
-
-/** Decisions the host (its UI/user) owns. */
-export interface HostDelegate {
-  /** `eventId` is the external event the bot says the question is about; the host decides whether to believe it. */
-  askUser(question: string, options?: string[], eventId?: string): Promise<string>;
-  /** Bash, or file writes outside the thread's roots. */
-  approve(
-    toolName: string,
-    input: Record<string, unknown>,
-    reason: string,
-  ): Promise<PermissionResult>;
-}
+import { type MemoryPaths } from "./memory.ts";
+import {
+  ASK_INSTRUCTIONS,
+  Inbox,
+  MEMORY_INSTRUCTIONS,
+  createCanUseTool,
+  createHostMcpServer,
+  memorySections,
+  type HostDelegate,
+} from "./session-kit.ts";
 
 /** What every bot thread the host opens shares, whether in a chat or in a headless routine run. */
 export interface ThreadEnv {
@@ -85,45 +76,7 @@ export interface ThreadOptions {
   onMemory?: (scope: MemoryScope, text: string) => void;
 }
 
-const HOST_INSTRUCTIONS = [
-  "You are embedded in a local host application.",
-  "When you need a decision or information from the user, call the mcp__host__ask_user tool instead of guessing.",
-  "When you ask because of an external event delivered to you (an <<<EXTERNAL_EVENT ... id=ID ...>>> message), pass that ID as event_id so the user's answer closes the event.",
-  "",
-  "## Memory",
-  "Two memory files are loaded into this prompt whenever the session opens:",
-  '- user memory (scope "user"): shared by every bot. Durable facts about the user: who they are, their background, environment, and general preferences that apply to any task.',
-  '- bot memory (scope "bot"): only this bot. How this bot should operate: directions, workflow, rules, output format, tone, priorities and boundaries for its job.',
-  'When the user tells you how to do your work (do/don\'t, always/never, format, process, style, which tools or sources to use), save it right away with mcp__host__remember scope "bot"; do not ask first. When they reveal a durable fact or general preference about themselves, save it with scope "user". If unsure whether a preference is general or specific to this bot\'s job, use "bot".',
-  "Write each entry as one concise, self-contained line. Do not save one-off task details or anything already in memory. When a direction changes or contradicts an existing entry, call mcp__host__rewrite_memory with the complete corrected file for that scope instead of appending.",
-  "Mention briefly what you saved.",
-].join("\n");
-
-const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "NotebookRead"]);
-const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
-
-/** Push-based async iterable feeding later turns into the same live query. */
-class Inbox implements AsyncIterable<SDKUserMessage> {
-  private queue: SDKUserMessage[] = [];
-  private wake?: (() => void) | undefined;
-  private done = false;
-  push(m: SDKUserMessage) {
-    this.queue.push(m);
-    this.wake?.();
-  }
-  end() {
-    this.done = true;
-    this.wake?.();
-  }
-  async *[Symbol.asyncIterator]() {
-    while (true) {
-      while (this.queue.length) yield this.queue.shift()!;
-      if (this.done) return;
-      await new Promise<void>((r) => (this.wake = r));
-      this.wake = undefined;
-    }
-  }
-}
+const HOST_INSTRUCTIONS = `${ASK_INSTRUCTIONS}\n\n${MEMORY_INSTRUCTIONS}`;
 
 export interface TurnResult {
   result: SDKResultMessage & { subtype: "success" };
@@ -149,110 +102,21 @@ export class Thread {
   private closedMidSend = false;
   private model: string;
   private effort: EffortLevel = DEFAULT_EFFORT;
-  private readonly roots: string[];
+  private readonly canUseTool: CanUseTool;
   private readonly log: (l: string) => void;
 
   constructor(private readonly o: ThreadOptions) {
     this.sessionId = o.sessionId ?? randomUUID();
     this.started = !!o.resume;
     this.model = o.model ?? DEFAULT_MODEL;
-    this.roots = [o.cwd, ...(o.additionalDirectories ?? [])].map((d) => resolve(d));
+    this.canUseTool = createCanUseTool({
+      cwd: o.cwd,
+      roots: [o.cwd, ...(o.additionalDirectories ?? [])].map((d) => resolve(d)),
+      integrations: o.integrations,
+      approveAll: o.approveAll,
+      delegate: o.delegate,
+    });
     this.log = o.log ?? ((l) => console.error(l));
-  }
-
-  private inRoots(p: unknown): boolean {
-    if (typeof p !== "string") return false;
-    const abs = resolve(this.o.cwd, p);
-    return this.roots.some((r) => {
-      const rel = relative(r, abs);
-      return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
-    });
-  }
-
-  private canUseTool: CanUseTool = async (name, input) => {
-    if (
-      name.startsWith("mcp__host__") ||
-      name.startsWith("mcp__browser__") ||
-      name.startsWith("mcp__bots__")
-    )
-      return { behavior: "allow", updatedInput: input };
-    switch (this.o.integrations?.decide(name)) {
-      case "allow":
-        return { behavior: "allow", updatedInput: input };
-      case "deny":
-        return { behavior: "deny", message: "this tool is switched off in Integrations" };
-      case "ask":
-        return this.o.delegate.approve(name, input, "integration tool");
-    }
-    if (this.o.approveAll) return { behavior: "allow", updatedInput: input };
-    const path = input.file_path ?? input.notebook_path ?? input.path;
-    if (READ_TOOLS.has(name) || WRITE_TOOLS.has(name)) {
-      if (path === undefined || this.inRoots(path))
-        return { behavior: "allow", updatedInput: input };
-      const shown = typeof path === "string" ? path : JSON.stringify(path);
-      if (READ_TOOLS.has(name))
-        return this.o.delegate.approve(name, input, `read outside workspace: ${shown}`);
-      return this.o.delegate.approve(name, input, `write outside workspace: ${shown}`);
-    }
-    if (name === "Bash") return this.o.delegate.approve(name, input, "shell command");
-    return this.o.delegate.approve(name, input, "tool requires approval");
-  };
-
-  private hostServer() {
-    const { delegate, memory, onMemory } = this.o;
-    const log = this.log;
-    const scope = z
-      .enum(["user", "bot"])
-      .describe('"user": about the user, shared by all bots; "bot": how this bot should operate');
-    return createSdkMcpServer({
-      name: "host",
-      version: VERSION,
-      tools: [
-        tool(
-          "ask_user",
-          "Ask the human user a question and wait for their answer. The user can always answer in free text; options adds up to 6 suggested answers they can pick with one click.",
-          {
-            question: z.string(),
-            options: z
-              .array(z.string().min(1))
-              .max(6)
-              .optional()
-              .describe("Suggested answers, shown as buttons; a click answers with the label"),
-            event_id: z
-              .string()
-              .optional()
-              .describe(
-                "The id of the external event this question is about, from its <<<EXTERNAL_EVENT>>> header; answering then closes that event",
-              ),
-          },
-          async ({ question, options, event_id }) => {
-            log(`[host] ask_user invoked in-process: ${JSON.stringify(question)}`);
-            const answer = await delegate.askUser(question, options, event_id);
-            return { content: [{ type: "text", text: answer }] };
-          },
-        ),
-        tool(
-          "remember",
-          "Append one line to user or bot memory.",
-          { scope, line: z.string() },
-          async ({ scope, line }) => {
-            appendMemory(memory[scope], line);
-            onMemory?.(scope, readMemory(memory[scope]));
-            return { content: [{ type: "text", text: `saved to ${scope} memory` }] };
-          },
-        ),
-        tool(
-          "rewrite_memory",
-          "Replace the whole user or bot memory file, to revise or drop entries. Pass the complete new content, one entry per line.",
-          { scope, text: z.string() },
-          async ({ scope, text }) => {
-            writeMemory(memory[scope], text);
-            onMemory?.(scope, readMemory(memory[scope]));
-            return { content: [{ type: "text", text: `${scope} memory rewritten` }] };
-          },
-        ),
-      ],
-    });
   }
 
   private async open() {
@@ -260,16 +124,11 @@ export class Thread {
     await this.o.claude.requireSignIn();
     const session = await this.o.integrations?.session();
     const lease = this.o.hostServers?.();
-    const section = (title: string, path: string) => {
-      const text = readMemory(path).trim();
-      return text ? `\n\n# ${title}\n${text}` : "";
-    };
     const append =
       HOST_INSTRUCTIONS +
       (lease?.instructions ? `\n\n${lease.instructions}` : "") +
       (this.o.persona ? `\n\n${this.o.persona}` : "") +
-      section("User memory (about the user)", this.o.memory.user) +
-      section("Bot memory (how you operate)", this.o.memory.bot);
+      memorySections(this.o.memory);
     const launch = claudeHarness.launch({
       hostServers: lease?.servers ?? [],
       integrations: session,
@@ -290,7 +149,14 @@ export class Thread {
           persistSession: true,
           includePartialMessages: true,
           canUseTool: this.canUseTool,
-          mcpServers: { host: this.hostServer() },
+          mcpServers: {
+            host: createHostMcpServer({
+              delegate: this.o.delegate,
+              memory: this.o.memory,
+              onMemory: this.o.onMemory,
+              log: this.log,
+            }),
+          },
           ...launch.options,
           model: this.model,
           env: { ...this.o.claude.env(), ...(await this.o.env?.()) },

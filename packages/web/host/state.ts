@@ -7,6 +7,7 @@ import type {
   HostEvent as StreamEvent,
   Integration,
   MemoryScope,
+  Presence,
   RoutinesEvent,
   ServerEvent,
   WorkEvent,
@@ -29,7 +30,14 @@ export type HostState = {
   bots: BotSummary[] | undefined;
   /** The bot whose chat the host is streaming; `chat`, `memory`, `files`, `routines` and `work` describe it. */
   openBotId: string | undefined;
-  chat: { items: Item[]; busy: boolean; context: ContextEvent | undefined };
+  chat: {
+    items: Item[];
+    /** A standard bot's turn is running. A double-loop bot never sets it from a turn: it shows `presence`. */
+    busy: boolean;
+    /** What a double-loop bot's presence line shows; `idle` for every other bot. */
+    presence: Presence;
+    context: ContextEvent | undefined;
+  };
   memory: Record<MemoryScope, string>;
   files: FilesEvent;
   routines: RoutinesEvent | undefined;
@@ -43,7 +51,7 @@ export const initialHostState: HostState = {
   publicInfo: undefined,
   bots: undefined,
   openBotId: undefined,
-  chat: { items: [], busy: false, context: undefined },
+  chat: { items: [], busy: false, presence: "idle", context: undefined },
   memory: { user: "", bot: "" },
   files: { type: "files", dir: "", files: [] },
   routines: undefined,
@@ -74,9 +82,15 @@ export function applyEvent(s: HostState, e: HostEvent): HostState {
     case "bots":
       return { ...s, bots: e.bots };
     case "reset":
-      return { ...s, openBotId: e.botId, chat: { items: [], busy: false, context: undefined } };
+      return {
+        ...s,
+        openBotId: e.botId,
+        chat: { items: [], busy: false, presence: "idle", context: undefined },
+      };
     case "context":
       return { ...s, chat: { ...s.chat, context: e } };
+    case "presence":
+      return { ...s, chat: { ...s.chat, presence: e.state } };
     default:
       return { ...s, chat: applyChatEvent(s.chat, e) };
   }
@@ -84,7 +98,7 @@ export function applyEvent(s: HostState, e: HostEvent): HostState {
 
 function applyChatEvent(
   chat: HostState["chat"],
-  e: Exclude<ServerEvent, { type: "reset" | "context" }>,
+  e: Exclude<ServerEvent, { type: "reset" | "context" | "presence" }>,
 ): HostState["chat"] {
   const context = e.type === "session" ? undefined : chat.context;
   const busy =
@@ -96,5 +110,5 @@ function applyChatEvent(
       : e.type === "done" || e.type === "error"
         ? false
         : chat.busy;
-  return { items: reduce(chat.items, e), busy, context };
+  return { items: reduce(chat.items, e), busy, presence: chat.presence, context };
 }

@@ -178,6 +178,7 @@ function reduceLive(
     case "done":
     case "reset":
     case "context":
+    case "presence":
       return items;
   }
 }

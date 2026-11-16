@@ -14,7 +14,7 @@ test("reset sets the open bot and clears the chat", () => {
     { type: "reset", botId: "b2" },
   ]);
   expect(s.openBotId).toBe("b2");
-  expect(s.chat).toEqual({ items: [], busy: false, context: undefined });
+  expect(s.chat).toEqual({ items: [], busy: false, presence: "idle", context: undefined });
 });
 
 test("busy turns on for user, update, routine and received handoffs, and off for done and error", () => {
@@ -124,4 +124,28 @@ test("a chat event leaves the other slices identical", () => {
   expect(next.integrations).toBe(s.integrations);
   expect(next.bots).toBe(s.bots);
   expect(next.memory).toBe(s.memory);
+});
+
+test("presence follows the host's events, never a turn, and a reset clears it", () => {
+  const typing = play([{ type: "presence", state: "typing" }]);
+  expect(typing.chat.presence).toBe("typing");
+  expect(typing.chat.busy).toBe(false);
+  expect(typing.chat.items).toEqual([]);
+
+  // A double-loop bot's messages and replies leave the presence the host last announced alone.
+  const talking = play(
+    [
+      { type: "user", text: "hi" },
+      { type: "text_start" },
+      { type: "delta", text: "hey" },
+      { type: "done" },
+    ],
+    typing,
+  );
+  expect(talking.chat.presence).toBe("typing");
+  expect(talking.chat.items).toHaveLength(2);
+
+  expect(play([{ type: "presence", state: "working" }], talking).chat.presence).toBe("working");
+  expect(play([{ type: "presence", state: "idle" }], talking).chat.presence).toBe("idle");
+  expect(play([{ type: "reset", botId: "b2" }], talking).chat.presence).toBe("idle");
 });

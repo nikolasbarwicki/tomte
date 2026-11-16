@@ -1,4 +1,4 @@
-import type { BotSummary } from "@claudebot/contract/events";
+import type { BotSummary, Presence } from "@claudebot/contract/events";
 import { getRouteApi } from "@tanstack/react-router";
 import { MessageSquarePlusIcon, PanelRightIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useState, useTransition, type ReactNode } from "react";
@@ -32,7 +32,11 @@ export function ChatView({
   bot: BotSummary;
   panel: (controls: { onClose: () => void }) => ReactNode;
 }) {
-  const { items, busy, context } = useChat();
+  const { items, busy: turnRunning, presence, context } = useChat();
+  // A double-loop bot never has a turn that blocks the chat: its one presence line says what it is doing.
+  const live: Presence =
+    bot.chatMode === "double_loop" ? presence : turnRunning ? "working" : "idle";
+  const busy = live !== "idle";
   const bots = useBots() ?? [];
   const wide = useMediaQuery("(min-width: 1024px)");
   const [pinned, setPinned] = useState(() => localStorage.getItem(PANEL_KEY) !== "closed");
@@ -124,7 +128,13 @@ export function ChatView({
           </Tooltip>
         </AppBar>
         <NeedsYou bot={bot} />
-        <Transcript bot={bot} bots={bots} items={items} busy={busy} onShowBrowser={showBrowser} />
+        <Transcript
+          bot={bot}
+          bots={bots}
+          items={items}
+          presence={live}
+          onShowBrowser={showBrowser}
+        />
         <Composer bot={bot} bots={bots} />
       </div>
       {wide ? (

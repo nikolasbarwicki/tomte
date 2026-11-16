@@ -91,6 +91,10 @@ export const WorkSnapshot = z.object({
 });
 export type WorkSnapshot = z.infer<typeof WorkSnapshot>;
 
+/** What a double-loop bot's chat shows as its one presence line: `typing` while the front streams, `working` while background agents run. */
+export const Presence = z.enum(["idle", "typing", "working"]);
+export type Presence = z.infer<typeof Presence>;
+
 export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("user"), text: z.string(), mentions: Mentions.exactOptional() }),
   /** A user message sent while the bot was busy; it waits as pending until `dequeued`, then shows as `user` if it ran. */
@@ -175,6 +179,8 @@ export const ServerEvent = z.discriminatedUnion("type", [
     trigger: z.enum(["manual", "auto"]),
     preTokens: z.number(),
   }),
+  /** A double-loop bot's presence changed; ephemeral, so it is never in the replayed history, and a page connecting is sent the current one. */
+  z.object({ type: z.literal("presence"), state: Presence }),
   ContextEvent,
 ]);
 export type ServerEvent = z.infer<typeof ServerEvent>;

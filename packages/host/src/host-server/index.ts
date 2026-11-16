@@ -191,6 +191,9 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       handoffs.endpoint.lease(botId),
       isolation(botId),
     ]);
+  /** A double-loop front only talks and hands off: no browser, and the same isolation as the bot's own thread. */
+  const frontServers: HostServersSource = (botId) =>
+    combineLeases([handoffs.endpoint.lease(botId), isolation(botId)]);
   /** Other bots' directories are on every bot's deny-read list, so a bot that appears or goes reaches the open sessions. */
   const botsChanged = () => {
     if (o.config.isolateAllBots) chats.reconfigure(undefined, "bots changed");
@@ -227,6 +230,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     db,
     integrations,
     hostServers,
+    frontServers,
     botEnv: (botId) => externalEvents.env(botId),
     approveAll: !o.config.askApproval,
     handoffs,
