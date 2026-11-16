@@ -103,6 +103,8 @@ test("a deleted bot's open handoffs fail, the other bot is told, and it no longe
     await alice.call("hand_off", { to: b, title: "Flights", brief: BRIEF }),
   );
   await host.until(() => host.messagesOf(b).length === 1);
+  // The fake CLI has the brief before the turn ends; the host refuses to delete a bot until the turn has.
+  await host.until(() => !host.server.isWorking(b));
 
   expect((await host.ui("/api/bots/delete", { botId: b })).status).toBe(200);
   await host.until(() => host.messagesOf(a).length === 1);
