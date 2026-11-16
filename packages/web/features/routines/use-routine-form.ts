@@ -45,6 +45,7 @@ export function useRoutineForm({
       instruction: fields.instruction,
       schedule,
       catchUp: fields.catchUp,
+      notifyResult: fields.notifyResult,
     };
     const res = await (routine
       ? updateRoutine(routine.id, payload)

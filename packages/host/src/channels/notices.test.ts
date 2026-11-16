@@ -41,3 +41,29 @@ test("the link goes to the routines panel, and a loopback http public URL has no
   );
   expect(noticeMessage(n, "http://127.0.0.1:5173").link).toBeUndefined();
 });
+
+const result = {
+  kind: "routine_result",
+  botId: "b1",
+  routine: "Digest",
+  output: "3 new items",
+} as const;
+
+test("a routine's result is its name and its output", () => {
+  expect(noticeMessage(result, "https://c.example").text).toBe("Digest: 3 new items");
+});
+
+test("a result's output is cut to about 800 characters", () => {
+  const { text } = noticeMessage({ ...result, output: "x".repeat(2000) }, "https://c.example");
+  expect(text.length).toBeLessThan(830);
+  expect(text.endsWith("…")).toBe(true);
+});
+
+test("a run with no output is told as finished, with no summary", () => {
+  expect(noticeMessage({ ...result, output: "" }, "https://c.example").text).toBe(
+    "Digest finished",
+  );
+  expect(noticeMessage({ ...result, output: " \n " }, "https://c.example").text).toBe(
+    "Digest finished",
+  );
+});

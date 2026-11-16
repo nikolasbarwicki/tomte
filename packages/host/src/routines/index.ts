@@ -46,6 +46,7 @@ export const RoutineInput = z.object({
   }),
   active: z.boolean().optional(),
   catchUp: z.boolean().optional(),
+  notifyResult: z.boolean().optional(),
 });
 export type RoutineInput = z.output<typeof RoutineInput>;
 
@@ -56,6 +57,7 @@ export const RoutinePatch = z.object({
   schedule: RoutineInput.shape.schedule.exactOptional(),
   active: z.boolean().exactOptional(),
   catchUp: z.boolean().exactOptional(),
+  notifyResult: z.boolean().exactOptional(),
 });
 export type RoutinePatch = z.output<typeof RoutinePatch>;
 
@@ -526,6 +528,7 @@ export function createRoutines(deps: {
         schedule: input.schedule,
         active: input.active ?? true,
         catchUp: input.catchUp ?? true,
+        notifyResult: input.notifyResult ?? false,
         lastScheduledFor: null,
         createdAt: t,
         updatedAt: t,
@@ -544,6 +547,7 @@ export function createRoutines(deps: {
         ...patch,
         active: patch.active ?? old.active,
         catchUp: patch.catchUp ?? old.catchUp,
+        notifyResult: patch.notifyResult ?? old.notifyResult,
         updatedAt: t,
       };
       // Occurrences before an edit or while paused are not "missed": move the claim baseline to now.

@@ -363,6 +363,14 @@ CREATE TABLE IF NOT EXISTS channel_cards (
 CREATE INDEX IF NOT EXISTS channel_cards_by_ref ON channel_cards (channel, message_ref);
 `;
 
+// A routine's opt-in to a short result on the owner's linked channel when a run succeeds; existing routines stay off. A database migrated
+// again after its version was set back (the old-database tests do) already has the column, and one made by hand may have no table.
+const SCHEMA_V21 = (db: Database) => {
+  const columns = db.query<{ name: string }, []>("PRAGMA table_info(routines)").all();
+  if (columns.length > 0 && !columns.some((c) => c.name === "notify_result"))
+    db.run("ALTER TABLE routines ADD COLUMN notify_result INTEGER NOT NULL DEFAULT 0");
+};
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -389,6 +397,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V18,
     SCHEMA_V19,
     SCHEMA_V20,
+    SCHEMA_V21,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

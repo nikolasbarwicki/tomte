@@ -16,6 +16,7 @@ export type RoutineRecord = {
   schedule: Schedule;
   active: boolean;
   catchUp: boolean;
+  notifyResult: boolean;
   lastScheduledFor: number | null;
   createdAt: number;
   updatedAt: number;
@@ -29,6 +30,7 @@ type RoutineRow = {
   schedule: string;
   active: number;
   catch_up: number;
+  notify_result: number;
   last_scheduled_for: number | null;
   created_at: number;
   updated_at: number;
@@ -55,6 +57,7 @@ const toRoutine = (r: RoutineRow): RoutineRecord => ({
   schedule: Schedule.parse(JSON.parse(r.schedule)),
   active: !!r.active,
   catchUp: !!r.catch_up,
+  notifyResult: !!r.notify_result,
   lastScheduledFor: r.last_scheduled_for,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
@@ -91,8 +94,8 @@ export function listActiveRoutines(db: Database): RoutineRecord[] {
 
 export function insertRoutine(db: Database, r: RoutineRecord) {
   db.query(
-    `INSERT INTO routines (id, bot_id, name, instruction, schedule, active, catch_up, last_scheduled_for, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO routines (id, bot_id, name, instruction, schedule, active, catch_up, notify_result, last_scheduled_for, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     r.id,
     r.botId,
@@ -101,6 +104,7 @@ export function insertRoutine(db: Database, r: RoutineRecord) {
     JSON.stringify(r.schedule),
     +r.active,
     +r.catchUp,
+    +r.notifyResult,
     r.lastScheduledFor,
     r.createdAt,
     r.updatedAt,
@@ -110,7 +114,7 @@ export function insertRoutine(db: Database, r: RoutineRecord) {
 /** Overwrites the editable fields and `last_scheduled_for` of an existing routine. */
 export function saveRoutine(db: Database, r: RoutineRecord) {
   db.query(
-    `UPDATE routines SET name = ?, instruction = ?, schedule = ?, active = ?, catch_up = ?, last_scheduled_for = ?, updated_at = ?
+    `UPDATE routines SET name = ?, instruction = ?, schedule = ?, active = ?, catch_up = ?, notify_result = ?, last_scheduled_for = ?, updated_at = ?
      WHERE id = ?`,
   ).run(
     r.name,
@@ -118,6 +122,7 @@ export function saveRoutine(db: Database, r: RoutineRecord) {
     JSON.stringify(r.schedule),
     +r.active,
     +r.catchUp,
+    +r.notifyResult,
     r.lastScheduledFor,
     r.updatedAt,
     r.id,

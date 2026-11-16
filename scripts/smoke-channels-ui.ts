@@ -4,7 +4,8 @@
 // database and secrets, temporary data root), driven by headless Chrome in a fresh profile. The host's Telegram adapter is pointed at
 // packages/host/src/testing/fake-telegram.ts on a loopback port, so api.telegram.org is never contacted and no real token exists.
 // Covers: no token yet, a token Telegram rejects, a token it accepts (the page shows the bot running and never the token), the link code
-// with its t.me deep link, linking by sending the code through the fake server, a stranger getting no reply, the linked state, and Unlink.
+// with its t.me deep link, linking by sending the code through the fake server, a stranger getting no reply, the linked state, a routine
+// created with "Send the result to my phone" whose run sends its result to the owner's chat, and Unlink.
 // Exits non-zero on the first failed check.
 import { fakeTelegram } from "../packages/host/src/testing/fake-telegram.ts";
 import { startSmoke } from "./smoke-kit.ts";
@@ -106,6 +107,48 @@ try {
     "the host linked the owner",
   );
   await smoke.shot("linked");
+
+  console.log("a routine that sends its result to the phone");
+  const botId = host.createBot("Planner");
+  await page.goto(`${host.clientUrl}/bots/${botId}?panel=routines`);
+  await page.getByRole("button", { name: "New routine" }).first().click();
+  const form = page.getByRole("dialog");
+  await form.getByLabel("Name").fill("Digest");
+  await form.getByLabel("Instruction").fill("Summarise the news");
+  const notify = form.getByRole("checkbox", { name: "Send the result to my phone" });
+  check(!(await notify.isChecked()), "the result checkbox starts off");
+  check(
+    await form.getByText("Needs a linked channel (Channels page)").isVisible(),
+    "the checkbox says it needs a linked channel",
+  );
+  check(await notify.isEnabled(), "the checkbox is enabled whatever the channel state");
+  await notify.click();
+  await smoke.shot("routine-form");
+  await form.getByRole("button", { name: "Create routine" }).click();
+  await page.getByText("Digest", { exact: true }).waitFor();
+  const sent = telegram.texts().length;
+  await page.getByRole("button", { name: "Run now" }).click();
+  await host.until(() => telegram.texts().length > sent, 10_000);
+  check(
+    telegram.texts().at(-1) === "Digest: ok",
+    `the owner got the routine's result (${telegram.texts().at(-1)})`,
+  );
+  check(
+    telegram.of("sendMessage").at(-1)!.params.chat_id === owner.id,
+    "the result went to the owner's chat",
+  );
+  await page.getByRole("button", { name: "Actions for Digest" }).click();
+  await page.getByRole("menuitem", { name: "Edit" }).click();
+  check(
+    await page
+      .getByRole("dialog")
+      .getByRole("checkbox", { name: "Send the result to my phone" })
+      .isChecked(),
+    "editing the routine shows the checkbox on",
+  );
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+  await page.goto(`${host.clientUrl}/channels`);
+  await status.waitFor();
 
   console.log("Unlink");
   await page.getByRole("button", { name: "Unlink" }).click();

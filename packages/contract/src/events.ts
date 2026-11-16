@@ -361,6 +361,7 @@ export const Routine = z.object({
   schedule: Schedule,
   active: z.boolean(),
   catchUp: z.boolean(),
+  notifyResult: z.boolean(),
   createdAt: z.number(),
   updatedAt: z.number(),
   /** Derived on read from schedule + lastScheduledFor; null when nothing is left to fire. */

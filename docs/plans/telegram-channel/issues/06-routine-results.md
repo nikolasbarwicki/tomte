@@ -10,11 +10,11 @@ The routine prompt already asks each run to end with a summary of at most 5 line
 
 **Status:** ready-for-agent
 
-- [ ] A schema step adds `notify_result INTEGER NOT NULL DEFAULT 0` to `routines` with `ALTER TABLE ... ADD COLUMN` (no CHECK is changed, so no table rebuild). Existing routines stay off
-- [ ] `Routine` in the contract gains `notifyResult: boolean`. `RoutineInput` and `RoutinePatch` accept it and the HTTP routes (`host-server/api/routines.ts`) pass it through, for create and update. Absent on create means off. A patch that omits it keeps it
-- [ ] The routine form has a checkbox "Send the result to my phone", with the description "Needs a linked channel (Channels page)", default off. It does not import the channels feature (ADR-0004); it is always enabled
-- [ ] A run that ends `succeeded` on a routine with `notifyResult` sends one `routine_result` notice: "<routine name>: <output>", the output cut to about 800 characters with "…", and a URL button to `<public URL>/bots/<botId>?panel=routines` (no button on a loopback public URL). An empty output sends "<routine name> finished" with no summary
-- [ ] A routine without the flag sends nothing on success. Its failures, interruptions and expired parks are still sent by ticket 05, flag or not. A failed run on a flagged routine sends the failure notice only, not also a result
-- [ ] A scheduled run, a manual test run and a parked run that resumed and then succeeded each send exactly one result when the routine opted in
-- [ ] Turning the flag off or deleting the routine before a run ends sends nothing for that run. The flag is read when the run ends, not when it started
-- [ ] Host seam tests with the fake Telegram server and the fake Claude CLI cover each bullet; the routine form's checkbox is covered by the browser smoke from ticket 02 (add a step). `bun run check` passes
+- [x] A schema step adds `notify_result INTEGER NOT NULL DEFAULT 0` to `routines` with `ALTER TABLE ... ADD COLUMN` (no CHECK is changed, so no table rebuild). Existing routines stay off
+- [x] `Routine` in the contract gains `notifyResult: boolean`. `RoutineInput` and `RoutinePatch` accept it and the HTTP routes (`host-server/api/routines.ts`) pass it through, for create and update. Absent on create means off. A patch that omits it keeps it
+- [x] The routine form has a checkbox "Send the result to my phone", with the description "Needs a linked channel (Channels page)", default off. It does not import the channels feature (ADR-0004); it is always enabled
+- [x] A run that ends `succeeded` on a routine with `notifyResult` sends one `routine_result` notice: "<routine name>: <output>", the output cut to about 800 characters with "…", and a URL button to `<public URL>/bots/<botId>?panel=routines` (no button on a loopback public URL). An empty output sends "<routine name> finished" with no summary
+- [x] A routine without the flag sends nothing on success. Its failures, interruptions and expired parks are still sent by ticket 05, flag or not. A failed run on a flagged routine sends the failure notice only, not also a result
+- [x] A scheduled run, a manual test run and a parked run that resumed and then succeeded each send exactly one result when the routine opted in
+- [x] Turning the flag off or deleting the routine before a run ends sends nothing for that run. The flag is read when the run ends, not when it started
+- [x] Host seam tests with the fake Telegram server and the fake Claude CLI cover each bullet; the routine form's checkbox is covered by the browser smoke from ticket 02 (add a step). `bun run check` passes

@@ -5,10 +5,12 @@ import type { ChannelMessage } from "./types.ts";
 
 /** How much of a failed run's error a notice keeps. */
 const MAX_ERROR = 300;
+/** How much of a succeeded run's output a result notice keeps. */
+const MAX_RESULT = 800;
 
 /**
  * A message the host sends the linked account on its own account, outside the needs-you cards: it has no buttons beyond the link to the
- * web UI and is not tracked after it is sent. A new kind (a routine's result) is a new member here and a new case in `noticeMessage`.
+ * web UI and is not tracked after it is sent. A new kind is a new member here and a new case in `noticeMessage`.
  */
 export const Notice = z.discriminatedUnion("kind", [
   /** A routine run that failed, or that the host's stopping interrupted (`interrupted`). */
@@ -26,6 +28,13 @@ export const Notice = z.discriminatedUnion("kind", [
     routine: z.string(),
     wait: z.string(),
   }),
+  /** A run of a routine that opted in succeeded; `output` is the run's final summary, empty when it left none. */
+  z.object({
+    kind: z.literal("routine_result"),
+    botId: z.string(),
+    routine: z.string(),
+    output: z.string(),
+  }),
 ]);
 export type Notice = z.output<typeof Notice>;
 
@@ -38,6 +47,12 @@ export function noticeMessage(notice: Notice, publicUrl: string): ChannelMessage
         return `Routine ${notice.routine} ${notice.interrupted ? "was interrupted" : "failed"}: ${cut(notice.error, MAX_ERROR)}`;
       case "park_expired":
         return `${notice.routine}: ${notice.wait} expired, so the run failed`;
+      case "routine_result": {
+        const output = notice.output.trim();
+        return output
+          ? `${notice.routine}: ${cut(output, MAX_RESULT)}`
+          : `${notice.routine} finished`;
+      }
     }
   })();
   return { text, ...(link && { link }) };
