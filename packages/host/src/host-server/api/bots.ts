@@ -1,4 +1,4 @@
-import type { ToolAllowances } from "@claudebot/contract/api";
+import { BotProfileUpdate, type ToolAllowances } from "@claudebot/contract/api";
 import { BotAvatar } from "@claudebot/contract/avatars";
 import { ChatMode } from "@claudebot/contract/events";
 import { z } from "zod";
@@ -12,6 +12,7 @@ import {
   setBrowserEnabled,
   setBrowserHeaded,
   setChatMode,
+  setProfile,
 } from "../../bots/index.ts";
 import { json } from "../http.ts";
 import type { ApiContext, ApiRoutes } from "./context.ts";
@@ -100,6 +101,17 @@ export function botRoutes({
       await browser.restart(bot.id);
       chats.announceBots();
       return json(res, { ok: true });
+    },
+    "/api/bots/profile": async ({ res, parse }) => {
+      const { botId, name, purpose, face, stroke } = parse(BotProfileUpdate);
+      const before = getBot(dataRoot, botId);
+      if (!before) return json(res, { error: "no such bot" }, 404);
+      const bot = setProfile(dataRoot, botId, { name, purpose, avatar: { face, stroke } });
+      // The name and purpose are in the system prompt; the avatar is only the page's.
+      if (name !== before.name || purpose !== before.purpose)
+        chats.reconfigure(botId, "profile changed");
+      chats.announceBots();
+      return json(res, bot);
     },
     "/api/bots/chat-mode": async ({ res, parse }) => {
       const { botId, chatMode } = parse(ChatModeChange);

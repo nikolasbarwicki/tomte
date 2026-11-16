@@ -14,6 +14,7 @@ import { eventSourceRoutes, eventTokenRoutes, needsYouRoutes } from "./external-
 import { fileRoutes } from "./files.ts";
 import { integrationApi } from "./integrations.ts";
 import { routineApi } from "./routines.ts";
+import { settingsRoutes } from "./settings.ts";
 
 /** The `/api/*` routes. A malformed body answers 400 with `{ error }`; any other failure answers 500 with the error as the body, without logging. */
 export function createApi(ctx: ApiContext): Handler {
@@ -22,6 +23,7 @@ export function createApi(ctx: ApiContext): Handler {
     ...eventTokenRoutes(ctx),
     ...eventSourceRoutes(ctx),
     ...needsYouRoutes(ctx),
+    ...settingsRoutes(ctx),
   };
   const openBot = { ...chatRoutes(ctx), ...fileRoutes(ctx) };
 

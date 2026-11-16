@@ -28,7 +28,7 @@ const EFFORT_LABELS: Record<EffortLevel, string> = {
   max: "Max",
 };
 
-/** The Settings tab: how the bot chats and what it runs on, saved with the bot. Switching mode starts a new conversation, so it asks first. */
+/** The "Chat & model" settings page: how the bot chats and what it runs on, saved with the bot. Switching mode starts a new conversation, so it asks first. */
 export function ChatSettings({ bot }: { bot: BotSummary }) {
   const busy = livePresence(bot.chatMode, useChat()) !== "idle";
   const doubleLoop = bot.chatMode === "double_loop";

@@ -29,7 +29,7 @@ const status = page.getByTestId("telegram-status");
 const tokenField = page.getByLabel("Bot token");
 
 try {
-  await page.goto(`${host.clientUrl}/channels`);
+  await page.goto(`${host.clientUrl}/settings/channels`);
   await status.waitFor();
 
   console.log("no token yet");
@@ -110,7 +110,7 @@ try {
 
   console.log("a routine that sends its result to the phone");
   const botId = host.createBot("Planner");
-  await page.goto(`${host.clientUrl}/bots/${botId}?panel=routines`);
+  await page.goto(`${host.clientUrl}/bots/${botId}?panel=settings&section=routines`);
   await page.getByRole("button", { name: "New routine" }).first().click();
   const form = page.getByRole("dialog");
   await form.getByLabel("Name").fill("Digest");
@@ -118,7 +118,7 @@ try {
   const notify = form.getByRole("checkbox", { name: "Send the result to my phone" });
   check(!(await notify.isChecked()), "the result checkbox starts off");
   check(
-    await form.getByText("Needs a linked channel (Channels page)").isVisible(),
+    await form.getByText("Needs a linked channel (Settings › Channels)").isVisible(),
     "the checkbox says it needs a linked channel",
   );
   check(await notify.isEnabled(), "the checkbox is enabled whatever the channel state");
@@ -147,7 +147,7 @@ try {
     "editing the routine shows the checkbox on",
   );
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
-  await page.goto(`${host.clientUrl}/channels`);
+  await page.goto(`${host.clientUrl}/settings/channels`);
   await status.waitFor();
 
   console.log("Unlink");

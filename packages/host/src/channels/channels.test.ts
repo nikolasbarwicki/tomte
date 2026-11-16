@@ -292,7 +292,7 @@ describe("notify", () => {
         to: owner,
         message: {
           text: "Routine Digest failed: boom",
-          link: { url: "https://claudebot.example/bots/b1?panel=routines" },
+          link: { url: "https://claudebot.example/bots/b1?panel=settings&section=routines" },
         },
       },
     ]);

@@ -1,4 +1,3 @@
-import type { ToolAllowances } from "@claudebot/contract/api";
 import type { BotFile, BotSummary } from "@claudebot/contract/events";
 import { getRouteApi } from "@tanstack/react-router";
 import {
@@ -6,12 +5,11 @@ import {
   EllipsisIcon,
   FileIcon,
   FolderOpenIcon,
-  Settings2Icon,
+  SettingsIcon,
   TrashIcon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useState, useTransition, type ReactNode } from "react";
-import { Streamdown } from "streamdown";
+import { useTransition, type ReactNode } from "react";
 
 import { confirmAction } from "@/components/confirm.tsx";
 import { Button } from "@/components/ui/button";
@@ -31,29 +29,14 @@ import {
 } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  useChat,
-  useFiles,
-  useMemory,
-  usePublicHostInfo,
-  useRoutines,
-  useWork,
-} from "@/host/hooks.ts";
+import { useFiles, usePublicHostInfo, useWork } from "@/host/hooks.ts";
 import { dateTime, fileSize } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
 
-import { fetchAllowances, deleteFile, downloadUrl, removeAllowance, revealFile } from "./api.ts";
+import { deleteFile, downloadUrl, revealFile } from "./api.ts";
+import { BotSettings } from "./bot-settings.tsx";
+import { PANEL_TABS, type PanelTab } from "./panel-nav.ts";
 
-export const PANEL_TABS = [
-  "work",
-  "tasks",
-  "memory",
-  "files",
-  "routines",
-  "browser",
-  "settings",
-] as const;
-export type PanelTab = (typeof PANEL_TABS)[number];
 const isPanelTab = (v: unknown): v is PanelTab => PANEL_TABS.some((t) => t === v);
 
 const botRoute = getRouteApi("/bots/$botId");
@@ -61,23 +44,31 @@ const botRoute = getRouteApi("/bots/$botId");
 /** Whether the host can reveal a folder in a file manager; false until the host says so. */
 const useCanReveal = () => usePublicHostInfo()?.capabilities.reveal === true;
 
+/**
+ * The bot's right-hand panel: one tab for each live view (Work, Tasks, Files, Browser) and a Settings tab with the
+ * bot's profile, chat, memory, routines and permissions as nested pages.
+ */
 export function BotPanel({
   bot,
   work,
   tasks,
-  routines,
   browser,
-  settings,
+  chat,
+  routines,
+  memory,
   onClose,
 }: {
   bot: BotSummary;
   work: ReactNode;
   /** The Tasks tab, shown for a double-loop bot only. */
   tasks: ReactNode;
-  routines: ReactNode;
   browser: ReactNode;
-  /** How the bot chats and what it runs on. */
-  settings: ReactNode;
+  /** The "Chat & model" settings page: how the bot chats and what it runs on. */
+  chat: ReactNode;
+  /** The "Routines" settings page. */
+  routines: ReactNode;
+  /** The "Memory" settings page. */
+  memory: ReactNode;
   onClose: () => void;
 }) {
   const navigate = botRoute.useNavigate();
@@ -90,9 +81,9 @@ export function BotPanel({
   const tab =
     explicitTab !== undefined && (hasTasks || explicitTab !== "tasks")
       ? explicitTab
-      : hasSources
+      : hasSources || bot.needsYou > 0
         ? "work"
-        : "memory";
+        : "settings";
   const workTrigger = (
     <TabsTrigger value="work">
       Work
@@ -108,8 +99,6 @@ export function BotPanel({
     </TabsTrigger>
   );
   const files = useFiles();
-  const routineList = useRoutines();
-  const botRoutines = routineList?.botId === bot.id ? routineList.routines : undefined;
   return (
     <Tabs
       value={tab}
@@ -122,12 +111,8 @@ export function BotPanel({
         <TabsList className="min-w-0 flex-1">
           {hasSources && workTrigger}
           {hasTasks && <TabsTrigger value="tasks">Tasks</TabsTrigger>}
-          <TabsTrigger value="memory">Memory</TabsTrigger>
           <TabsTrigger value="files">
             Files <Count n={files.files.length} />
-          </TabsTrigger>
-          <TabsTrigger value="routines">
-            Routines <Count n={botRoutines?.length ?? 0} />
           </TabsTrigger>
           <TabsTrigger value="browser">
             Browser
@@ -137,7 +122,7 @@ export function BotPanel({
           </TabsTrigger>
           {!hasSources && workTrigger}
           <TabsTrigger value="settings" aria-label="Settings" title="Settings">
-            <Settings2Icon />
+            <SettingsIcon />
           </TabsTrigger>
         </TabsList>
         <Button variant="ghost" size="icon-sm" aria-label="Close panel" onClick={onClose}>
@@ -152,29 +137,14 @@ export function BotPanel({
           {tasks}
         </TabsContent>
       )}
-      <TabsContent value="memory" className="min-h-0 overflow-y-auto p-4">
-        <Memory bot={bot} />
-      </TabsContent>
       <TabsContent value="files" className="min-h-0 overflow-y-auto p-4">
         <Files bot={bot} />
-      </TabsContent>
-      <TabsContent value="routines" className="min-h-0 overflow-y-auto p-4">
-        {botRoutines ? (
-          routines
-        ) : (
-          <div className="flex justify-center p-6">
-            <Spinner className="text-muted-foreground" />
-          </div>
-        )}
       </TabsContent>
       <TabsContent value="browser" className="min-h-0 overflow-y-auto p-4">
         {browser}
       </TabsContent>
       <TabsContent value="settings" className="min-h-0 overflow-y-auto p-4">
-        <div className="grid gap-6">
-          {settings}
-          <Permissions bot={bot} />
-        </div>
+        <BotSettings bot={bot} chat={chat} routines={routines} memory={memory} />
       </TabsContent>
     </Tabs>
   );
@@ -182,111 +152,6 @@ export function BotPanel({
 
 function Count({ n }: { n: number }) {
   return n > 0 ? <span className="text-muted-foreground text-xs tabular-nums">{n}</span> : null;
-}
-
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="grid gap-2">
-      <div>
-        <h3 className="text-sm font-medium">{title}</h3>
-        <p className="text-muted-foreground text-xs">{description}</p>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function MemoryText({ text, empty }: { text: string; empty: string }) {
-  if (!text.trim())
-    return (
-      <p className="text-muted-foreground rounded-lg border border-dashed p-3 text-sm">{empty}</p>
-    );
-  return (
-    <div className="bg-muted/50 rounded-lg p-3 text-sm break-words">
-      <Streamdown linkSafety={{ enabled: false }}>{text}</Streamdown>
-    </div>
-  );
-}
-
-function Memory({ bot }: { bot: BotSummary }) {
-  const memory = useMemory();
-  return (
-    <div className="grid gap-6">
-      <Section title="About you" description="What every bot knows about you.">
-        <MemoryText text={memory.user} empty="Nothing remembered yet." />
-      </Section>
-      <Section title={`How ${bot.name} works`} description="Directions only this bot follows.">
-        <MemoryText text={memory.bot} empty="No directions yet." />
-      </Section>
-    </div>
-  );
-}
-
-/** The tools the owner chose "Always allow for this bot" on, each with a way to take the rule back. */
-function Permissions({ bot }: { bot: BotSummary }) {
-  const [rules, setRules] = useState<ToolAllowances["allowances"] | { error: string }>();
-  const [removing, startRemoving] = useTransition();
-  // A rule added on a card in this chat shows up without reopening the panel.
-  const added = useChat().items.filter(
-    (i) => i.kind === "approve" && i.answer === "allow_always",
-  ).length;
-  useEffect(() => {
-    let current = true;
-    void fetchAllowances(bot.id).then((r) => {
-      if (current) setRules("error" in r ? r : r.allowances);
-    });
-    return () => {
-      current = false;
-    };
-  }, [bot.id, added]);
-  const remove = (tool: string) =>
-    startRemoving(async () => {
-      if (await removeAllowance(bot.id, tool))
-        setRules((now) => (Array.isArray(now) ? now.filter((r) => r.tool !== tool) : now));
-    });
-  return (
-    <Section
-      title="Permissions"
-      description={`Tools ${bot.name} may always use without asking, chosen on an approval card. A tool switched off in Integrations stays off.`}
-    >
-      {rules === undefined ? (
-        <Spinner className="text-muted-foreground" />
-      ) : !Array.isArray(rules) ? (
-        <p className="text-destructive text-sm">{rules.error}</p>
-      ) : rules.length === 0 ? (
-        <p className="text-muted-foreground rounded-lg border border-dashed p-3 text-sm">
-          Nothing is always allowed yet.
-        </p>
-      ) : (
-        <ul className="grid gap-1" data-testid="allowances">
-          {rules.map((r) => (
-            <li key={r.tool} className="bg-muted/50 flex items-center gap-2 rounded-lg px-3 py-1.5">
-              <span className="min-w-0 flex-1 truncate font-mono text-sm" title={r.tool}>
-                {r.tool}
-              </span>
-              <Button
-                variant="outline"
-                size="xs"
-                disabled={removing}
-                aria-label={`Remove ${r.tool}`}
-                onClick={() => remove(r.tool)}
-              >
-                Remove
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Section>
-  );
 }
 
 function Files({ bot }: { bot: BotSummary }) {

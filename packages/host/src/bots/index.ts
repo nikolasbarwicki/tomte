@@ -23,7 +23,7 @@ import {
 } from "@claudebot/contract/events";
 import { z } from "zod";
 
-import { userMemoryPath } from "./memory.ts";
+import { instructionsPath, readMemory, userMemoryPath } from "./memory.ts";
 import { type HostDelegate } from "./session-kit.ts";
 import { Thread, type ThreadEnv } from "./thread.ts";
 
@@ -37,7 +37,13 @@ export {
   toolUseIdOf,
   type HostDelegate,
 } from "./session-kit.ts";
-export { readMemory, userMemoryPath, type MemoryPaths } from "./memory.ts";
+export {
+  instructionsPath,
+  readMemory,
+  userMemoryPath,
+  writeMemory,
+  type MemoryPaths,
+} from "./memory.ts";
 export { deleteActivity, getActivity, markSeen, recordMessage } from "./activity-store.ts";
 export {
   allowTool,
@@ -92,10 +98,13 @@ function write(dataRoot: string, bot: Bot) {
   writeFileSync(join(botDir(dataRoot, bot.id), "bot.json"), JSON.stringify(bot, null, 2) + "\n");
 }
 
-/** Saves a bot held in memory. Settings are owned by their setters, so a stale copy never overwrites them. */
+/** Saves a bot held in memory. Settings and the profile are owned by their setters, so a stale copy never overwrites them. */
 function save(dataRoot: string, bot: Bot) {
   const stored = getBot(dataRoot, bot.id);
   if (stored) {
+    bot.name = stored.name;
+    bot.purpose = stored.purpose;
+    bot.avatar = stored.avatar;
     bot.browser = stored.browser;
     bot.chatMode = stored.chatMode;
     bot.model = stored.model;
@@ -184,6 +193,19 @@ export function setChatMode(dataRoot: string, id: string, chatMode: ChatMode): B
   return bot;
 }
 
+/** Replaces the bot's name, purpose and avatar; the caller has validated them. */
+export function setProfile(
+  dataRoot: string,
+  id: string,
+  profile: Pick<Bot, "name" | "purpose" | "avatar">,
+): Bot | undefined {
+  const bot = getBot(dataRoot, id);
+  if (!bot) return undefined;
+  Object.assign(bot, profile);
+  write(dataRoot, bot);
+  return bot;
+}
+
 /** The model and effort the bot runs on: its standard turns, or the background tasks of its double-loop chat. */
 export function setModelSettings(
   dataRoot: string,
@@ -214,14 +236,19 @@ export function touchBot(dataRoot: string, bot: Bot) {
   save(dataRoot, bot);
 }
 
-/** Who the bot is, as the system prompt tells every session of it. */
-function botIdentity(bot: Bot): string[] {
+/** The heading the user's instructions sit under in every bot's system prompt. */
+const INSTRUCTIONS_HEADING = "# The user's instructions for every bot";
+
+/** Who the bot is, as the system prompt tells every session of it, followed by the user's instructions when there are any. */
+function botIdentity(dataRoot: string, bot: Bot): string[] {
+  const instructions = readMemory(instructionsPath(dataRoot)).trim();
   return [
     `# This bot`,
     `You are "${bot.name}", one of several specialized bots the user runs; each bot is a single long-running conversation dedicated to its own job.`,
     bot.purpose
       ? `Your job: ${bot.purpose}`
       : "No job description was given; infer it from the conversation and bot memory.",
+    ...(instructions ? ["", INSTRUCTIONS_HEADING, instructions] : []),
   ];
 }
 
@@ -230,17 +257,24 @@ const botMemory = (dataRoot: string, id: string) => ({
   bot: botMemoryPath(dataRoot, id),
 });
 
-/** Thread options that bind a thread to a bot's identity, session, memory and files folder; user memory is the data root's. */
+/** The bot as saved now, so a rename made since the caller read it reaches the next session; `bot` itself when it is gone. */
+const freshBot = (dataRoot: string, bot: Bot) => getBot(dataRoot, bot.id) ?? bot;
+
+/**
+ * Thread options that bind a thread to a bot's identity, session, memory and files folder; user memory is the data root's.
+ * The persona is computed when the session opens, from the bot and the instructions as saved then.
+ */
 export function botContext(dataRoot: string, bot: Bot) {
   const files = botFilesPath(dataRoot, bot.id);
   mkdirSync(files, { recursive: true });
-  const persona = [
-    ...botIdentity(bot),
-    "",
-    `## Your files`,
-    `Your own files folder is ${files}. The user browses it in the app's sidebar.`,
-    `Save every file you produce for the user (reports, notes, drafts, exports, scripts, data, images) inside that folder, with descriptive names and subfolders when useful. Write elsewhere only when the user explicitly asks you to change files in the workspace or another location.`,
-  ].join("\n");
+  const persona = () =>
+    [
+      ...botIdentity(dataRoot, freshBot(dataRoot, bot)),
+      "",
+      `## Your files`,
+      `Your own files folder is ${files}. The user browses it in the app's sidebar.`,
+      `Save every file you produce for the user (reports, notes, drafts, exports, scripts, data, images) inside that folder, with descriptive names and subfolders when useful. Write elsewhere only when the user explicitly asks you to change files in the workspace or another location.`,
+    ].join("\n");
   return {
     sessionId: currentSession(bot),
     persona,
@@ -251,13 +285,13 @@ export function botContext(dataRoot: string, bot: Bot) {
 /**
  * What a bot's front session binds to: the bot's identity, session and memory. The front itself has no tools to write files,
  * so its persona leaves the files folder out; the background worker writes there, so `workerPersona` is the bot's full persona
- * and `files` the folder.
+ * and `files` the folder. Both are computed when the session opens.
  */
 export function frontContext(dataRoot: string, bot: Bot) {
   const full = botContext(dataRoot, bot);
   return {
     sessionId: full.sessionId,
-    persona: botIdentity(bot).join("\n"),
+    persona: () => botIdentity(dataRoot, freshBot(dataRoot, bot)).join("\n"),
     workerPersona: full.persona,
     files: botFilesPath(dataRoot, bot.id),
     memory: full.memory,
