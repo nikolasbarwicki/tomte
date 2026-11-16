@@ -14,14 +14,14 @@ The tool description says that pausing does not stop a run already in progress, 
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `update_routine` with `active: false` pauses the routine: `/api/routines/list` shows `active: false` and no next run, and the result has an empty `next_runs`. `active: true` resumes it and `next_runs` returns
-- [ ] Changing only the schedule keeps the name and instruction. Changing only the name keeps the schedule. The result shows the new `next_runs`
-- [ ] A schedule change is checked by the same rules as `create_routine` (bad cron, unknown time zone, once in the past, interval under 5 minutes) and an invalid one changes nothing
-- [ ] With the bot open, each update reaches the stream as a `routines` event
-- [ ] A bot cannot update another bot's routine, and an unknown id answers the same "no such routine", so ids are not revealed. The other bot's routine is unchanged
-- [ ] A call with only `routine_id` answers "nothing to change"
-- [ ] While the bot runs a routine turn or a headless run, `update_routine` is refused with the "scheduled runs cannot create or change routines" message. A routine cannot pause itself this way
-- [ ] No tool in the endpoint deletes or runs a routine: the server lists exactly `list_routines`, `create_routine` and `update_routine`
-- [ ] Host HTTP-seam tests cover all of the above through `actAs(botId, "routines")` (prior art: `handoffs/guardrails.test.ts`, `routines/index.test.ts` for the baseline rules). `bun run check` passes
+- [x] `update_routine` with `active: false` pauses the routine: `/api/routines/list` shows `active: false` and no next run, and the result has an empty `next_runs`. `active: true` resumes it and `next_runs` returns
+- [x] Changing only the schedule keeps the name and instruction. Changing only the name keeps the schedule. The result shows the new `next_runs`
+- [x] A schedule change is checked by the same rules as `create_routine` (bad cron, unknown time zone, once in the past, interval under 5 minutes) and an invalid one changes nothing
+- [x] With the bot open, each update reaches the stream as a `routines` event
+- [x] A bot cannot update another bot's routine, and an unknown id answers the same "no such routine", so ids are not revealed. The other bot's routine is unchanged
+- [x] A call with only `routine_id` answers "nothing to change"
+- [x] While the bot runs a routine turn or a headless run, `update_routine` is refused with the "scheduled runs cannot create or change routines" message. A routine cannot pause itself this way
+- [x] No tool in the endpoint deletes or runs a routine: the server lists exactly `list_routines`, `create_routine` and `update_routine`
+- [x] Host HTTP-seam tests cover all of the above through `actAs(botId, "routines")` (prior art: `handoffs/guardrails.test.ts`, `routines/index.test.ts` for the baseline rules). `bun run check` passes

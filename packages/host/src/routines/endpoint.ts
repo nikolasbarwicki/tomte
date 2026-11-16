@@ -9,6 +9,7 @@ import type { TokenRegistry } from "../platform/tokens.ts";
 import type { RoutinesPort, RoutinesToolContext } from "./tools/context.ts";
 import { registerCreateRoutine } from "./tools/create-routine.ts";
 import { registerListRoutines } from "./tools/list-routines.ts";
+import { registerUpdateRoutine } from "./tools/update-routine.ts";
 
 export const ROUTINES_ENDPOINT_PATH = "/mcp/routines";
 export const ROUTINES_SERVER_NAME = "routines";
@@ -53,6 +54,7 @@ function createRoutinesMcpServer(ctx: RoutinesToolContext): McpServer {
   );
   registerListRoutines(mcp, ctx);
   registerCreateRoutine(mcp, ctx);
+  registerUpdateRoutine(mcp, ctx);
   return mcp;
 }
 
