@@ -26,8 +26,8 @@ const msg = (text: string) => `<browser-control>\n${text}\n</browser-control>`;
 /**
  * Who holds a bot's browser. The user takes control from the panel at any time, or the bot asks for it with a
  * human wait; either way new bot calls are refused while the user holds it. It ends on hand-back, on the
- * wait's "I'm done" or "Skip", after 30 minutes without input (counted as Skip), or when the bot's pending
- * waits are cancelled.
+ * wait's "I'm done" or "Skip", after 30 minutes without input (counted as Skip; for a routine run's request
+ * the 30 minutes start at the first input), when the wait expires, or when the bot's pending waits are cancelled.
  */
 export class Takeover {
   private controls = new Map<string, Control>();
@@ -72,7 +72,11 @@ export class Takeover {
     return this.holder(botId) === "user";
   }
 
-  /** The bot asks for help: the user gets control at once and a card with "I'm done" and "Skip". Called from inside a bot call, so it does not wait for the bot's calls to drain. */
+  /**
+   * The bot asks for help: the user gets control at once and a card with "I'm done" and "Skip". Called from inside a bot call, so it
+   * does not wait for the bot's calls to drain. A request that belongs to a routine run parks the run and may wait all night, so its
+   * inactivity limit starts with the user's first input (`touch`); until then only the wait's 24-hour expiry applies.
+   */
   request(botId: string, reason: string): WaitingForUser {
     const browser = this.o.runtimes.forBot(botId);
     const result = this.o.waits.open(botId, {
@@ -84,7 +88,8 @@ export class Takeover {
       ],
     });
     browser.holdControl();
-    this.begin(botId, { phase: "user", waitId: result.id });
+    const wait = this.o.waits.find(result.id);
+    this.begin(botId, { phase: "user", waitId: result.id }, wait?.runId === null);
     return result;
   }
 
@@ -129,9 +134,9 @@ export class Takeover {
     this.release(botId, false);
   }
 
-  private begin(botId: string, c: Control) {
+  private begin(botId: string, c: Control, arm = true) {
     this.controls.set(botId, c);
-    if (c.phase === "user") this.arm(botId, c);
+    if (c.phase === "user" && arm) this.arm(botId, c);
     this.notify(botId);
   }
 

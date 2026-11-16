@@ -32,6 +32,7 @@ const ENV_KEYS = [
 ] as const;
 const UNATTENDED =
   "not available in unattended runs; report the login wall or CAPTCHA in your result instead";
+const DAY = 24 * 60 * 60_000;
 
 let root: string;
 let cwd: string;
@@ -39,6 +40,9 @@ let fakeDir: string;
 let claudeDir: string;
 let server: HostServer;
 let device: string;
+let db: Database;
+let clock = Date.now();
+let serverOptions: { script: object; laneWaitMs?: number | undefined };
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 const closers: (() => unknown)[] = [];
 
@@ -72,16 +76,29 @@ afterEach(async () => {
   await server.close();
 });
 
-async function startServer(script: object = {}, laneWaitMs?: number) {
-  writeFileSync(join(fakeDir, "script.json"), JSON.stringify(script));
-  server = await createHostServer({
+const makeServer = () =>
+  createHostServer({
     config: parseHostConfig(["--data-root", cwd], {}).config,
     cli: { path: FAKE_CLAUDE, source: "CLAUDE_PATH", needsShell: false },
-    db: migrate(new Database(":memory:")),
+    db,
     secrets: memorySecrets(),
-    browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir }, laneWaitMs },
+    browser: { env: { FAKE_AGENT_BROWSER_DIR: fakeDir }, laneWaitMs: serverOptions.laneWaitMs },
+    now: () => clock,
   });
+
+async function startServer(script: object = {}, laneWaitMs?: number) {
+  serverOptions = { script, laneWaitMs };
+  writeFileSync(join(fakeDir, "script.json"), JSON.stringify(script));
+  db = migrate(new Database(":memory:"));
+  clock = Date.now();
+  server = await makeServer();
   device = pairDevice(server);
+}
+
+/** Stops the host and starts it again on the same data root and database, as a restart or a deploy does. */
+async function restartServer() {
+  await server.close();
+  server = await makeServer();
 }
 
 const until = async (check: () => boolean, ms = 4000) => {
@@ -137,6 +154,7 @@ async function startRoutine(botId: string) {
 const runs = async (id: string) =>
   (await (await ui("/api/routines/runs", { id })).json()) as {
     output: string | null;
+    error: string | null;
     status: string;
   }[];
 
@@ -144,7 +162,7 @@ describe.each([
   ["chat-hosted", true],
   ["headless", false],
 ])("%s routine turn", (_label, openChat) => {
-  test("browsing works; browser_request_takeover and browser_login are refused with the unattended message", async () => {
+  test("browsing works; browser_login is still refused with the unattended message", async () => {
     await startServer();
     const { botId, call } = await setup(openChat);
     writeFileSync(join(claudeDir, "hold"), "");
@@ -153,10 +171,6 @@ describe.each([
 
     expect((await call("browser_open", { url: "https://example.com" })).isError).toBe(false);
     expect((await call("browser_snapshot")).isError).toBe(false);
-    expect(await call("browser_request_takeover", { reason: "CAPTCHA" })).toEqual({
-      isError: true,
-      text: UNATTENDED,
-    });
     expect(await call("browser_login", { entry: "Example" })).toEqual({
       isError: true,
       text: UNATTENDED,
@@ -175,7 +189,102 @@ describe.each([
     }
     expect(done).toBe(true);
     const r = await call("browser_request_takeover", { reason: "CAPTCHA" });
-    expect(r.text).not.toContain("unattended");
+    expect(r.isError).toBe(false);
+    expect(JSON.parse(r.text).status).toBe("waiting_for_user");
+  });
+});
+
+describe.each([
+  ["chat-hosted", true],
+  ["headless", false],
+])("%s routine takeover", (_label, openChat) => {
+  /** A routine turn that requested a takeover and ended: the run is parked and its bot's browser is held. */
+  async function park(reason = "solve the CAPTCHA") {
+    await startServer();
+    const bot = await setup(openChat);
+    writeFileSync(join(claudeDir, "hold"), "");
+    const routineId = await startRoutine(bot.botId);
+    await until(() => messages().length === 1);
+    expect((await bot.call("browser_open", { url: "https://example.com" })).isError).toBe(false);
+
+    const requested = await bot.call("browser_request_takeover", { reason });
+    expect(requested.isError).toBe(false);
+    const wait = JSON.parse(requested.text) as { status: string; id: string; instruction: string };
+    expect(wait.status).toBe("waiting_for_user");
+    expect(wait.instruction).toContain("End your turn");
+
+    rmSync(join(claudeDir, "hold"));
+    await untilRun(routineId, "waiting");
+    return { ...bot, routineId, wait };
+  }
+  const untilRun = async (routineId: string, status: string) => {
+    for (let i = 0; i < 160 && (await runs(routineId))[0]?.status !== status; i++)
+      await Bun.sleep(25);
+    expect((await runs(routineId))[0]?.status).toBe(status);
+  };
+
+  test("parks the run and holds the browser; a hand-back resumes the same session and the run succeeds", async () => {
+    const { botId, call, connect, routineId } = await park();
+    expect(messages()).toHaveLength(1);
+    expect((await runs(routineId))[0]?.output).toBeNull();
+
+    // Another caller of the bot's browser meanwhile is refused.
+    const second = await connect();
+    expect(await second("browser_snapshot")).toEqual({ isError: true, text: "user has control" });
+
+    expect((await ui("/api/browser/control", { botId, action: "hand_back" })).status).toBe(200);
+    await untilRun(routineId, "succeeded");
+    expect(messages()).toHaveLength(2);
+    expect(messages()[1]).toContain("finished the takeover");
+    expect(messages()[1]).toContain("fresh snapshot");
+    expect(messages()[1]).not.toContain("<scheduled-routine");
+    expect(await runs(routineId)).toHaveLength(1);
+    expect((await call("browser_snapshot")).isError).toBe(false);
+  });
+
+  test("Skip resumes the run and tells the bot the user did not handle it", async () => {
+    const { call, routineId, wait } = await park("enter the 2FA code");
+    expect((await ui("/api/waits/answer", { id: wait.id, action: "skip" })).status).toBe(200);
+    await untilRun(routineId, "succeeded");
+    expect(messages()).toHaveLength(2);
+    expect(messages()[1]).toContain("skipped");
+    expect(messages()[1]).toContain("enter the 2FA code");
+    expect((await call("browser_snapshot")).isError).toBe(false);
+  });
+
+  test("a takeover nobody handles for 24 hours fails the run with 'approval expired' and releases the browser", async () => {
+    const { call, routineId, wait } = await park();
+    clock += DAY + 1000;
+    expect((await ui("/api/waits/answer", { id: wait.id, action: "done" })).status).toBe(404);
+    await untilRun(routineId, "failed");
+    expect((await runs(routineId))[0]).toMatchObject({ error: "approval expired" });
+    await until(() => messages().length === 2);
+    expect(messages()[1]).toContain("nothing was approved");
+    expect((await call("browser_snapshot")).isError).toBe(false);
+  });
+
+  test("a restart cancels the takeover and resumes the run with a message that the browser session is gone", async () => {
+    const { botId, routineId } = await park();
+    await restartServer();
+    await untilRun(routineId, "succeeded");
+    await until(() => messages().length === 2);
+    expect(messages()[1]).toContain("browser session is gone");
+    expect(messages()[1]).toContain("request the takeover again");
+
+    // The bot may ask again: its browser works and a new request is an ordinary wait.
+    const s = defined(server.browser.lease(botId).servers[0], "server");
+    const client = new Client({ name: "test", version: "1.0.0" });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(s.url), {
+        requestInit: { headers: { Authorization: `Bearer ${s.token}` } },
+      }),
+    );
+    closers.push(() => client.close());
+    const again = await client.callTool({
+      name: "browser_request_takeover",
+      arguments: { reason: "again" },
+    });
+    expect(again.isError).not.toBe(true);
   });
 });
 

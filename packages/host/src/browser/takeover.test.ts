@@ -337,24 +337,60 @@ describe("human wait: takeover request", () => {
     expect(botId).toBeTruthy();
   });
 
-  test("is refused in an unattended routine run", async () => {
-    await startServer();
-    const { botId, call } = await setup();
-    writeFileSync(join(claudeDir, "hold"), "");
-    const created = await ui("/api/routines/create", {
-      botId,
-      name: "nightly",
-      instruction: "check",
-      schedule: { kind: "cron", expr: "0 3 * * *", tz: "UTC" },
-    });
-    const routine = (await created.json()) as { id: string };
-    await ui("/api/routines/run", { id: routine.id });
-    await until(() => messages().length === 1);
+  // The inactivity timer is a real timer in the host; the host-wide fake clock does not drive it, so these tests wait in real time.
+  describe.each([
+    ["chat-hosted", true],
+    ["headless", false],
+  ])("a %s routine's takeover request", (_label, chatHosted) => {
+    const runStatus = async (routineId: string) =>
+      (
+        (await (await ui("/api/routines/runs", { id: routineId })).json()) as {
+          status: string;
+        }[]
+      )[0]?.status;
+    const untilRun = async (routineId: string, status: string) => {
+      for (let i = 0; i < 160 && (await runStatus(routineId)) !== status; i++) await Bun.sleep(25);
+      expect(await runStatus(routineId)).toBe(status);
+    };
 
-    const r = await call("browser_request_takeover", { reason: "CAPTCHA" });
-    expect(r.isError).toBe(true);
-    expect(r.text).toContain("unattended");
-    expect((await call("browser_snapshot")).isError).toBe(false);
+    test("stays open until the first input; then the inactivity limit applies and a timeout counts as Skip", async () => {
+      await startServer(300);
+      const { botId, call, holder } = await setup();
+      // A routine turn is chat-hosted while its bot's chat is open, and headless once another bot's chat is.
+      if (!chatHosted) {
+        const other = createBot(cwd, "other").id;
+        expect((await ui("/api/open", { botId: other })).status).toBe(200);
+      }
+      writeFileSync(join(claudeDir, "hold"), "");
+      const created = await ui("/api/routines/create", {
+        botId,
+        name: "nightly",
+        instruction: "check",
+        schedule: { kind: "cron", expr: "0 3 * * *", tz: "UTC" },
+      });
+      const routine = (await created.json()) as { id: string };
+      await ui("/api/routines/run", { id: routine.id });
+      await until(() => messages().length === 1);
+
+      expect((await request(call, "enter the code")).status).toBe("waiting_for_user");
+      rmSync(join(claudeDir, "hold"));
+      await untilRun(routine.id, "waiting");
+
+      // Three times the inactivity limit with no input: the user still holds the browser and the run still waits.
+      await Bun.sleep(900);
+      expect(holder.at(-1)).toBe("user");
+      expect(await runStatus(routine.id)).toBe("waiting");
+      expect(messages()).toHaveLength(1);
+
+      // The first input starts the limit; with no more input it ends as Skip and the run goes on.
+      const moved = { botId, kind: "mouse", eventType: "mouseMoved", x: 1, y: 1 };
+      expect((await ui("/api/browser/input", moved)).status).toBe(200);
+      await until(() => messages().length === 2);
+      expect(messages()[1]).toContain("counts as skipped");
+      expect(messages()[1]).toContain("enter the code");
+      await untilRun(routine.id, "succeeded");
+      await until(() => holder.at(-1) === "bot");
+    });
   });
 });
 

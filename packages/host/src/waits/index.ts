@@ -270,7 +270,10 @@ export function createWaits(o: WaitsOptions): Waits {
       return finish(id, "answered", value, note);
     },
     resolve(id, outcome, reason) {
-      return finish(id, outcome === "cancelled" ? "cancelled" : "expired", outcome, reason);
+      // A takeover's `timeout` counts as the user's Skip: the run goes on, so it is an answer, not the 24-hour expiry that fails a run.
+      const state =
+        outcome === "cancelled" ? "cancelled" : outcome === "timeout" ? "answered" : "expired";
+      return finish(id, state, outcome, reason);
     },
     cancelBot(botId, reason) {
       const open = store.open(botId);
