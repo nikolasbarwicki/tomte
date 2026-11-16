@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] `routine-turns.ts` (and whatever in `host-server/chats.ts` hands routine jobs to the front) starts every routine run of a `double_loop` bot headless, whether or not its chat is open, in its own session; the front session never receives the routine prompt or a resume message
 - [x] Such a run parks on an approval and on an `ask_user` question exactly as a standard bot's headless run: `waiting` in the Routines panel, Allow/Deny/answer resume it in the same headless session, a restart keeps it `waiting` and an answer afterwards resumes it, an expired park fails it with "approval expired"

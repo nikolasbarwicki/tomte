@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 The pieces: `botsEvent` in `host-server/views.ts` builds each bot's `needsYou`, `needsYouSources` and `needsYouAt` from `Events.needsYou` (`events/store.ts`, `OpenItems`). `Chats.announceBots` rebroadcasts it. The bar is `NeedsYou` in `web/features/chat/needs-you.tsx`, fed by `needsYouItems` in `web/features/chat/model.ts` from the work event. The wait cards already reach the open bot's chat as `wait`, `approve` and `ask` items (`web/host/transcript.ts`). The desktop banner reads only the `bots` slice (`packages/desktop/src/needs-you-banner.ts`), so it needs no change of its own.
 

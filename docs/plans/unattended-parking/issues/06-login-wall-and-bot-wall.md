@@ -4,7 +4,7 @@
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** done
 
 Nothing detects either today. `snapshotOutcome` in `browser/tools/page.ts` takes a snapshot, numbers its refs and wraps it as untrusted page content; `browser_open`, `browser_snapshot`, every action and `browser_tabs` end there. `BROWSER_INSTRUCTIONS` in `browser/tools.ts` tells the bot to call `browser_request_takeover` for a CAPTCHA, and `docs/browser.md` says only that a routine hitting a login wall "is told to say so in its run result". The password-field rules already exist in `browser/login.ts` (`FIELD`, `PASSWORD_FIELD`, `classifyAfterLogin`); share them rather than copying them. The engine's snapshot is an accessibility tree, so detection reads visible text and, from `browser_open`, the page title. `BotBrowser.exclusive` holds the bot's lane for a whole tool call and a second call waits `laneWaitMs` (30 seconds, `browser/runtime.ts`).
 

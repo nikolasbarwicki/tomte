@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
 Today `headlessDelegate` (`bots/index.ts`) denies every approval and answers every question with a canned text. A headless run uses it directly (`runHeadless` in `routines/index.ts`). A chat-hosted routine turn reaches it through `hooks.unattended()` in `host-server/threads.ts`. `routine-turns.ts` picks between the two. `createRoutines` keeps `running` in memory, `fire()` skips on it (`routines/index.ts`, `running.has(id)`), and `interruptStaleRuns` in `routines/store.ts` marks leftover `running` rows `interrupted`. A `waiting` row must be left alone by it.
 

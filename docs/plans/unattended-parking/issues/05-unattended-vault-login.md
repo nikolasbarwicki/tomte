@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 How it works today. `registerCredentialTools` in `browser/tools/credentials.ts` returns `errorResult(UNATTENDED_MESSAGE)` when `ctx.unattended()`. `BrowserLogin.login` in `browser/login.ts` finds the entry by label; with no grant for the bot it opens the credential approval wait (`ask`), and with a grant it runs `signIn`, which issues a one-time nonce and has the engine fetch the username and password through the credential plugin (`exchange` checks the nonce and `credentials.hasGrant`). The only code that creates a grant is the approval's `onResolve` in `login.ts`; no route or UI grants. So a grant always means I approved its first use. `credentials.revoke` removes one.
 

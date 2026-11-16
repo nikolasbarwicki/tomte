@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 Today `ApproveCard` in `web/features/chat/transcript.tsx` has Deny and Allow, answered through `answer(id, "allow" | "deny")` to `/api/answer` (`host-server/api/chat.ts`). The `approve` event has no `actions` field; the stored wait (ticket 01) has `actions`, which a channel reads. `HumanWaits.answer(id, value, note?)` already carries a note into the bot's message (ticket 01); this ticket adds the route field and the card. `Thread.canUseTool` in `bots/thread.ts` asks in two places: an integration tool whose policy is `ask` (the `integrations.decide` switch) and, only with `askApproval`, Bash and out-of-workspace file access (the `delegate.approve` calls below `approveAll`). `decide` returning `deny` ("Off") must keep winning. Bots keep small tables in their own folder (`bots/activity-store.ts` for `bot_activity`); follow that.
 
