@@ -278,7 +278,7 @@ interface Env {
 
 async function runCase(c: Case, n: number, env: Env): Promise<Outcome> {
   const bot = createBot(env.root, `Eval ${n}`, "A general assistant that researches things.");
-  const { sessionId, persona, memory } = frontContext(env.root, bot);
+  const { sessionId, persona, workerPersona, files, memory } = frontContext(env.root, bot);
   if (sessionId === undefined) throw new Error("the eval bot has no session");
   const cwd = join(env.root, "cwd");
   mkdirSync(cwd, { recursive: true });
@@ -364,7 +364,21 @@ async function runCase(c: Case, n: number, env: Env): Promise<Outcome> {
     delegate: headlessDelegate,
     log: () => {},
     persona,
+    workerPersona,
+    files,
     memory,
+    // No integrations: the eval measures the front's routing, and every tool call is refused anyway.
+    integrations: {
+      session: async () => ({
+        mcpServers: {},
+        disallowedTools: [],
+        plugins: [],
+        policyOf: () => undefined,
+        expiresAt: undefined,
+      }),
+      decide: () => undefined,
+      reconcile: () => {},
+    },
     observer,
     tasks,
     loopServer: createLoopServer({
