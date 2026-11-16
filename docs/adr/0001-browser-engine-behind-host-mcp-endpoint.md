@@ -26,7 +26,7 @@ The engine is wrapped by the host. Bots reach it only through a Streamable HTTP 
 
 ## Note: the agent listener
 
-The loopback endpoint this ADR describes is now the **agent listener**: a second socket on `127.0.0.1` with its own free port, separate from the **client listener** that serves the web UI and `/api/*`. The browser endpoint, the bots endpoint and the credential exchange are served only there, and the client listener answers 404 for them. The checks above (Host, no Origin, per-session bearer token) are unchanged, and each harness's MCP config points at the agent listener. [ADR-0005](0005-agent-and-client-listeners-and-device-auth.md) records why the two listeners stay separate.
+The loopback endpoint this ADR describes is now the **agent listener**: a second socket on `127.0.0.1` with its own free port, separate from the **client listener** that serves the web UI and `/api/*`. The browser endpoint, the bots endpoint, the routines endpoint and the credential exchange are served only there, and the client listener answers 404 for them. The checks above (Host, no Origin, per-session bearer token) are unchanged, and each harness's MCP config points at the agent listener. [ADR-0005](0005-agent-and-client-listeners-and-device-auth.md) records why the two listeners stay separate.
 
 ## Note: shell isolation for every bot
 

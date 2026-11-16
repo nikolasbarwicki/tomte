@@ -22,13 +22,17 @@ Record the result under `## Comments` at the bottom of this file, with the date 
 
 **Blocked by:** 02, 03
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] `callOnMessage` and `stopCalling` exist in the test host, with prior art `rememberOnMessage`/`askOnMessage`, and are used by the tests below
-- [ ] Gate test: a chat message sent through `/api/send` to an open bot makes the fake CLI call `create_routine` on the routines server from the CLI's own MCP config (cron `0 8 * * 1-5`, the time zone the test put in user memory). The routine is in `/api/routines/list`, and a `routines` event reached the stream. The CLI's launch record shows the `routines` server and its instructions
-- [ ] Pause test: a second scripted call of `update_routine` with `active: false` makes the panel's list and the stream show the routine paused
-- [ ] Guard tests at the same seam: one bot cannot list or update the other's routine through its own CLI config; a scripted call made while the bot runs a routine turn is refused and creates nothing
-- [ ] A scripted turn where the bot calls `create_routine` with a bad schedule gets the route's error text back in `toolResults()`, and creates nothing
-- [ ] `docs/roadmap.md` item 3 is updated as above
+Everything automated is done (the test host helpers, the scripted chat tests in `packages/host/src/routines/gate-check.test.ts`, the docs). Only the live check above is open: it needs the real Claude CLI on the owner's host, which an agent does not run.
+
+- [x] `callOnMessage` and `stopCalling` exist in the test host, with prior art `rememberOnMessage`/`askOnMessage`, and are used by the tests below
+- [x] Gate test: a chat message sent through `/api/send` to an open bot makes the fake CLI call `create_routine` on the routines server from the CLI's own MCP config (cron `0 8 * * 1-5`, the time zone the test put in user memory). The routine is in `/api/routines/list`, and a `routines` event reached the stream. The CLI's launch record shows the `routines` server and its instructions
+- [x] Pause test: a second scripted call of `update_routine` with `active: false` makes the panel's list and the stream show the routine paused
+- [x] Guard tests at the same seam: one bot cannot list or update the other's routine through its own CLI config; a scripted call made while the bot runs a routine turn is refused and creates nothing
+- [x] A scripted turn where the bot calls `create_routine` with a bad schedule gets the route's error text back in `toolResults()`, and creates nothing
+- [x] `docs/roadmap.md` item 3 is updated as above
 - [ ] Live check steps 1 to 6 are done by the owner and recorded in Comments. An agent leaves this box unticked, says so in its report, and marks the gate-step-4 check as waiting for the owner
-- [ ] `bun run check` passes
+- [x] `bun run check` passes
+
+## Comments
