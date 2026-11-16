@@ -270,6 +270,8 @@ export function openThread(
   bot: Bot,
   opts: {
     resume?: boolean;
+    /** A session of its own instead of the bot's current one. */
+    sessionId?: string;
     delegate: HostDelegate;
     log: (line: string) => void;
     idleMs?: number;

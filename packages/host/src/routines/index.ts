@@ -69,9 +69,14 @@ export type RoutineJob = {
   trigger: RunTrigger;
   /** True for a turn that resumes a parked run: its prompt carries the owner's answers, not the routine's instruction. */
   resumed: boolean;
+  /**
+   * The session id of a double-loop bot's run, which has a session of its own: the bot's front keeps its conversation, and a
+   * routine run never enters it. Undefined for a standard bot, whose run writes the bot's current session.
+   */
+  ownSession?: string;
 };
 
-/** One agent turn in the bot's chat session; `done` resolves to the final text, `stop` ends it early (rejecting `done`). */
+/** One agent turn of a run, in the bot's chat session or, for a double-loop bot, in the run's own session; `done` resolves to the final text, `stop` ends it early (rejecting `done`). */
 export type Executor = (job: RoutineJob) => {
   done: Promise<string>;
   stop: (reason: string) => void;
@@ -89,20 +94,21 @@ const LATE_NOTE_MS = 15 * 60_000;
 /** setTimeout's delay is a signed 32-bit int; longer waits re-arm in steps. */
 const MAX_TIMEOUT_MS = 2_147_000_000;
 
-/** Runs a routine turn in the bot's own session without the UI, for a bot that is not open. `delegate` answers what the bot asks during the turn. */
+/** Runs a routine turn without the UI, for a bot that is not open, or whose run has a session of its own. `delegate` answers what the bot asks during the turn. */
 export function runHeadless(
   env: ThreadEnv,
-  { bot, routine, prompt }: RoutineJob,
+  { bot, routine, prompt, ownSession }: RoutineJob,
   delegate: HostDelegate,
 ): ReturnType<Executor> {
   let thread: Thread | undefined;
   let stopped: string | undefined;
   const done = (async () => {
-    const sessionId = currentSession(bot);
+    const sessionId = ownSession ?? currentSession(bot);
     const resume = sessionId !== undefined && !!(await getSessionInfo(sessionId, { dir: env.cwd }));
     if (stopped) throw new Error(stopped);
     thread = openThread(env, bot, {
       resume,
+      ...(ownSession !== undefined && { sessionId: ownSession }),
       delegate,
       log: (l) => console.error(`[routine ${routine.name}] ${l}`),
     });
@@ -250,7 +256,11 @@ export function createRoutines(deps: {
       trigger,
       scheduledFor,
       status: bot ? "running" : "failed",
-      sessionId: bot ? (currentSession(bot) ?? null) : null,
+      sessionId: bot
+        ? bot.chatMode === "double_loop"
+          ? randomUUID()
+          : (currentSession(bot) ?? null)
+        : null,
       output: null,
       error: bot ? null : "bot no longer exists",
       startedAt,
@@ -295,6 +305,7 @@ export function createRoutines(deps: {
     try {
       let message = first;
       let isResume = resumed;
+      const ownSession = bot.chatMode === "double_loop" ? (row.sessionId ?? undefined) : undefined;
       for (;;) {
         const job = execute({
           bot,
@@ -303,6 +314,7 @@ export function createRoutines(deps: {
           runId: row.id,
           trigger: row.trigger,
           resumed: isResume,
+          ...(ownSession !== undefined && { ownSession }),
         });
         entry.stop = job.stop;
         const text = await job.done;
@@ -369,9 +381,10 @@ export function createRoutines(deps: {
   }
 
   /**
-   * A wait of the run went unanswered for 24 hours: the run fails with "approval expired", whatever started it. The bot is told
-   * that nothing was approved, in a message of its own session; its reply is a chat message, not the run's output. The single
-   * place a run leaves `waiting` for `failed` by time.
+   * A wait of the run went unanswered for 24 hours: the run fails with "approval expired", whatever started it. A standard bot
+   * is told that nothing was approved, in a message of its own session; its reply is a chat message, not the run's output. A
+   * double-loop bot's run has a session of its own that nothing continues, and its front is never told: the Routines panel
+   * shows the failure. The single place a run leaves `waiting` for `failed` by time.
    */
   function expire(runId: string) {
     const row = store.getRun(db, runId);
@@ -379,12 +392,13 @@ export function createRoutines(deps: {
     if (!row || !lapsed.length || !endRun(runId, "approval expired")) return;
     const r = store.getRoutine(db, row.routineId);
     if (r) {
-      void (async () => {
-        await deps.notice(r.botId, `Routine "${r.name}" failed: approval expired`);
-        await deps.deliver(r.botId, waits.resultText(lapsed));
-      })().catch((e: Error) =>
-        console.error(`[routines] telling ${r.botId} about the expired run failed: ${e.message}`),
-      );
+      if (getBot(dataRoot, r.botId)?.chatMode !== "double_loop")
+        void (async () => {
+          await deps.notice(r.botId, `Routine "${r.name}" failed: approval expired`);
+          await deps.deliver(r.botId, waits.resultText(lapsed));
+        })().catch((e: Error) =>
+          console.error(`[routines] telling ${r.botId} about the expired run failed: ${e.message}`),
+        );
       onChange(r.botId);
     }
   }
@@ -530,7 +544,8 @@ export function createRoutines(deps: {
 
     /**
      * Runs a parked run's session on with `message` (the owner's answers) as its next turn, in the bot's chat when it has one and
-     * headless otherwise; resolves when the run ends or parks again. Rejects when the run is not waiting.
+     * headless otherwise (a double-loop bot's run is always headless, in its own session); resolves when the run ends or parks
+     * again. Rejects when the run is not waiting.
      */
     resume,
 

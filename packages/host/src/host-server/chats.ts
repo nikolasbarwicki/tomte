@@ -106,7 +106,7 @@ export interface Chats {
   /** Gives the external-event rows already in a bot's chat their new state, shown live when the chat is. */
   updateExternal(botId: string, rows: ExternalRow[]): void;
   isWorking(botId: string): boolean;
-  /** The routine run the bot's unattended turn belongs to, if one is running now: a standard bot's chat-hosted or headless routine turn. A double-loop bot's routine turn answers like an attended turn and has none. */
+  /** The routine run the bot's unattended turn belongs to, if one is running now: a chat-hosted or headless routine turn, including a double-loop bot's run in a session of its own. */
   runOf(botId: string): string | undefined;
   botsEvent(): BotsEvent;
   currentBotId: () => string | undefined;
@@ -168,10 +168,6 @@ type Chat = {
   presence: Presence;
   /** What the front has said in the turn running now, for when its result carries no text of its own. */
   frontText: string;
-  /** Routine turns waiting for the front's next result. */
-  frontWaiters: ((r: TurnResult | Error) => void)[];
-  /** Host messages for the front that wait out a headless routine run writing the same session. */
-  held: string[];
 };
 
 export function createChats(deps: ChatsDeps): Chats {
@@ -202,7 +198,11 @@ export function createChats(deps: ChatsDeps): Chats {
   };
   const isWorking = (botId: string) => {
     const chat = chats.get(botId);
-    return !!chat?.busy || (chat !== undefined && chat.presence !== "idle") || headless(botId);
+    return (
+      !!chat?.busy ||
+      (chat !== undefined && chat.presence !== "idle") ||
+      routineTurns.headlessRun(botId) !== undefined
+    );
   };
   const chatsBotsEvent = () =>
     botsEvent(dataRoot, db, isWorking, deps.events.needsYou, {
@@ -239,11 +239,6 @@ export function createChats(deps: ChatsDeps): Chats {
     chat.front?.close(reason);
     chat.presence = "idle";
     chat.frontText = "";
-    settleWaiters(chat, new Error(reason));
-  }
-
-  function settleWaiters(chat: Chat, result: TurnResult | Error) {
-    for (const waiter of chat.frontWaiters.splice(0)) waiter(result);
   }
 
   /** The latest rate limit report of each window. The limits belong to the account, not to a chat, so they outlive a new session and a reload; only a double-loop bot's page is sent them. */
@@ -296,20 +291,11 @@ export function createChats(deps: ChatsDeps): Chats {
         // A resumed run continues the turn the chat already shows the start of; its prompt is the owner's answers.
         if (!job.resumed)
           emit(chat, { type: "routine", name: job.routine.name, trigger: job.trigger });
-        if (chat.front) {
-          // A double-loop chat has no turn of its own: the routine's prompt goes to the front, and the routine ends with the front's next result.
-          const { promise, resolve } = Promise.withResolvers<TurnResult | Error>();
-          chat.frontWaiters.push(resolve);
-          pushToFront(chat, job.prompt, true);
-          return { done: promise, stop: (reason) => closeSessions(chat, reason) };
-        }
         chat.routineRun = job.runId;
         return { done: turn(chat, job.prompt), stop: (reason) => chat.thread.close(reason) };
       },
     );
     for (const chat of chats.values()) {
-      if (chat.front && chat.held.length && !headless(chat.bot.id))
-        for (const text of chat.held.splice(0)) pushToFront(chat, text, true);
       if (!chat.inbox.length || chat.busy || headless(chat.bot.id)) continue;
       const entries = chat.inbox.splice(0);
       for (const e of entries) {
@@ -343,17 +329,11 @@ export function createChats(deps: ChatsDeps): Chats {
     }
     if (chat.front) {
       showDelivered(chat, text);
-      messageFront(chat, text);
+      pushToFront(chat, text, true);
       return;
     }
     chat.inbox.push({ source: "host", text });
     await drain();
-  }
-
-  /** Gives a double-loop bot's front a message the app wrote; it waits while a scheduled run is writing the conversation. */
-  function messageFront(chat: Chat, text: string) {
-    if (headless(chat.bot.id)) chat.held.push(text);
-    else pushToFront(chat, text, true);
   }
 
   /** Gives a double-loop bot's front a message, which it takes mid-turn if it is busy; the reply streams through `onFrontMessage`. */
@@ -369,7 +349,6 @@ export function createChats(deps: ChatsDeps): Chats {
   function frontFailed(chat: Chat, e: Error) {
     emit(chat, { type: "error", message: e.message });
     chat.frontText = "";
-    settleWaiters(chat, e);
     setPresence(chat, restingPresence(chat));
     release(chat);
     void drain();
@@ -389,12 +368,9 @@ export function createChats(deps: ChatsDeps): Chats {
     if (m.subtype === "success" && !m.is_error) {
       emit(chat, { type: "done" });
       if (said.trim()) recordMessage(db, chat.bot.id, { from: "bot", text: said, at: Date.now() });
-      settleWaiters(chat, { result: m, text: said, toolsUsed: [] });
     } else {
       const detail = "errors" in m ? m.errors.join("; ") : m.result;
-      const failure = new Error(`turn failed (${m.subtype}): ${detail}`);
-      emit(chat, { type: "error", message: failure.message });
-      settleWaiters(chat, failure);
+      emit(chat, { type: "error", message: `turn failed (${m.subtype}): ${detail}` });
     }
     setPresence(chat, restingPresence(chat));
     void afterFrontTurn(chat);
@@ -538,13 +514,17 @@ export function createChats(deps: ChatsDeps): Chats {
     return ids;
   }
 
-  /** Opens a wait for a tool call of this chat's session and resolves, with the text the bot would have been sent, once the wait closes in this process. */
+  /**
+   * Opens a wait for a tool call of this chat's session and resolves, with the text the bot would have been sent, once the wait
+   * closes in this process. It belongs to no run: a double-loop front can ask while a routine run of the bot is parked or working
+   * in a session of its own.
+   */
   function waitFor<K extends WaitKind>(
     chat: Chat,
     spec: WaitSpec<K>,
   ): Promise<{ wait: Wait; text: string }> {
     const { promise, resolve } = Promise.withResolvers<{ wait: Wait; text: string }>();
-    const { id } = deps.waits.open(chat.bot.id, spec);
+    const { id } = deps.waits.open(chat.bot.id, { ...spec, runId: null });
     chat.awaiting.set(id, (wait, text) => resolve({ wait, text }));
     return promise;
   }
@@ -610,7 +590,7 @@ export function createChats(deps: ChatsDeps): Chats {
       store: deps.loop,
       emit: (e) => emitLoop(chat(), e),
       changed: () => tasksChanged(chat()),
-      dispatch: (text) => messageFront(chat(), text),
+      dispatch: (text) => pushToFront(chat(), text, true),
       onMessage: (m) => onFrontMessage(chat(), m),
       onEnd: (e) => frontFailed(chat(), e),
     });
@@ -641,8 +621,6 @@ export function createChats(deps: ChatsDeps): Chats {
       front: openFrontSession(bot, hasSession, () => chat),
       presence: "idle",
       frontText: "",
-      frontWaiters: [],
-      held: [],
       thread: openThread(bot, hasSession, () => chat),
     };
     chats.set(bot.id, chat);
@@ -670,10 +648,10 @@ export function createChats(deps: ChatsDeps): Chats {
     recoverFront(chat);
   }
 
-  /** A chat opening after an app restart (or a front that died) tells its front about the agents that were cut off, so it resumes them. A scheduled run writing the conversation delays it until the chat is shown again. */
+  /** A chat opening after an app restart (or a front that died) tells its front about the agents that were cut off, so it resumes them. */
   function recoverFront(chat: Chat) {
     const front = chat.front;
-    if (!front?.needsRecovery() || headless(chat.bot.id)) return;
+    if (!front?.needsRecovery()) return;
     setPresence(chat, "typing");
     front.recover().then(
       (told) => {
@@ -738,7 +716,6 @@ export function createChats(deps: ChatsDeps): Chats {
     closeSessions(chat, "new session");
     newSession(dataRoot, chat.bot);
     chat.delivered.clear();
-    chat.held = [];
     chat.thread = openThread(chat.bot, false, () => chat);
     // Saving the bot refreshed its mode, so the new session is the mode the bot is in now.
     chat.front = openFrontSession(chat.bot, false, () => chat);
@@ -760,10 +737,6 @@ export function createChats(deps: ChatsDeps): Chats {
             return { refused: "an answer to that item is already queued" };
         }
         if (chat.front) {
-          if (headless(chat.bot.id))
-            return {
-              refused: "a scheduled run is writing this conversation; try again when it ends",
-            };
           userSaid(chat, shown, mentions);
           return {
             start() {
@@ -838,6 +811,7 @@ export function createChats(deps: ChatsDeps): Chats {
       }
     },
     isWorking,
+
     runOf: (botId) => chats.get(botId)?.routineRun ?? routineTurns.headlessRun(botId),
     botsEvent: chatsBotsEvent,
     announceBots,

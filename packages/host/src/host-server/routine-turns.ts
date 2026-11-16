@@ -4,7 +4,7 @@ import { recordMessage, type ThreadEnv, type TurnResult } from "../bots/index.ts
 import { parkingDelegate, runHeadless, type Executor, type RoutineJob } from "../routines/index.ts";
 import type { Waits } from "../waits/index.ts";
 
-/** A routine turn waiting for its bot; it runs in the bot's chat once that is idle, or headless if the bot has no chat. */
+/** A routine turn waiting for its bot; it runs in the bot's chat once that is idle, or headless if the bot has no chat or the run has a session of its own. */
 type QueuedRoutine = {
   job: RoutineJob;
   resolve(text: string): void;
@@ -20,7 +20,7 @@ export interface RoutineTurnsDeps extends ThreadEnv {
   waits: Pick<Waits, "open" | "consumeApproval">;
   db: Database;
   announceBots: () => void;
-  /** A headless run ended; the bot's chat, if any, may now show it. */
+  /** A headless run in the bot's current session ended; the bot's chat, if any, may now show it. */
   headlessDone(botId: string): void;
   /** Something queued; start whatever can run. */
   wake(): void;
@@ -28,11 +28,11 @@ export interface RoutineTurnsDeps extends ThreadEnv {
 
 export interface RoutineTurns {
   execute: Executor;
-  /** The routine a headless run is writing the bot's session for; that bot's chat must not start its own turn meanwhile. */
+  /** The routine a headless run is writing the bot's current session for; that bot's chat must not start its own turn meanwhile. A run in a session of its own never blocks the chat. */
   headless(botId: string): string | undefined;
-  /** The run id of the bot's headless run, if one is writing its session. */
+  /** The run id of the bot's headless run, in the bot's session or in one of its own. */
   headlessRun(botId: string): string | undefined;
-  /** Starts every queued routine whose bot is free: in the bot's chat when it has one, headless otherwise. */
+  /** Starts every queued routine whose bot is free: in the bot's chat when it has one, headless otherwise or when the run has a session of its own. */
   startReady<C extends { busy: boolean }>(
     chatOf: (botId: string) => C | undefined,
     runInChat: (chat: C, job: RoutineJob) => ChatRoutineTurn,
@@ -42,23 +42,29 @@ export interface RoutineTurns {
 export function createRoutineTurns(deps: RoutineTurnsDeps): RoutineTurns {
   const { db } = deps;
   let routineQueue: QueuedRoutine[] = [];
-  const headlessRuns = new Map<string, { routine: string; runId: string }>();
+  const headlessRuns = new Map<
+    string,
+    { routine: string; runId: string; ownSession: string | undefined }
+  >();
 
   function startHeadless(item: QueuedRoutine) {
-    const { bot, routine } = item.job;
+    const { bot, routine, runId, ownSession } = item.job;
     const h = runHeadless(deps, item.job, parkingDelegate(deps.waits, bot.id));
     item.stop = h.stop;
-    headlessRuns.set(bot.id, { routine: routine.name, runId: item.job.runId });
+    headlessRuns.set(bot.id, { routine: routine.name, runId, ownSession });
     deps.announceBots();
     h.done
       .then((text) => {
-        if (text.trim()) recordMessage(db, bot.id, { from: "bot", text, at: Date.now() });
+        // A run in a session of its own reports through its run output; the bot's chat has no message from it.
+        if (text.trim() && ownSession === undefined)
+          recordMessage(db, bot.id, { from: "bot", text, at: Date.now() });
         item.resolve(text);
       }, item.reject)
       .finally(() => {
         headlessRuns.delete(bot.id);
         deps.announceBots();
-        deps.headlessDone(bot.id);
+        if (ownSession === undefined) deps.headlessDone(bot.id);
+        else deps.wake();
       });
   }
 
@@ -77,15 +83,18 @@ export function createRoutineTurns(deps: RoutineTurnsDeps): RoutineTurns {
         },
       };
     },
-    headless: (botId) => headlessRuns.get(botId)?.routine,
+    headless: (botId) => {
+      const run = headlessRuns.get(botId);
+      return run?.ownSession === undefined ? run?.routine : undefined;
+    },
     headlessRun: (botId) => headlessRuns.get(botId)?.runId,
     startReady(chatOf, runInChat) {
       for (const item of routineQueue) {
         const botId = item.job.bot.id;
         const chat = chatOf(botId);
-        if (headlessRuns.has(botId) || chat?.busy) continue;
+        if (headlessRuns.has(botId) || (item.job.ownSession === undefined && chat?.busy)) continue;
         routineQueue = routineQueue.filter((i) => i !== item);
-        if (!chat) {
+        if (!chat || item.job.ownSession !== undefined) {
           startHeadless(item);
           continue;
         }

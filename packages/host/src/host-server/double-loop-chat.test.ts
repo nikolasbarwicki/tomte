@@ -267,7 +267,7 @@ describe("a double-loop bot's front session", () => {
     await settled(bot);
   });
 
-  test("a routine run in its chat goes through the front and ends with the front's result", async () => {
+  test("a routine run goes headless in a session of its own: the front gets nothing and the run reports through its output", async () => {
     const bot = await doubleLoopBot();
     const created = await host.ui("/api/routines/create", {
       botId: bot,
@@ -278,17 +278,23 @@ describe("a double-loop bot's front session", () => {
     const routine = (await created.json()) as { id: string };
     expect((await host.ui("/api/routines/run", { id: routine.id })).status).toBe(200);
 
-    await host.until(() => host.messagesOf(bot).length === 1);
-    expect(host.messagesOf(bot)[0]).toContain("<scheduled-routine");
-    const events = await settled(bot);
-    expect(events.some((e) => e.type === "routine")).toBe(true);
+    type Run = { status: string; output: string | null; sessionId: string | null };
     const runsOf = async () =>
-      (await (await host.ui("/api/routines/runs", { id: routine.id })).json()) as {
-        status: string;
-        output: string | null;
-      }[];
-    for (let i = 0; i < 40 && (await runsOf())[0]?.output == null; i++) await Bun.sleep(50);
-    expect((await runsOf())[0]).toMatchObject({ output: "ok" });
+      (await (await host.ui("/api/routines/runs", { id: routine.id })).json()) as Run[];
+    for (let i = 0; i < 100 && (await runsOf())[0]?.status !== "succeeded"; i++)
+      await Bun.sleep(50);
+    const run = (await runsOf())[0];
+    expect(run).toMatchObject({ status: "succeeded", output: "ok" });
+    const session = run?.sessionId ?? "";
+    expect(session).not.toBe("");
+    expect(session).not.toBe(bot);
+    expect(host.messagesOf(session)).toHaveLength(1);
+    expect(host.messagesOf(session)[0]).toContain("<scheduled-routine");
+
+    // The front's session, transcript and presence are as before the run.
+    expect(host.messagesOf(bot)).toEqual([]);
+    const events = await settled(bot);
+    expect(events.some((e) => e.type === "routine")).toBe(false);
   });
 });
 

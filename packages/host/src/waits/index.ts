@@ -26,8 +26,8 @@ export interface WaitSpec<K extends WaitKind = WaitKind> {
   payload: WaitPayloads[K];
   /** The buttons of a card, first is the main one; a question has none. */
   actions: WaitAction[];
-  /** The routine run the wait belongs to; omitted for an attended wait. */
-  runId?: string;
+  /** The routine run the wait belongs to; omitted to take the run the bot's unattended turn belongs to now, if any, and null for a wait that belongs to no run. */
+  runId?: string | null;
 }
 
 /** What one kind of wait does, working from the stored row alone so a wait can be resumed after a restart. */
@@ -263,7 +263,7 @@ export function createWaits(o: WaitsOptions): Waits {
         id,
         botId,
         kind: spec.kind,
-        runId: spec.runId ?? context?.runId ?? null,
+        runId: spec.runId !== undefined ? spec.runId : (context?.runId ?? null),
         sessionId: context?.sessionId ?? null,
         payload: spec.payload,
         actions: spec.actions,
