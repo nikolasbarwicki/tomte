@@ -6,6 +6,7 @@
 // An optional `approve.json` (`{ tool, input? }`) makes each user message send a `can_use_tool` control request for that tool and input, as the CLI does when a tool call needs the host's permission, wait for the host's answer and append `{ tool_name, agent_id, response }` to `permission-results.jsonl` (`response` is `{ behavior: "allow" | "deny", ... }`, or `{ error }`). Like a pending `ask_user`, an approval keeps the turn running for as long as the user takes; the turn is answered once the host has answered.
 // A turn is answered only once every tool it called has its result, as with the real CLI: a pending `ask_user` keeps the turn running.
 // Every tool result the host sends back for those calls is appended to `tool-results.jsonl` as the MCP response message.
+// An optional `call.json` (`{ server, tool, args }`) makes each user message call `tool` on the host's HTTP MCP server named `server` (`routines`, `bots`, `browser`), as the real CLI does: a JSON-RPC `tools/call` POST to the `url` of that server's entry in the --mcp-config file, with that entry's `Authorization` header (the session's bearer token). The host's endpoints answer each request on their own, so there is no initialize handshake. The result is appended to `tool-results.jsonl` as `{ server, tool, result: { content, isError? } }`. A server missing from the config, an HTTP error or an answer that is not JSON-RPC is recorded as an error result whose text says what happened, so a wiring fault shows in `toolResults()` instead of hanging the turn. The turn is answered once the call has its result.
 // `auth status` prints the real CLI's JSON and exits 1 while a `signed-out` file exists, else exits 0. `auth login` exits with the code in the optional `login-exit` file (default 0).
 // An optional `loop.json` scripts what the fake emits per user message, to drive the host as the double-loop chat mode's long-lived front query does (background tasks, hooks, in-process MCP servers, a crash mid-run). Without it, or when no script is left for a message, the behaviour above is unchanged. Shape: `{ scripts: [{ match?: string, steps: Step[] }] }`.
 // A user message takes the first unused script whose `match` is a substring of its text, else the first unused script without a `match`; the use is recorded in `loop-used.json`, so it holds across relaunches (`--resume`). Steps run in order, off the read loop, so a later user message is answered while an earlier script still runs. A script with no `result` step ends with the default result (`result.txt`, else "ok"). Every string in a step may hold `{session}` (the session id), `{n}` (0-based index of the user message over all launches, the line count of `messages.jsonl` before it) and `{queued}` (the first queue id, `q-` and hex digits, in the user message's text: the task the app asks the front to start).
@@ -231,6 +232,53 @@ const callTool = async (
   record("tool-results.jsonl", { server, tool, ...response });
 };
 
+/** The text of a JSON-RPC answer that came as JSON or as one server-sent event. */
+const rpcBody = (text: string) => {
+  const data = text.startsWith("{")
+    ? text
+    : text
+        .split("\n")
+        .find((l) => l.startsWith("data: "))
+        ?.slice(6);
+  return data === undefined ? undefined : (JSON.parse(data) as Record<string, unknown>);
+};
+/** What `call.json` asks for: `tool` on the HTTP MCP server `server` named in the CLI's own MCP config, with that entry's URL and bearer token. Resolves once the result is recorded. */
+const callHttp = async () => {
+  const file = join(dir, "call.json");
+  if (!existsSync(file)) return;
+  const { server, tool, args = {} } = JSON.parse(readFileSync(file, "utf8"));
+  const failed = (text: string) =>
+    record("tool-results.jsonl", {
+      server,
+      tool,
+      result: { isError: true, content: [{ type: "text", text }] },
+    });
+  const entry = mcpServers[server] as { url: string; headers?: Record<string, string> } | undefined;
+  if (!entry) return failed(`no MCP server "${server}" in the CLI's config`);
+  try {
+    const res = await fetch(entry.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        ...entry.headers,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: tool, arguments: args },
+      }),
+    });
+    const text = await res.text();
+    const message = res.ok ? rpcBody(text) : undefined;
+    if (message?.result) record("tool-results.jsonl", { server, tool, result: message.result });
+    else failed(`HTTP ${res.status}: ${text}`);
+  } catch (e) {
+    failed(String(e));
+  }
+};
+
 const matcherHits = (matcher: string | undefined, subject: string) => {
   if (matcher === undefined || matcher === "") return true;
   try {
@@ -432,6 +480,7 @@ for await (const line of createInterface({ input: process.stdin })) {
         );
         return calls.length;
       };
+      const http = callHttp();
       const done = results;
       let called = late ? 0 : callTools();
       while (existsSync(join(dir, "hold"))) await Bun.sleep(25);
@@ -450,6 +499,7 @@ for await (const line of createInterface({ input: process.stdin })) {
       }
       // Like the real CLI, the turn ends only once every tool it called has its result.
       while (results < done + called) await Bun.sleep(25);
+      await http;
       out(resultMessage(defaultResult()));
     })();
   } else if (m.type === "control_response") {

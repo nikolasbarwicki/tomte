@@ -1,67 +1,28 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-
 import { setChatMode } from "../bots/index.ts";
 import { defined } from "../testing/defined.ts";
+import {
+  routinesOf as panelList,
+  UNATTENDED,
+  WEEKDAYS,
+  type ToolOut,
+} from "../testing/routines-kit.ts";
 import { parse, startHandoffHost, type BotCaller, type HandoffHost } from "../testing/test-host.ts";
-import { ROUTINES_SERVER_NAME } from "./index.ts";
 
 let host: HandoffHost;
-const clients: Client[] = [];
 beforeEach(async () => void (host = await startHandoffHost()));
-afterEach(async () => {
-  for (const c of clients.splice(0)) await c.close();
-  await host.stop();
-});
+afterEach(async () => host.stop());
 
-const WEEKDAYS = { kind: "cron", expr: "0 8 * * 1-5", tz: "Europe/Warsaw" };
-const UNATTENDED = "scheduled runs cannot create or change routines; ask the user in chat";
-
-type RoutineOut = {
-  id: string;
-  name: string;
-  instruction: string;
-  schedule: { kind: string; expr?: string; tz?: string; at?: string };
-  active: boolean;
-  catch_up: boolean;
-  next_runs: string[];
-};
-type Created = { now: string; routine: RoutineOut };
-type Listed = { id: string; name: string; active: boolean; catchUp: boolean }[];
+type Created = ToolOut;
 
 const base = { name: "Brief", instruction: "Summarize my inbox", schedule: WEEKDAYS };
 
-async function routinesOf(botId: string) {
-  const res = await host.ui("/api/routines/list", { botId });
-  expect(res.status).toBe(200);
-  return (await res.json()) as Listed;
-}
+const routinesOf = (botId: string) => panelList(host, botId);
 
 async function bot(name = "Ada") {
   const id = host.createBot(name);
   return { id, call: (await host.actAs(id, "routines")).call };
-}
-
-/** Calls the routines tools with the server entry a CLI launch recorded: the token the session itself was given. */
-async function callerOf(launch: number): Promise<BotCaller> {
-  const server = defined(
-    defined(host.launches()[launch], "launch").mcpServers[ROUTINES_SERVER_NAME],
-    "routines server",
-  );
-  const client = new Client({ name: "test", version: "1.0.0" });
-  await client.connect(
-    new StreamableHTTPClientTransport(new URL(server.url), {
-      requestInit: { headers: { Authorization: server.headers.Authorization } },
-    }),
-  );
-  clients.push(client);
-  return (name, args = {}) =>
-    client.callTool({ name, arguments: args }).then((r) => ({
-      isError: r.isError === true,
-      text: (r.content as { text: string }[]).map((c) => c.text).join("\n"),
-    }));
 }
 
 describe("create_routine", () => {
@@ -312,14 +273,14 @@ describe("a double-loop bot", () => {
     expect((await host.ui("/api/send", { text: "hello" })).status).toBe(200);
     await host.until(() => host.messagesOf(id).length === 1);
     await host.until(() => !host.server.isWorking(id));
-    const front = await callerOf(0);
+    const front = await host.asLaunched(0, "routines");
 
     const routineRes = await host.ui("/api/routines/create", { botId: id, ...base });
     const routineId = ((await routineRes.json()) as { id: string }).id;
     host.hold();
     expect((await host.ui("/api/routines/run", { id: routineId })).status).toBe(200);
     await host.until(() => host.launches().length === 2);
-    const run = await callerOf(1);
+    const run = await host.asLaunched(1, "routines");
     await host.until(() => {
       const session = host.launches()[1]?.argv.find((a) => a.startsWith("--session-id="));
       return session !== undefined && host.messagesOf(session.slice(13)).length === 1;

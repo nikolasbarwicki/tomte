@@ -1,49 +1,23 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-
 import { setChatMode } from "../bots/index.ts";
 import { defined } from "../testing/defined.ts";
-import { parse, startHandoffHost, type BotCaller, type HandoffHost } from "../testing/test-host.ts";
-import { ROUTINES_SERVER_NAME } from "./index.ts";
+import {
+  routinesOf as panelList,
+  UNATTENDED,
+  WEEKDAYS,
+  type ToolOut,
+} from "../testing/routines-kit.ts";
+import { parse, startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { watchEvents } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
-const clients: Client[] = [];
 beforeEach(async () => void (host = await startHandoffHost()));
-afterEach(async () => {
-  for (const c of clients.splice(0)) await c.close();
-  await host.stop();
-});
+afterEach(async () => host.stop());
 
-const WEEKDAYS = { kind: "cron", expr: "0 8 * * 1-5", tz: "Europe/Warsaw" };
-const UNATTENDED = "scheduled runs cannot create or change routines; ask the user in chat";
+type Updated = ToolOut;
 
-type RoutineOut = {
-  id: string;
-  name: string;
-  instruction: string;
-  schedule: { kind: string; expr?: string; tz?: string; at?: string };
-  active: boolean;
-  catch_up: boolean;
-  next_runs: string[];
-};
-type Updated = { now: string; routine: RoutineOut };
-type Listed = {
-  id: string;
-  name: string;
-  instruction: string;
-  active: boolean;
-  catchUp: boolean;
-  nextRunAt: number | null;
-  schedule: unknown;
-}[];
-
-async function routinesOf(botId: string) {
-  const res = await host.ui("/api/routines/list", { botId });
-  expect(res.status).toBe(200);
-  return (await res.json()) as Listed;
-}
+const routinesOf = (botId: string) => panelList(host, botId);
 
 /** A routine made in the panel, so the tool under test is the only thing that changes it. */
 async function create(botId: string, body: Record<string, unknown> = {}) {
@@ -61,26 +35,6 @@ async function create(botId: string, body: Record<string, unknown> = {}) {
 async function bot(name = "Ada") {
   const id = host.createBot(name);
   return { id, call: (await host.actAs(id, "routines")).call };
-}
-
-/** Calls the routines tools with the server entry a CLI launch recorded: the token the session itself was given. */
-async function callerOf(launch: number): Promise<BotCaller> {
-  const server = defined(
-    defined(host.launches()[launch], "launch").mcpServers[ROUTINES_SERVER_NAME],
-    "routines server",
-  );
-  const client = new Client({ name: "test", version: "1.0.0" });
-  await client.connect(
-    new StreamableHTTPClientTransport(new URL(server.url), {
-      requestInit: { headers: { Authorization: server.headers.Authorization } },
-    }),
-  );
-  clients.push(client);
-  return (name, args = {}) =>
-    client.callTool({ name, arguments: args }).then((r) => ({
-      isError: r.isError === true,
-      text: (r.content as { text: string }[]).map((c) => c.text).join("\n"),
-    }));
 }
 
 describe("update_routine", () => {
@@ -214,48 +168,21 @@ describe("update_routine", () => {
     const { id, call } = await bot();
     const routineId = await create(id);
     expect((await host.ui("/api/open", { id, botId: id })).status).toBe(200);
-    const ctl = new AbortController();
-    const res = await fetch(`${host.clientUrl}/api/events`, {
-      signal: ctl.signal,
-      headers: host.authHeaders,
-    });
-    let seen = "";
-    void (async () => {
-      const reader = res.body!.getReader();
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) return;
-        seen += new TextDecoder().decode(value);
-      }
-    })().catch(() => undefined);
-    const carries = (name: string, active: boolean) =>
-      seen
-        .split("\n\n")
-        .filter((l) => l.startsWith("data: "))
-        .map(
-          (l) =>
-            JSON.parse(l.slice(6)) as {
-              type: string;
-              routines?: { name: string; active: boolean }[];
-            },
-        )
-        .some(
-          (e) =>
-            e.type === "routines" &&
-            e.routines?.some((r) => r.name === name && r.active === active),
-        );
-    await Bun.sleep(100);
-    expect(carries("Renamed", true)).toBe(false);
+    const page = await watchEvents(host);
+    const panel = () => page.routines(id)?.map((r) => [r.name, r.active]);
+    await host.until(() => panel() !== undefined);
+    expect(panel()).toEqual([["Brief", true]]);
 
     expect((await call("update_routine", { routine_id: routineId, name: "Renamed" })).isError).toBe(
       false,
     );
-    await host.until(() => carries("Renamed", true));
+    await host.until(() => panel()?.[0]?.[0] === "Renamed");
+    expect(panel()).toEqual([["Renamed", true]]);
     expect((await call("update_routine", { routine_id: routineId, active: false })).isError).toBe(
       false,
     );
-    await host.until(() => carries("Renamed", false));
-    ctl.abort();
+    await host.until(() => panel()?.[0]?.[1] === false);
+    page.stop();
   });
 
   test("a bot cannot update another bot's routine, and an unknown id answers the same", async () => {
@@ -360,13 +287,13 @@ describe("a double-loop bot", () => {
     expect((await host.ui("/api/send", { text: "hello" })).status).toBe(200);
     await host.until(() => host.messagesOf(id).length === 1);
     await host.until(() => !host.server.isWorking(id));
-    const front = await callerOf(0);
+    const front = await host.asLaunched(0, "routines");
 
     const routineId = await create(id);
     host.hold();
     expect((await host.ui("/api/routines/run", { id: routineId })).status).toBe(200);
     await host.until(() => host.launches().length === 2);
-    const run = await callerOf(1);
+    const run = await host.asLaunched(1, "routines");
     await host.until(() => {
       const session = host.launches()[1]?.argv.find((a) => a.startsWith("--session-id="));
       return session !== undefined && host.messagesOf(session.slice(13)).length === 1;

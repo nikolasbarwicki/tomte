@@ -1,3 +1,5 @@
+import type { Routine } from "@claudebot/contract/events";
+
 import type { HandoffHost } from "./test-host.ts";
 
 type PageEvent = { type: string; [k: string]: unknown };
@@ -12,6 +14,8 @@ export interface EventsWatch {
   /** Source id to Work status, as of the latest `work` event of the bot. */
   status(botId: string): Record<string, string>;
   needsYou(botId: string): number | undefined;
+  /** The routines of the latest `routines` event of the bot: what its Routines panel shows now; undefined before the first. */
+  routines(botId: string): Routine[] | undefined;
 }
 
 /** One page's `/api/events` stream from now on, read as the events it was sent. `stop()` ends it. */
@@ -59,6 +63,12 @@ export async function watchEvents(
         | { bots: { id: string; needsYou: number }[] }
         | undefined;
       return bots?.bots.find((b) => b.id === botId)?.needsYou;
+    },
+    routines(botId: string) {
+      const event = seen.filter((e) => e.type === "routines" && e.botId === botId).at(-1) as
+        | { routines: Routine[] }
+        | undefined;
+      return event?.routines;
     },
   };
 }
