@@ -12,7 +12,7 @@ import { join } from "node:path";
 
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { BotAvatar, defaultAvatar } from "@claudebot/contract/avatars";
-import { Bot, BotBrowserSettings, type MemoryScope } from "@claudebot/contract/events";
+import { Bot, BotBrowserSettings, ChatMode, type MemoryScope } from "@claudebot/contract/events";
 import { z } from "zod";
 
 import { userMemoryPath } from "./memory.ts";
@@ -53,6 +53,7 @@ export const BROWSER_FILES_DIR = "browser";
 const StoredBot = Bot.extend({
   sessions: Bot.shape.sessions.min(1).optional(),
   avatar: BotAvatar.optional(),
+  chatMode: ChatMode.default("standard"),
   browser: BotBrowserSettings.extend({ headed: z.boolean().default(false) }).default({
     enabled: false,
     headed: false,
@@ -67,7 +68,10 @@ function write(dataRoot: string, bot: Bot) {
 /** Saves a bot held in memory. Settings are owned by their setters, so a stale copy never overwrites them. */
 function save(dataRoot: string, bot: Bot) {
   const stored = getBot(dataRoot, bot.id);
-  if (stored) bot.browser = stored.browser;
+  if (stored) {
+    bot.browser = stored.browser;
+    bot.chatMode = stored.chatMode;
+  }
   write(dataRoot, bot);
 }
 
@@ -105,6 +109,7 @@ export function createBot(
     createdAt: now,
     lastActive: now,
     sessions: [id],
+    chatMode: "standard",
     browser: { enabled: false, headed: false },
   };
   save(dataRoot, bot);
@@ -136,6 +141,14 @@ export function setBrowserHeaded(dataRoot: string, id: string, headed: boolean):
   const bot = getBot(dataRoot, id);
   if (!bot) return undefined;
   bot.browser.headed = headed;
+  write(dataRoot, bot);
+  return bot;
+}
+
+export function setChatMode(dataRoot: string, id: string, chatMode: ChatMode): Bot | undefined {
+  const bot = getBot(dataRoot, id);
+  if (!bot) return undefined;
+  bot.chatMode = chatMode;
   write(dataRoot, bot);
   return bot;
 }

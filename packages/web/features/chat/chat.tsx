@@ -15,6 +15,7 @@ import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
 import { newSession } from "./api.ts";
+import { ChatModeMenu } from "./chat-mode.tsx";
 import { Composer } from "./composer.tsx";
 import { ContextMeter } from "./context-meter.tsx";
 import { NeedsYou } from "./needs-you.tsx";
@@ -103,6 +104,7 @@ export function ChatView({
             </TooltipTrigger>
             <TooltipContent>New session</TooltipContent>
           </Tooltip>
+          <ChatModeMenu bot={bot} busy={busy} />
           <Tooltip>
             <TooltipTrigger
               render={

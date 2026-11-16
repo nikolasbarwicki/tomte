@@ -98,6 +98,8 @@ export interface Chats {
   pendingAskFor(botId: string, eventId: string): string | undefined;
   /** Takes back a queued user message; false when it already reached the bot. */
   cancelQueued(id: string): boolean;
+  /** Starts a new session for a bot, with or without a chat; false while it is running a turn. */
+  newSession(botId: string): boolean;
   /** Reopens a bot's thread, or every bot's, to pick up changed settings; a busy chat reopens after its turn. */
   reconfigure(botId: string | undefined, reason: string): void;
   /** The open chat's routines, reset marker and transcript, replayed on connect. */
@@ -450,6 +452,16 @@ export function createChats(deps: ChatsDeps): Chats {
     void drain();
   }
 
+  function startSession(chat: Chat): boolean {
+    if (chat.busy || headless(chat.bot.id)) return false;
+    chat.thread.close("new session");
+    newSession(dataRoot, chat.bot);
+    chat.delivered.clear();
+    chat.thread = openThread(chat.bot, false, () => chat);
+    emit(chat, { type: "session" });
+    return true;
+  }
+
   function openChat(chat: Chat): OpenChat {
     return {
       bot: chat.bot,
@@ -492,15 +504,7 @@ export function createChats(deps: ChatsDeps): Chats {
         await chat.thread.setEffort(effort);
         emit(chat, { type: "info", text: `effort → ${effort}` });
       },
-      newSession() {
-        if (chat.busy || headless(chat.bot.id)) return false;
-        chat.thread.close("new session");
-        newSession(dataRoot, chat.bot);
-        chat.delivered.clear();
-        chat.thread = openThread(chat.bot, false, () => chat);
-        emit(chat, { type: "session" });
-        return true;
-      },
+      newSession: () => startSession(chat),
     };
   }
 
@@ -545,6 +549,14 @@ export function createChats(deps: ChatsDeps): Chats {
         return true;
       }
       return false;
+    },
+    newSession(botId) {
+      const chat = chats.get(botId);
+      if (chat) return startSession(chat);
+      const bot = getBot(dataRoot, botId);
+      if (!bot || headless(botId)) return false;
+      newSession(dataRoot, bot);
+      return true;
     },
     reconfigure(botId, reason) {
       for (const chat of botId === undefined ? chats.values() : [chats.get(botId)]) {

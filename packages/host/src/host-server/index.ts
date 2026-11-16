@@ -73,6 +73,8 @@ export interface HostServerOptions {
   ui?: UiAssets;
   /** The clock device auth reads for pairing code expiry, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
+  /** Whether a bot has background tasks running or queued; always false until the loop module supplies it. */
+  hasActiveTasks?: (botId: string) => boolean;
 }
 
 export interface HostServer {
@@ -287,6 +289,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     removeBot,
     cwd,
     headedBrowser: o.config.headedBrowser,
+    hasActiveTasks: o.hasActiveTasks ?? (() => false),
     dataRoot,
     cli,
     db,

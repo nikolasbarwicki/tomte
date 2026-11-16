@@ -183,6 +183,10 @@ export type ServerEvent = z.infer<typeof ServerEvent>;
 export const BotBrowserSettings = z.object({ enabled: z.boolean(), headed: z.boolean() });
 export type BotBrowserSettings = z.infer<typeof BotBrowserSettings>;
 
+/** How a bot chats: `standard` is one turn per message; `double_loop` keeps a fast front session and runs heavy work in background tasks. */
+export const ChatMode = z.enum(["standard", "double_loop"]);
+export type ChatMode = z.infer<typeof ChatMode>;
+
 /** A specialized agent: a chain of Claude Code sessions (`sessions`, newest last) plus its own memory. */
 export const Bot = z.object({
   id: z.string(),
@@ -192,6 +196,7 @@ export const Bot = z.object({
   createdAt: z.number(),
   lastActive: z.number(),
   sessions: z.array(z.string()),
+  chatMode: ChatMode,
   browser: BotBrowserSettings,
 });
 export type Bot = z.infer<typeof Bot>;

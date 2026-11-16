@@ -116,6 +116,8 @@ export async function startHandoffHost(
   ui?: UiAssets,
   /** Stands in for the OS file manager, so a test sees what the host would reveal and never launches one. */
   reveal?: HostServerOptions["reveal"],
+  /** Stands in for the loop module's task registry. */
+  hasActiveTasks?: HostServerOptions["hasActiveTasks"],
 ): Promise<HandoffHost> {
   const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   const root = realpathSync(mkdtempSync(join(tmpdir(), "handoffs-test-")));
@@ -167,6 +169,7 @@ export async function startHandoffHost(
           ? { status: "available" }
           : { status: "unavailable", reason: "no sandbox in this test" },
       ...(reveal !== undefined && { reveal }),
+      ...(hasActiveTasks !== undefined && { hasActiveTasks }),
       now: () => clock,
       ...(ui !== undefined && { ui }),
     });

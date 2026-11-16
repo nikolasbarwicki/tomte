@@ -1,8 +1,14 @@
+import type { ChatMode } from "@claudebot/contract/events";
+
 import { act } from "@/host/api.ts";
 
 export const cancelSend = (id: string) => act("/api/send/cancel", { id });
 
 export const newSession = () => act("/api/session/new", {});
+
+/** Switches the bot's chat mode; the host starts a new session, and answers 409 while background tasks run. */
+export const setChatMode = (botId: string, chatMode: ChatMode) =>
+  act("/api/bots/chat-mode", { botId, chatMode });
 
 export const setModel = (model: string) => act("/api/model", { model });
 
