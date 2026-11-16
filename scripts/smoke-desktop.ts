@@ -3,7 +3,7 @@ import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 // Smoke test for the packaged desktop app on this machine, run for real through playwright-core:
-//   bun scripts/smoke-desktop.ts [dist/desktop/Claudebot-darwin-arm64/Claudebot.app]   (default: this machine's package output)
+//   bun scripts/smoke-desktop.ts [dist/desktop/Claudebot-darwin-arm64/mac-arm64/Claudebot.app]   (default: this machine's package output)
 // Launches the packaged `.app` binary (`bun run package:desktop` builds it) on a fresh temporary root that holds the
 // data root, the Electron user-data directory and the file-secrets key, with Chromium's mock keychain, so nothing
 // reaches the macOS keychain or a default folder. Three launches on that root:

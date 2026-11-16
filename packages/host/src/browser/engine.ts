@@ -53,7 +53,7 @@ export type EngineStatus =
   | { status: "unavailable"; reason: string; installable?: boolean };
 
 /** Release asset name suffix for this machine, or undefined when upstream ships no binary for it. */
-export function platformKey(): string | undefined {
+function platformKey(): string | undefined {
   const arch = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x64" : undefined;
   if (!arch) return undefined;
   const os = process.platform === "linux" ? (isMusl() ? "linux-musl" : "linux") : process.platform;

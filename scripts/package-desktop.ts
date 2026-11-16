@@ -1,29 +1,139 @@
-import { copyFile, cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 // Packages the desktop app for this machine, unsigned and unnotarized, into dist/desktop/ (gitignored):
-//   bun run package:desktop [--out <dir>]
-// Builds the host binary for this machine, bundles the main process and runs @electron/packager with asar on.
+//   bun run package:desktop [--out <dir>] [--version <semver>] [--arch <arm64|x64>]... [--host-dir <dir>] [--update-url <http://127.0.0.1:port>]
+// Bundles the main process and runs electron-builder with asar on. It writes, into <out>/Claudebot-<os>-<archs>/, the
+// installers (macOS: dmg and zip; Windows: NSIS; Linux: AppImage and deb), the update metadata electron-updater reads
+// (latest-mac.yml, latest.yml, latest-linux.yml) and the unpacked app (mac-<arch>/Claudebot.app, win-unpacked/,
+// linux-unpacked/). Nothing is published, and nothing is signed unless `--sign` is given (below).
 // The host binary goes in as the extra resource `claudebot-host`, next to the app's other resources, and the browser
-// (scripts/browser-bundle.ts) as `browser-engine` beside it, where the host looks for it.
-// It refuses, before building or deleting anything, when a process is running from the bundle it would replace.
-import { packager } from "@electron/packager";
+// (scripts/browser-bundle.ts, for the arch being packaged) as `browser-engine` beside it, where the host looks for it.
+// By default each arch's host is built for this run into dist/host; `--host-dir` bundles the already-built binaries in
+// <dir> instead (named claudebot-host-<os>-<arch>[.exe], as build:host and the release workflow's artifacts are) and
+// builds none.
+// `--arch` (repeatable, default this machine's) packages several CPUs in one run, which is how the macOS release gets one
+// latest-mac.yml for both arm64 and x64 (electron-builder writes one file per OS and run). `--version` defaults to the host's VERSION.
+// `--update-url` bakes a loopback `http` feed into app-update.yml instead of GitHub Releases, for verifying auto-update on this machine; it is refused in CI.
+// It refuses, before building or deleting anything, when a process is running from the folder it would replace.
+// `--sign` (or CLAUDEBOT_REQUIRE_SIGNING=true) signs this OS's app with the certificates in the environment (names in
+// scripts/signing-kit.ts SIGNING_SECRETS): macOS Developer ID, hardened runtime and notarized, Windows Authenticode. It
+// exits before building when one of them is missing. Without it the build is unsigned, whatever the environment holds,
+// and no keychain identity is ever looked up. The bundled host must already be signed (`scripts/signing.ts sign-host`).
+// `--local-keychain <file> --local-identity <sha1>` (with `--sign`, macOS, never in CI) signs with one identity in that keychain
+// instead of the CI secrets, taking the notarization key from APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER; it is what
+// `scripts/sign-local.ts` passes (docs/release/local-signing.md) and is not meant to be run by hand.
+// `--local-notary asc --local-asc-profile <name> --local-asc-bin <path> --local-notary-record <file>` replaces the API key
+// with a saved profile of the `asc` CLI: electron-builder signs but does not notarize, and an `afterSign` hook (scripts/
+// asc-notary.ts) notarizes and staples the app before the dmg and zip are built, then writes the submission to the record file.
+import { type AfterPackContext, archFromString, build, Platform } from "electron-builder";
 
+import { BUNDLE_DIR } from "../packages/host/src/browser/engine.ts";
+import { VERSION as HOST_VERSION } from "../packages/host/src/harness/claude-access.ts";
+import { notarizeSignedApp } from "./asc-notary.ts";
 import { prepareBrowserBundle } from "./browser-bundle.ts";
 import { ASSETS_OUT, buildMain, MAIN_OUT } from "./build-desktop.ts";
+import { spawnRunner } from "./command-runner.ts";
+import {
+  APP_NAME,
+  bundleDirName,
+  type DesktopArch,
+  type DesktopPlatform,
+  FIXTURE_BUNDLE_ID,
+  hostBinaryName,
+  hostTarget,
+  inCi,
+  isDesktopArch,
+  PRODUCTION_BUNDLE_ID,
+  updateProvider,
+} from "./desktop-kit.ts";
 import { processes, processesUnder, refusal } from "./process-guard.ts";
+import {
+  localMacSigning,
+  packagingSigning,
+  MAC_ENTITLEMENTS,
+  SIGNED_WIN,
+  SIGNING_SECRETS,
+  type SigningDecision,
+} from "./signing-kit.ts";
 
 const ROOT = join(import.meta.dir, "..");
-const { values: flags } = parseArgs({ options: { out: { type: "string" } } });
+const { values: flags } = parseArgs({
+  options: {
+    out: { type: "string" },
+    version: { type: "string" },
+    arch: { type: "string", multiple: true },
+    "host-dir": { type: "string" },
+    sign: { type: "boolean" },
+    "update-url": { type: "string" },
+    "local-keychain": { type: "string" },
+    "local-identity": { type: "string" },
+    "local-notary": { type: "string" },
+    "local-asc-profile": { type: "string" },
+    "local-asc-bin": { type: "string" },
+    "local-notary-record": { type: "string" },
+  },
+});
 const OUT = resolve(flags.out ?? join(ROOT, "dist/desktop"));
 const STAGE = join(OUT, ".stage");
-const APP_NAME = "Claudebot";
-const BUNDLE_ID = "dev.claudebot.desktop";
+/** A fixture build (`--update-url`) has its own bundle id, so nothing it or Squirrel.Mac writes outside its temp folders is under the production id. */
+const BUNDLE_ID = flags["update-url"] === undefined ? PRODUCTION_BUNDLE_ID : FIXTURE_BUNDLE_ID;
+/** The app's version, and so the installers' names and the update metadata's. */
+const VERSION = flags.version ?? HOST_VERSION;
+/** `owner/repo`, set by GitHub Actions. Local builds have no repository coordinates. */
+const REPOSITORY = process.env.GITHUB_REPOSITORY || undefined;
+const HOST_DIR = flags["host-dir"] === undefined ? undefined : resolve(flags["host-dir"]);
 
-const HOST_OS = process.platform === "win32" ? "windows" : process.platform;
-const HOST_TARGET = `${HOST_OS}-${process.arch}`;
-const HOST_EXE = process.platform === "win32" ? ".exe" : "";
+const PLATFORM = process.platform as DesktopPlatform;
+const HOST_EXE = PLATFORM === "win32" ? ".exe" : "";
+const REQUESTED_ARCHS = flags.arch?.length ? [...new Set(flags.arch)] : [process.arch];
+
+/** Credentials that would make electron-builder sign or publish; an unsigned build never sees them. */
+const SIGNING_AND_PUBLISH_ENV = [
+  "CSC_LINK",
+  "CSC_KEY_PASSWORD",
+  "CSC_NAME",
+  "WIN_CSC_LINK",
+  "WIN_CSC_KEY_PASSWORD",
+  "APPLE_ID",
+  "APPLE_APP_SPECIFIC_PASSWORD",
+  "APPLE_TEAM_ID",
+  "APPLE_API_KEY",
+  "APPLE_API_KEY_ID",
+  "APPLE_API_ISSUER",
+  "GH_TOKEN",
+  "GITHUB_TOKEN",
+  "CSC_KEYCHAIN",
+  "CSC_INSTALLER_LINK",
+  "CSC_INSTALLER_KEY_PASSWORD",
+  "APPLE_KEYCHAIN",
+  "APPLE_KEYCHAIN_PROFILE",
+];
+
+const MAC_CATEGORY = "public.app-category.developer-tools";
+/** Unsigned and unnotarized, and no identity is looked up: the local and the default release build. */
+const UNSIGNED_MAC = { identity: null, notarize: false, category: MAC_CATEGORY };
+/**
+ * Developer ID signed with the hardened runtime and notarized (notarization staples the ticket), from the one
+ * certificate in CSC_LINK. Everything Mach-O in the app is signed by electron-builder with the same entitlements file,
+ * except the host: it arrives already signed by the same certificate (`signing.ts sign-host`, the host job), and
+ * re-signing it would change the bytes `release.ts desktop` compares to the release's own binary.
+ */
+const SIGNED_MAC = {
+  category: MAC_CATEGORY,
+  hardenedRuntime: true,
+  entitlements: MAC_ENTITLEMENTS,
+  entitlementsInherit: MAC_ENTITLEMENTS,
+  notarize: true,
+  signIgnore: ["/Contents/Resources/claudebot-host$"],
+};
+const INSTALLER_TARGETS: Record<DesktopPlatform, string[]> = {
+  darwin: ["dmg", "zip"],
+  win32: ["nsis"],
+  linux: ["AppImage", "deb"],
+};
 
 /** The version of the Electron the desktop package installed, which is the one the app is built on. */
 function electronVersion(): string {
@@ -31,26 +141,91 @@ function electronVersion(): string {
   return (require(manifest) as { version: string }).version;
 }
 
-async function buildHost(): Promise<string> {
-  const build = Bun.spawn(["bun", "scripts/build-host.ts", HOST_TARGET], {
-    cwd: ROOT,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  if ((await build.exited) !== 0) throw new Error(`building the ${HOST_TARGET} host failed`);
-  return join(ROOT, "dist/host", `claudebot-host-${HOST_TARGET}${HOST_EXE}`);
+/**
+ * The host binary each arch's app bundles: from `--host-dir` as they are, or built for this run. All archs are built by
+ * one build-host run, since each run starts by emptying dist/host.
+ */
+async function hostBinariesFor(archs: readonly DesktopArch[]): Promise<Map<DesktopArch, string>> {
+  const dir = HOST_DIR ?? join(ROOT, "dist/host");
+  if (HOST_DIR === undefined) {
+    const targets = archs.map((arch) => hostTarget(PLATFORM, arch));
+    const host = Bun.spawn(["bun", "scripts/build-host.ts", ...targets], {
+      cwd: ROOT,
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    if ((await host.exited) !== 0)
+      throw new Error(`building the ${targets.join(", ")} host failed`);
+  }
+  const binaries = new Map<DesktopArch, string>();
+  for (const arch of archs) {
+    const path = join(dir, hostBinaryName(PLATFORM, arch));
+    if (
+      !(await stat(path).then(
+        (s) => s.isFile(),
+        () => false,
+      ))
+    ) {
+      throw new Error(`${dir} has no ${hostBinaryName(PLATFORM, arch)}`);
+    }
+    binaries.set(arch, path);
+  }
+  return binaries;
 }
 
-/** Stops, before anything is built or deleted, when a process runs from the bundle that packaging would replace. */
+/** Stops, before anything is built or deleted, when a process runs from the folder that packaging would replace. */
 function refuseWhileRunning(bundleDir: string): void {
   const running = processesUnder(bundleDir, processes());
   if (running.length > 0) throw new Error(refusal("package", bundleDir, running));
 }
 
+/** The `afterSign` hook of the asc backend: notarize the signed app, staple it and record the submission (scripts/asc-notary.ts). */
+function ascAfterSign(notary: { profile: string; bin: string; record: string }) {
+  return (context: AfterPackContext) =>
+    notarizeSignedApp({
+      run: spawnRunner,
+      asc: { bin: notary.bin, profile: notary.profile },
+      app: join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`),
+      recordFile: notary.record,
+      log: console.log,
+    });
+}
+
 async function main(): Promise<void> {
-  const bundleDir = join(OUT, `${APP_NAME}-${process.platform}-${process.arch}`);
+  const archs = REQUESTED_ARCHS.map((a) => {
+    if (!isDesktopArch(a)) throw new Error(`--arch ${a}: expected arm64 or x64`);
+    return a;
+  });
+  const bundleDir = join(OUT, bundleDirName(PLATFORM, archs));
   refuseWhileRunning(bundleDir);
-  const hostBinary = await buildHost();
+  const targets = INSTALLER_TARGETS[PLATFORM] as string[] | undefined;
+  if (targets === undefined) throw new Error(`no installer is defined for ${process.platform}`);
+  // Before anything is built: a CI build without repository coordinates fails here, not after the installers exist.
+  const publish = updateProvider(REPOSITORY, inCi(process.env), flags["update-url"]);
+  // Also before anything is built: a signed run without all of this OS's secrets, or a required one without --sign,
+  // fails here, never after producing an unsigned installer. The local route's request is read before the scrub below.
+  const local = localMacSigning(
+    {
+      keychain: flags["local-keychain"],
+      identity: flags["local-identity"],
+      notary: flags["local-notary"],
+      ascProfile: flags["local-asc-profile"],
+      ascBin: flags["local-asc-bin"],
+      notaryRecord: flags["local-notary-record"],
+    },
+    process.env,
+    { platform: PLATFORM, sign: flags.sign ?? false, ci: inCi(process.env) },
+  );
+  const signing: SigningDecision =
+    local === undefined
+      ? packagingSigning(PLATFORM, process.env, flags.sign ?? false)
+      : { signed: true, platform: "darwin" };
+  console.log(
+    signing.signed
+      ? `signing: ${signing.platform}, signed${local === undefined ? "" : " (local keychain)"}`
+      : `signing: unsigned (${signing.reason})`,
+  );
+  const hostBinaries = await hostBinariesFor(archs);
   await buildMain();
 
   await rm(bundleDir, { recursive: true, force: true });
@@ -61,30 +236,121 @@ async function main(): Promise<void> {
   await cp(ASSETS_OUT, join(appDir, "assets"), { recursive: true });
   await writeFile(
     join(appDir, "package.json"),
-    `${JSON.stringify({ name: "claudebot-desktop", productName: APP_NAME, version: "0.0.0", main: "main.cjs" }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        name: "claudebot-desktop",
+        productName: APP_NAME,
+        version: VERSION,
+        description: "Claudebot desktop app",
+        author: APP_NAME,
+        ...(REPOSITORY === undefined ? {} : { homepage: `https://github.com/${REPOSITORY}` }),
+        main: "main.cjs",
+      },
+      null,
+      2,
+    )}\n`,
   );
-  const resource = join(STAGE, `claudebot-host${HOST_EXE}`);
-  await copyFile(hostBinary, resource);
-  const browser = await prepareBrowserBundle(STAGE);
+  // One staged copy per arch; electron-builder expands ${arch} per build. A downloaded release artifact has lost its
+  // executable bit, so it is restored here (the copy is byte-identical otherwise). The browser is per arch too.
+  for (const [arch, hostBinary] of hostBinaries) {
+    const dir = join(STAGE, "host", arch);
+    await mkdir(dir, { recursive: true });
+    const resource = join(dir, `claudebot-host${HOST_EXE}`);
+    await copyFile(hostBinary, resource);
+    await chmod(resource, 0o755);
+    await prepareBrowserBundle(join(STAGE, "browser", arch), arch);
+  }
 
+  // Credentials come from the environment only when this run signs; every run starts from an environment without them.
+  const credentials = signing.signed
+    ? Object.fromEntries(SIGNING_SECRETS[signing.platform].map((n) => [n, process.env[n] ?? ""]))
+    : {};
+  for (const name of [...SIGNING_AND_PUBLISH_ENV, ...Object.values(SIGNING_SECRETS).flat()]) {
+    delete process.env[name];
+  }
+  // Unsigned: no identity is ever looked up. Signed (CI): electron-builder imports the certificate into a keychain of
+  // its own (CSC_LINK) and looks only there. Local: CSC_KEYCHAIN names the keychain `sign-local.ts` made and the
+  // identity is given by hash, so electron-builder creates no keychain and never looks anywhere else.
+  process.env.CSC_IDENTITY_AUTO_DISCOVERY =
+    signing.signed && local === undefined ? "true" : "false";
+  let secretsDir: string | undefined;
   try {
-    const [appPath] = await packager({
-      dir: appDir,
-      out: OUT,
-      name: APP_NAME,
-      appBundleId: BUNDLE_ID,
-      electronVersion: electronVersion(),
-      platform: process.platform,
-      arch: process.arch,
-      asar: true,
-      prune: false,
-      overwrite: true,
-      extraResource: [resource, browser],
-      quiet: true,
+    if (local !== undefined) {
+      process.env.CSC_KEYCHAIN = local.keychain;
+      if (local.notary.kind === "p8") {
+        Object.assign(process.env, {
+          APPLE_API_KEY: local.notary.key,
+          APPLE_API_KEY_ID: local.notary.keyId,
+          APPLE_API_ISSUER: local.notary.issuer,
+        });
+      }
+    } else if (signing.signed && signing.platform === "darwin") {
+      secretsDir = await mkdtemp(join(tmpdir(), "claudebot-notary-"));
+      const key = join(secretsDir, "AuthKey.p8");
+      await writeFile(key, credentials.APPLE_API_KEY_P8 ?? "", { mode: 0o600 });
+      Object.assign(process.env, {
+        CSC_LINK: credentials.MACOS_CERTIFICATE_P12,
+        CSC_KEY_PASSWORD: credentials.MACOS_CERTIFICATE_PASSWORD,
+        APPLE_API_KEY: key,
+        APPLE_API_KEY_ID: credentials.APPLE_API_KEY_ID,
+        APPLE_API_ISSUER: credentials.APPLE_API_ISSUER,
+      });
+    } else if (signing.signed) {
+      Object.assign(process.env, {
+        WIN_CSC_LINK: credentials.WINDOWS_CERTIFICATE_PFX,
+        WIN_CSC_KEY_PASSWORD: credentials.WINDOWS_CERTIFICATE_PASSWORD,
+      });
+    }
+    const artifacts = await build({
+      projectDir: appDir,
+      targets: Platform.current().createTarget(targets, ...archs.map((a) => archFromString(a))),
+      publish: "never",
+      config: {
+        appId: BUNDLE_ID,
+        productName: APP_NAME,
+        electronVersion: electronVersion(),
+        asar: true,
+        npmRebuild: false,
+        directories: { output: bundleDir },
+        extraResources: [
+          {
+            from: join(STAGE, "host", "${arch}", `claudebot-host${HOST_EXE}`),
+            to: `claudebot-host${HOST_EXE}`,
+          },
+          { from: join(STAGE, "browser", "${arch}", BUNDLE_DIR), to: BUNDLE_DIR },
+        ],
+        publish,
+        mac:
+          signing.signed && signing.platform === "darwin"
+            ? local === undefined
+              ? SIGNED_MAC
+              : {
+                  ...SIGNED_MAC,
+                  identity: local.identity,
+                  // The asc backend notarizes in `afterSign`, so electron-builder must not.
+                  ...(local.notary.kind === "asc" ? { notarize: false } : {}),
+                }
+            : UNSIGNED_MAC,
+        // After the app is signed and before the dmg and zip targets are built (electron-builder runs `afterSign` between
+        // them), so both contain the stapled app.
+        ...(local?.notary.kind === "asc" ? { afterSign: ascAfterSign(local.notary) } : {}),
+        // The local route names its identity, so a build that could not sign with it must fail, not ship unsigned.
+        ...(local === undefined ? {} : { forceCodeSigning: true }),
+        ...(signing.signed && signing.platform === "win32" ? { win: SIGNED_WIN } : {}),
+        nsis: { artifactName: "${productName}-Setup-${version}.${ext}" },
+        // Named without an arch: only linux x64 is released, and `${arch}` would spell it x86_64 and amd64 per target.
+        linux: {
+          category: "Development",
+          executableName: "claudebot",
+          maintainer: APP_NAME,
+          artifactName: "${productName}-${version}.${ext}",
+        },
+      },
     });
-    console.log(`packaged ${relative(ROOT, appPath ?? OUT)}`);
+    for (const artifact of artifacts) console.log(`built ${relative(ROOT, artifact)}`);
   } finally {
     await rm(STAGE, { recursive: true, force: true });
+    if (secretsDir !== undefined) await rm(secretsDir, { recursive: true, force: true });
   }
 }
 

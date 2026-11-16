@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 // Smoke test of the desktop app's hidden title bar (macOS only), run for real against the packaged `.app`:
-//   bun scripts/smoke-desktop-titlebar.ts [dist/desktop/Claudebot-darwin-arm64/Claudebot.app]
+//   bun scripts/smoke-desktop-titlebar.ts [dist/desktop/Claudebot-darwin-arm64/mac-arm64/Claudebot.app]
 // One launch on a fresh temp root (fake Claude CLI, file secrets, mock keychain, login-item file seam; see the kit). It
 //   - reads the web UI's header and the real traffic lights' geometry (Accessibility frames of the three native buttons)
 //     and asserts the lights sit inside the header, vertically centred, with no control or title under them, both with

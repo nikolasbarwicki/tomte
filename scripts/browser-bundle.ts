@@ -12,7 +12,6 @@ import {
   ENGINE_BINARY,
   ENGINE_SHA256,
   ENGINE_VERSION,
-  platformKey,
 } from "../packages/host/src/browser/engine.ts";
 
 const CACHE = join(import.meta.dir, "..", "dist/browser-cache");
@@ -78,12 +77,15 @@ async function unzip(zip: string, dest: string): Promise<void> {
   if ((await p.exited) !== 0) throw new Error(`unpacking ${zip} failed`);
 }
 
-/** Lays out BUNDLE_DIR for this machine in `stageDir` and returns its path. Throws when this platform has no pinned engine or Chrome. */
-export async function prepareBrowserBundle(stageDir: string): Promise<string> {
-  const key = platformKey();
-  const chrome = key ? CHROME_SHA256[key] : undefined;
-  if (!key || !chrome)
-    throw new Error(`no pinned agent-browser and Chrome for ${process.platform}/${process.arch}`);
+/** Lays out BUNDLE_DIR for `arch` (default this machine's) on this OS in `stageDir` and returns its path. Throws when that platform has no pinned engine or Chrome. */
+export async function prepareBrowserBundle(
+  stageDir: string,
+  arch: string = process.arch,
+): Promise<string> {
+  const key = `${process.platform}-${arch}`;
+  const chrome = CHROME_SHA256[key];
+  if (!chrome || !(key in ENGINE_SHA256))
+    throw new Error(`no pinned agent-browser and Chrome for ${process.platform}/${arch}`);
   const asset = `agent-browser-${key}${process.platform === "win32" ? ".exe" : ""}`;
   const engine = await fetchVerified(
     `https://github.com/vercel-labs/agent-browser/releases/download/v${ENGINE_VERSION}/${asset}`,

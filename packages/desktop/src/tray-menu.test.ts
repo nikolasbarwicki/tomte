@@ -11,7 +11,7 @@ const profiles = [
   { id: "p1", name: "Work", origin: "https://work.example.com", active: true },
 ];
 
-function setup(state: HostState, startAtLogin = true) {
+function setup(state: HostState, startAtLogin = true, readyUpdate?: string) {
   const calls: string[] = [];
   const actions: TrayActions = {
     open: () => void calls.push("open"),
@@ -20,8 +20,9 @@ function setup(state: HostState, startAtLogin = true) {
     quit: () => void calls.push("quit"),
     connect: (id) => void calls.push(`connect ${id}`),
     manageConnections: () => void calls.push("manage"),
+    restartToUpdate: () => void calls.push("update"),
   };
-  const items = trayMenu(state, startAtLogin, profiles, actions);
+  const items = trayMenu(state, startAtLogin, profiles, readyUpdate, actions);
   const item = (label: string) => items.find((i) => i.label === label);
   const click = (label: string) => {
     const click = item(label)?.click as (() => void) | undefined;
@@ -89,5 +90,14 @@ describe("the tray menu", () => {
     menu.click("This computer");
     menu.click("Manage Connections…");
     expect(menu.calls).toEqual(["connect local", "manage"]);
+  });
+});
+
+describe("the update item", () => {
+  test("appears only once an update is downloaded, names its version and asks to restart", () => {
+    expect(setup(running).item("Restart to update to 0.2.0")).toBeUndefined();
+    const menu = setup(running, true, "0.2.0");
+    menu.click("Restart to update to 0.2.0");
+    expect(menu.calls).toEqual(["update"]);
   });
 });

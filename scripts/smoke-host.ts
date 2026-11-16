@@ -4,7 +4,7 @@
 // free port. Installs the managed Claude CLI with `install-cli` (first use) unless CLAUDE_PATH names one, starts the
 // host, pairs a device with the `pair` subcommand, creates a bot the way the UI does, checks the event stream, loads
 // the UI from the embedded assets (every script and stylesheet index.html references, with the CSP), checks what the
-// client listener must refuse, stops the host with SIGTERM and removes the temporary directory.
+// client listener must refuse, stops the host with SIGTERM (on Windows, which has none, terminates it) and removes the temporary directory.
 // Never prints the pairing code or the device token. Exits non-zero on the first failed check.
 import { existsSync } from "node:fs";
 import { chmod, copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -311,8 +311,15 @@ async function main(): Promise<number> {
       const force = setTimeout(() => server.kill("SIGKILL"), SHUTDOWN_TIMEOUT_MS);
       const exit = await server.exited;
       clearTimeout(force);
-      check(exit === 0, "SIGTERM stops the host with exit 0");
-      check(!existsSync(join(dataRoot, "host.lock")), "the data root lock is released");
+      if (process.platform === "win32") {
+        // Windows has no SIGTERM: kill() ends the process at once, so there is no graceful exit code or lock release to check.
+        console.log(
+          `  windows: the host was terminated (exit ${exit}); graceful shutdown not checked`,
+        );
+      } else {
+        check(exit === 0, "SIGTERM stops the host with exit 0");
+        check(!existsSync(join(dataRoot, "host.lock")), "the data root lock is released");
+      }
     } finally {
       if (server.exitCode === null) {
         server.kill("SIGKILL");

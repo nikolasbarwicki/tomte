@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 
 import { _electron, type ElectronApplication, type Page } from "playwright-core";
 
+import { UPDATES_ENV } from "../packages/desktop/src/updates.ts";
 import {
   outsideLineage,
   type ProcessRow,
@@ -23,7 +24,7 @@ export const FAKE_CLAUDE = join(ROOT, "packages/host/src/testing/fake-claude.ts"
 export const EVIDENCE_DIR = join(ROOT, ".scratch");
 const DEFAULT_APP = join(
   ROOT,
-  `dist/desktop/Claudebot-${process.platform}-${process.arch}/Claudebot.app`,
+  `dist/desktop/Claudebot-${process.platform}-${process.arch}/${process.arch === "arm64" ? "mac-arm64" : "mac"}/Claudebot.app`,
 );
 
 export const CLIENT_URL = /^http:\/\/127\.0\.0\.1:\d+\//;
@@ -256,6 +257,8 @@ export async function createSmokeRun(
       CLAUDEBOT_SECRETS: "file",
       CLAUDEBOT_SECRETS_KEY_FILE: keyFile,
       CLAUDEBOT_DESKTOP_LOGIN_ITEM_FILE: loginItemFile,
+      // No smoke asks an update feed for anything; a launch that wants the check on says so through `extra`.
+      [UPDATES_ENV]: "off",
       ...extra,
     };
   }

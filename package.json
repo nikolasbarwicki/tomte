@@ -28,17 +28,19 @@
     "prepare": "if git rev-parse --git-dir >/dev/null 2>&1; then lefthook install; fi",
     "build:desktop": "bun scripts/build-desktop.ts",
     "package:desktop": "bun scripts/package-desktop.ts",
+    "sign:local": "bun scripts/sign-local.ts",
     "icons:desktop": "bun scripts/make-tray-icons.ts",
     "smoke:desktop": "bun scripts/smoke-desktop.ts",
     "smoke:desktop:profiles": "bun scripts/smoke-desktop-profiles.ts",
-    "smoke:desktop:titlebar": "bun scripts/smoke-desktop-titlebar.ts"
+    "smoke:desktop:titlebar": "bun scripts/smoke-desktop-titlebar.ts",
+    "smoke:desktop:update": "bun scripts/smoke-desktop-update.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
-    "@electron/packager": "^20.3.0",
     "@swc/core": "^1.16.22",
     "dependency-cruiser": "^18.7.2",
+    "electron-builder": "^26.18.0",
     "knip": "^6.44.1",
     "lefthook": "^2.2.2",
     "oxfmt": "^0.77.0",

@@ -7,8 +7,13 @@ import type { HostState } from "./supervisor.ts";
 import { hostStatusText, trayMenu, type TrayActions } from "./tray-menu.ts";
 
 export interface DesktopTray {
-  /** Shows the state, the profiles (the active one checked) and the Start at login choice in the tooltip and the menu. */
-  update(state: HostState, startAtLogin: boolean, profiles: ProfileView[]): void;
+  /** Shows the state, the profiles (the active one checked), the Start at login choice and a downloaded update's version in the tooltip and the menu. */
+  update(
+    state: HostState,
+    startAtLogin: boolean,
+    profiles: ProfileView[],
+    readyUpdate: string | undefined,
+  ): void;
   /** What the tray shows now: the tooltip and the menu items, whose `click` is what the real menu calls. */
   snapshot(): { tooltip: string; items: MenuItemConstructorOptions[] };
 }
@@ -20,10 +25,10 @@ export function createTray(assetsDir: string, actions: TrayActions): DesktopTray
   const tray = new Tray(image);
   let current = { tooltip: "", items: [] as MenuItemConstructorOptions[] };
   return {
-    update(state, startAtLogin, profiles) {
+    update(state, startAtLogin, profiles, readyUpdate) {
       current = {
         tooltip: hostStatusText(state),
-        items: trayMenu(state, startAtLogin, profiles, actions),
+        items: trayMenu(state, startAtLogin, profiles, readyUpdate, actions),
       };
       tray.setToolTip(current.tooltip);
       tray.setContextMenu(Menu.buildFromTemplate(current.items));

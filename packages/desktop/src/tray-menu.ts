@@ -11,6 +11,7 @@ export interface TrayActions {
   quit(): void;
   connect(id: string): void;
   manageConnections(): void;
+  restartToUpdate(): void;
 }
 
 export function hostStatusText(state: HostState): string {
@@ -24,11 +25,12 @@ export function hostStatusText(state: HostState): string {
   }
 }
 
-/** The tray's menu for the current state. The same items back the real menu and what a smoke test reads. */
+/** The tray's menu for the current state. The same items back the real menu and what a smoke test reads. `readyUpdate` is the version of a downloaded update, which adds a "Restart to update" item. */
 export function trayMenu(
   state: HostState,
   startAtLogin: boolean,
   profiles: ProfileView[],
+  readyUpdate: string | undefined,
   actions: TrayActions,
 ): MenuItemConstructorOptions[] {
   return [
@@ -42,6 +44,14 @@ export function trayMenu(
       manage: () => actions.manageConnections(),
     }),
     { type: "separator" },
+    ...(readyUpdate === undefined
+      ? []
+      : [
+          {
+            label: `Restart to update to ${readyUpdate}`,
+            click: () => actions.restartToUpdate(),
+          },
+        ]),
     { label: "Open Claudebot", click: () => actions.open() },
     {
       label: "Start at login",
