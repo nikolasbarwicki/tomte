@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { BROWSER_ENDPOINT_PATH, CREDENTIAL_EXCHANGE_PATH } from "../browser/index.ts";
 import { BOTS_ENDPOINT_PATH } from "../handoffs/index.ts";
+import { ROUTINES_ENDPOINT_PATH } from "../routines/index.ts";
 import { defined } from "../testing/defined.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
@@ -29,21 +30,24 @@ describe("the two listeners", () => {
     expect(new URL(host.agentUrl).hostname).toBe("127.0.0.1");
   });
 
-  test("the bots endpoint and the browser endpoint answer on the agent listener only", async () => {
+  test("the browser, bots and routines endpoints answer on the agent listener only", async () => {
     const bot = host.createBot("alice");
     expect((await host.ui("/api/bots/browser", { botId: bot, enabled: true })).status).toBe(200);
     const lease = host.server.browser.lease(bot);
     const browser = defined(lease.servers[0], "browser server");
     const bots = await host.actAs(bot);
+    const routines = await host.actAs(bot, "routines");
 
     expect(browser.url).toBe(`${host.agentUrl}${BROWSER_ENDPOINT_PATH}`);
     expect(bots.url).toBe(`${host.agentUrl}${BOTS_ENDPOINT_PATH}`);
     expect((await mcpPost(browser.url, browser.token)).status).toBe(200);
+    expect(routines.url).toBe(`${host.agentUrl}${ROUTINES_ENDPOINT_PATH}`);
     expect((await mcpPost(bots.url, bots.token)).status).toBe(200);
+    expect((await mcpPost(routines.url, routines.token)).status).toBe(200);
 
     // A paired device that passes the boundary check still finds no such route.
     const sameOrigin = { origin: host.clientUrl };
-    for (const path of [BROWSER_ENDPOINT_PATH, BOTS_ENDPOINT_PATH])
+    for (const path of [BROWSER_ENDPOINT_PATH, BOTS_ENDPOINT_PATH, ROUTINES_ENDPOINT_PATH])
       expect((await mcpPost(`${host.clientUrl}${path}`, host.deviceToken, sameOrigin)).status).toBe(
         404,
       );

@@ -13,12 +13,12 @@ The endpoint copies `handoffs/endpoint.ts`:
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `list_routines` returns `{ now, routines }` with the caller's own routines only, in creation order. A bot with none gets an empty list. A routine of another bot never appears
-- [ ] Each routine has `id`, `name`, `instruction`, `schedule` (cron as stored, once with `at` as ISO UTC), `active`, `catch_up`, `next_runs` (up to 3 ISO times, empty when paused or finished), `running` and `last_run` (`status`, `started_at`, `error`, no output)
-- [ ] The endpoint refuses a wrong Host, any Origin, a missing token and a revoked token, as the bots endpoint does. The client listener answers 404 for `/mcp/routines`
-- [ ] Every harness launch carries the `routines` server with its own token, and its instructions text is in the appended system prompt. The instructions say the owner's IANA time zone comes from user memory, then `ask_user` and `remember`, and never from the server
-- [ ] `mcp__routines__*` is allowed by `canUseTool` without an approval card (a unit test names `mcp__routines__list_routines`)
-- [ ] GLOSSARY gains **Routine tools** (the MCP tools exposed at the routines endpoint) and **Routines endpoint** (the host's Streamable HTTP MCP route that serves them, on the agent listener), next to the browser entries, and the **Agent listener** entry names the routines endpoint
-- [ ] Host HTTP-seam tests cover all of the above (prior art: `handoffs/handoffs.test.ts`, and `host-server/listeners.test.ts`, which asserts both endpoints on the agent listener and their 404 on the client listener). `bun run check` passes
+- [x] `list_routines` returns `{ now, routines }` with the caller's own routines only, in creation order. A bot with none gets an empty list. A routine of another bot never appears
+- [x] Each routine has `id`, `name`, `instruction`, `schedule` (cron as stored, once with `at` as ISO UTC), `active`, `catch_up`, `next_runs` (up to 3 ISO times, empty when paused or finished), `running` and `last_run` (`status`, `started_at`, `error`, no output)
+- [x] The endpoint refuses a wrong Host, any Origin, a missing token and a revoked token, as the bots endpoint does. The client listener answers 404 for `/mcp/routines`
+- [x] Every harness launch carries the `routines` server with its own token, and its instructions text is in the appended system prompt. The instructions say the owner's IANA time zone comes from user memory, then `ask_user` and `remember`, and never from the server
+- [x] `mcp__routines__*` is allowed by `canUseTool` without an approval card (a unit test names `mcp__routines__list_routines`)
+- [x] GLOSSARY gains **Routine tools** (the MCP tools exposed at the routines endpoint) and **Routines endpoint** (the host's Streamable HTTP MCP route that serves them, on the agent listener), next to the browser entries, and the **Agent listener** entry names the routines endpoint
+- [x] Host HTTP-seam tests cover all of the above (prior art: `handoffs/handoffs.test.ts`, and `host-server/listeners.test.ts`, which asserts both endpoints on the agent listener and their 404 on the client listener). `bun run check` passes

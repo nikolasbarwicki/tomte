@@ -29,6 +29,13 @@ import * as store from "./store.ts";
 import type { RoutineRecord } from "./store.ts";
 
 export { parkingDelegate };
+export {
+  ROUTINES_ENDPOINT_PATH,
+  ROUTINES_INSTRUCTIONS,
+  ROUTINES_SERVER_NAME,
+  createRoutinesEndpoint,
+  type RoutinesEndpoint,
+} from "./endpoint.ts";
 
 export class Conflict extends Error {}
 

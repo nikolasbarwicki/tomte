@@ -53,8 +53,11 @@ export interface HandoffHost {
   createBot(name: string, purpose?: string): string;
   /** Names of the secrets the host holds in its (in-memory) secret store. */
   secretNames(): string[];
-  /** An MCP client connected to the bots endpoint with a token from a fresh bots lease for `botId`. */
-  actAs(botId: string): Promise<{ call: BotCaller; token: string; url: string; revoke(): void }>;
+  /** An MCP client connected to the `bots` (default) or `routines` endpoint with a token from a fresh lease of it for `botId`. */
+  actAs(
+    botId: string,
+    server?: "bots" | "routines",
+  ): Promise<{ call: BotCaller; token: string; url: string; revoke(): void }>;
   /** Texts the fake CLI received for the bot's first session, oldest first. */
   messagesOf(botId: string): string[];
   /** The user messages the fake CLI received for the bot's first session, with the flags the host sent them with. */
@@ -251,8 +254,8 @@ export async function startHandoffHost(
     dataRoot: config.dataRoot,
     db,
     createBot: (name, purpose) => createBot(config.dataRoot, name, purpose).id,
-    async actAs(botId) {
-      const lease = server.bots.lease(botId);
+    async actAs(botId, endpoint = "bots") {
+      const lease = server[endpoint].lease(botId);
       const s = defined(lease.servers[0], "server");
       const client = new Client({ name: "test", version: "1.0.0" });
       await client.connect(
