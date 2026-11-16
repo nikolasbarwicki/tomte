@@ -58,13 +58,13 @@ const WORKER_FILE_TOOLS = ["Read", "Write", "Edit", "NotebookEdit", "Glob", "Gre
 export const FRONT_BUILTIN_TOOLS = ["Agent", "SendMessage", "TaskStop"];
 
 /**
- * Everything the front itself may use (decision 5 of ADR-0011), besides the handoff tools the host's `bots` server adds. This is
+ * Everything the front itself may use (decision 5 of ADR-0011), besides the handoff and routine tools the host's `bots` and `routines` servers add. This is
  * the one list the front's tool set is held to: whatever an agent has and is not here is denied to the front.
  */
 const FRONT_TOOLS = [...FRONT_BUILTIN_TOOLS, QUEUE_TASK, CANCEL_QUEUED, REMEMBER, REWRITE_MEMORY];
 
 /** MCP servers the host itself defines; an integration of the same name would shadow one, so it is left out of the session. */
-export const HOST_SERVER_NAMES = ["host", "loop", "bots", "browser"];
+export const HOST_SERVER_NAMES = ["host", "loop", "bots", "browser", "routines"];
 
 /** What the worker is set up with when the front session opens: the bot's shell, its integrations and who it is. */
 export interface WorkerSetup {
@@ -144,7 +144,7 @@ export const sessionTools = (agents: Record<string, AgentDefinition>) => [
  * The agent the main thread runs as, so its tool set is the front's and not the session's whole one. It has no tool list of its
  * own to be kept in step with: it is denied every tool an agent has that the front does not, computed from the agent
  * definitions, so a tool added to an agent never reaches the front. What is left is the session's other tools: the front's own
- * (`FRONT_TOOLS`) and the host's handoff tools. Its instructions are the session's system prompt, which wins over an agent's own.
+ * (`FRONT_TOOLS`) and the host's handoff and routine tools. Its instructions are the session's system prompt, which wins over an agent's own.
  */
 export function frontAgent(agents: Record<string, AgentDefinition>): AgentDefinition {
   return {

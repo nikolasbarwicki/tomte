@@ -121,7 +121,8 @@ export function createCanUseTool(o: {
     if (
       name.startsWith("mcp__host__") ||
       name.startsWith("mcp__browser__") ||
-      name.startsWith("mcp__bots__")
+      name.startsWith("mcp__bots__") ||
+      name.startsWith("mcp__routines__")
     )
       return { behavior: "allow", updatedInput: input };
     switch (o.integrations?.decide(name)) {

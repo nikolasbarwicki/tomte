@@ -12,8 +12,8 @@ export interface McpRequestOptions {
   tokens: TokenRegistry;
   /** Why this bot may not use the endpoint right now (answered 403); undefined to let it through. */
   refuse?(botId: string): string | undefined;
-  /** A fresh MCP server for the bot the request's token belongs to. */
-  server(botId: string): McpServer;
+  /** A fresh MCP server for the bot the request's token belongs to; `token` is that bearer, for an endpoint that tells its sessions apart. */
+  server(botId: string, token: string): McpServer;
 }
 
 function reject(res: ServerResponse, status: number, message: string) {
@@ -37,12 +37,12 @@ export async function serveMcpRequest(
     return reject(res, 403, "cross-origin requests are not allowed");
   const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
   const botId = bearer ? o.tokens.botOf(bearer) : undefined;
-  if (!botId) return reject(res, 401, "missing or invalid token");
+  if (!bearer || !botId) return reject(res, 401, "missing or invalid token");
   const refused = o.refuse?.(botId);
   if (refused !== undefined) return reject(res, 403, refused);
   if (req.method !== "POST") return reject(res, 405, "method not allowed");
 
-  const mcp = o.server(botId);
+  const mcp = o.server(botId, bearer);
   const transport = new StreamableHTTPServerTransport({ enableJsonResponse: true });
   res.on("close", () => {
     void transport.close();

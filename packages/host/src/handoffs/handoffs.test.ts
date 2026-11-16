@@ -153,7 +153,7 @@ describe("endpoint hardening", () => {
 });
 
 describe("bot sessions", () => {
-  test("a session gets the bots instructions and both the browser and bots servers, and both tokens work", async () => {
+  test("a session gets the bots instructions and the browser, bots and routines servers, and every token works", async () => {
     const a = host.createBot("Alice", "plans trips");
     host.createBot("Bob", "searches flights");
     expect((await host.ui("/api/bots/browser", { botId: a, enabled: true })).status).toBe(200);
@@ -167,11 +167,13 @@ describe("bot sessions", () => {
       "goal, context, constraints, deliverable, and done when",
     );
     expect(launch.appendSystemPrompt).toContain("## Browser");
-    expect(Object.keys(launch.mcpServers).sort()).toEqual(["bots", "browser"]);
+    expect(launch.appendSystemPrompt).toContain("## Routines");
+    expect(Object.keys(launch.mcpServers).sort()).toEqual(["bots", "browser", "routines"]);
 
     for (const [name, tool, args] of [
       ["bots", "list_bots", {}],
       ["browser", "browser_open", { url: "https://example.com" }],
+      ["routines", "list_routines", {}],
     ] as const) {
       const s = defined(launch.mcpServers[name], name);
       const client = new Client({ name: "test", version: "1.0.0" });

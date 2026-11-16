@@ -53,7 +53,11 @@ import { openFileSecrets } from "../platform/file-secrets.ts";
 import { keychainSecrets, type SecretStore } from "../platform/secrets.ts";
 import { TokenRegistry } from "../platform/tokens.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
-import { createRoutines } from "../routines/index.ts";
+import {
+  createRoutines,
+  createRoutinesEndpoint,
+  type RoutinesEndpoint,
+} from "../routines/index.ts";
 import { serveUi, type UiAssets } from "../ui/index.ts";
 import { createWaits } from "../waits/index.ts";
 import { externalEventsRoute } from "./api/external-events.ts";
@@ -115,7 +119,7 @@ export interface HostServerOptions {
 export interface HostServer {
   /** The client listener's loopback URL: the web UI, `/api/*`, live view and `/oauth/callback`. */
   clientUrl: string;
-  /** The agent listener's loopback URL: the browser endpoint, the bots endpoint and the credential exchange. */
+  /** The agent listener's loopback URL: the browser endpoint, the bots endpoint, the routines endpoint and the credential exchange. */
   agentUrl: string;
   /** The origin users and OAuth providers reach. */
   publicUrl: string;
@@ -123,6 +127,8 @@ export interface HostServer {
   browser: BrowserEndpoint;
   /** The bots endpoint's token leases, so a caller can act as a bot session. */
   bots: BotsEndpoint;
+  /** The routines endpoint's token leases, so a caller can act as a bot session. */
+  routines: RoutinesEndpoint;
   /** Pairing codes and device tokens, so a caller can pair a device without going through the exchange. */
   devices: DeviceAuth;
   /** The channels and their links, so a caller can feed an update in or send to the linked account. */
@@ -251,11 +257,20 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     combineLeases([
       browser.endpoint.lease(botId),
       handoffs.endpoint.lease(botId),
+      routinesEndpoint.lease(botId),
       isolation(botId),
     ]);
-  /** A double-loop front only talks and hands off: no browser, and the same isolation as the bot's own thread. */
+  /**
+   * A double-loop front only talks, hands off and manages routines: no browser, and the same isolation as the bot's own thread.
+   * It is never a scheduled run, so its routines lease is attended: a routine run of the bot (headless, in a session of its own)
+   * does not stop the owner creating routines from the front's chat.
+   */
   const frontServers: HostServersSource = (botId) =>
-    combineLeases([handoffs.endpoint.lease(botId), isolation(botId)]);
+    combineLeases([
+      handoffs.endpoint.lease(botId),
+      routinesEndpoint.lease(botId, { attended: true }),
+      isolation(botId),
+    ]);
   /** Other bots' directories are on every bot's deny-read list, so a bot that appears or goes reaches the open sessions. */
   const botsChanged = () => {
     if (o.config.isolateAllBots) chats.reconfigure(undefined, "bots changed");
@@ -352,6 +367,13 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       const notice = runNotice(end);
       if (notice && getBot(dataRoot, end.routine.botId)) void channels.notify(notice);
     },
+  });
+  const routinesEndpoint = createRoutinesEndpoint({
+    host: agentAt,
+    tokens,
+    routines,
+    unattended: (botId) => chats.unattended(botId),
+    now: Date.now,
   });
   // A run's waits are told to the run: an answer resumes it, an expiry fails it.
   waits.subscribe((e) => {
@@ -458,7 +480,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     pair: pairRoute(devices, clientAt.publicUrl),
     api,
   });
-  const agent = agentRoutes({ browser, handoffs });
+  const agent = agentRoutes({ browser, handoffs, routines: routinesEndpoint });
 
   routines.start();
   channels.start();
@@ -483,6 +505,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     publicUrl: clientAt.publicUrl,
     browser: browser.endpoint,
     bots: handoffs.endpoint,
+    routines: routinesEndpoint,
     devices,
     channels,
     currentBotId: chats.currentBotId,

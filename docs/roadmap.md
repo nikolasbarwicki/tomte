@@ -56,15 +56,15 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 
 ## 3. Bots that create routines, bots and skills
 
-**Problem.** Bot-facing host tools are `ask_user`, `remember`, the handoff tools and the browser tools; none of them manages routines, bots or skills. Routine CRUD exists only under `/api/routines/*`. MausBot ("automations from one sentence"), Rerun (Foreman), Turnstone and Rakazo (Chief of Staff) all let a bot set these up.
+**Problem.** Bot-facing host tools are `ask_user`, `remember`, the handoff tools, the routine tools (`create_routine`, `list_routines`, `update_routine`) and the browser tools; none of them creates bots or skills. MausBot ("automations from one sentence"), Rerun (Foreman), Turnstone and Rakazo (Chief of Staff) all let a bot set these up.
 
 **Plan.**
 
-- Add `create_routine` / `list_routines` / `update_routine` host tools, calling the same code as the HTTP routes.
+- **Shipped:** `create_routine`, `list_routines` and `update_routine`, served at `/mcp/routines` on the agent listener (`mcp__routines__*`), calling the same code as the HTTP routes. There is no delete tool: a bot pauses a routine with `update_routine` `active: false`. The scripted chat test is `routines/gate-check.test.ts`; the check with the real model is the owner's (gate step 4 in `docs/plans/grok-bot-replacement-roadmap.md`).
 - Add `create_bot` (name, purpose, initial memory). Pair it with the unfinished bot delete flow (item 6) so created bots can be cleaned up.
-- Ship a Chief of Staff template that combines these with `hand_off`. Handoffs have landed, so this waits only on `create_routine` and `create_bot`.
+- Ship a Chief of Staff template that combines these with `hand_off`. Handoffs and the routine tools have landed, so this waits only on `create_bot`.
 
-**Guards.** A bot may edit only its own routines. Cap the number of bots one bot may create. Bot-created routines default to approval-required for writes (item 1).
+**Guards.** A bot may edit only its own routines (another bot's id answers "no such routine"). A bot may hold at most 20 routines (`create_routine` only; the panel and `/api/routines/create` are not capped). There is no per-routine approval flag: a bot-made routine runs under the bot's own tool policies, so a write left at `ask` parks the run ([ADR-0009](adr/0009-unattended-runs-park-on-durable-human-waits.md)). The routine tools cannot change a tool policy, a vault grant or an integration, and a scheduled run (a routine turn or a headless run) cannot create or change routines. Still open: a cap on the bots one bot may create, and `create_bot` and the Chief of Staff template.
 
 **Done when.** The user says "brief me every weekday at 8" in chat and a routine appears in the Routines panel without touching the UI.
 
