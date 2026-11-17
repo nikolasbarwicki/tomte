@@ -114,12 +114,16 @@ export const TaskState = z.enum([
 ]);
 export type TaskState = z.infer<typeof TaskState>;
 
+/** When a message was written, in epoch milliseconds; replay leaves it out when the session file has no time for it. */
+const SentAt = z.number().exactOptional();
+
 export const ServerEvent = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("user"),
     text: z.string(),
     mentions: Mentions.exactOptional(),
     attachments: Attachments.exactOptional(),
+    at: SentAt,
   }),
   /** A user message sent while the bot was busy; it waits as pending until `dequeued`, then shows as `user` if it ran. */
   z.object({
@@ -130,7 +134,8 @@ export const ServerEvent = z.discriminatedUnion("type", [
     attachments: Attachments.exactOptional(),
   }),
   z.object({ type: z.literal("dequeued"), id: z.string() }),
-  z.object({ type: z.literal("text_start") }),
+  /** A reply starts; `delta`s carry its text. */
+  z.object({ type: z.literal("text_start"), at: SentAt }),
   z.object({ type: z.literal("delta"), text: z.string() }),
   z.object({ type: z.literal("tool"), name: z.string(), input: z.string() }),
   /** The bot is waiting for an answer. `eventId` names the external needs-you item the bot asked about; answering resolves it. */
@@ -244,7 +249,7 @@ export const ServerEvent = z.discriminatedUnion("type", [
     resetsAt: z.number().exactOptional(),
   }),
   /** A background task's result, posted whole as the bot's own message; it never enters the front session. */
-  z.object({ type: z.literal("report"), taskId: z.string(), text: z.string() }),
+  z.object({ type: z.literal("report"), taskId: z.string(), text: z.string(), at: SentAt }),
   ContextEvent,
 ]);
 export type ServerEvent = z.infer<typeof ServerEvent>;

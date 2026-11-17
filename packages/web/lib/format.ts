@@ -48,3 +48,7 @@ export const dateTime = (t: number) => {
     minute: "2-digit",
   });
 };
+
+/** The clock time alone, hours and minutes, e.g. "09:30". */
+export const clockTime = (t: number) =>
+  new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });

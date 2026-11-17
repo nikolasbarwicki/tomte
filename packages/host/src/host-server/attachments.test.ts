@@ -157,7 +157,7 @@ describe("sending with attachments", () => {
       ].join("\n"),
     );
     expect(await userEvents()).toEqual([
-      { type: "user", text: "read these", attachments: [file, folder] },
+      { type: "user", text: "read these", attachments: [file, folder], at: expect.any(Number) },
     ]);
   });
 
@@ -185,6 +185,7 @@ test("reopening replays attachments beside the text, not as raw tags", async () 
   const dir = join(claudeConfig, "projects", host.cwd.replace(/[^a-zA-Z0-9]/g, "-"));
   mkdirSync(dir, { recursive: true });
   const report = join(files, "attachments", "report.txt");
+  const sent = Date.UTC(2026, 10, 17, 9, 30);
   const msgs = [
     `look\n<attachment kind="file" path="${report}"/>`,
     `<attachment kind="folder" path="${join(files, "attachments", "notes")}"/>`,
@@ -193,7 +194,7 @@ test("reopening replays attachments beside the text, not as raw tags", async () 
     uuid: `m${i}`,
     parentUuid: i ? `m${i - 1}` : null,
     sessionId: botId,
-    timestamp: new Date().toISOString(),
+    timestamp: new Date(sent).toISOString(),
     cwd: host.cwd,
     isSidechain: false,
     type: "user",
@@ -206,7 +207,13 @@ test("reopening replays attachments beside the text, not as raw tags", async () 
       type: "user",
       text: "look",
       attachments: [{ path: "attachments/report.txt", folder: false }],
+      at: sent,
     },
-    { type: "user", text: "", attachments: [{ path: "attachments/notes", folder: true }] },
+    {
+      type: "user",
+      text: "",
+      attachments: [{ path: "attachments/notes", folder: true }],
+      at: sent,
+    },
   ]);
 });

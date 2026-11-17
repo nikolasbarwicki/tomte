@@ -1,7 +1,5 @@
 import {
   AlarmIcon,
-  ArrowDownLeftIcon,
-  ArrowUpRightIcon,
   RobotIcon,
   WarningCircleIcon,
   CheckCircleIcon,
@@ -12,18 +10,16 @@ import {
   HandIcon,
   QuestionIcon,
   ShieldWarningIcon,
-  WrenchIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
-import type { Attachment, BotSummary, HandoffStatus, Presence } from "@tomte/contract/events";
+import type { Attachment, BotSummary, Presence } from "@tomte/contract/events";
 import { useState, useTransition } from "react";
 import { Streamdown } from "streamdown";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
 import { RelayStatus } from "@/components/relay-status.tsx";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,37 +42,36 @@ import {
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent } from "@/components/ui/message";
 import { Spinner } from "@/components/ui/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  Trace,
-  TraceCollapsible,
-  TraceCollapsibleContent,
-  TraceCollapsibleTrigger,
-  TraceIcon,
-  TraceLine,
-  TraceTitle,
-} from "@/components/ui/trace";
 import { downloadUrl } from "@/host/api.ts";
 import type { Item } from "@/host/transcript.ts";
 import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
+import { BOT_COLUMN, HandoffLine, MessageMeta, Steps } from "./activity.tsx";
 import { answer, answerWait, cancelSend } from "./api.ts";
 import { EXTERNAL_ICONS } from "./external-icons.ts";
 import { bindMentions } from "./mentions.ts";
 import { approvalAnswerLabel, approvalButtons, cardElementId } from "./model.ts";
 import { Scroller, ScrollerItem } from "./scroller.tsx";
+import type { ToolItem } from "./tool-view.ts";
 
-type ToolItem = Extract<Item, { kind: "tool" }>;
 type QueuedItem = Extract<Item, { kind: "queued" }>;
-/** What the thread renders: items as they came, except back-to-back tool calls collapse into one trace of steps. */
+/** What the thread renders: items as they came, except back-to-back tool calls collapse into one line of steps. */
 type Row = Exclude<Item, ToolItem | QueuedItem> | { kind: "steps"; tools: ToolItem[] };
 
-/** Scroller items use `content-visibility: auto`, whose paint containment would clip a handoff card's shadow. */
+/** Scroller items use `content-visibility: auto`, whose paint containment would clip the focus rings of a line that opens. */
 const UNCLIPPED = "[content-visibility:visible]";
 
 const isRequest = (row: Row): row is Extract<Row, { kind: "wait" | "approve" | "ask" }> =>
   row.kind === "wait" || row.kind === "approve" || row.kind === "ask";
+
+/** Who a bubble row is from; anything else is not a bubble. */
+const author = (row: Row | undefined) =>
+  row?.kind === "user"
+    ? "user"
+    : row?.kind === "assistant" || row?.kind === "report"
+      ? "bot"
+      : undefined;
 
 function toRows(items: Item[]): Row[] {
   const rows: Row[] = [];
@@ -138,13 +133,20 @@ export function Transcript({
       followKey={sent}
       busy={busy}
       className="flex-1"
-      contentClassName="mx-auto w-full max-w-228 gap-4 px-4 py-6"
+      contentClassName="mx-auto w-full max-w-228 gap-3 px-4 py-6"
     >
       {rows.map((row, i) => (
         <ScrollerItem
           key={i}
           {...(isRequest(row) && { id: cardElementId(row.id) })}
-          className={cn(row.kind === "handoff" && UNCLIPPED)}
+          className={cn(
+            (row.kind === "steps" || row.kind === "handoff") && UNCLIPPED,
+            (isRequest(row) || row.kind === "external" || row.kind === "error") && BOT_COLUMN,
+            // A user message starts an exchange: the same extra air above and below it.
+            rows[i - 1] && (row.kind === "user") !== (rows[i - 1]?.kind === "user") && "pt-3",
+            // Bubbles from the same author sit close together, as one run of messages.
+            author(row) !== undefined && author(row) === author(rows[i - 1]) && "-mt-2",
+          )}
         >
           <RowView
             row={row}
@@ -212,26 +214,17 @@ function RowView({
           text={row.text}
           mentions={row.mentions}
           attachments={row.attachments}
+          at={row.at}
           bots={bots}
         />
       );
     case "assistant":
-      return (
-        <Message>
-          <MessageContent>
-            <Bubble variant="muted" className="max-w-[60%]">
-              <BubbleContent className="w-full">
-                <Streamdown linkSafety={{ enabled: false }}>{row.text}</Streamdown>
-              </BubbleContent>
-            </Bubble>
-          </MessageContent>
-        </Message>
-      );
+      return <Reply text={row.text} at={row.at} />;
     case "steps":
       return <Steps tools={row.tools} running={running} />;
     case "error":
       return (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="w-fit max-w-full">
           <WarningCircleIcon />
           <AlertDescription className="break-words whitespace-pre-wrap">
             {row.text}
@@ -239,35 +232,32 @@ function RowView({
         </Alert>
       );
     case "info":
-      return (
-        <Marker variant="separator" className="text-xs">
-          <MarkerContent>{row.text}</MarkerContent>
-        </Marker>
-      );
     case "session":
       return (
-        <Marker variant="separator" className="text-xs">
-          <MarkerContent>
-            New session · earlier messages are no longer in the bot's context
+        <Marker variant="separator" className="py-1 text-xs">
+          <MarkerContent className="max-w-[80%] text-balance">
+            {row.kind === "info"
+              ? row.text
+              : "New session · earlier messages are no longer in the bot's context"}
           </MarkerContent>
         </Marker>
       );
     case "routine":
       return (
-        <Marker variant="separator" className="text-xs">
-          <MarkerIcon>
-            <AlarmIcon className="size-3.5" />
-          </MarkerIcon>
-          <MarkerContent>
-            Routine <span className="text-foreground font-semibold">{row.name}</span> ·{" "}
-            {row.trigger === "manual" ? "test run" : "scheduled"}
+        <Marker variant="separator" className="py-1">
+          <MarkerContent className="bg-muted text-foreground inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs">
+            <AlarmIcon className="text-primary size-3.5" />
+            <span className="font-medium">{row.name}</span>
+            <span className="text-muted-foreground">
+              · {row.trigger === "manual" ? "test run" : "scheduled run"}
+            </span>
           </MarkerContent>
         </Marker>
       );
     case "external": {
       const Icon = EXTERNAL_ICONS[row.eventKind];
       return (
-        <div className="grid gap-1">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
           <Marker>
             <MarkerIcon>
               <Icon />
@@ -288,11 +278,11 @@ function RowView({
       );
     }
     case "report":
-      return <Report text={row.text} task={row.task} />;
+      return <Reply text={row.text} at={row.at} />;
     case "task":
       return <TaskLine item={row} />;
     case "handoff":
-      return <HandoffCard item={row} other={bots.find((b) => b.id === row.botId)} />;
+      return <HandoffLine item={row} other={bots.find((b) => b.id === row.botId)} />;
     case "wait":
       return <WaitCard item={row} onShowBrowser={onShowBrowser} />;
     case "ask":
@@ -302,17 +292,19 @@ function RowView({
   }
 }
 
-/** A message from the user. `queuedId` marks one still waiting for the bot: it is dimmed and can be cancelled. */
+/** A message from the user, with its copy button and time on hover. `queuedId` marks one still waiting for the bot: it is dimmed and can be cancelled. */
 function UserMessage({
   text,
   mentions = [],
   attachments = [],
+  at,
   bots,
   queuedId,
 }: {
   text: string;
   mentions?: { id: string; name: string }[] | undefined;
   attachments?: Attachment[] | undefined;
+  at?: number | undefined;
   bots: BotSummary[];
   queuedId?: string;
 }) {
@@ -323,7 +315,7 @@ function UserMessage({
     .map((m) => ({ mention: m, text: `@${m.name}` }));
   return (
     <Message align="end">
-      <MessageContent>
+      <MessageContent className="gap-1">
         {attachments.length > 0 && (
           <ul className={cn("flex flex-wrap justify-end gap-1.5", queuedId && "opacity-60")}>
             {attachments.map((a) => {
@@ -355,7 +347,7 @@ function UserMessage({
         )}
         {text && (
           <Bubble align="end" className={cn(queuedId && "opacity-60")}>
-            <BubbleContent className="whitespace-pre-wrap">
+            <BubbleContent className="rounded-2xl rounded-br-md px-3.5 py-2 leading-[1.45] whitespace-pre-wrap">
               {[...leading.flatMap((s) => [s, " "]), ...bound.segments].map((s, i) => {
                 if (typeof s === "string") return s;
                 const target = bots.find((b) => b.id === s.mention.id);
@@ -377,6 +369,7 @@ function UserMessage({
                 );
               })}
             </BubbleContent>
+            {!queuedId && <MessageMeta text={text} at={at} align="end" />}
           </Bubble>
         )}
         {queuedId && (
@@ -407,25 +400,21 @@ function UserMessage({
   );
 }
 
-/** A report is the bot's own message, written by a background task; hovering it names the task. */
-function Report({ text, task }: { text: string; task: string | undefined }) {
-  const message = (
+/** A message from the bot: a bubble set as a chat reply, with its copy button and time on hover. */
+function Reply({ text, at }: { text: string; at?: number | undefined }) {
+  return (
     <Message>
       <MessageContent>
-        <Bubble variant="muted" className="max-w-[60%]">
-          <BubbleContent className="w-full">
-            <Streamdown linkSafety={{ enabled: false }}>{text}</Streamdown>
+        <Bubble variant="muted" className="max-w-[88%]">
+          <BubbleContent className="rounded-2xl rounded-bl-md px-3.5 py-2.5">
+            <div className="chat-prose">
+              <Streamdown linkSafety={{ enabled: false }}>{text}</Streamdown>
+            </div>
           </BubbleContent>
+          <MessageMeta text={text} at={at} />
         </Bubble>
       </MessageContent>
     </Message>
-  );
-  if (task === undefined) return message;
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<div />}>{message}</TooltipTrigger>
-      <TooltipContent>Result of the task: {task}</TooltipContent>
-    </Tooltip>
   );
 }
 
@@ -448,31 +437,6 @@ function TaskLine({ item }: { item: Extract<Item, { kind: "task" }> }) {
         {running && item.status && <> · {item.status}</>}
       </MarkerContent>
     </Marker>
-  );
-}
-
-/** Tool calls the bot made in a row. The host reports no tool results, so the newest call of a live turn is the one running. */
-function Steps({ tools, running }: { tools: ToolItem[]; running: boolean }) {
-  return (
-    <Trace>
-      {tools.map((tool, i) => (
-        <TraceCollapsible key={i}>
-          <TraceCollapsibleTrigger>
-            <TraceLine status={running && i === tools.length - 1 ? "running" : undefined}>
-              <TraceIcon>
-                <WrenchIcon />
-              </TraceIcon>
-              <TraceTitle className="font-mono text-xs">{tool.name}</TraceTitle>
-            </TraceLine>
-          </TraceCollapsibleTrigger>
-          <TraceCollapsibleContent>
-            <pre className="max-h-80 overflow-auto font-mono text-xs whitespace-pre-wrap">
-              {tool.input}
-            </pre>
-          </TraceCollapsibleContent>
-        </TraceCollapsible>
-      ))}
-    </Trace>
   );
 }
 
@@ -690,64 +654,5 @@ function ApproveCard({ item }: { item: Extract<Item, { kind: "approve" }> }) {
         </div>
       }
     />
-  );
-}
-
-const HANDOFF_STATUS: Partial<Record<HandoffStatus, string>> = {
-  completed: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  failed: "bg-destructive/10 text-destructive",
-  canceled: "bg-destructive/10 text-destructive",
-};
-
-/** `other`: the bot on the far side, when it still exists; the card takes its color. */
-function HandoffCard({
-  item,
-  other,
-}: {
-  item: Extract<Item, { kind: "handoff" }>;
-  other: BotSummary | undefined;
-}) {
-  const received = item.direction === "received";
-  return (
-    <div
-      style={other && botTheme(other.avatar.color)}
-      className={cn(
-        "grid gap-2 rounded-xl border bg-card p-4 text-sm shadow-[0_0_24px_1px_rgb(0_0_0/0.06)] dark:shadow-[0_0_24px_1px_rgb(0_0_0/0.4)]",
-        other && "bot-theme",
-      )}
-    >
-      <div className="text-muted-foreground flex items-center gap-2 text-xs">
-        {received ? (
-          <ArrowDownLeftIcon className="size-3.5" />
-        ) : (
-          <ArrowUpRightIcon className="size-3.5" />
-        )}
-        <span className="flex items-center gap-1">
-          Handoff {received ? "from" : "to"}
-          {other ? (
-            <Link
-              to="/bots/$botId"
-              params={{ botId: other.id }}
-              className="text-primary hover:bg-primary/10 inline-flex items-center gap-1 rounded-full py-0.5 pr-2 pl-1 font-medium transition-colors"
-            >
-              <BotAvatar avatar={other.avatar} className="size-4" />
-              {item.bot}
-            </Link>
-          ) : (
-            <span className="text-foreground font-medium">{item.bot}</span>
-          )}
-        </span>
-        <Badge
-          variant="secondary"
-          className={cn("ml-auto capitalize", HANDOFF_STATUS[item.status])}
-        >
-          {item.status}
-        </Badge>
-      </div>
-      {item.title && <p className="font-medium">{item.title}</p>}
-      <div className="text-muted-foreground max-h-48 overflow-y-auto whitespace-pre-wrap">
-        {item.text}
-      </div>
-    </div>
   );
 }

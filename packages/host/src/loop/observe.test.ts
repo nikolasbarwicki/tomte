@@ -439,7 +439,7 @@ describe("a task's report", () => {
     await stopped("The answer.");
     ended("completed");
 
-    expect(reports()).toEqual([{ type: "report", taskId: "t1", text: "The answer." }]);
+    expect(reports()).toEqual([{ type: "report", taskId: "t1", text: "The answer.", at: clock }]);
     expect(log.events("report")).toHaveLength(1);
     expect(log.getTask("t1")?.status).toBe("done");
     expect(waits).toEqual([]);
@@ -452,7 +452,7 @@ describe("a task's report", () => {
     expect(waits).toMatchObject([{ ms: REPORT_WAIT_MS, cancelled: false }]);
 
     await stopped("The answer.");
-    expect(reports()).toEqual([{ type: "report", taskId: "t1", text: "The answer." }]);
+    expect(reports()).toEqual([{ type: "report", taskId: "t1", text: "The answer.", at: clock }]);
     expect(waits[0]?.cancelled).toBe(true);
     // The cancelled wait is gone: a later signal adds nothing.
     await stopped("The answer.");
@@ -476,7 +476,7 @@ describe("a task's report", () => {
     waits[0]?.fn();
 
     expect(reports()).toEqual([
-      { type: "report", taskId: "t1", text: "(The task finished without a report.)" },
+      { type: "report", taskId: "t1", text: "(The task finished without a report.)", at: clock },
     ]);
   });
 
@@ -501,7 +501,9 @@ describe("a task's report", () => {
 
       started();
       ended("completed", { output_file: file });
-      expect(reports()).toEqual([{ type: "report", taskId: "t1", text: "From the file." }]);
+      expect(reports()).toEqual([
+        { type: "report", taskId: "t1", text: "From the file.", at: clock },
+      ]);
       expect(waits).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -530,6 +532,7 @@ describe("a task's report", () => {
         type: "report",
         taskId: "t1",
         text: "This one failed (out of turns). Here is what it had before it broke:\n\nHalf an answer.",
+        at: clock,
       },
     ]);
   });

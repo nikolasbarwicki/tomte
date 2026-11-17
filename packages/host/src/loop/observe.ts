@@ -345,8 +345,9 @@ export class Observer {
   private report(taskId: string, text: string) {
     this.reported.add(taskId);
     if (this.d.log.events("report", taskId).at(-1)?.text === text) return;
-    this.d.log.append({ kind: "report", taskId, at: this.now(), text });
-    this.d.emit({ type: "report", taskId, text });
+    const at = this.now();
+    this.d.log.append({ kind: "report", taskId, at, text });
+    this.d.emit({ type: "report", taskId, text, at });
   }
 
   onMessage(m: SDKMessage): void {

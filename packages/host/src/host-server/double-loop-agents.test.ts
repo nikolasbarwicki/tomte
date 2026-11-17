@@ -243,8 +243,12 @@ describe("a double-loop bot's researcher", () => {
 
     // One report even though the hook and the notification each came twice.
     const events = watch.events();
-    expect(reportsIn(events)).toEqual([{ type: "report", taskId: "agent-1", text: REPORT }]);
-    expect(log.events("report")).toMatchObject([{ taskId: "agent-1", text: REPORT }]);
+    expect(reportsIn(events)).toEqual([
+      { type: "report", taskId: "agent-1", text: REPORT, at: expect.any(Number) },
+    ]);
+    expect(log.events("report")).toMatchObject([
+      { taskId: "agent-1", text: REPORT, at: expect.any(Number) },
+    ]);
     expect(taskStates(events).at(-1)).toBe("done");
     expect(events.filter((e) => e.type === "task_status").at(-1)).toMatchObject({
       taskId: "agent-1",
@@ -577,7 +581,7 @@ describe("a double-loop bot's parallel tasks", () => {
       `Start queued task ${queued.taskId} (agent: researcher): compare plans`,
     );
     expect(reportsIn(watch.events())).toEqual([
-      { type: "report", taskId: "agent-1", text: REPORT },
+      { type: "report", taskId: "agent-1", text: REPORT, at: expect.any(Number) },
     ]);
 
     // The front's Agent call names the queue id: the agent replaces the entry.

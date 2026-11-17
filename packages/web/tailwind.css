@@ -272,3 +272,99 @@ html.theme-switching *::before,
 html.theme-switching *::after {
   transition: none !important;
 }
+
+/*
+ * The reading role for a bot's reply. Geist at 15px with 1.45 leading on a 68ch measure, set close as a chat
+ * reply rather than an article; headings step by weight and a little size, with more space above than below; lists keep the body's
+ * rhythm; numbers in tables are tabular.
+ */
+.chat-prose {
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  text-wrap: pretty;
+  max-width: 68ch;
+}
+/* Streamdown's root spaces blocks by 1rem and pads list items; the reply's rhythm replaces both. */
+.chat-prose > div > * {
+  margin-block: 0;
+}
+.chat-prose > div > * + * {
+  margin-top: 0.6em;
+}
+.chat-prose
+  :is([data-streamdown="heading-1"], [data-streamdown="heading-2"], [data-streamdown="heading-3"]) {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  text-wrap: balance;
+  margin: 1.1em 0 0.3em;
+}
+.chat-prose
+  :is(
+    [data-streamdown="heading-1"],
+    [data-streamdown="heading-2"],
+    [data-streamdown="heading-3"]
+  ):first-child {
+  margin-top: 0;
+}
+.chat-prose
+  :is([data-streamdown="heading-1"], [data-streamdown="heading-2"], [data-streamdown="heading-3"])
+  + * {
+  margin-top: 0.3em;
+}
+.chat-prose [data-streamdown="heading-1"] {
+  font-size: 1.25rem;
+}
+.chat-prose [data-streamdown="heading-2"] {
+  font-size: 1.125rem;
+}
+.chat-prose [data-streamdown="heading-3"] {
+  font-size: 1rem;
+}
+.chat-prose :is([data-streamdown="ordered-list"], [data-streamdown="unordered-list"]) {
+  list-style-position: outside;
+  padding-left: 1.4em;
+}
+.chat-prose [data-streamdown="list-item"] {
+  padding: 0 0 0 0.2em;
+  margin: 0;
+}
+.chat-prose [data-streamdown="list-item"] > p {
+  margin: 0;
+}
+.chat-prose [data-streamdown="list-item"] + [data-streamdown="list-item"] {
+  margin-top: 0.2em;
+}
+.chat-prose [data-streamdown="list-item"]::marker {
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.chat-prose [data-streamdown="strong"] {
+  font-weight: 600;
+}
+.chat-prose [data-streamdown="inline-code"] {
+  font-size: 0.85em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.3rem;
+  background: color-mix(in oklch, var(--foreground) 7%, transparent);
+}
+.chat-prose [data-streamdown="table-wrapper"] {
+  margin-block: 0.75em;
+}
+.chat-prose [data-streamdown="table"] {
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.chat-prose [data-streamdown="table-header-cell"] {
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.chat-prose [data-streamdown="link"] {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  text-decoration-color: color-mix(in oklch, var(--link) 40%, transparent);
+}
+.chat-prose [data-streamdown="link"]:hover {
+  text-decoration-color: var(--link);
+}

@@ -253,12 +253,13 @@ export function createChats(deps: ChatsDeps): Chats {
 
   /** Shows a user message in the transcript and records it as the bot's latest; called when it reaches the bot. */
   function userSaid(chat: Chat, text: string, refs: MessageRefs) {
-    emit(chat, { type: "user", text, ...shownRefs(refs) });
+    const at = Date.now();
+    emit(chat, { type: "user", text, ...shownRefs(refs), at });
     const named = refs.attachments.map((a) => a.path.slice(a.path.lastIndexOf("/") + 1));
     recordMessage(db, chat.bot.id, {
       from: "user",
       text: text || named.join(", "),
-      at: Date.now(),
+      at,
     });
   }
 
@@ -448,7 +449,7 @@ export function createChats(deps: ChatsDeps): Chats {
     if (m.type !== "assistant") return;
     for (const blk of m.message.content)
       if (blk.type === "text" && blk.text.trim()) {
-        emit(chat, { type: "text_start" });
+        emit(chat, { type: "text_start", at: Date.now() });
         emit(chat, { type: "delta", text: blk.text });
       }
   }
@@ -463,7 +464,7 @@ export function createChats(deps: ChatsDeps): Chats {
     if (m.type !== "stream_event" || m.parent_tool_use_id) return;
     const ev = m.event;
     if (ev.type === "content_block_start" && ev.content_block.type === "text")
-      emit(chat, { type: "text_start" });
+      emit(chat, { type: "text_start", at: Date.now() });
     if (ev.type === "content_block_delta" && ev.delta.type === "text_delta")
       emit(chat, { type: "delta", text: ev.delta.text });
   }

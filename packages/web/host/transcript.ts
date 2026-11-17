@@ -16,6 +16,8 @@ export type Item =
       text: string;
       mentions?: { id: string; name: string }[] | undefined;
       attachments?: Attachment[] | undefined;
+      /** When it was sent, in epoch milliseconds. */
+      at?: number | undefined;
     }
   /** A message sent while the bot was busy; shown below the live thread until it runs or is cancelled. */
   | {
@@ -25,7 +27,9 @@ export type Item =
       mentions?: { id: string; name: string }[] | undefined;
       attachments?: Attachment[] | undefined;
     }
-  | { kind: "assistant" | "error" | "info"; text: string }
+  | { kind: "error" | "info"; text: string }
+  /** A reply of the bot; `at` is when it started, in epoch milliseconds. */
+  | { kind: "assistant"; text: string; at?: number | undefined }
   | { kind: "tool"; name: string; input: string }
   | {
       kind: "ask";
@@ -91,7 +95,13 @@ export type Item =
       status?: string | undefined;
     }
   /** A background task's result, shown as the bot's own message; `task` is the goal of the task that produced it, when known. */
-  | { kind: "report"; taskId: string; text: string; task?: string | undefined };
+  | {
+      kind: "report";
+      taskId: string;
+      text: string;
+      task?: string | undefined;
+      at?: number | undefined;
+    };
 
 export function reduce(items: Item[], e: ServerEvent): Item[] {
   if (e.type === "queued")
@@ -121,10 +131,10 @@ function reduceLive(
     case "user":
       return [
         ...items,
-        { kind: "user", text: e.text, mentions: e.mentions, attachments: e.attachments },
+        { kind: "user", text: e.text, mentions: e.mentions, attachments: e.attachments, at: e.at },
       ];
     case "text_start":
-      return [...items, { kind: "assistant", text: "" }];
+      return [...items, { kind: "assistant", text: "", at: e.at }];
     case "delta":
       return last?.kind === "assistant"
         ? [...items.slice(0, -1), { ...last, text: last.text + e.text }]
@@ -236,6 +246,7 @@ function reduceLive(
           taskId: e.taskId,
           text: e.text,
           task: taskRow(items, e.taskId)?.goal,
+          at: e.at,
         },
       ];
     case "done":

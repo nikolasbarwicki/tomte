@@ -65,7 +65,7 @@ function withLoopLog(events: ServerEvent[], stamps: number[], log: SessionLog): 
       .map((t) => ({ at: t.startedAt, event: taskEvent(t, findingsOf(log, t.taskId)) })),
     ...log.events("report").map((r) => ({
       at: r.at,
-      event: { type: "report" as const, taskId: r.taskId, text: r.text },
+      event: { type: "report" as const, taskId: r.taskId, text: r.text, at: r.at },
     })),
   ].sort((a, b) => a.at - b.at);
   const merged: ServerEvent[] = [];
@@ -110,7 +110,9 @@ export function createTranscripts({
     let front = false;
     for (const m of await getSessionMessages(sessionId, { dir: cwd })) {
       stamp();
-      at = writtenAt(m) ?? at;
+      const written = writtenAt(m);
+      at = written ?? at;
+      const sent = written === undefined ? {} : { at: written };
       const msg = m.message;
       const content = msg && typeof msg === "object" && "content" in msg ? msg.content : undefined;
       if (m.parent_tool_use_id) continue;
@@ -149,15 +151,17 @@ export function createTranscripts({
                       text: typed,
                       ...(mentions.length > 0 && { mentions }),
                       ...(files.attachments.length > 0 && { attachments: files.attachments }),
+                      ...sent,
                     }
-                  : { type: "user", text: piece },
+                  : { type: "user", text: piece, ...sent },
               );
             }
           }
         }
       } else if (m.type === "assistant" && Array.isArray(content)) {
         for (const b of content) {
-          if (b.type === "text") out.push({ type: "text_start" }, { type: "delta", text: b.text });
+          if (b.type === "text")
+            out.push({ type: "text_start", ...sent }, { type: "delta", text: b.text });
           if (b.type === "tool_use")
             out.push(
               ...(front

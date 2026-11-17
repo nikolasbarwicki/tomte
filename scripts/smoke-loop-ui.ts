@@ -487,9 +487,6 @@ try {
   await said(ZEBRA_REPORT).waitFor();
   await said("That's the zebra research done.").waitFor();
   check((await shown(ZEBRA_REPORT)) === 1, "the report is posted once");
-  await said(ZEBRA_REPORT).hover();
-  await page.getByText("Result of the task: research Zebra").waitFor();
-  check(true, "the report's tooltip names its task");
   await page.mouse.move(700, 450);
   await task("agent-1").and(page.locator('[data-state="done"]')).waitFor();
   const dispatches = () =>

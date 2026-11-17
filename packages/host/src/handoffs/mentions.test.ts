@@ -62,6 +62,7 @@ describe("mentions", () => {
           { id: w, name: "Writer" },
           { id: e, name: "Editor" },
         ],
+        at: expect.any(Number),
       },
     ]);
   });
@@ -83,11 +84,12 @@ describe("mentions", () => {
     const dir = join(claudeConfig, "projects", host.cwd.replace(/[^a-zA-Z0-9]/g, "-"));
     mkdirSync(dir, { recursive: true });
     const msgs = [`draft this\n<mention name="Writer" id="${w}"/>`, "ping @Writer"];
+    const sent = Date.UTC(2026, 10, 17, 9, 30);
     const lines = msgs.map((t, i) => ({
       uuid: `m${i}`,
       parentUuid: i ? `m${i - 1}` : null,
       sessionId: a,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(sent).toISOString(),
       cwd: host.cwd,
       isSidechain: false,
       type: "user",
@@ -96,8 +98,8 @@ describe("mentions", () => {
     writeFileSync(join(dir, `${a}.jsonl`), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
     await open(a);
     expect((await pageEvents()).filter((x) => x.type === "user")).toEqual([
-      { type: "user", text: "draft this", mentions: [{ id: w, name: "Writer" }] },
-      { type: "user", text: "ping @Writer" },
+      { type: "user", text: "draft this", mentions: [{ id: w, name: "Writer" }], at: sent },
+      { type: "user", text: "ping @Writer", at: sent },
     ]);
   });
 
