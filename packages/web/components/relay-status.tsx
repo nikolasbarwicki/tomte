@@ -1,4 +1,4 @@
-import type { Relay } from "@claudebot/contract/events";
+import type { Relay } from "@tomte/contract/events";
 
 import { Button } from "@/components/ui/button";
 import { act } from "@/host/api.ts";

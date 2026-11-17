@@ -1,5 +1,5 @@
 {
-  "name": "claudebot",
+  "name": "tomte",
   "private": true,
   "workspaces": [
     "packages/*"
@@ -9,7 +9,7 @@
     "host": "bun packages/host/src/host.ts",
     "ui": "bun packages/host/src/server.ts",
     "dev": "bun --watch packages/host/src/server.ts --port 5173 --vite",
-    "build:web": "bun --filter @claudebot/web build",
+    "build:web": "bun --filter @tomte/web build",
     "build:host": "bun scripts/build-host.ts",
     "smoke:host": "bun scripts/smoke-host.ts",
     "smoke:answer-ui": "bun scripts/smoke-answer-ui.ts",
@@ -40,10 +40,10 @@
     "smoke:desktop:update": "bun scripts/smoke-desktop-update.ts"
   },
   "devDependencies": {
-    "@claudebot/contract": "workspace:*",
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
     "@swc/core": "^1.16.22",
+    "@tomte/contract": "workspace:*",
     "@types/bun": "^1.4.4",
     "@types/node": "^26.6.6",
     "dependency-cruiser": "^18.7.2",

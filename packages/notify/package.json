@@ -1,15 +1,15 @@
 {
-  "name": "@claudebot/notify",
+  "name": "@tomte/notify",
   "private": true,
   "bin": {
-    "claudebot-notify": "src/main.ts"
+    "tomte-notify": "src/main.ts"
   },
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@claudebot/contract": "workspace:*",
+    "@tomte/contract": "workspace:*",
     "zod": "^4.6.7"
   },
   "devDependencies": {

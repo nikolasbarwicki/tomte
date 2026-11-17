@@ -62,8 +62,8 @@ const PASSTHROUGH_ENV = [
   "LOCALAPPDATA",
 ];
 
-/** Marks engine sessions that belong to claudebot. */
-export const SESSION_PREFIX = "claudebot-";
+/** Marks engine sessions that belong to tomte. */
+export const SESSION_PREFIX = "tomte-";
 
 /** Chrome bypasses any proxy for loopback by default; this makes loopback go through the egress proxy, which refuses it. */
 const PROXY_NO_BYPASS = "--proxy-bypass-list=<-loopback>";

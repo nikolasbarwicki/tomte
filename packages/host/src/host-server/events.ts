@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type { HostEvent } from "@claudebot/contract/events";
+import type { HostEvent } from "@tomte/contract/events";
 
 /** The page's server-sent event stream: every connected page gets every event. */
 export interface EventStream {

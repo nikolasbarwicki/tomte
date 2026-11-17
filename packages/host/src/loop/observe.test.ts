@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { HookCallback, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { ServerEvent } from "@claudebot/contract/events";
+import type { ServerEvent } from "@tomte/contract/events";
 
 import { migrate } from "../platform/db.ts";
 import { ProgressAttribution } from "./agents.ts";

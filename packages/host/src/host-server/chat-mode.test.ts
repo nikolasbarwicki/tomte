@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 
-import { BotsEvent } from "@claudebot/contract/events";
+import { BotsEvent } from "@tomte/contract/events";
 
 import { getBot } from "../bots/index.ts";
 import { createLoopStore } from "../loop/index.ts";

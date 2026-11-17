@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 
-import type { ExternalEventPosted, ExternalEventInput, ReplyTarget } from "@claudebot/contract/api";
+import type { ExternalEventPosted, ExternalEventInput, ReplyTarget } from "@tomte/contract/api";
 import {
   WorkSnapshot,
   type Relay,
@@ -11,7 +11,7 @@ import {
   type ServerEvent,
   type SourceEvent,
   type WorkSource,
-} from "@claudebot/contract/events";
+} from "@tomte/contract/events";
 
 /** A delivered external event as the transcript shows it. */
 export type ExternalRow = Extract<ServerEvent, { type: "external" }>;
@@ -311,7 +311,7 @@ export function createEventStore(db: Database) {
   );
 
   /** The one source the host's own notices come from. */
-  const NOTICE_SOURCE = { id: "claudebot", label: "Claudebot" };
+  const NOTICE_SOURCE = { id: "tomte", label: "Tomte" };
   /** Stores a notice unless its key was seen: a repeated key makes one item. All or nothing. */
   const recordNotice = db.transaction(
     (

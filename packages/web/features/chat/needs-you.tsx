@@ -1,6 +1,6 @@
-import type { BotSummary } from "@claudebot/contract/events";
-import { itemActions, type ItemAction } from "@claudebot/contract/item-actions";
 import { getRouteApi } from "@tanstack/react-router";
+import type { BotSummary } from "@tomte/contract/events";
+import { itemActions, type ItemAction } from "@tomte/contract/item-actions";
 import {
   BellRingIcon,
   ChevronDownIcon,

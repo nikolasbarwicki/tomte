@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 
-import { LAUNCH_DEVICE_NAME, LaunchToken } from "@claudebot/contract/sidecar";
+import { LAUNCH_DEVICE_NAME, LaunchToken } from "@tomte/contract/sidecar";
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const CODE_LENGTH = 12;

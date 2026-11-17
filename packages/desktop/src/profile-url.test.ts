@@ -5,9 +5,7 @@ import { parseProfileUrl } from "./profile-url.ts";
 
 describe("parseProfileUrl", () => {
   test("reduces an https URL to its origin", () => {
-    expect(parseProfileUrl("  https://Claudebot.Example.com/  ")).toBe(
-      "https://claudebot.example.com",
-    );
+    expect(parseProfileUrl("  https://Tomte.Example.com/  ")).toBe("https://tomte.example.com");
     expect(parseProfileUrl("https://host.example.com:8443")).toBe("https://host.example.com:8443");
   });
 

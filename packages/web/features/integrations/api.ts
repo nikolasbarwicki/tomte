@@ -1,4 +1,4 @@
-import type { IntegrationTransport, ToolPolicy } from "@claudebot/contract/events";
+import type { IntegrationTransport, ToolPolicy } from "@tomte/contract/events";
 
 import { act, post } from "@/host/api.ts";
 

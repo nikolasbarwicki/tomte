@@ -1,4 +1,4 @@
-import type { FeatureStatus, SourceEvent, WorkItem, WorkSource } from "@claudebot/contract/events";
+import type { FeatureStatus, SourceEvent, WorkItem, WorkSource } from "@tomte/contract/events";
 
 const URGENCY: Record<FeatureStatus, number> = {
   needs_you: 0,

@@ -189,7 +189,7 @@ export async function startHandoffHost(
     HostServerOptions,
     "frontIdleMs" | "channelAdapters" | "telegram" | "cards" | "notices" | "absenceCheckMs"
   >,
-  /** The environment the host's configuration is read from, such as `CLAUDEBOT_ASK_APPROVAL`. */
+  /** The environment the host's configuration is read from, such as `TOMTE_ASK_APPROVAL`. */
   env: Record<string, string> = {},
 ): Promise<HandoffHost> {
   const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));

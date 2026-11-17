@@ -3,9 +3,9 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "claudebot",
+      "name": "tomte",
       "devDependencies": {
-        "@claudebot/contract": "workspace:*",
+        "@tomte/contract": "workspace:*",
         "@commitlint/cli": "^21.2.4",
         "@commitlint/config-conventional": "^21.2.4",
         "@swc/core": "^1.16.22",
@@ -23,7 +23,7 @@
       },
     },
     "packages/contract": {
-      "name": "@claudebot/contract",
+      "name": "@tomte/contract",
       "dependencies": {
         "zod": "^4.6.7",
       },
@@ -32,9 +32,9 @@
       },
     },
     "packages/desktop": {
-      "name": "@claudebot/desktop",
+      "name": "@tomte/desktop",
       "dependencies": {
-        "@claudebot/contract": "workspace:*",
+        "@tomte/contract": "workspace:*",
         "electron-updater": "^6.8.11",
         "zod": "^4.6.7",
       },
@@ -45,10 +45,10 @@
       },
     },
     "packages/host": {
-      "name": "@claudebot/host",
+      "name": "@tomte/host",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.318",
-        "@claudebot/contract": "workspace:*",
+        "@tomte/contract": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.32.2",
         "vite": "^8.3.5",
         "zod": "^4.6.7",
@@ -59,12 +59,12 @@
       },
     },
     "packages/notify": {
-      "name": "@claudebot/notify",
+      "name": "@tomte/notify",
       "bin": {
-        "claudebot-notify": "src/main.ts",
+        "tomte-notify": "src/main.ts",
       },
       "dependencies": {
-        "@claudebot/contract": "workspace:*",
+        "@tomte/contract": "workspace:*",
         "zod": "^4.6.7",
       },
       "devDependencies": {
@@ -73,10 +73,10 @@
       },
     },
     "packages/web": {
-      "name": "@claudebot/web",
+      "name": "@tomte/web",
       "dependencies": {
         "@base-ui/react": "^1.9.0",
-        "@claudebot/contract": "workspace:*",
+        "@tomte/contract": "workspace:*",
         "@fontsource-variable/geist": "^5.3.0",
         "@tanstack/react-router": "^1.170.46",
         "class-variance-authority": "^0.7.1",
@@ -187,15 +187,15 @@
 
     "@base-ui/utils": ["@base-ui/utils@0.5.0", "", { "dependencies": { "@babel/runtime": "^7.29.7 || ^8.0.0", "@floating-ui/utils": "^0.2.12", "reselect": "^5.3.0", "use-sync-external-store": "^1.7.0" }, "peerDependencies": { "@types/react": "^17 || ^18 || ^19", "react": "^17 || ^18 || ^19", "react-dom": "^17 || ^18 || ^19" }, "optionalPeers": ["@types/react"] }, "sha512-dYGGcEttjkYiMoa5nHm8vLaJ2UcuTWxo3BFAwOYXeRg/q7UVVvA6cacEIXEs3FgBfK1CGtW1ptElqs7wsx+t9A=="],
 
-    "@claudebot/contract": ["@claudebot/contract@workspace:packages/contract"],
+    "@tomte/contract": ["@tomte/contract@workspace:packages/contract"],
 
-    "@claudebot/desktop": ["@claudebot/desktop@workspace:packages/desktop"],
+    "@tomte/desktop": ["@tomte/desktop@workspace:packages/desktop"],
 
-    "@claudebot/host": ["@claudebot/host@workspace:packages/host"],
+    "@tomte/host": ["@tomte/host@workspace:packages/host"],
 
-    "@claudebot/notify": ["@claudebot/notify@workspace:packages/notify"],
+    "@tomte/notify": ["@tomte/notify@workspace:packages/notify"],
 
-    "@claudebot/web": ["@claudebot/web@workspace:packages/web"],
+    "@tomte/web": ["@tomte/web@workspace:packages/web"],
 
     "@commitlint/cli": ["@commitlint/cli@21.2.4", "", { "dependencies": { "@commitlint/config-conventional": "^21.2.4", "@commitlint/format": "^21.2.3", "@commitlint/lint": "^21.2.4", "@commitlint/load": "^21.2.4", "@commitlint/read": "^21.2.3", "@commitlint/types": "^21.2.3", "tinyexec": "^1.0.0", "yargs": "^18.0.0" }, "bin": { "commitlint": "cli.js" } }, "sha512-g3M/wrQdElqGH5vROIeL2QiYIxrzqUkhCgsDyDlWfKEyQdCt10OyMB28W2cJtpZ+VNGMvmaN923infr1hOfyrg=="],
 

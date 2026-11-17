@@ -3,8 +3,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { oauthFixture } from "../testing/fake-oauth-server.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
-const PUBLIC = "https://claudebot.example.com";
-const MOVED = "https://claudebot.example.net";
+const PUBLIC = "https://tomte.example.com";
+const MOVED = "https://tomte.example.net";
 
 let host: HandoffHost;
 let provider: ReturnType<typeof oauthFixture>;

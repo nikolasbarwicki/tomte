@@ -5,7 +5,7 @@ export interface SecretStore {
   delete(name: string): Promise<void>;
 }
 
-const SERVICE = "claudebot";
+const SERVICE = "tomte";
 
 /** On Windows a roaming profile would copy the default entry to other computers; `local` keeps it on this one. */
 const PERSIST = process.platform === "win32" ? ({ persist: "local" } as const) : {};

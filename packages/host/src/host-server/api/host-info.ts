@@ -1,4 +1,4 @@
-import { API_VERSION, type PublicHostInfo } from "@claudebot/contract/api";
+import { API_VERSION, type PublicHostInfo } from "@tomte/contract/api";
 
 import type { SandboxStatus } from "../../browser/index.ts";
 import { VERSION, type SignInState } from "../../harness/index.ts";

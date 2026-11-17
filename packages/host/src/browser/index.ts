@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type { Bot } from "@claudebot/contract/events";
+import type { Bot } from "@tomte/contract/events";
 
 import type { Credentials } from "../credentials/index.ts";
 import type { HostOrigin } from "../platform/config.ts";

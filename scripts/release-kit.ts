@@ -10,11 +10,11 @@ export const CHECKSUM_FILE = "SHA256SUMS";
 
 /** The host binaries a release must ship, named as `scripts/build-host.ts` writes them. */
 export const HOST_BINARIES = [
-  "claudebot-host-darwin-arm64",
-  "claudebot-host-darwin-x64",
-  "claudebot-host-linux-arm64",
-  "claudebot-host-linux-x64",
-  "claudebot-host-windows-x64.exe",
+  "tomte-host-darwin-arm64",
+  "tomte-host-darwin-x64",
+  "tomte-host-linux-arm64",
+  "tomte-host-linux-x64",
+  "tomte-host-windows-x64.exe",
 ] as const;
 
 // Semantic Versioning 2.0.0 without build metadata ("+" is not allowed in a release tag): vMAJOR.MINOR.PATCH[-pre.release].

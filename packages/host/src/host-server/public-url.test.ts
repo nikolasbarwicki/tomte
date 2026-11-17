@@ -30,9 +30,9 @@ async function redirectUrls(headers: Record<string, string> = {}): Promise<strin
 
 describe("the OAuth redirect URL", () => {
   test("is built from the configured public URL, not from forwarded headers", async () => {
-    host = await startHandoffHost(["--public-url", "https://claudebot.example.com"]);
+    host = await startHandoffHost(["--public-url", "https://tomte.example.com"]);
     const urls = await redirectUrls(FORWARDED);
-    expect(new Set(urls)).toEqual(new Set(["https://claudebot.example.com/oauth/callback"]));
+    expect(new Set(urls)).toEqual(new Set(["https://tomte.example.com/oauth/callback"]));
     expect(await redirectUrls()).toEqual(urls);
   });
 
@@ -44,7 +44,7 @@ describe("the OAuth redirect URL", () => {
   });
 
   test("bots still reach the host on its loopback address when a public URL is set", async () => {
-    host = await startHandoffHost(["--public-url", "https://claudebot.example.com"]);
+    host = await startHandoffHost(["--public-url", "https://tomte.example.com"]);
     const bot = host.createBot("alice");
     const act = await host.actAs(bot);
     expect(act.url).toBe(`${host.agentUrl}/mcp/bots`);

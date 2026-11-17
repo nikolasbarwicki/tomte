@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { request } from "node:http";
 
-import { PublicHostInfo } from "@claudebot/contract/api";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { PublicHostInfo } from "@tomte/contract/api";
 
 import { getBot, setBrowserEnabled, setBrowserHeaded } from "../bots/index.ts";
 import { defined } from "../testing/defined.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
-const REMOTE = ["--mode", "remote", "--secrets-key-file", "/etc/claudebot-test/secrets.key"];
+const REMOTE = ["--mode", "remote", "--secrets-key-file", "/etc/tomte-test/secrets.key"];
 
 let host: HandoffHost | undefined;
 let client: Client | undefined;

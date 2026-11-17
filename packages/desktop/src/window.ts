@@ -1,11 +1,11 @@
-import { SESSION_COOKIE } from "@claudebot/contract/sidecar";
+import { SESSION_COOKIE } from "@tomte/contract/sidecar";
 import { BrowserWindow } from "electron";
 
 import { windowChrome } from "./window-chrome.ts";
 
 function messagePage(html: string): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(
-    `<!doctype html><meta charset="utf-8"><title>Claudebot</title>
+    `<!doctype html><meta charset="utf-8"><title>Tomte</title>
 <style>html{height:100%;background:#111;color:#aaa;font:15px system-ui,sans-serif}body{height:100%;margin:0;display:grid;place-items:center}pre{max-width:80ch;white-space:pre-wrap;font:12px ui-monospace,monospace}body::before{content:"";position:fixed;inset:0 0 auto;height:env(titlebar-area-height,0px);-webkit-app-region:drag}</style>
 <body><div>${html}</div></body>`,
   )}`;
@@ -21,7 +21,7 @@ export function createWindow(show = true): BrowserWindow {
     show,
     width: 1280,
     height: 860,
-    title: "Claudebot",
+    title: "Tomte",
     ...windowChrome(process.platform),
     webPreferences: {
       contextIsolation: true,
@@ -59,7 +59,7 @@ export async function signIn(
 export async function showHostStopped(window: BrowserWindow, reason: string): Promise<void> {
   await window.loadURL(
     messagePage(
-      `The Claudebot host is not running.<br>Choose Restart host in the menu bar icon's menu.<pre>${escapeHtml(reason)}</pre>`,
+      `The Tomte host is not running.<br>Choose Restart host in the menu bar icon's menu.<pre>${escapeHtml(reason)}</pre>`,
     ),
   );
 }

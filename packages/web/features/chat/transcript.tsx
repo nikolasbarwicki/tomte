@@ -1,5 +1,5 @@
-import type { BotSummary, HandoffStatus, Presence } from "@claudebot/contract/events";
 import { Link } from "@tanstack/react-router";
+import type { BotSummary, HandoffStatus, Presence } from "@tomte/contract/events";
 import {
   AlarmClockIcon,
   ArrowDownLeftIcon,

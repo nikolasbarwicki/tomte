@@ -1,4 +1,4 @@
-import { HandoffStatus } from "@claudebot/contract/events";
+import { HandoffStatus } from "@tomte/contract/events";
 
 /** The fixed line after a brief: the tools that continue or finish the handoff. */
 const HANDOFF_TOOLS_LINE =

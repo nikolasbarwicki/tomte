@@ -1,6 +1,6 @@
 # Custom integrations for services outside the catalog
 
-Figma, Trello, Obsidian and Paper have no remote MCP server that claudebot can sign in to, so they are not catalog entries. Add each one with **Add custom** on the Integrations screen. Policy works as for any integration: tools the server marks read-only start on Auto, every other tool starts on Ask.
+Figma, Trello, Obsidian and Paper have no remote MCP server that tomte can sign in to, so they are not catalog entries. Add each one with **Add custom** on the Integrations screen. Policy works as for any integration: tools the server marks read-only start on Auto, every other tool starts on Ask.
 
 In the form, Arguments are separated by spaces and Environment takes one `KEY=value` per line.
 
@@ -26,7 +26,7 @@ Prerequisites:
 
 ## Figma
 
-Figma's remote server (`mcp.figma.com`) accepts only clients on Figma's own allowlist, and refused claudebot's registration with 403. Use the server built into the Figma desktop app instead.
+Figma's remote server (`mcp.figma.com`) accepts only clients on Figma's own allowlist, and refused tomte's registration with 403. Use the server built into the Figma desktop app instead.
 
 Prerequisites:
 

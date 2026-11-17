@@ -1,4 +1,4 @@
-import { Integration, type IntegrationTransport } from "@claudebot/contract/events";
+import { Integration, type IntegrationTransport } from "@tomte/contract/events";
 import { useActionState, useState } from "react";
 import { toast } from "sonner";
 

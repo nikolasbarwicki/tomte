@@ -1,5 +1,5 @@
-import type { BotSummary } from "@claudebot/contract/events";
 import { getRouteApi } from "@tanstack/react-router";
+import type { BotSummary } from "@tomte/contract/events";
 import { MessageSquarePlusIcon, PanelRightIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useState, useTransition, type ReactNode } from "react";
 
@@ -22,7 +22,7 @@ import { NeedsYou } from "./needs-you.tsx";
 import { RateLimitMeter } from "./rate-limit-meter.tsx";
 import { Transcript } from "./transcript.tsx";
 
-const PANEL_KEY = "claudebot:panel";
+const PANEL_KEY = "tomte:panel";
 const botRoute = getRouteApi("/bots/$botId");
 
 /** One bot: its conversation, and beside it the panel with what the bot knows, made and runs. */

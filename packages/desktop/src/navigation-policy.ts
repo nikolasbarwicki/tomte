@@ -38,7 +38,7 @@ export function permissionAllowed(permission: string): boolean {
   return permission === "clipboard-sanitized-write";
 }
 
-/** A window pinned to one app-served page (the Connections window): `scheme//host` of `pinned`, such as `claudebot-desktop://connections`, is allowed and everything else is denied, with no hand-off to the system browser. Compared as protocol and host because Node gives a custom scheme an opaque origin. */
+/** A window pinned to one app-served page (the Connections window): `scheme//host` of `pinned`, such as `tomte-desktop://connections`, is allowed and everything else is denied, with no hand-off to the system browser. Compared as protocol and host because Node gives a custom scheme an opaque origin. */
 export function decidePinnedNavigation(url: string, pinned: string): NavigationDecision {
   try {
     const parsed = new URL(url);

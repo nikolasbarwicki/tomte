@@ -2,7 +2,7 @@
 
 Status: draft
 
-Claudebot is a side project and a portfolio piece. It grows in three stages, and each stage is useful on its own:
+Tomte is a side project and a portfolio piece. It grows in three stages, and each stage is useful on its own:
 
 1. **My Grok Bot replacement.** Every Grok Bot feature my routines use works for me, including routines that run while my laptop is off. It runs on the VPS I already rent, so it costs nothing on top of the Claude plan I already pay for.
 2. **Published.** Anyone can self-host it with one command. The repository, the docs and a demo show the work to employers and future partners.
@@ -26,7 +26,7 @@ Two competitors come close. Turnstone keeps a shared "Brain" of plain files, but
 
 "Stage" says when the gap closes. "Not planned" marks features that matter only to teams.
 
-| Grok Bot feature                                                           | Claudebot today                                                                 | Gap                                                              | Stage                     |
+| Grok Bot feature                                                           | Tomte today                                                                     | Gap                                                              | Stage                     |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------- |
 | Bots with a name, a job, memory and a picture                              | Bots, bot memory, user memory and avatars                                       | None                                                             | Done                      |
 | A primary bot that coordinates the others                                  | Handoffs between bots (ADR 0002)                                                | No primary bot. The Chief of Staff template is roadmap item 3    | 1, after the gate         |
@@ -93,7 +93,7 @@ Voice notes wait until a routine needs them.
 1. **License** ([Decision 8](#8-license)).
 2. **One-command self-hosting.** `deploy/install.sh` for any Linux server, proven on my VPS in Stage 1, plus Caddy and a domain for public HTTPS.
 3. **Signed macOS desktop app.** `AGENTS.md` already lists the signing and notarization steps.
-4. **Templates and a Grok Bot importer.** A shared Grok Bot template link exposes the bot's identity, description, skills and routines. The importer maps those to a Claudebot bot, its skills and its routines.
+4. **Templates and a Grok Bot importer.** A shared Grok Bot template link exposes the bot's identity, description, skills and routines. The importer maps those to a Tomte bot, its skills and its routines.
 5. **Teach by demonstration.** Record a takeover and draft a skill from it.
 6. **Showcase.** The README with a demo video, `docs/provider-terms.md` and an architecture page that links the ADRs.
 

@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 
-import type { CredentialEntry } from "@claudebot/contract/events";
+import type { CredentialEntry } from "@tomte/contract/events";
 import { z } from "zod";
 
 import { InvalidInput, NotFound } from "../platform/errors.ts";

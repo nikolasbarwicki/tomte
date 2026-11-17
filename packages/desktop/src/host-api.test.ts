@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { API_VERSION } from "@claudebot/contract/api";
+import { API_VERSION } from "@tomte/contract/api";
 
 import { ConnectionError } from "./connection-error.ts";
 import { createHostClient, type HostFetch } from "./host-api.ts";
@@ -61,14 +61,14 @@ describe("checkHost", () => {
     );
   });
 
-  test("rejects a server that is not a Claudebot host", async () => {
+  test("rejects a server that is not a Tomte host", async () => {
     for (const answer of [
       json({ hello: 1 }),
       new Response("<html>", { status: 200 }),
       json({}, 404),
     ]) {
       const { client } = clientAnswering(answer);
-      expect(await refusal(client.checkHost(ORIGIN))).toContain("is not a Claudebot host");
+      expect(await refusal(client.checkHost(ORIGIN))).toContain("is not a Tomte host");
     }
   });
 

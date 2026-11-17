@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import type { FeatureStatus, WorkSource } from "@claudebot/contract/events";
+import type { FeatureStatus, WorkSource } from "@tomte/contract/events";
 
 import { sortSources } from "./model.ts";
 

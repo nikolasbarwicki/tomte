@@ -20,13 +20,13 @@ export interface HostConfig {
   publicUrl: string | undefined;
   /** Serve the web UI through Vite (the dev script sets it). */
   vite: boolean;
-  /** Ask the user before a bot runs a tool instead of approving everything; `CLAUDEBOT_ASK_APPROVAL`. */
+  /** Ask the user before a bot runs a tool instead of approving everything; `TOMTE_ASK_APPROVAL`. */
   askApproval: boolean;
-  /** Allow a non-loopback bind while the public URL is not HTTPS, for private networks such as Tailscale; `--allow-plain-http`, `CLAUDEBOT_ALLOW_PLAIN_HTTP`. */
+  /** Allow a non-loopback bind while the public URL is not HTTPS, for private networks such as Tailscale; `--allow-plain-http`, `TOMTE_ALLOW_PLAIN_HTTP`. */
   allowPlainHttp: boolean;
-  /** The secrets backend: keychain in local mode, file in remote mode; `--secrets`, `--secrets-key-file`, `CLAUDEBOT_SECRETS`, `CLAUDEBOT_SECRETS_KEY_FILE`. */
+  /** The secrets backend: keychain in local mode, file in remote mode; `--secrets`, `--secrets-key-file`, `TOMTE_SECRETS`, `TOMTE_SECRETS_KEY_FILE`. */
   secrets: SecretsConfig;
-  /** The operator's relay configuration file (ADR-0008): absolute; `relay.json` in the data root unless `--relay-config` or `CLAUDEBOT_RELAY_CONFIG` names another. The file need not exist: without it no answer is relayed. */
+  /** The operator's relay configuration file (ADR-0008): absolute; `relay.json` in the data root unless `--relay-config` or `TOMTE_RELAY_CONFIG` names another. The file need not exist: without it no answer is relayed. */
   relayConfig: string;
   /** Whether a bot may run headed Chrome; local mode only. */
   headedBrowser: boolean;
@@ -36,7 +36,7 @@ export interface HostConfig {
   isolateAllBots: boolean;
   /** Run as the desktop app's sidecar: read the launch token from stdin, print one JSON ready line to stdout, and shut down when stdin ends; local mode only; `--sidecar`. */
   sidecar: boolean;
-  /** Days without any action of the owner (a request from a paired device except the event stream, or a linked channel action) after which every active routine is paused; 0 is off. `--pause-after-absence-days`, `CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS`. */
+  /** Days without any action of the owner (a request from a paired device except the event stream, or a linked channel action) after which every active routine is paused; 0 is off. `--pause-after-absence-days`, `TOMTE_PAUSE_AFTER_ABSENCE_DAYS`. */
   pauseAfterAbsenceDays: number;
 }
 
@@ -84,7 +84,7 @@ function parseSecrets(
   }
   if (rawKeyFile === undefined)
     throw new InvalidConfig(
-      `the file secrets backend needs a key file of 32 raw bytes: pass --secrets-key-file <absolute path> (CLAUDEBOT_SECRETS_KEY_FILE), or use --secrets keychain`,
+      `the file secrets backend needs a key file of 32 raw bytes: pass --secrets-key-file <absolute path> (TOMTE_SECRETS_KEY_FILE), or use --secrets keychain`,
     );
   if (!isAbsolute(rawKeyFile))
     throw new InvalidConfig(`invalid secrets key file "${rawKeyFile}": expected an absolute path`);
@@ -100,16 +100,15 @@ export interface HostSystem {
   home: string;
 }
 
-/** The OS application-data directory for claudebot: `~/Library/Application Support`, `%APPDATA%`, or `$XDG_DATA_HOME` (`~/.local/share`). */
+/** The OS application-data directory for tomte: `~/Library/Application Support`, `%APPDATA%`, or `$XDG_DATA_HOME` (`~/.local/share`). */
 function defaultDataRoot(
   env: Record<string, string | undefined>,
   { platform, home }: HostSystem,
 ): string {
-  if (platform === "darwin") return join(home, "Library", "Application Support", "claudebot");
-  if (platform === "win32")
-    return join(env.APPDATA || join(home, "AppData", "Roaming"), "claudebot");
+  if (platform === "darwin") return join(home, "Library", "Application Support", "tomte");
+  if (platform === "win32") return join(env.APPDATA || join(home, "AppData", "Roaming"), "tomte");
   const xdg = env.XDG_DATA_HOME;
-  return join(xdg && isAbsolute(xdg) ? xdg : join(home, ".local", "share"), "claudebot");
+  return join(xdg && isAbsolute(xdg) ? xdg : join(home, ".local", "share"), "tomte");
 }
 
 function parseDataRoot(raw: string): string {
@@ -140,7 +139,7 @@ function parsePublicUrl(raw: string): string {
     u = new URL(raw);
   } catch {
     throw new InvalidConfig(
-      `invalid public URL "${shown}": expected an origin such as https://claudebot.example.com`,
+      `invalid public URL "${shown}": expected an origin such as https://tomte.example.com`,
     );
   }
   if (u.username || u.password)
@@ -192,7 +191,7 @@ function parseFlags(argv: readonly string[]) {
 /**
  * Reads the host's configuration from command-line flags (`--mode`, `--data-root`, `--host`, `--port`, `--public-url`, `--allow-plain-http`,
  * `--secrets`, `--secrets-key-file`, `--relay-config`, `--pause-after-absence-days`, `--vite`, `--sidecar`) and
- * `CLAUDEBOT_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|ALLOW_PLAIN_HTTP|SECRETS|SECRETS_KEY_FILE|RELAY_CONFIG|PAUSE_AFTER_ABSENCE_DAYS|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
+ * `TOMTE_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|ALLOW_PLAIN_HTTP|SECRETS|SECRETS_KEY_FILE|RELAY_CONFIG|PAUSE_AFTER_ABSENCE_DAYS|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
  * Without a data root the OS application-data directory is used. Remote mode parses on Linux only (ADR-0006).
  */
 export function parseHostConfig(
@@ -203,7 +202,7 @@ export function parseHostConfig(
   const { values, positionals } = parseFlags(argv);
   const get = (key: string) => (env[key] === "" ? undefined : env[key]);
 
-  const mode = values.mode ?? get("CLAUDEBOT_MODE") ?? "local";
+  const mode = values.mode ?? get("TOMTE_MODE") ?? "local";
   if (!MODES.includes(mode))
     throw new InvalidConfig(`invalid mode "${mode}": expected local or remote`);
   if (mode === "remote" && system.platform !== "linux")
@@ -212,27 +211,27 @@ export function parseHostConfig(
     throw new InvalidConfig(
       "--sidecar is for the desktop app's local host and cannot run in remote mode; drop --sidecar or use --mode local",
     );
-  const rawDataRoot = values["data-root"] ?? get("CLAUDEBOT_DATA_ROOT");
-  const address = values.host ?? get("CLAUDEBOT_HOST") ?? DEFAULT_BIND.address;
-  const rawPublicUrl = values["public-url"] ?? get("CLAUDEBOT_PUBLIC_URL");
+  const rawDataRoot = values["data-root"] ?? get("TOMTE_DATA_ROOT");
+  const address = values.host ?? get("TOMTE_HOST") ?? DEFAULT_BIND.address;
+  const rawPublicUrl = values["public-url"] ?? get("TOMTE_PUBLIC_URL");
   const publicUrl = rawPublicUrl === undefined ? undefined : parsePublicUrl(rawPublicUrl);
-  const rawAllowPlainHttp = get("CLAUDEBOT_ALLOW_PLAIN_HTTP");
+  const rawAllowPlainHttp = get("TOMTE_ALLOW_PLAIN_HTTP");
   const allowPlainHttp =
     values["allow-plain-http"] ??
     (rawAllowPlainHttp === undefined
       ? false
-      : parseBool("CLAUDEBOT_ALLOW_PLAIN_HTTP", rawAllowPlainHttp));
+      : parseBool("TOMTE_ALLOW_PLAIN_HTTP", rawAllowPlainHttp));
   if (!isLoopback(address) && !allowPlainHttp && !publicUrl?.startsWith("https:")) {
     throw new InvalidConfig(
-      `refusing to bind ${address}: the public URL is ${publicUrl ?? "not set"}, so users would reach the host over plain HTTP; set --public-url to an https:// origin (a TLS proxy in front), or pass --allow-plain-http (CLAUDEBOT_ALLOW_PLAIN_HTTP=1) on a private network such as Tailscale`,
+      `refusing to bind ${address}: the public URL is ${publicUrl ?? "not set"}, so users would reach the host over plain HTTP; set --public-url to an https:// origin (a TLS proxy in front), or pass --allow-plain-http (TOMTE_ALLOW_PLAIN_HTTP=1) on a private network such as Tailscale`,
     );
   }
-  const rawPort = values.port ?? get("CLAUDEBOT_PORT");
-  const rawVite = get("CLAUDEBOT_VITE");
-  const rawAskApproval = get("CLAUDEBOT_ASK_APPROVAL");
+  const rawPort = values.port ?? get("TOMTE_PORT");
+  const rawVite = get("TOMTE_VITE");
+  const rawAskApproval = get("TOMTE_ASK_APPROVAL");
   const rawAbsenceDays =
-    values["pause-after-absence-days"] ?? get("CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS");
-  const rawRelayConfig = values["relay-config"] ?? get("CLAUDEBOT_RELAY_CONFIG");
+    values["pause-after-absence-days"] ?? get("TOMTE_PAUSE_AFTER_ABSENCE_DAYS");
+  const rawRelayConfig = values["relay-config"] ?? get("TOMTE_RELAY_CONFIG");
   if (rawRelayConfig !== undefined && !isAbsolute(rawRelayConfig))
     throw new InvalidConfig(`invalid relay config "${rawRelayConfig}": expected an absolute path`);
   const dataRoot =
@@ -250,8 +249,8 @@ export function parseHostConfig(
       allowPlainHttp,
       secrets: parseSecrets(
         mode as HostMode,
-        values.secrets ?? get("CLAUDEBOT_SECRETS"),
-        values["secrets-key-file"] ?? get("CLAUDEBOT_SECRETS_KEY_FILE"),
+        values.secrets ?? get("TOMTE_SECRETS"),
+        values["secrets-key-file"] ?? get("TOMTE_SECRETS_KEY_FILE"),
       ),
       relayConfig:
         rawRelayConfig === undefined ? join(dataRoot, "relay.json") : normalize(rawRelayConfig),
@@ -260,9 +259,9 @@ export function parseHostConfig(
       isolateAllBots: mode === "remote",
       sidecar: values.sidecar ?? false,
       pauseAfterAbsenceDays: rawAbsenceDays === undefined ? 0 : parseAbsenceDays(rawAbsenceDays),
-      vite: values.vite ?? (rawVite === undefined ? false : parseBool("CLAUDEBOT_VITE", rawVite)),
+      vite: values.vite ?? (rawVite === undefined ? false : parseBool("TOMTE_VITE", rawVite)),
       askApproval:
-        rawAskApproval === undefined ? false : parseBool("CLAUDEBOT_ASK_APPROVAL", rawAskApproval),
+        rawAskApproval === undefined ? false : parseBool("TOMTE_ASK_APPROVAL", rawAskApproval),
     },
     positionals,
   };

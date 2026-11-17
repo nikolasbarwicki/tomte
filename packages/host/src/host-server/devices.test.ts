@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { DeviceList, PairingCodeResponse, PairingResponse } from "@claudebot/contract/api";
+import { DeviceList, PairingCodeResponse, PairingResponse } from "@tomte/contract/api";
 
 import { asDevice, clientPost, pairDevice } from "../testing/paired-device.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
@@ -200,7 +200,7 @@ describe("creating a pairing code", () => {
       headers: {
         "content-type": "application/json",
         origin: host.clientUrl,
-        cookie: `claudebot_session=${host.deviceToken}`,
+        cookie: `tomte_session=${host.deviceToken}`,
       },
       body: "{}",
     });

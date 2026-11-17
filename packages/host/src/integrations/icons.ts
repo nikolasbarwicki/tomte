@@ -1,4 +1,4 @@
-import type { BrandIcon } from "@claudebot/contract/events";
+import type { BrandIcon } from "@tomte/contract/events";
 
 /**
  * Brand logos the Integrations screen draws. Most are Simple Icons marks (CC0, simpleicons.org): one 24×24 path and the brand colour each.

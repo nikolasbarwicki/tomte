@@ -1,4 +1,4 @@
-import type { WorkSource } from "@claudebot/contract/events";
+import type { WorkSource } from "@tomte/contract/events";
 
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";

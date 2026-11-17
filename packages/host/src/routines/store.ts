@@ -1,11 +1,6 @@
 import type { Database } from "bun:sqlite";
 
-import {
-  Schedule,
-  type RoutineRun,
-  type RunStatus,
-  type RunTrigger,
-} from "@claudebot/contract/events";
+import { Schedule, type RoutineRun, type RunStatus, type RunTrigger } from "@tomte/contract/events";
 
 import type { TurnUsage } from "../bots/index.ts";
 

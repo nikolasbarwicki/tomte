@@ -30,7 +30,7 @@ export function absenceActions(d: {
       for (const [botId, names] of named)
         d.events.notice(botId, {
           key: `${WARNING}${since}`,
-          title: "Routines will pause in 2 days unless you open claudebot",
+          title: "Routines will pause in 2 days unless you open tomte",
           body: `Active routines: ${names.join(", ")}.`,
         });
       return named.size > 0;
@@ -41,7 +41,7 @@ export function absenceActions(d: {
         d.events.notice(botId, {
           key: `${PAUSED}${since}`,
           title: `Routines paused: no activity for ${days(pauseAfterDays)}`,
-          body: `Paused: ${names.join(", ")}. Open claudebot to resume them.`,
+          body: `Paused: ${names.join(", ")}. Open tomte to resume them.`,
         });
     },
 

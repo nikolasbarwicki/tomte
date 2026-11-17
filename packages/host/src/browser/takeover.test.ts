@@ -21,9 +21,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { LiveMessage, ServerEvent } from "@claudebot/contract/events";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { LiveMessage, ServerEvent } from "@tomte/contract/events";
 
 import { createBot } from "../bots/index.ts";
 import { createHostServer, type HostServer } from "../host-server/index.ts";

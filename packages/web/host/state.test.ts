@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import type { BotSummary } from "@claudebot/contract/events";
+import type { BotSummary } from "@tomte/contract/events";
 
 import { applyEvent, initialHostState, type HostEvent, type HostState } from "./state.ts";
 

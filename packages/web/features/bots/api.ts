@@ -1,5 +1,5 @@
-import { ToolAllowances, type BotProfileUpdate } from "@claudebot/contract/api";
-import type { BotAvatar } from "@claudebot/contract/avatars";
+import { ToolAllowances, type BotProfileUpdate } from "@tomte/contract/api";
+import type { BotAvatar } from "@tomte/contract/avatars";
 
 import { act, errorOf, post, readJson } from "@/host/api.ts";
 

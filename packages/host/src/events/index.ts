@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 
-import type { EventAccess, ExternalEventInput, ExternalEventPosted } from "@claudebot/contract/api";
-import type { Relay as RelayStatus, WorkEvent } from "@claudebot/contract/events";
+import type { EventAccess, ExternalEventInput, ExternalEventPosted } from "@tomte/contract/api";
+import type { Relay as RelayStatus, WorkEvent } from "@tomte/contract/events";
 
 import type { SecretStore } from "../platform/secrets.ts";
 import { createRelay, MAX_RELAY_ANSWER, type RelayOptions } from "./relay.ts";
@@ -21,8 +21,8 @@ const EVENTS_ROUTE = /^\/api\/bots\/([^/]+)\/events$/;
 export const eventsRouteBot = (path: string): string | undefined => EVENTS_ROUTE.exec(path)?.[1];
 
 /** The environment variables a harness process gets so it can post events to its bot. */
-const EVENTS_URL_ENV = "CLAUDEBOT_EVENTS_URL";
-const EVENTS_TOKEN_ENV = "CLAUDEBOT_EVENTS_TOKEN";
+const EVENTS_URL_ENV = "TOMTE_EVENTS_URL";
+const EVENTS_TOKEN_ENV = "TOMTE_EVENTS_TOKEN";
 
 export interface EventsOptions {
   db: Database;
@@ -64,7 +64,7 @@ export interface Events {
    */
   post(botId: string, event: ExternalEventInput): ExternalEventPosted;
   /**
-   * Raises a notice: a needs-you item the host has about itself, from the source "Claudebot". It is stored and shown like any
+   * Raises a notice: a needs-you item the host has about itself, from the source "Tomte". It is stored and shown like any
    * open item (the sidebar count, the Needs-you bar, the banner) but never delivered to the bot, and the user can only dismiss
    * it. `key` dedupes per bot, so posting a key again changes nothing; `title` and `body` are cut to what the events route allows.
    */

@@ -2,8 +2,8 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
 /** The two variables that name a bot's events route; the environment of a bot's harness and a config file use the same names. */
-export const URL_VAR = "CLAUDEBOT_EVENTS_URL";
-export const TOKEN_VAR = "CLAUDEBOT_EVENTS_TOKEN";
+export const URL_VAR = "TOMTE_EVENTS_URL";
+export const TOKEN_VAR = "TOMTE_EVENTS_TOKEN";
 
 /** A problem with the configuration. The message names a file, a variable or a line number, never a value. */
 export class ConfigError extends Error {}
@@ -37,10 +37,10 @@ export const describeSource = (source: Source): string =>
 
 const isFileNamePart = (slug: string) => !/[/\\\0]/.test(slug) && slug !== "." && slug !== "..";
 
-/** The directory of notify config: `CLAUDEBOT_NOTIFY_DIR`, else `claudebot/` under `XDG_CONFIG_HOME` or `~/.config`. */
+/** The directory of notify config: `TOMTE_NOTIFY_DIR`, else `tomte/` under `XDG_CONFIG_HOME` or `~/.config`. */
 function configDir({ env, home }: Surroundings): string {
-  if (set(env.CLAUDEBOT_NOTIFY_DIR)) return env.CLAUDEBOT_NOTIFY_DIR;
-  return join(set(env.XDG_CONFIG_HOME) ? env.XDG_CONFIG_HOME : join(home, ".config"), "claudebot");
+  if (set(env.TOMTE_NOTIFY_DIR)) return env.TOMTE_NOTIFY_DIR;
+  return join(set(env.XDG_CONFIG_HOME) ? env.XDG_CONFIG_HOME : join(home, ".config"), "tomte");
 }
 
 const exists = (path: string) =>
@@ -87,23 +87,23 @@ async function routed(dir: string, project: string): Promise<string> {
 
 /**
  * Which config the report uses, decided without reading it. In order:
- * 1. `CLAUDEBOT_NOTIFY_ENV`: that file, for a caller that names its target outright.
- * 2. `CLAUDEBOT_EVENTS_URL` and `CLAUDEBOT_EVENTS_TOKEN` in the environment, which is what a bot's harness has. One
+ * 1. `TOMTE_NOTIFY_ENV`: that file, for a caller that names its target outright.
+ * 2. `TOMTE_EVENTS_URL` and `TOMTE_EVENTS_TOKEN` in the environment, which is what a bot's harness has. One
  *    without the other is an error, never a fallback to a file.
  * 3. `notify-<project>.env` in the config dir when it exists, else `notify.env` there. The project is
- *    `CLAUDEBOT_NOTIFY_PROJECT`, else the name of the main repository of the working directory (a worktree resolves to
+ *    `TOMTE_NOTIFY_PROJECT`, else the name of the main repository of the working directory (a worktree resolves to
  *    its main repository), else the first path segment under `~/.herdr/worktrees/`; the `routes` file remaps it.
  */
 export async function select(s: Surroundings): Promise<Selection> {
   const { env } = s;
   const dir = configDir(s);
-  let project = env.CLAUDEBOT_NOTIFY_PROJECT;
+  let project = env.TOMTE_NOTIFY_PROJECT;
   project = set(project) ? project : ((await repositoryName(s.cwd, env)) ?? worktreeName(s));
   if (project !== undefined) project = await routed(dir, project);
   const named = { ...(project !== undefined && { project }) };
 
-  if (set(env.CLAUDEBOT_NOTIFY_ENV))
-    return { source: { from: "file", path: resolve(s.cwd, env.CLAUDEBOT_NOTIFY_ENV) }, ...named };
+  if (set(env.TOMTE_NOTIFY_ENV))
+    return { source: { from: "file", path: resolve(s.cwd, env.TOMTE_NOTIFY_ENV) }, ...named };
   const url = set(env[URL_VAR]);
   if (url !== set(env[TOKEN_VAR]))
     throw new ConfigError(

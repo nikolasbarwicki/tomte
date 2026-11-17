@@ -4,11 +4,11 @@ Status: accepted
 
 ## Context
 
-Bots can drive a real Chrome through the `agent-browser` engine. Claudebot runs bots on Claude Code today, and Codex and OpenCode are planned. The bot is untrusted for secrets: a prompt-injected page or bot must not be able to read saved logins, steal vault passwords, reach claudebot's own server through the browser, or drive the engine around claudebot's rules (policy, takeover lock, one call at a time, output limits, credential approval).
+Bots can drive a real Chrome through the `agent-browser` engine. Tomte runs bots on Claude Code today, and Codex and OpenCode are planned. The bot is untrusted for secrets: a prompt-injected page or bot must not be able to read saved logins, steal vault passwords, reach tomte's own server through the browser, or drive the engine around tomte's rules (policy, takeover lock, one call at a time, output limits, credential approval).
 
 ## Decision
 
-The engine is wrapped by the host. Bots reach it only through a Streamable HTTP MCP route on the host server, bound to `127.0.0.1`, serving claudebot's own `browser_*` tools. All rules are enforced inside that endpoint, keyed by a per-session bearer token (issued per opened bot session, in memory only, revoked on session end). The endpoint rejects requests with an `Origin` header or a wrong `Host`. A small `Harness` adapter renders the endpoint's URL and token into each harness's MCP config; harness permission hooks only mirror the rules for UI polish. The host drives the engine itself by running its CLI with `--json` and host-fixed flags; bots get no direct path to it, enforced for Claude by the Claude Code sandbox for shell commands.
+The engine is wrapped by the host. Bots reach it only through a Streamable HTTP MCP route on the host server, bound to `127.0.0.1`, serving tomte's own `browser_*` tools. All rules are enforced inside that endpoint, keyed by a per-session bearer token (issued per opened bot session, in memory only, revoked on session end). The endpoint rejects requests with an `Origin` header or a wrong `Host`. A small `Harness` adapter renders the endpoint's URL and token into each harness's MCP config; harness permission hooks only mirror the rules for UI polish. The host drives the engine itself by running its CLI with `--json` and host-fixed flags; bots get no direct path to it, enforced for Claude by the Claude Code sandbox for shell commands.
 
 ## Alternatives considered
 

@@ -5,7 +5,7 @@ import {
   ExternalEventInput,
   MAX_EVENT_BODY_BYTES,
   type EventAccess,
-} from "@claudebot/contract/api";
+} from "@tomte/contract/api";
 
 import { getBot } from "../../bots/index.ts";
 import { eventsRouteBot, type Events } from "../../events/index.ts";

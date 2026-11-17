@@ -14,7 +14,7 @@ const parse = (
   system: HostSystem = { platform: "linux", home: "/home/ada" },
 ) => parseHostConfig(argv, env, system);
 
-const KEY_FILE = "/srv/claudebot/secrets.key";
+const KEY_FILE = "/srv/tomte/secrets.key";
 
 describe("defaults", () => {
   test.each([
@@ -79,23 +79,23 @@ describe("defaults", () => {
 describe("flags and environment", () => {
   test("environment variables set every field", () => {
     const { config } = parse([], {
-      CLAUDEBOT_MODE: "remote",
-      CLAUDEBOT_HOST: "::1",
-      CLAUDEBOT_PORT: "8080",
-      CLAUDEBOT_PUBLIC_URL: "https://claudebot.example.com",
-      CLAUDEBOT_ALLOW_PLAIN_HTTP: "1",
-      CLAUDEBOT_SECRETS: "file",
-      CLAUDEBOT_SECRETS_KEY_FILE: KEY_FILE,
-      CLAUDEBOT_ASK_APPROVAL: "1",
-      CLAUDEBOT_VITE: "true",
-      CLAUDEBOT_DATA_ROOT: "/srv/claudebot",
-      CLAUDEBOT_RELAY_CONFIG: "/etc/claudebot/relay.json",
-      CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS: "14",
+      TOMTE_MODE: "remote",
+      TOMTE_HOST: "::1",
+      TOMTE_PORT: "8080",
+      TOMTE_PUBLIC_URL: "https://tomte.example.com",
+      TOMTE_ALLOW_PLAIN_HTTP: "1",
+      TOMTE_SECRETS: "file",
+      TOMTE_SECRETS_KEY_FILE: KEY_FILE,
+      TOMTE_ASK_APPROVAL: "1",
+      TOMTE_VITE: "true",
+      TOMTE_DATA_ROOT: "/srv/tomte",
+      TOMTE_RELAY_CONFIG: "/etc/tomte/relay.json",
+      TOMTE_PAUSE_AFTER_ABSENCE_DAYS: "14",
     });
     expect(config).toEqual({
       mode: "remote",
       bind: { address: "::1", port: 8080 },
-      publicUrl: "https://claudebot.example.com",
+      publicUrl: "https://tomte.example.com",
       allowPlainHttp: true,
       secrets: { backend: "file", keyFile: KEY_FILE },
       headedBrowser: false,
@@ -105,49 +105,49 @@ describe("flags and environment", () => {
       pauseAfterAbsenceDays: 14,
       vite: true,
       askApproval: true,
-      dataRoot: "/srv/claudebot",
-      relayConfig: "/etc/claudebot/relay.json",
+      dataRoot: "/srv/tomte",
+      relayConfig: "/etc/tomte/relay.json",
     });
   });
 
   test("a flag wins over the environment", () => {
     const { config } = parse(["--port", "9000", "--mode", "local"], {
-      CLAUDEBOT_PORT: "8080",
-      CLAUDEBOT_MODE: "remote",
+      TOMTE_PORT: "8080",
+      TOMTE_MODE: "remote",
     });
     expect(config.mode).toBe("local");
     expect(config.bind.port).toBe(9000);
   });
 
   test("an environment variable can switch Vite off", () => {
-    const { config } = parse([], { CLAUDEBOT_VITE: "false" });
+    const { config } = parse([], { TOMTE_VITE: "false" });
     expect(config.vite).toBe(false);
   });
 
   test("the absence pause is off unless a flag or the environment sets a number of days, and a flag wins", () => {
     expect(parse().config.pauseAfterAbsenceDays).toBe(0);
+    expect(parse([], { TOMTE_PAUSE_AFTER_ABSENCE_DAYS: "14" }).config.pauseAfterAbsenceDays).toBe(
+      14,
+    );
     expect(
-      parse([], { CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS: "14" }).config.pauseAfterAbsenceDays,
-    ).toBe(14);
-    expect(
-      parse(["--pause-after-absence-days", "7"], { CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS: "14" })
-        .config.pauseAfterAbsenceDays,
+      parse(["--pause-after-absence-days", "7"], { TOMTE_PAUSE_AFTER_ABSENCE_DAYS: "14" }).config
+        .pauseAfterAbsenceDays,
     ).toBe(7);
     expect(
-      parse(["--pause-after-absence-days", "0"], { CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS: "14" })
-        .config.pauseAfterAbsenceDays,
+      parse(["--pause-after-absence-days", "0"], { TOMTE_PAUSE_AFTER_ABSENCE_DAYS: "14" }).config
+        .pauseAfterAbsenceDays,
     ).toBe(0);
   });
 
   test.each([["-1"], ["1.5"], ["two"], ["1e3"], ["0x10"]])("rejects %s days of absence", (days) => {
     expect(() => parse(["--pause-after-absence-days", days])).toThrow(InvalidConfig);
-    expect(() => parse([], { CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS: days })).toThrow(InvalidConfig);
+    expect(() => parse([], { TOMTE_PAUSE_AFTER_ABSENCE_DAYS: days })).toThrow(InvalidConfig);
   });
 
   test("the relay configuration is relay.json in the data root unless a flag or the environment names another", () => {
     expect(parse(["--data-root", "/srv/c"]).config.relayConfig).toBe("/srv/c/relay.json");
     expect(
-      parse(["--relay-config", "/etc/r.json"], { CLAUDEBOT_RELAY_CONFIG: "/x.json" }).config
+      parse(["--relay-config", "/etc/r.json"], { TOMTE_RELAY_CONFIG: "/x.json" }).config
         .relayConfig,
     ).toBe("/etc/r.json");
   });
@@ -157,7 +157,7 @@ describe("flags and environment", () => {
   });
 
   test("empty environment variables count as unset", () => {
-    const { config } = parse([], { CLAUDEBOT_PORT: "", CLAUDEBOT_HOST: "", CLAUDEBOT_MODE: "" });
+    const { config } = parse([], { TOMTE_PORT: "", TOMTE_HOST: "", TOMTE_MODE: "" });
     expect(config.bind).toEqual({ address: "127.0.0.1", port: 0 });
   });
 
@@ -168,8 +168,8 @@ describe("flags and environment", () => {
   });
 
   test("a trailing slash on the public URL is dropped", () => {
-    expect(parse(["--public-url", "https://claudebot.example.com/"]).config.publicUrl).toBe(
-      "https://claudebot.example.com",
+    expect(parse(["--public-url", "https://tomte.example.com/"]).config.publicUrl).toBe(
+      "https://tomte.example.com",
     );
   });
 });
@@ -181,31 +181,31 @@ describe("data root", () => {
       name: "macOS uses Application Support",
       system: { platform: "darwin", home: "/Users/ada" },
       env: {},
-      expected: "/Users/ada/Library/Application Support/claudebot",
+      expected: "/Users/ada/Library/Application Support/tomte",
     },
     {
       name: "Linux uses ~/.local/share",
       system: { platform: "linux", home: "/home/ada" },
       env: {},
-      expected: "/home/ada/.local/share/claudebot",
+      expected: "/home/ada/.local/share/tomte",
     },
     {
       name: "Linux follows XDG_DATA_HOME",
       system: { platform: "linux", home: "/home/ada" },
       env: { XDG_DATA_HOME: "/data/xdg" },
-      expected: "/data/xdg/claudebot",
+      expected: "/data/xdg/tomte",
     },
     {
       name: "Linux ignores a relative XDG_DATA_HOME",
       system: { platform: "linux", home: "/home/ada" },
       env: { XDG_DATA_HOME: "xdg" },
-      expected: "/home/ada/.local/share/claudebot",
+      expected: "/home/ada/.local/share/tomte",
     },
     {
       name: "Windows uses APPDATA",
       system: { platform: "win32", home: "C:\\Users\\ada" },
       env: { APPDATA: "C:\\Users\\ada\\AppData\\Roaming" },
-      expected: "C:\\Users\\ada\\AppData\\Roaming\\claudebot",
+      expected: "C:\\Users\\ada\\AppData\\Roaming\\tomte",
     },
   ] as const)("default: $name", ({ system, env, expected }) => {
     const root = parse([], env, system).config.dataRoot;
@@ -219,27 +219,24 @@ describe("data root", () => {
   });
 
   test("an environment variable overrides the default", () => {
-    expect(parse([], { CLAUDEBOT_DATA_ROOT: "/srv/claudebot" }).config.dataRoot).toBe(
-      "/srv/claudebot",
-    );
+    expect(parse([], { TOMTE_DATA_ROOT: "/srv/tomte" }).config.dataRoot).toBe("/srv/tomte");
   });
 
   test("a flag overrides the environment variable", () => {
     expect(
-      parse(["--data-root", "/tmp/flag"], { CLAUDEBOT_DATA_ROOT: "/srv/claudebot" }).config
-        .dataRoot,
+      parse(["--data-root", "/tmp/flag"], { TOMTE_DATA_ROOT: "/srv/tomte" }).config.dataRoot,
     ).toBe("/tmp/flag");
   });
 
   test("an empty environment variable counts as unset", () => {
-    expect(parse([], { CLAUDEBOT_DATA_ROOT: "" }, linux).config.dataRoot).toBe(
-      "/home/ada/.local/share/claudebot",
+    expect(parse([], { TOMTE_DATA_ROOT: "" }, linux).config.dataRoot).toBe(
+      "/home/ada/.local/share/tomte",
     );
   });
 });
 
 describe("binding beyond loopback", () => {
-  const URL_HTTPS = "https://claudebot.example.com";
+  const URL_HTTPS = "https://tomte.example.com";
   const URL_HTTP = "http://100.64.0.7:8080";
 
   test.each([
@@ -248,7 +245,7 @@ describe("binding beyond loopback", () => {
     "192.168.1.20",
     "10.0.0.5",
     "8.8.8.8",
-    "claudebot.example.com",
+    "tomte.example.com",
     "128.0.0.1",
   ])(
     "rejects binding %s with no public URL and no flag, names it, and names both ways out",
@@ -261,7 +258,7 @@ describe("binding beyond loopback", () => {
   );
 
   test("rejects a non-loopback bind from the environment", () => {
-    expect(() => parse([], { CLAUDEBOT_HOST: "0.0.0.0" })).toThrow("0.0.0.0");
+    expect(() => parse([], { TOMTE_HOST: "0.0.0.0" })).toThrow("0.0.0.0");
   });
 
   test("remote mode rejects it too", () => {
@@ -281,7 +278,7 @@ describe("binding beyond loopback", () => {
     {
       name: "an HTTPS public URL from the environment",
       argv: [],
-      env: { CLAUDEBOT_PUBLIC_URL: URL_HTTPS },
+      env: { TOMTE_PUBLIC_URL: URL_HTTPS },
     },
     { name: "--allow-plain-http", argv: ["--allow-plain-http"], env: {} },
     {
@@ -289,7 +286,7 @@ describe("binding beyond loopback", () => {
       argv: ["--allow-plain-http", "--public-url", URL_HTTP],
       env: {},
     },
-    { name: "CLAUDEBOT_ALLOW_PLAIN_HTTP", argv: [], env: { CLAUDEBOT_ALLOW_PLAIN_HTTP: "1" } },
+    { name: "TOMTE_ALLOW_PLAIN_HTTP", argv: [], env: { TOMTE_ALLOW_PLAIN_HTTP: "1" } },
   ])("accepts binding 0.0.0.0 with $name", ({ argv, env }) => {
     expect(parse(["--host", "0.0.0.0", ...argv], env).config.bind.address).toBe("0.0.0.0");
   });
@@ -297,7 +294,7 @@ describe("binding beyond loopback", () => {
   test("the plain-HTTP flag is off unless set, and the environment can switch it off", () => {
     expect(parse().config.allowPlainHttp).toBe(false);
     expect(parse(["--allow-plain-http"]).config.allowPlainHttp).toBe(true);
-    expect(parse([], { CLAUDEBOT_ALLOW_PLAIN_HTTP: "0" }).config.allowPlainHttp).toBe(false);
+    expect(parse([], { TOMTE_ALLOW_PLAIN_HTTP: "0" }).config.allowPlainHttp).toBe(false);
   });
 
   test("an HTTP public URL on a loopback bind needs no flag", () => {
@@ -329,17 +326,17 @@ describe("invalid input", () => {
     { argv: ["--port=-1"], message: "-1" },
     { argv: ["--port", "80x"], message: "80x" },
     { argv: ["--mode", "cloud"], message: "cloud" },
-    { argv: ["--public-url", "claudebot.example.com"], message: "claudebot.example.com" },
+    { argv: ["--public-url", "tomte.example.com"], message: "tomte.example.com" },
     {
-      argv: ["--public-url", "ftp://claudebot.example.com"],
-      message: "ftp://claudebot.example.com",
+      argv: ["--public-url", "ftp://tomte.example.com"],
+      message: "ftp://tomte.example.com",
     },
     {
-      argv: ["--public-url", "https://claudebot.example.com/app"],
-      message: "https://claudebot.example.com/app",
+      argv: ["--public-url", "https://tomte.example.com/app"],
+      message: "https://tomte.example.com/app",
     },
     {
-      argv: ["--public-url", "https://user:pw@claudebot.example.com"],
+      argv: ["--public-url", "https://user:pw@tomte.example.com"],
       message: "invalid public URL",
     },
     { argv: ["--bogus"], message: "bogus" },
@@ -350,7 +347,7 @@ describe("invalid input", () => {
     expect(() => parse(argv)).toThrow(message);
   });
 
-  test.each([["CLAUDEBOT_VITE"], ["CLAUDEBOT_ASK_APPROVAL"], ["CLAUDEBOT_ALLOW_PLAIN_HTTP"]])(
+  test.each([["TOMTE_VITE"], ["TOMTE_ASK_APPROVAL"], ["TOMTE_ALLOW_PLAIN_HTTP"]])(
     "rejects %s set to a value that is not 1, true, 0 or false",
     (name) => {
       expect(() => parse([], { [name]: "yes" })).toThrow(InvalidConfig);
@@ -358,13 +355,13 @@ describe("invalid input", () => {
     },
   );
 
-  test("tool approval is off unless CLAUDEBOT_ASK_APPROVAL turns it on", () => {
+  test("tool approval is off unless TOMTE_ASK_APPROVAL turns it on", () => {
     expect(parse().config.askApproval).toBe(false);
-    expect(parse([], { CLAUDEBOT_ASK_APPROVAL: "true" }).config.askApproval).toBe(true);
+    expect(parse([], { TOMTE_ASK_APPROVAL: "true" }).config.askApproval).toBe(true);
   });
 
   test("the error for a public URL does not echo a password", () => {
-    expect(() => parse(["--public-url", "https://user:hunter2@claudebot.example.com"])).not.toThrow(
+    expect(() => parse(["--public-url", "https://user:hunter2@tomte.example.com"])).not.toThrow(
       "hunter2",
     );
   });
@@ -379,7 +376,7 @@ describe("remote mode platform", () => {
     expect(() => parse(argv, {}, system)).toThrow("Linux only");
     expect(() => parse(argv, {}, system)).toThrow("keychain");
     expect(() =>
-      parse([], { CLAUDEBOT_MODE: "remote", CLAUDEBOT_SECRETS_KEY_FILE: KEY_FILE }, system),
+      parse([], { TOMTE_MODE: "remote", TOMTE_SECRETS_KEY_FILE: KEY_FILE }, system),
     ).toThrow("Linux only");
   });
 
@@ -439,7 +436,7 @@ describe("secrets backend", () => {
   });
 
   test("the environment names the backend and the key file, and a flag wins", () => {
-    const env = { CLAUDEBOT_SECRETS: "file", CLAUDEBOT_SECRETS_KEY_FILE: KEY_FILE };
+    const env = { TOMTE_SECRETS: "file", TOMTE_SECRETS_KEY_FILE: KEY_FILE };
     expect(parse([], env).config.secrets).toEqual({ backend: "file", keyFile: KEY_FILE });
     expect(parse(["--secrets-key-file", "/other/key"], env).config.secrets).toEqual({
       backend: "file",
@@ -448,7 +445,7 @@ describe("secrets backend", () => {
   });
 
   test("an empty key file variable counts as unset", () => {
-    expect(parse([], { CLAUDEBOT_SECRETS_KEY_FILE: "" }).config.secrets).toEqual({
+    expect(parse([], { TOMTE_SECRETS_KEY_FILE: "" }).config.secrets).toEqual({
       backend: "keychain",
     });
   });
@@ -456,8 +453,8 @@ describe("secrets backend", () => {
 
 describe("the agent listener's origin", () => {
   test("is always loopback and never the public URL", () => {
-    const { config } = parse(["--public-url", "https://claudebot.example.com"]);
-    expect(clientOrigin(config, 5173).publicUrl).toBe("https://claudebot.example.com");
+    const { config } = parse(["--public-url", "https://tomte.example.com"]);
+    expect(clientOrigin(config, 5173).publicUrl).toBe("https://tomte.example.com");
     const origin = agentOrigin(6000);
     expect(origin.localUrl).toBe("http://127.0.0.1:6000");
     expect(origin.publicUrl).toBe("http://127.0.0.1:6000");
@@ -484,7 +481,7 @@ describe("which Host headers name the host", () => {
 describe("sidecar mode", () => {
   test("is off unless --sidecar is passed, and is not read from the environment", () => {
     expect(parse().config.sidecar).toBe(false);
-    expect(parse([], { CLAUDEBOT_SIDECAR: "1" }).config.sidecar).toBe(false);
+    expect(parse([], { TOMTE_SIDECAR: "1" }).config.sidecar).toBe(false);
     expect(parse(["--sidecar"]).config.sidecar).toBe(true);
   });
 

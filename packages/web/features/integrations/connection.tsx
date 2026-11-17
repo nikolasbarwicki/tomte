@@ -1,4 +1,4 @@
-import type { Integration } from "@claudebot/contract/events";
+import type { Integration } from "@tomte/contract/events";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import type { ExternalEventInput } from "@claudebot/contract/api";
+import type { ExternalEventInput } from "@tomte/contract/api";
 
 import { stripInvisible } from "../platform/untrusted-text.ts";
 

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Instructions, ModelProviders } from "@claudebot/contract/api";
+import { Instructions, ModelProviders } from "@tomte/contract/api";
 
 import {
   botMemoryPath,

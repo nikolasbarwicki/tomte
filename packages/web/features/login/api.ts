@@ -1,4 +1,4 @@
-import { PairingResponse } from "@claudebot/contract/api";
+import { PairingResponse } from "@tomte/contract/api";
 
 import { errorOf, post, readJson } from "@/host/api.ts";
 import { sessionStore } from "@/host/session.ts";

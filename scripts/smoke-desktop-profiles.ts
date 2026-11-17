@@ -6,8 +6,8 @@ import { join } from "node:path";
 import type { ElectronApplication, Page } from "playwright-core";
 
 // Smoke test for the desktop app's remote connection profiles, run for real against the packaged app:
-//   bun scripts/smoke-desktop-profiles.ts [dist/desktop/Claudebot-darwin-arm64/mac-arm64/Claudebot.app]
-// Needs `bun run package:desktop` first (it also builds dist/host/claudebot-host-<os>-<arch>, the fixture host).
+//   bun scripts/smoke-desktop-profiles.ts [dist/desktop/Tomte-darwin-arm64/mac-arm64/Tomte.app]
+// Needs `bun run package:desktop` first (it also builds dist/host/tomte-host-<os>-<arch>, the fixture host).
 // Everything runs on a fresh temp root under the isolation rules of the DESK briefs: file secrets backend, Chromium's
 // mock keychain (so the safeStorage key is Chromium's mock key, NOT the real keychain), a fake Claude CLI, no default
 // folders. These are FIXTURES, not a VPS: the "remote" host is a second compiled host on loopback http, the mismatch
@@ -38,9 +38,9 @@ import {
 } from "./desktop-smoke-kit.ts";
 import { processes } from "./process-guard.ts";
 
-const CONNECTIONS_SCHEME = "claudebot-desktop://connections";
+const CONNECTIONS_SCHEME = "tomte-desktop://connections";
 const HOST_OS = process.platform === "win32" ? "windows" : process.platform;
-const HOST_BINARY = join(ROOT, "dist/host", `claudebot-host-${HOST_OS}-${process.arch}`);
+const HOST_BINARY = join(ROOT, "dist/host", `tomte-host-${HOST_OS}-${process.arch}`);
 const DEVICE_NAME = `${hostname()} (desktop)`;
 
 interface StoredProfiles {
@@ -69,7 +69,7 @@ async function runBinary(binary: string, args: string[], env: Record<string, str
 async function main(): Promise<void> {
   if (!existsSync(HOST_BINARY))
     fail(`no host binary at ${HOST_BINARY}; run \`bun run package:desktop\``);
-  const run = await createSmokeRun(process.argv[2], "claudebot-desktop-profiles-smoke-");
+  const run = await createSmokeRun(process.argv[2], "tomte-desktop-profiles-smoke-");
   const {
     root,
     userData,
@@ -90,13 +90,13 @@ async function main(): Promise<void> {
   console.log(`app       ${run.appBundle}`);
 
   // ---- fixtures -------------------------------------------------------------------------------------------------
-  const remoteBin = join(root, "bin/claudebot-host-remote");
+  const remoteBin = join(root, "bin/tomte-host-remote");
   await mkdir(join(root, "bin"));
   await copyFile(HOST_BINARY, remoteBin);
   await chmod(remoteBin, 0o755);
   const remoteData = join(root, "remote-data");
   const remoteFlags = ["--data-root", remoteData];
-  const remoteEnv = run.launchEnv({ CLAUDE_PATH: fakeCli, CLAUDEBOT_DATA_ROOT: remoteData });
+  const remoteEnv = run.launchEnv({ CLAUDE_PATH: fakeCli, TOMTE_DATA_ROOT: remoteData });
   const remotePort = await freePort();
   const remote = Bun.spawn([remoteBin, ...remoteFlags, "--port", String(remotePort)], {
     env: remoteEnv,
@@ -272,7 +272,7 @@ async function main(): Promise<void> {
     const manager = await openConnections(a.app);
     const prefs = await a.app.evaluate(({ BrowserWindow, session }) => {
       const w = BrowserWindow.getAllWindows().find((x) =>
-        x.webContents.getURL().startsWith("claudebot-desktop:"),
+        x.webContents.getURL().startsWith("tomte-desktop:"),
       )!;
       const p = w.webContents.getLastWebPreferences()!;
       return {
@@ -294,15 +294,12 @@ async function main(): Promise<void> {
       `the Connections window has the host window's webPreferences, no preload, and its own session ${JSON.stringify(prefs)}`,
     );
     const reach = await main.evaluate(() =>
-      fetch("claudebot-desktop://connections/").then(
+      fetch("tomte-desktop://connections/").then(
         () => "reachable",
         () => "unreachable",
       ),
     );
-    check(
-      reach === "unreachable",
-      "the host UI's session cannot reach the claudebot-desktop: scheme",
-    );
+    check(reach === "unreachable", "the host UI's session cannot reach the tomte-desktop: scheme");
     const csp = await manager.evaluate(async () => {
       const s = document.createElement("script");
       s.textContent = "window.__injected = true";
@@ -329,7 +326,7 @@ async function main(): Promise<void> {
       return (await response.json()) as { deviceId: string; token: string };
     })();
     await a.app.evaluate(async ({ session }) => {
-      const found = await session.defaultSession.cookies.get({ name: "claudebot_session" });
+      const found = await session.defaultSession.cookies.get({ name: "tomte_session" });
       Reflect.set(globalThis, "cookieBefore", found.map((c) => c.value).join());
     });
     const code = await pairingCode();
@@ -384,7 +381,7 @@ async function main(): Promise<void> {
       "the decrypted token is a valid device token on the fixture host",
     );
     const cookieAfter = await a.app.evaluate(async ({ session }) => {
-      const found = await session.defaultSession.cookies.get({ name: "claudebot_session" });
+      const found = await session.defaultSession.cookies.get({ name: "tomte_session" });
       return found.map((c) => c.value).join() === Reflect.get(globalThis, "cookieBefore");
     });
     check(
@@ -463,10 +460,10 @@ async function main(): Promise<void> {
     const trayLabels = (await trayView(a)).items.map((i) => i.label);
     check(
       trayLabels.includes("Manage Connections…") &&
-        trayLabels.includes("Open Claudebot") &&
+        trayLabels.includes("Open Tomte") &&
         trayLabels.includes("Start at login") &&
-        trayLabels.includes("Quit Claudebot"),
-      "the tray keeps Open Claudebot, Start at login and Quit, and gains Manage Connections…",
+        trayLabels.includes("Quit Tomte"),
+      "the tray keeps Open Tomte, Start at login and Quit, and gains Manage Connections…",
     );
     await untilTray(a, "This computer|Fixture remote*");
     check(true, "the tray shows the active profile checked: This computer | Fixture remote*");
@@ -737,7 +734,7 @@ async function main(): Promise<void> {
     const traces = libraryTraces();
     console.log("\ndefault locations, before and after");
     info(
-      `~/Library entries named *claudebot* (three levels): before ${beforeTraces.length}, after ${traces.length}`,
+      `~/Library entries named *tomte* (three levels): before ${beforeTraces.length}, after ${traces.length}`,
     );
     for (const t of traces.filter((t) => !beforeTraces.includes(t))) info(`  new or changed: ${t}`);
     info(

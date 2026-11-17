@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { ChannelLinkCodeResponse, type EventAccess } from "@claudebot/contract/api";
+import { ChannelLinkCodeResponse, type EventAccess } from "@tomte/contract/api";
 
 import { fakeTelegram, type FakeCall, type FakeTelegram } from "../testing/fake-telegram.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
@@ -188,7 +188,7 @@ describe("a card for an open item", () => {
   });
 
   test("with a public URL that is not loopback links to the bot's work panel", async () => {
-    const t = await start(["--public-url", "https://claudebot.example.com"]);
+    const t = await start(["--public-url", "https://tomte.example.com"]);
     await t.link();
     const botId = t.host.createBot("Planner");
     await t.post(botId);
@@ -199,7 +199,7 @@ describe("a card for an open item", () => {
         .flat()
         .filter((b) => b.url),
     ).toEqual([
-      { text: "Open in Claudebot", url: `https://claudebot.example.com/bots/${botId}?panel=work` },
+      { text: "Open in Tomte", url: `https://tomte.example.com/bots/${botId}?panel=work` },
     ]);
   });
 

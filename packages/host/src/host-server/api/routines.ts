@@ -1,6 +1,6 @@
 import type { ServerResponse } from "node:http";
 
-import type { RoutinePreview } from "@claudebot/contract/api";
+import type { RoutinePreview } from "@tomte/contract/api";
 import { z } from "zod";
 
 import { getBot } from "../../bots/index.ts";

@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { EventAccess } from "@claudebot/contract/api";
+import type { EventAccess } from "@tomte/contract/api";
 
 import { migrate } from "../platform/db.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
@@ -196,7 +196,7 @@ describe("the external events table", () => {
     migrate(db);
 
     db.run(
-      "INSERT INTO external_events (id, bot_id, key, source_id, kind, title, received_at, state) VALUES ('e2', 'a', 'k2', 'claudebot', 'notice', 'paused', 2, 'open')",
+      "INSERT INTO external_events (id, bot_id, key, source_id, kind, title, received_at, state) VALUES ('e2', 'a', 'k2', 'tomte', 'notice', 'paused', 2, 'open')",
     );
     expect(
       db

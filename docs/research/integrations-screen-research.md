@@ -5,7 +5,7 @@ Input: six screenshots from two competitor products, taken 2026-11-06.
 - **Product A** is a dark desktop app with a full-page "Marketplace" (Apps / Agents / Skills). Screens: catalog, GitHub detail (not connected), Linear detail (connected).
 - **Product B** is a light chat app where integrations open in a modal over the conversation. Screens: "Connect Apps" catalog, "Manage plugins and skills", Gmail detail. [INFERENCE] Probably Cursor: the Gmail detail lists Developer "Cursor" and website cursor.com, though no product chrome is visible.
 
-The current claudebot screen is `web/integrations.tsx`: a responsive grid of `IntegrationCard`s. Each card puts everything inline:
+The current tomte screen is `web/integrations.tsx`: a responsive grid of `IntegrationCard`s. Each card puts everything inline:
 
 - Header: state badge, transport/endpoint, enable switch.
 - Error alert.
@@ -94,13 +94,13 @@ The catalog (`src/integrations/catalog.ts`) has 5 entries: Gmail, Linear, GitHub
 
 **A's information architecture is better; B's catalog has the better shortcuts.** A's full-page catalog with capability lines and the Connection / Information / Danger zone detail is calm, scannable, and safe. From B, take three things: account identity, the composition line ("N tools, M skills"), and unified search over apps and skills.
 
-**Neither product shows what an agent may _do_ with a connection.** Both reduce an integration to connected or not connected. Claudebot's per-tool `off/ask/auto` policy is the strongest item on the roadmap (`docs/roadmap.md`: "Ahead of every competitor on safety"). The current UI hides it inside a crowded card. The rebuild should make permissions a headline section of the detail page.
+**Neither product shows what an agent may _do_ with a connection.** Both reduce an integration to connected or not connected. Tomte's per-tool `off/ask/auto` policy is the strongest item on the roadmap (`docs/roadmap.md`: "Ahead of every competitor on safety"). The current UI hides it inside a crowded card. The rebuild should make permissions a headline section of the detail page.
 
-**Neither shows failure.** Both screens assume connecting works once and stays working. Claudebot has four `ConnState`s (`disconnected`, `connected`, `needs-auth`, `failed`) plus `enabled`, and the sidebar already counts integrations needing attention. Expired tokens are a real event here: Gmail in Testing mode expires refresh tokens after seven days (`GMAIL_OAUTH` steps). The list must show broken states as clearly as healthy ones.
+**Neither shows failure.** Both screens assume connecting works once and stays working. Tomte has four `ConnState`s (`disconnected`, `connected`, `needs-auth`, `failed`) plus `enabled`, and the sidebar already counts integrations needing attention. Expired tokens are a real event here: Gmail in Testing mode expires refresh tokens after seven days (`GMAIL_OAUTH` steps). The list must show broken states as clearly as healthy ones.
 
 **A's hero is marketing.** The gradient pushes connection status and settings below the fold, and three example prompts don't need 400px. Runnable prompts are still a good idea after connecting, as a compact row.
 
-**Categories and chips are premature.** A needs them for ~17 apps and B for ~30+. Claudebot has 5 catalog entries plus custom servers, so sections with one or two rows each would add chrome with no benefit. Add grouping when the catalog passes ~12. The roadmap adds Slack, Notion, Calendar, Drive, and Stripe, which brings it to ~10.
+**Categories and chips are premature.** A needs them for ~17 apps and B for ~30+. Tomte has 5 catalog entries plus custom servers, so sections with one or two rows each would add chrome with no benefit. Add grouping when the catalog passes ~12. The roadmap adds Slack, Notion, Calendar, Drive, and Stripe, which brings it to ~10.
 
 **Connect effort differs a lot per service and nobody says so.** A Linear DCR sign-in is one click. Gmail needs a Google Cloud project, a consent screen, and an own client, about 7 steps. Users should see that before clicking Connect, not after.
 

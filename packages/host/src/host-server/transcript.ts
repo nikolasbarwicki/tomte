@@ -5,12 +5,7 @@ import {
   getSessionMessages,
   type SessionMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import {
-  RunTrigger,
-  type Bot,
-  type LastMessage,
-  type ServerEvent,
-} from "@claudebot/contract/events";
+import { RunTrigger, type Bot, type LastMessage, type ServerEvent } from "@tomte/contract/events";
 import { z } from "zod";
 
 import { currentSession, listBots, markSeen, getActivity, recordMessage } from "../bots/index.ts";

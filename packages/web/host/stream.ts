@@ -1,5 +1,5 @@
-import { HostInfo, PublicHostInfo } from "@claudebot/contract/api";
-import { HostEvent } from "@claudebot/contract/events";
+import { HostInfo, PublicHostInfo } from "@tomte/contract/api";
+import { HostEvent } from "@tomte/contract/events";
 
 import { parseJson, post, probeSession, readJson } from "./api.ts";
 import type { HostStore } from "./store.ts";

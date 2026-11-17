@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import type { BotFile } from "@claudebot/contract/events";
+import type { BotFile } from "@tomte/contract/events";
 
 const IGNORED = new Set([".DS_Store"]);
 

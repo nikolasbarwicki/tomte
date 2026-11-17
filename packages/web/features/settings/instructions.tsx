@@ -1,4 +1,4 @@
-import { MAX_TEXT_DOCUMENT } from "@claudebot/contract/api";
+import { MAX_TEXT_DOCUMENT } from "@tomte/contract/api";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
 

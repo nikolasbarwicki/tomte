@@ -1,4 +1,4 @@
-import type { Integration } from "@claudebot/contract/events";
+import type { Integration } from "@tomte/contract/events";
 import { useTransition, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";

@@ -216,22 +216,22 @@ describe("idle close", () => {
 });
 
 describe("sweep", () => {
-  test("closes claudebot sessions no live runtime owns and leaves everything else alone", async () => {
+  test("closes tomte sessions no live runtime owns and leaves everything else alone", async () => {
     const live = "33333333-3333-4333-8333-333333333333";
     const rt = runtimes();
     await rt.forBot(live).call(["open", "https://a.test"]);
-    seedSessions([sessionName(live), "claudebot-orphan-1", "someone-elses"]);
+    seedSessions([sessionName(live), "tomte-orphan-1", "someone-elses"]);
     await rt.sweep();
-    expect(closedSessions()).toEqual(["claudebot-orphan-1"]);
+    expect(closedSessions()).toEqual(["tomte-orphan-1"]);
   });
 
   test("start() sweeps at boot", async () => {
-    seedSessions(["claudebot-crash-leftover"]);
+    seedSessions(["tomte-crash-leftover"]);
     const rt = runtimes();
     rt.start();
     await rt.sweep();
     await rt.closeAll();
-    expect(closedSessions()).toContain("claudebot-crash-leftover");
+    expect(closedSessions()).toContain("tomte-crash-leftover");
   });
 
   test("an orphaned engine process tree is killed when it ignores the close", async () => {

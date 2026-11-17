@@ -4,16 +4,16 @@ When the user answers a needs-you item whose event named a reply target, the hos
 
 ## The two halves
 
-**The sender names a target.** `claudebot-notify` takes `--reply <kind>:<agent>` and `--reply-session <session>` (or `CLAUDEBOT_REPLY=<kind>:<agent>` and `CLAUDEBOT_REPLY_SESSION`), and the question id as its fifth argument:
+**The sender names a target.** `tomte-notify` takes `--reply <kind>:<agent>` and `--reply-session <session>` (or `TOMTE_REPLY=<kind>:<agent>` and `TOMTE_REPLY_SESSION`), and the question id as its fifth argument:
 
 ```sh
-claudebot-notify --reply herdr:coordinator --reply-session main \
+tomte-notify --reply herdr:coordinator --reply-session main \
   question 05-relay omp-7 "Which database?" Q-3
 ```
 
 The event carries `reply: { kind: "herdr", agent: "coordinator", session: "main" }` and `questionId: "Q-3"` (see `docs/notify.md`). The posting route refuses a target or question id that is not a plain name: letters, digits, `.`, `_`, `:` and `-`, at most 128 characters, never starting with `-`. The bot is not told the target.
 
-**The operator configures the adapter.** `relay.json` in the data root (or the file named by `--relay-config` / `CLAUDEBOT_RELAY_CONFIG`, an absolute path):
+**The operator configures the adapter.** `relay.json` in the data root (or the file named by `--relay-config` / `TOMTE_RELAY_CONFIG`, an absolute path):
 
 ```json
 {

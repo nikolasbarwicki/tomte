@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ExternalEventInput } from "@claudebot/contract/api";
+import { ExternalEventInput } from "@tomte/contract/api";
 
 import { EXIT, run, type Context } from "./cli.ts";
 import { TOKEN_VAR, URL_VAR } from "./config.ts";
@@ -56,7 +56,7 @@ beforeAll(() => {
   root = mkdtempSync(join(realpathSync(tmpdir()), "notify-cli-"));
   home = join(root, "home");
   work = join(root, "work");
-  mkdirSync(join(home, ".config", "claudebot"), { recursive: true });
+  mkdirSync(join(home, ".config", "tomte"), { recursive: true });
   mkdirSync(work);
 });
 afterAll(() => {
@@ -171,8 +171,8 @@ describe("a reply target", () => {
     const fixture = serve();
     const env = {
       ...viaEnv(fixture.url),
-      CLAUDEBOT_REPLY: "herdr:from-env",
-      CLAUDEBOT_REPLY_SESSION: "s9",
+      TOMTE_REPLY: "herdr:from-env",
+      TOMTE_REPLY_SESSION: "s9",
     };
     await sender(["question", "t", "s", "m", "Q-1"], env);
     await sender(["--reply", "herdr:from-flag", "question", "t", "s", "m", "Q-1"], env);
@@ -276,8 +276,8 @@ describe("usage", () => {
     const r = await sender(argv, viaEnv(fixture.url));
     expect(r.code).toBe(EXIT.usage);
     expect(r.out).toEqual([]);
-    expect(r.err[0]).toContain(`claudebot-notify: ${problem}`);
-    expect(r.err.join("\n")).toContain("usage: claudebot-notify");
+    expect(r.err[0]).toContain(`tomte-notify: ${problem}`);
+    expect(r.err.join("\n")).toContain("usage: tomte-notify");
     expect(fixture.seen).toHaveLength(0);
   });
 
@@ -300,7 +300,7 @@ describe("configuration", () => {
     const r = await sender(send, {});
     expect(r.code).toBe(EXIT.config);
     expect(r.err[0]).toContain("missing config");
-    expect(r.err[0]).toContain(join(home, ".config", "claudebot", "notify.env"));
+    expect(r.err[0]).toContain(join(home, ".config", "tomte", "notify.env"));
   });
 
   test("a partial environment pair exits 1, and nothing is sent", async () => {
@@ -318,28 +318,28 @@ describe("configuration", () => {
       mode: 0o600,
     });
     const r = await sender(send, {
-      CLAUDEBOT_NOTIFY_ENV: file,
-      CLAUDEBOT_NOTIFY_PROJECT: "claudebot",
+      TOMTE_NOTIFY_ENV: file,
+      TOMTE_NOTIFY_PROJECT: "tomte",
     });
     expect(r).toMatchObject({ code: EXIT.ok, out: ["ok"], err: [] });
     expect(fixture.seen[0]).toMatchObject({ authorization: `Bearer ${TOKEN}` });
-    expect(fixture.seen[0]!.json.source.label).toBe("claudebot · t");
+    expect(fixture.seen[0]!.json.source.label).toBe("tomte · t");
   });
 
   test("a file others can read still sends, with a warning that names the path only", async () => {
     const fixture = serve();
     const file = join(root, "loose.env");
     writeFileSync(file, `${URL_VAR}=${fixture.url}\n${TOKEN_VAR}=${TOKEN}\n`, { mode: 0o644 });
-    const r = await sender(send, { CLAUDEBOT_NOTIFY_ENV: file });
+    const r = await sender(send, { TOMTE_NOTIFY_ENV: file });
     expect(r.code).toBe(EXIT.ok);
     expect(r.err).toEqual([
-      `claudebot-notify: warning: ${file} can be read by other users; run chmod 600 on it`,
+      `tomte-notify: warning: ${file} can be read by other users; run chmod 600 on it`,
     ]);
   });
 
   test("--which prints the file in use, or `environment`, and reads no token", async () => {
     const file = join(root, "which.env");
-    expect(await sender(["--which"], { CLAUDEBOT_NOTIFY_ENV: file })).toMatchObject({
+    expect(await sender(["--which"], { TOMTE_NOTIFY_ENV: file })).toMatchObject({
       code: EXIT.ok,
       out: [file],
     });
@@ -348,7 +348,7 @@ describe("configuration", () => {
       out: ["environment"],
     });
     expect((await sender(["--which"], {})).out).toEqual([
-      join(home, ".config", "claudebot", "notify.env"),
+      join(home, ".config", "tomte", "notify.env"),
     ]);
     expect((await sender(["--which"], { [URL_VAR]: "u" })).code).toBe(EXIT.config);
   });
@@ -363,7 +363,7 @@ describe("failures", () => {
     expect(r.code).toBe(EXIT.request);
     expect(r.out).toEqual([]);
     expect(r.err).toEqual([
-      `claudebot-notify: HTTP 400 from ${new URL(fixture.url).origin}: title: Too big`,
+      `tomte-notify: HTTP 400 from ${new URL(fixture.url).origin}: title: Too big`,
     ]);
   });
 
@@ -400,7 +400,7 @@ describe("failures", () => {
   test("an empty error body still names the status", async () => {
     const fixture = serve(() => new Response(null, { status: 503 }));
     const r = await sender(send, viaEnv(fixture.url));
-    expect(r.err).toEqual([`claudebot-notify: HTTP 503 from ${new URL(fixture.url).origin}`]);
+    expect(r.err).toEqual([`tomte-notify: HTTP 503 from ${new URL(fixture.url).origin}`]);
   });
 
   test("a redirect is a failure and is not followed, so the token goes nowhere else", async () => {
@@ -462,9 +462,9 @@ describe("as a program", () => {
       stderr: "pipe",
     });
 
-  test("the entry point sends, prints ok and exits 0; through a symlink named claudebot-notify too", async () => {
+  test("the entry point sends, prints ok and exits 0; through a symlink named tomte-notify too", async () => {
     const fixture = serve();
-    const link = join(root, "claudebot-notify");
+    const link = join(root, "tomte-notify");
     symlinkSync(MAIN, link);
     for (const script of [MAIN, link]) {
       const child = spawn(script, ["completed", "t", "s", "shipped"], viaEnv(fixture.url));

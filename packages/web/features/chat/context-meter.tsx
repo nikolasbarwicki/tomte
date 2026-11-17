@@ -1,4 +1,4 @@
-import type { ContextEvent } from "@claudebot/contract/events";
+import type { ContextEvent } from "@tomte/contract/events";
 
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";

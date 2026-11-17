@@ -51,7 +51,7 @@ const git = (cwd: string, ...args: string[]) => {
 beforeAll(() => {
   root = mkdtempSync(join(realpathSync(tmpdir()), "notify-config-"));
   home = join(root, "home");
-  dir = join(home, ".config", "claudebot");
+  dir = join(home, ".config", "tomte");
   const repo = join(root, "src", "my-repo");
   mkdirSync(dir, { recursive: true });
   mkdirSync(join(repo, "pkg"), { recursive: true });
@@ -112,11 +112,11 @@ describe("which config is selected", () => {
   });
 
   test("an explicit file wins over the environment and the project; a relative one is made absolute", async () => {
-    const env = { CLAUDEBOT_NOTIFY_ENV: "mine.env", [URL_VAR]: URL_, [TOKEN_VAR]: TOKEN };
+    const env = { TOMTE_NOTIFY_ENV: "mine.env", [URL_VAR]: URL_, [TOKEN_VAR]: TOKEN };
     const picked = await select(around(place.elsewhere, env));
     expect(describeSource(picked.source)).toBe(join(place.elsewhere, "mine.env"));
     const named = await select(
-      around(place.repo, { CLAUDEBOT_NOTIFY_ENV: "/abs/x.env", CLAUDEBOT_NOTIFY_PROJECT: "p" }),
+      around(place.repo, { TOMTE_NOTIFY_ENV: "/abs/x.env", TOMTE_NOTIFY_PROJECT: "p" }),
     );
     expect(describeSource(named.source)).toBe("/abs/x.env");
   });
@@ -143,10 +143,10 @@ describe("which config is selected", () => {
     clean();
     const own = write("notify-my-repo.env", "");
     const fallback = join(dir, "notify.env");
-    const other = await select(around(place.repo, { CLAUDEBOT_NOTIFY_PROJECT: "other" }));
+    const other = await select(around(place.repo, { TOMTE_NOTIFY_PROJECT: "other" }));
     expect(describeSource(other.source)).toBe(fallback);
     expect(other.project).toBe("other");
-    const same = await select(around(place.elsewhere, { CLAUDEBOT_NOTIFY_PROJECT: "my-repo" }));
+    const same = await select(around(place.elsewhere, { TOMTE_NOTIFY_PROJECT: "my-repo" }));
     expect(describeSource(same.source)).toBe(own);
   });
 
@@ -167,21 +167,21 @@ describe("which config is selected", () => {
     rmSync(shared);
   });
 
-  test("the config directory can be moved with CLAUDEBOT_NOTIFY_DIR or XDG_CONFIG_HOME", async () => {
+  test("the config directory can be moved with TOMTE_NOTIFY_DIR or XDG_CONFIG_HOME", async () => {
     clean();
     const moved = join(root, "moved");
     mkdirSync(moved, { recursive: true });
-    const viaDir = await select(around(place.elsewhere, { CLAUDEBOT_NOTIFY_DIR: moved }));
+    const viaDir = await select(around(place.elsewhere, { TOMTE_NOTIFY_DIR: moved }));
     expect(describeSource(viaDir.source)).toBe(join(moved, "notify.env"));
     const viaXdg = await select(around(place.elsewhere, { XDG_CONFIG_HOME: moved }));
-    expect(describeSource(viaXdg.source)).toBe(join(moved, "claudebot", "notify.env"));
+    expect(describeSource(viaXdg.source)).toBe(join(moved, "tomte", "notify.env"));
   });
 
   test("a project name that cannot be part of a file name is refused", async () => {
     for (const name of ["../escape", "a/b", ".."])
-      await expect(
-        select(around(place.elsewhere, { CLAUDEBOT_NOTIFY_PROJECT: name })),
-      ).rejects.toThrow("cannot name a config file");
+      await expect(select(around(place.elsewhere, { TOMTE_NOTIFY_PROJECT: name }))).rejects.toThrow(
+        "cannot name a config file",
+      );
   });
 });
 

@@ -2,7 +2,7 @@
 //   bun scripts/signing.ts plan
 //       reads the signing secrets from the environment (only their presence), prints which platforms are signed, appends
 //       `mac=` and `windows=` (true/false) to $GITHUB_OUTPUT and a summary to $GITHUB_STEP_SUMMARY; exits non-zero when
-//       a platform is partly configured, or when CLAUDEBOT_REQUIRE_SIGNING=true and one has no secrets.
+//       a platform is partly configured, or when TOMTE_REQUIRE_SIGNING=true and one has no secrets.
 //   bun scripts/signing.ts sign-host <binary>
 //       signs the host binary in place with this OS's identity (macOS: Developer ID Application, hardened runtime,
 //       timestamp and the entitlements of scripts/entitlements.mac.plist; Windows: Authenticode, SHA-256, timestamped).
@@ -170,7 +170,7 @@ async function signHost(binary: string): Promise<void> {
     throw new Error(`there is no host signing on ${platform}`);
   }
   planSigning(platform, process.env, true);
-  const dir = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), "claudebot-sign-"));
+  const dir = await mkdtemp(join(process.env.RUNNER_TEMP ?? tmpdir(), "tomte-sign-"));
   try {
     const target = resolve(binary);
     await (platform === "darwin" ? signHostMac(target, dir) : signHostWindows(target, dir));

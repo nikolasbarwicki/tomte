@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import type { ExternalEventInput } from "@claudebot/contract/api";
+import type { ExternalEventInput } from "@tomte/contract/api";
 
 import { migrate } from "../platform/db.ts";
 import { createEventStore } from "./store.ts";

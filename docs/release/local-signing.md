@@ -1,6 +1,6 @@
 # Local macOS signing and notarization (personal test builds)
 
-`bun scripts/sign-local.ts` (alias `bun run sign:local`) signs and notarizes an **arm64** Claudebot build on this Mac, with a Developer ID Application certificate and an App Store Connect API key (a `.p8` file, or a saved `asc` profile) that you hold. It produces a signed, notarized, stapled DMG, a signed update zip and a signed bundled host. Nothing is installed, published or pushed.
+`bun scripts/sign-local.ts` (alias `bun run sign:local`) signs and notarizes an **arm64** Tomte build on this Mac, with a Developer ID Application certificate and an App Store Connect API key (a `.p8` file, or a saved `asc` profile) that you hold. It produces a signed, notarized, stapled DMG, a signed update zip and a signed bundled host. Nothing is installed, published or pushed.
 
 It is a separate route from the release workflow. CI keeps using `scripts/signing.ts` and `package-desktop.ts --sign` with the `CSC_LINK` secrets exactly as before (AGENTS.md, "Signing and notarization"); this route never runs in CI and refuses when `CI` is set.
 
@@ -16,7 +16,7 @@ bun scripts/sign-local.ts cleanup --out dist/rel-ready-1108-signed-arm64        
 
 Other flags: `--version <semver>` (default: the host's `VERSION`), `--arch arm64` (the only accepted value) and `--add-to-search-list` (below).
 
-- `plan` prints every operation in order with its arguments (secrets as `<labels>`), every path, the identity rule, the global settings the route touches and the secrets that appear on a command line. It runs no command, reads no file and does not look at the keychain; with the asc backend and no `CLAUDEBOT_LOCAL_ASC_BIN` it only looks `asc` up on `PATH` (a directory lookup, nothing is executed). It also lists what would make `run` refuse right now.
+- `plan` prints every operation in order with its arguments (secrets as `<labels>`), every path, the identity rule, the global settings the route touches and the secrets that appear on a command line. It runs no command, reads no file and does not look at the keychain; with the asc backend and no `TOMTE_LOCAL_ASC_BIN` it only looks `asc` up on `PATH` (a directory lookup, nothing is executed). It also lists what would make `run` refuse right now.
 - `run` does the work. It refuses, before running anything, when `CI` is set, when `--confirm-keychain-and-notary-upload` is missing, when this is not macOS, when an input is missing or names no file, when `--out` exists and is not empty, when a process runs from under `--out`, or when `--out` lies in a `Keychains` folder.
 - `--out` must not exist (or be empty). Use a new folder per run.
 
@@ -29,15 +29,15 @@ Other flags: `--version <semver>` (default: the host's `VERSION`), `--arch arm64
 
 Credentials come **only** from these environment variables. The CI secret names (`MACOS_CERTIFICATE_P12`, …) are deliberately not accepted: they hold base64 contents, these hold paths.
 
-| Variable                                                              | Content                                                                              |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `CLAUDEBOT_LOCAL_P12_FILE`                                            | absolute path of the `.p12`                                                          |
-| `CLAUDEBOT_LOCAL_P12_PASSWORD_FILE` or `CLAUDEBOT_LOCAL_P12_PASSWORD` | exactly one: a file holding the password (trailing newline ignored), or the password |
-| `CLAUDEBOT_LOCAL_API_KEY_FILE`                                        | absolute path of the `.p8`                                                           |
-| `CLAUDEBOT_LOCAL_API_KEY_ID`                                          | the key's Key ID                                                                     |
-| `CLAUDEBOT_LOCAL_API_ISSUER`                                          | the issuer ID                                                                        |
-| `CLAUDEBOT_LOCAL_ASC_PROFILE`                                         | instead of the three above: the name of a saved `asc` profile, for example `ASC API` |
-| `CLAUDEBOT_LOCAL_ASC_BIN`                                             | optional, with the profile: absolute path of `asc` (default: `asc` found on `PATH`)  |
+| Variable                                                      | Content                                                                              |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `TOMTE_LOCAL_P12_FILE`                                        | absolute path of the `.p12`                                                          |
+| `TOMTE_LOCAL_P12_PASSWORD_FILE` or `TOMTE_LOCAL_P12_PASSWORD` | exactly one: a file holding the password (trailing newline ignored), or the password |
+| `TOMTE_LOCAL_API_KEY_FILE`                                    | absolute path of the `.p8`                                                           |
+| `TOMTE_LOCAL_API_KEY_ID`                                      | the key's Key ID                                                                     |
+| `TOMTE_LOCAL_API_ISSUER`                                      | the issuer ID                                                                        |
+| `TOMTE_LOCAL_ASC_PROFILE`                                     | instead of the three above: the name of a saved `asc` profile, for example `ASC API` |
+| `TOMTE_LOCAL_ASC_BIN`                                         | optional, with the profile: absolute path of `asc` (default: `asc` found on `PATH`)  |
 
 `sign-local.ts` reads them once and removes them from its own environment, so the build, electron-builder and `notarytool` never inherit them. The `.p8` path is handed on as `APPLE_API_KEY`, the key ID and issuer as `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`, which is what `@electron/notarize` reads. Prefer `…_PASSWORD_FILE` so the password is not in your shell's environment or history.
 
@@ -50,8 +50,8 @@ All state lives inside `--out`:
 ```
 <out>/.signing/<run-id>.keychain-db   the temporary keychain (deleted at the end)
 <out>/.signing/state.json             run id, pid, keychain path, search-list snapshot (for cleanup)
-<out>/host/claudebot-host-darwin-arm64    the signed host (what package:desktop bundles)
-<out>/Claudebot-darwin-arm64/             electron-builder's output: unpacked app, DMG, update zip, the zip's blockmap, latest-mac.yml (the DMG's blockmap is deleted after stapling)
+<out>/host/tomte-host-darwin-arm64    the signed host (what package:desktop bundles)
+<out>/Tomte-darwin-arm64/             electron-builder's output: unpacked app, DMG, update zip, the zip's blockmap, latest-mac.yml (the DMG's blockmap is deleted after stapling)
 <out>/artifacts/                          the finished DMG, zip, the zip's blockmap, latest-mac.yml and SHA256SUMS (no DMG blockmap)
 ```
 
@@ -63,7 +63,7 @@ Order (the exact argv is what `plan` prints): create the folders and state file;
 
 ### What is uploaded to Apple
 
-1. `Claudebot.zip`: a `ditto` archive of the signed `Claudebot.app` (Electron frameworks and helpers, `app.asar`, the bundled signed host, resources), made by `@electron/notarize` in a temporary folder.
+1. `Tomte.zip`: a `ditto` archive of the signed `Tomte.app` (Electron frameworks and helpers, `app.asar`, the bundled signed host, resources), made by `@electron/notarize` in a temporary folder.
 2. The signed DMG (the stapled app and the Applications link).
 
 The update zip is not uploaded: it is built afterwards from the app whose ticket is already stapled. Apple sees the file names and contents of those two archives and your team's identity; nothing else of this machine.
@@ -72,8 +72,8 @@ The update zip is not uploaded: it is built afterwards from the app whose ticket
 
 Exactly one, chosen by the inputs (setting both is a refusal):
 
-- **`.p8` key** (`CLAUDEBOT_LOCAL_API_KEY_*`): `electron-builder` notarizes the app through `@electron/notarize` (`notarytool submit --wait`), and the route runs `xcrun notarytool submit --wait --output-format json` for the DMG.
-- **`asc` profile** (`CLAUDEBOT_LOCAL_ASC_PROFILE`): the Rork ASC CLI, with a profile you saved earlier. Every upload is `asc --profile "<name>" notarization submit --file <zip|dmg> --wait --output json`; no key file, key ID or issuer is given to the route. The packaging run gets `notarize: false` and an `afterSign` hook (`scripts/asc-notary.ts`): after electron-builder has signed the app and before it builds the DMG and the zip, the hook makes `Claudebot.zip` with `ditto -c -k --sequesterRsrc --keepParent`, submits it, and only on `Accepted` runs `xcrun stapler staple` and `xcrun stapler validate` on the app (stapling stays with `stapler` for both backends; the existing checks of the app in the update zip and of the DMG are unchanged). The DMG goes through the same `asc` call after it is signed. Anything but an explicit `Accepted` fails the run; the error carries the status, the submission ID, the sha256 of the uploaded file and the output of `asc --profile "<name>" notarization log --id <id>` (or says why it could not be fetched).
+- **`.p8` key** (`TOMTE_LOCAL_API_KEY_*`): `electron-builder` notarizes the app through `@electron/notarize` (`notarytool submit --wait`), and the route runs `xcrun notarytool submit --wait --output-format json` for the DMG.
+- **`asc` profile** (`TOMTE_LOCAL_ASC_PROFILE`): the Rork ASC CLI, with a profile you saved earlier. Every upload is `asc --profile "<name>" notarization submit --file <zip|dmg> --wait --output json`; no key file, key ID or issuer is given to the route. The packaging run gets `notarize: false` and an `afterSign` hook (`scripts/asc-notary.ts`): after electron-builder has signed the app and before it builds the DMG and the zip, the hook makes `Tomte.zip` with `ditto -c -k --sequesterRsrc --keepParent`, submits it, and only on `Accepted` runs `xcrun stapler staple` and `xcrun stapler validate` on the app (stapling stays with `stapler` for both backends; the existing checks of the app in the update zip and of the DMG are unchanged). The DMG goes through the same `asc` call after it is signed. Anything but an explicit `Accepted` fails the run; the error carries the status, the submission ID, the sha256 of the uploaded file and the output of `asc --profile "<name>" notarization log --id <id>` (or says why it could not be fetched).
 
 Both backends write `<out>/artifacts/NOTARIZATION.json`: `{ backend, profile?, version, submissions: [{ kind: "app"|"dmg", file, sha256, id, status }] }`. With the asc backend it lists the app zip and the DMG; with `.p8` only the DMG (electron-builder's own app submission is not observable). It is not in `SHA256SUMS`. Submission IDs are also logged as they happen.
 
@@ -104,7 +104,7 @@ The route never names or writes the login keychain, the default keychain, the Sy
 - With `CSC_LINK` set (CI) electron-builder creates its own keychain and prepends it, plus its root-certificates keychain, to the user search list and never restores the list. That is why this route does not use `CSC_LINK`.
 - Without `CSC_LINK`, `CSC_KEYCHAIN` names the keychain and electron-builder creates none and does not change the search list. The identity is passed as the SHA-1 (`mac.identity`; electron-builder matches it against `security find-identity` output, so no `Developer ID Application:` prefix). `forceCodeSigning: true` is set so a missing identity fails instead of shipping an unsigned app.
 - electron-builder notarizes the `.app` only (`ditto`, `notarytool submit --wait`, `stapler staple`). It does **not** notarize or staple the DMG, and it signs a DMG only when `dmg.sign` is set, without a timestamp. This route signs, notarizes and staples the DMG itself.
-- Stapling changes the DMG's bytes, so electron-builder's `latest-mac.yml` entry for the DMG and its `.blockmap` (both built from the unstapled file) go stale. The DMG's blockmap is written by `buildBlockMap` in `app-builder-lib` (`out/targets/blockmap/blockmap.js`, plain `fs`/`crypto`/`zlib`, no signing tool) but that module is a transitive, undocumented deep import of electron-builder, not a dependency of this repository, so the route does not call it. Instead it **drops** the DMG's `.blockmap`: the step after stapling rewrites the entry's `sha512` and `size`, removes the entry's `blockMapSize` if one is present (electron-builder writes `.blockmap` files in a mode that returns no `blockMapSize`, so none is expected; read from source), and deletes `<DMG>.blockmap`. The DMG's blockmap is therefore in neither `<out>/Claudebot-darwin-arm64/` nor `<out>/artifacts/` nor `SHA256SUMS`. The zip's blockmap is unchanged and is collected as before. electron-updater applies the zip on macOS, not the DMG, so the missing DMG blockmap should not matter for updates (UNVERIFIED).
+- Stapling changes the DMG's bytes, so electron-builder's `latest-mac.yml` entry for the DMG and its `.blockmap` (both built from the unstapled file) go stale. The DMG's blockmap is written by `buildBlockMap` in `app-builder-lib` (`out/targets/blockmap/blockmap.js`, plain `fs`/`crypto`/`zlib`, no signing tool) but that module is a transitive, undocumented deep import of electron-builder, not a dependency of this repository, so the route does not call it. Instead it **drops** the DMG's `.blockmap`: the step after stapling rewrites the entry's `sha512` and `size`, removes the entry's `blockMapSize` if one is present (electron-builder writes `.blockmap` files in a mode that returns no `blockMapSize`, so none is expected; read from source), and deletes `<DMG>.blockmap`. The DMG's blockmap is therefore in neither `<out>/Tomte-darwin-arm64/` nor `<out>/artifacts/` nor `SHA256SUMS`. The zip's blockmap is unchanged and is collected as before. electron-updater applies the zip on macOS, not the DMG, so the missing DMG blockmap should not matter for updates (UNVERIFIED).
 
 ### Who can use the signing key (read this before approving a run)
 
@@ -138,11 +138,11 @@ With the asc backend there is no notary secret on any command line: the profile'
 ## Verifying a result by hand
 
 ```sh
-spctl --assess --type execute --verbose=4 <out>/Claudebot-darwin-arm64/mac-arm64/Claudebot.app
-xcrun stapler validate <out>/Claudebot-darwin-arm64/mac-arm64/Claudebot.app
-spctl -a -t open --context context:primary-signature -vv <out>/artifacts/Claudebot-<version>-arm64.dmg
-xcrun stapler validate <out>/artifacts/Claudebot-<version>-arm64.dmg
-codesign -dvv <out>/Claudebot-darwin-arm64/mac-arm64/Claudebot.app/Contents/Resources/claudebot-host
+spctl --assess --type execute --verbose=4 <out>/Tomte-darwin-arm64/mac-arm64/Tomte.app
+xcrun stapler validate <out>/Tomte-darwin-arm64/mac-arm64/Tomte.app
+spctl -a -t open --context context:primary-signature -vv <out>/artifacts/Tomte-<version>-arm64.dmg
+xcrun stapler validate <out>/artifacts/Tomte-<version>-arm64.dmg
+codesign -dvv <out>/Tomte-darwin-arm64/mac-arm64/Tomte.app/Contents/Resources/tomte-host
 (cd <out>/artifacts && shasum -a 256 -c SHA256SUMS)
 ```
 
@@ -151,7 +151,7 @@ The route runs the same checks itself: the app and the host, and the browser in 
 ## Known limits
 
 - arm64 only; Windows and Linux are untouched.
-- The personal build bakes the placeholder update feed (`https://updates.invalid/claudebot`) unless `GITHUB_REPOSITORY` is set: it will never auto-update. That is intended for a test build.
+- The personal build bakes the placeholder update feed (`https://updates.invalid/tomte`) unless `GITHUB_REPOSITORY` is set: it will never auto-update. That is intended for a test build.
 - The `.dmg`/`.zip` produced here are not byte-identical to a CI release and are not for publishing.
 - Whether the Bun-compiled host, Chrome and its helpers run under the hardened runtime with the JIT entitlements and `disable-library-validation` (`scripts/entitlements.mac.plist`) is unobserved. The host job's smoke on a signed host exists in CI for this and `bun run smoke:desktop` on the signed app covers Chrome; this route starts neither. If a signed binary fails to start, add the entitlement to the plist and `MAC_ENTITLEMENT_KEYS` in `signing-kit.ts`.
 - Whether DMG notarization with a timestamp-only `codesign --force --timestamp` (no hardened runtime, as for any DMG) is accepted by Apple is unobserved; the route fails with Apple's log when it is not.

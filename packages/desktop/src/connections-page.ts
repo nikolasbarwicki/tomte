@@ -5,7 +5,7 @@ import type { Connections, ProfileView } from "./connections.ts";
 import { LOCAL_ID } from "./profile-store.ts";
 
 /** The privileged scheme the Connections window loads from, and the one origin it may navigate to. */
-export const CONNECTIONS_SCHEME = "claudebot-desktop";
+export const CONNECTIONS_SCHEME = "tomte-desktop";
 export const CONNECTIONS_ORIGIN = `${CONNECTIONS_SCHEME}://connections`;
 
 const MAX_NOTICES = 20;
@@ -88,7 +88,7 @@ ${notice ? noticeHtml(notice) : ""}
 <h2>Add a connection</h2>
 <form class="add" method="post" action="/add" autocomplete="off">
 <label for="name">Name</label><input type="text" id="name" name="name" value="${esc(form?.name ?? "")}">
-<label for="url">Address</label><input type="text" id="url" name="url" placeholder="https://claudebot.example.com" value="${esc(form?.url ?? "")}">
+<label for="url">Address</label><input type="text" id="url" name="url" placeholder="https://tomte.example.com" value="${esc(form?.url ?? "")}">
 <label for="code">Pairing code</label><input type="text" id="code" name="code" placeholder="ABCD-EFGH-IJKL">
 <p class="hint">Create the code on the host with <code>host pair</code>, or on its Devices page.</p>
 <button>Add</button>
@@ -103,7 +103,7 @@ function respond(status: number, headers: Record<string, string>, body: string |
 }
 
 export interface ConnectionsPages {
-  /** Answers a request to the `claudebot-desktop:` scheme: the list page, and the form posts that act and redirect back to it. */
+  /** Answers a request to the `tomte-desktop:` scheme: the list page, and the form posts that act and redirect back to it. */
   handle(request: Request): Promise<Response>;
   /** Stores a message and returns the id the list page takes as `?m=`. */
   notice(kind: Notice["kind"], text: string): string;

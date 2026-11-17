@@ -21,15 +21,15 @@ describe("what a release holds", () => {
     const assets = releaseAssets("1.2.0");
     expect(assets).toEqual([
       ...HOST_BINARIES,
-      "Claudebot-1.2.0-arm64.dmg",
-      "Claudebot-1.2.0-arm64-mac.zip",
-      "Claudebot-1.2.0.dmg",
-      "Claudebot-1.2.0-mac.zip",
+      "Tomte-1.2.0-arm64.dmg",
+      "Tomte-1.2.0-arm64-mac.zip",
+      "Tomte-1.2.0.dmg",
+      "Tomte-1.2.0-mac.zip",
       "latest-mac.yml",
-      "Claudebot-Setup-1.2.0.exe",
+      "Tomte-Setup-1.2.0.exe",
       "latest.yml",
-      "Claudebot-1.2.0.AppImage",
-      "Claudebot-1.2.0.deb",
+      "Tomte-1.2.0.AppImage",
+      "Tomte-1.2.0.deb",
       "latest-linux.yml",
     ]);
     expect(new Set(assets).size).toBe(assets.length);
@@ -37,7 +37,7 @@ describe("what a release holds", () => {
 
   test("a pre-release suffix is part of every name", () => {
     expect(desktopAssets("win32", ["x64"], "1.2.0-rc.1").installers).toEqual([
-      "Claudebot-Setup-1.2.0-rc.1.exe",
+      "Tomte-Setup-1.2.0-rc.1.exe",
     ]);
   });
 
@@ -47,26 +47,24 @@ describe("what a release holds", () => {
   });
 
   test("host binaries and unpacked apps follow the build and electron-builder naming", () => {
-    expect(hostBinaryName("win32", "x64")).toBe("claudebot-host-windows-x64.exe");
-    expect(hostBinaryName("darwin", "arm64")).toBe("claudebot-host-darwin-arm64");
-    expect(bundleDirName("darwin", ["arm64", "x64"])).toBe("Claudebot-darwin-arm64-x64");
-    expect(bundledHostPath("darwin", "x64")).toBe(
-      "mac/Claudebot.app/Contents/Resources/claudebot-host",
-    );
+    expect(hostBinaryName("win32", "x64")).toBe("tomte-host-windows-x64.exe");
+    expect(hostBinaryName("darwin", "arm64")).toBe("tomte-host-darwin-arm64");
+    expect(bundleDirName("darwin", ["arm64", "x64"])).toBe("Tomte-darwin-arm64-x64");
+    expect(bundledHostPath("darwin", "x64")).toBe("mac/Tomte.app/Contents/Resources/tomte-host");
     expect(bundledHostPath("darwin", "arm64")).toStartWith("mac-arm64/");
-    expect(bundledHostPath("win32", "x64")).toBe("win-unpacked/resources/claudebot-host.exe");
-    expect(bundledHostPath("linux", "arm64")).toBe("linux-arm64-unpacked/resources/claudebot-host");
-    expect(bundledAppPath("darwin", "arm64")).toBe("mac-arm64/Claudebot.app");
-    expect(bundledAppPath("win32", "x64")).toBe("win-unpacked/Claudebot.exe");
+    expect(bundledHostPath("win32", "x64")).toBe("win-unpacked/resources/tomte-host.exe");
+    expect(bundledHostPath("linux", "arm64")).toBe("linux-arm64-unpacked/resources/tomte-host");
+    expect(bundledAppPath("darwin", "arm64")).toBe("mac-arm64/Tomte.app");
+    expect(bundledAppPath("win32", "x64")).toBe("win-unpacked/Tomte.exe");
   });
 });
 
 describe("updateProvider", () => {
   test("a repository gives the GitHub provider", () => {
-    expect(updateProvider("acme/claudebot", true)).toEqual({
+    expect(updateProvider("acme/tomte", true)).toEqual({
       provider: "github",
       owner: "acme",
-      repo: "claudebot",
+      repo: "tomte",
       channel: "latest",
     });
   });
@@ -83,10 +81,10 @@ describe("updateProvider", () => {
       url: "http://127.0.0.1:4555",
       channel: "latest",
     });
-    expect(updateProvider("acme/claudebot", false, "http://localhost:80/feed").provider).toBe(
+    expect(updateProvider("acme/tomte", false, "http://localhost:80/feed").provider).toBe(
       "generic",
     );
-    expect(() => updateProvider("acme/claudebot", true, "http://127.0.0.1:4555")).toThrow("CI");
+    expect(() => updateProvider("acme/tomte", true, "http://127.0.0.1:4555")).toThrow("CI");
     expect(() => updateProvider(undefined, false, "https://updates.example.com")).toThrow(
       "not a loopback http URL",
     );
@@ -122,15 +120,15 @@ describe("collectDesktopRelease", () => {
     const hostDir = join(root, "hosts");
     const outDir = join(root, "out");
     await mkdir(hostDir);
-    await writeFile(join(hostDir, "claudebot-host-linux-x64"), "released host");
+    await writeFile(join(hostDir, "tomte-host-linux-x64"), "released host");
     const inApp = join(bundleDir, bundledHostPath("linux", "x64"));
     await mkdir(dirname(inApp), { recursive: true });
     await writeFile(inApp, opts.bundledHost ?? "released host");
     await chmod(inApp, 0o755);
     for (const name of [
-      "Claudebot-1.0.0.AppImage",
-      "Claudebot-1.0.0.deb",
-      "Claudebot-1.0.0.AppImage.blockmap",
+      "Tomte-1.0.0.AppImage",
+      "Tomte-1.0.0.deb",
+      "Tomte-1.0.0.AppImage.blockmap",
       "unrelated.txt",
     ]) {
       await writeFile(join(bundleDir, name), name);
@@ -156,10 +154,10 @@ describe("collectDesktopRelease", () => {
     const { run } = await linuxRun();
     const collected = await collectDesktopRelease(run);
     expect(collected).toEqual([
-      "Claudebot-1.0.0.AppImage",
-      "Claudebot-1.0.0.deb",
+      "Tomte-1.0.0.AppImage",
+      "Tomte-1.0.0.deb",
       "latest-linux.yml",
-      "Claudebot-1.0.0.AppImage.blockmap",
+      "Tomte-1.0.0.AppImage.blockmap",
     ]);
     expect((await readdir(run.outDir)).toSorted()).toEqual(collected.toSorted());
   });
@@ -167,7 +165,7 @@ describe("collectDesktopRelease", () => {
   test("fails when the bundled host is not the released binary", async () => {
     const { run } = await linuxRun({ bundledHost: "rebuilt host" });
     await expect(collectDesktopRelease(run)).rejects.toThrow(
-      "is not the release's claudebot-host-linux-x64",
+      "is not the release's tomte-host-linux-x64",
     );
   });
 
@@ -186,8 +184,8 @@ describe("collectDesktopRelease", () => {
 
   test("fails when an installer was not built", async () => {
     const { run } = await linuxRun();
-    await rm(join(run.bundleDir, "Claudebot-1.0.0.deb"));
-    await expect(collectDesktopRelease(run)).rejects.toThrow("Claudebot-1.0.0.deb was not built");
+    await rm(join(run.bundleDir, "Tomte-1.0.0.deb"));
+    await expect(collectDesktopRelease(run)).rejects.toThrow("Tomte-1.0.0.deb was not built");
   });
 
   test("macOS: the host inside the update zip is checked too, per arch", async () => {
@@ -197,18 +195,18 @@ describe("collectDesktopRelease", () => {
     const hostDir = join(root, "hosts");
     await mkdir(hostDir);
     const zips = {
-      arm64: "Claudebot-1.0.0-arm64-mac.zip",
-      x64: "Claudebot-1.0.0-mac.zip",
+      arm64: "Tomte-1.0.0-arm64-mac.zip",
+      x64: "Tomte-1.0.0-mac.zip",
     } as const;
     for (const arch of ["arm64", "x64"] as const) {
-      await writeFile(join(hostDir, `claudebot-host-darwin-${arch}`), `host ${arch}`);
+      await writeFile(join(hostDir, `tomte-host-darwin-${arch}`), `host ${arch}`);
       const app = join(root, `zip-${arch}`);
-      const inZip = join(app, "Claudebot.app/Contents/Resources/claudebot-host");
+      const inZip = join(app, "Tomte.app/Contents/Resources/tomte-host");
       await mkdir(dirname(inZip), { recursive: true });
       // The x64 zip carries the arm64 host: the app on disk is right, the zip is not.
       await writeFile(inZip, arch === "x64" ? "host arm64" : `host ${arch}`);
       await mkdir(bundleDir, { recursive: true });
-      const zip = Bun.spawn(["zip", "-qr", join(bundleDir, zips[arch]), "Claudebot.app"], {
+      const zip = Bun.spawn(["zip", "-qr", join(bundleDir, zips[arch]), "Tomte.app"], {
         cwd: app,
       });
       expect(await zip.exited).toBe(0);
@@ -229,11 +227,9 @@ describe("collectDesktopRelease", () => {
       archs: ["arm64", "x64"],
       version: "1.0.0",
     } as const;
-    await expect(collectDesktopRelease(run)).rejects.toThrow(
-      "Claudebot-1.0.0-mac.zip holds a host",
-    );
+    await expect(collectDesktopRelease(run)).rejects.toThrow("Tomte-1.0.0-mac.zip holds a host");
     await expect(collectDesktopRelease({ ...run, archs: ["arm64"] })).resolves.toContain(
-      "Claudebot-1.0.0-arm64-mac.zip",
+      "Tomte-1.0.0-arm64-mac.zip",
     );
   });
 });

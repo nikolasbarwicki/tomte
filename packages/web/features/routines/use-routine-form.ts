@@ -1,5 +1,5 @@
-import { RoutinePreview } from "@claudebot/contract/api";
-import type { Routine } from "@claudebot/contract/events";
+import { RoutinePreview } from "@tomte/contract/api";
+import type { Routine } from "@tomte/contract/events";
 import { useActionState, useEffect, useEffectEvent, useReducer, useState } from "react";
 
 import { errorOf, readJson } from "@/host/api.ts";

@@ -1,5 +1,5 @@
-import type { BotFile, BotSummary } from "@claudebot/contract/events";
 import { getRouteApi } from "@tanstack/react-router";
+import type { BotFile, BotSummary } from "@tomte/contract/events";
 import {
   DownloadIcon,
   EllipsisIcon,

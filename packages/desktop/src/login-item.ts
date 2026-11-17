@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { z } from "zod";
 
 /** When this names a file, the login item is recorded there as `{ "openAtLogin": boolean }` and the OS is never asked: the seam smoke tests use so nothing registers on the machine they run on. */
-export const LOGIN_ITEM_FILE_ENV = "CLAUDEBOT_DESKTOP_LOGIN_ITEM_FILE";
+export const LOGIN_ITEM_FILE_ENV = "TOMTE_DESKTOP_LOGIN_ITEM_FILE";
 
 /** The app's registration with the OS to open when the user logs in. */
 export interface LoginItem {

@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 
-import type { HandoffStatus } from "@claudebot/contract/events";
+import type { HandoffStatus } from "@tomte/contract/events";
 
 type MessageKind = "brief" | "message" | "result" | "failure" | "cancel";
 

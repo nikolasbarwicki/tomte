@@ -1,4 +1,4 @@
-import { itemActions } from "@claudebot/contract/item-actions";
+import { itemActions } from "@tomte/contract/item-actions";
 
 import type { Answered, CardItem, CardSource } from "../channels/index.ts";
 import type { EventItem, Events } from "../events/index.ts";

@@ -1,4 +1,4 @@
-import type { Routine } from "@claudebot/contract/events";
+import type { Routine } from "@tomte/contract/events";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";

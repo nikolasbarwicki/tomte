@@ -1,5 +1,5 @@
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
-import type { Bot, MemoryScope } from "@claudebot/contract/events";
+import type { Bot, MemoryScope } from "@tomte/contract/events";
 
 import { openThread, type HostDelegate, type Thread, type ThreadEnv } from "../bots/index.ts";
 

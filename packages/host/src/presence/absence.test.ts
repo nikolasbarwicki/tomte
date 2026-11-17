@@ -70,13 +70,13 @@ async function watch() {
       (
         latest("bots") as (PageEvent & { bots: { id: string; needsYou: number }[] }) | undefined
       )?.bots.find((b) => b.id === botId)?.needsYou ?? 0,
-    /** The open bot's notices: the events of its "Claudebot" source. */
+    /** The open bot's notices: the events of its "Tomte" source. */
     notices: (botId: string): Notice[] =>
       (
         latest("work", botId) as
           | (PageEvent & { sources: { label: string; events: Notice[] }[] })
           | undefined
-      )?.sources.find((s) => s.label === "Claudebot")?.events ?? [],
+      )?.sources.find((s) => s.label === "Tomte")?.events ?? [],
     /** The open bot's routines, as the last routines event showed them. */
     routines: (botId: string) =>
       (latest("routines", botId) as (PageEvent & { routines: RoutineView[] }) | undefined)

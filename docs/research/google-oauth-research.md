@@ -1,7 +1,7 @@
 # Google / Gmail OAuth: research notes
 
 Status: research, no decision taken
-Scope: how claudebot should handle Gmail setup for a public release; how competitors handle it.
+Scope: how tomte should handle Gmail setup for a public release; how competitors handle it.
 Gathered: against repo clones and Google docs fetched during one session. Competitor stars, plans and prices are snapshots.
 
 Legend: **[V]** observed in a doc or in source. **[I]** inference, not observed. **[U]** unverified claim made by a vendor.
@@ -14,12 +14,12 @@ Gmail setup today asks each user to:
 2. Create their own Google Cloud project and OAuth client, with "Use this client for an AI-powered agent" selected **[V]**.
 3. Click through a consent screen, with the unverified-app warning if the client is unverified **[V]**.
 
-## 2. Claudebot's current wiring **[V]**
+## 2. Tomte's current wiring **[V]**
 
 - `src/integrations/catalog.ts`: `GMAIL_OAUTH` is an own-client entry. Scopes `gmail.readonly gmail.compose`. URL `https://gmailmcp.googleapis.com/mcp/v1`.
 - `src/integrations/index.ts`: `connectOAuth` uses `deps.oauthRedirectUrl` (loopback `/oauth/callback`, port from `PORT`, default 5173) through the MCP SDK `mcpAuth`.
 - `.env`: `APP_ORIGIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
-- No `access_type` string exists in `src/integrations/*.ts`. The installed MCP SDK (`node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js`) matches only `offline_access`, and only to add `prompt=consent`; it never sets `access_type`. **[V]** by grep, not by a live Google sign-in. So claudebot sends no `access_type=offline` today, and Google likely issues no refresh token **[I]** until tested.
+- No `access_type` string exists in `src/integrations/*.ts`. The installed MCP SDK (`node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js`) matches only `offline_access`, and only to add `prompt=consent`; it never sets `access_type`. **[V]** by grep, not by a live Google sign-in. So tomte sends no `access_type=offline` today, and Google likely issues no refresh token **[I]** until tested.
 
 ## 3. Google facts
 
@@ -83,7 +83,7 @@ Composio's own account of managed auth (`composio.dev/content/ship-gmail-integra
 
 ### Patterns worth copying
 
-- **Two tiers:** managed one-click only on the vendor's hosted or packaged path, bring-your-own as the escape hatch. MausBot defaults to its managed broker in packaged builds; source builds and self-hosters use their own Composio key. Rerun's cloud is managed; self-hosting needs your own Composio auth config. OpenBot has no managed tier: Google MCP and Composio are both bring-your-own. This does not imply claudebot should default to Composio; see sections 5 and 6 (opt-in, data path disclosed).
+- **Two tiers:** managed one-click only on the vendor's hosted or packaged path, bring-your-own as the escape hatch. MausBot defaults to its managed broker in packaged builds; source builds and self-hosters use their own Composio key. Rerun's cloud is managed; self-hosting needs your own Composio auth config. OpenBot has no managed tier: Google MCP and Composio are both bring-your-own. This does not imply tomte should default to Composio; see sections 5 and 6 (opt-in, data path disclosed).
 - **Verb-class grants enforced at the bridge, not in the model** (MausBot `docs/superpowers/plans/2026-08-31-04-connector-scopes.md`): read, draft, send, modify, delete. A new grant defaults to read-only. Imported bots get no grants. Every allow/deny is logged.
 - **Send gating at every level** (MausBot `docs/verification/gmail-drafts.md`): "Ask every time" holds sends at Full access. A daily send allowance is the only auto-send route. Reading and drafting never consume it.
 - **Confirm cards for send/post/delete** (OpenBot `openbot.ask_ui`). Whether it is an enforced gate or a prompt convention was not checked.
@@ -92,13 +92,13 @@ Composio's own account of managed auth (`composio.dev/content/ship-gmail-integra
 
 ## 5. Options for a public release
 
-|     | Option                                                                                  | Verdict                                                                                                                                                                                                                            |
-| --- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A   | Bring-your-own OAuth client (today). Keep as the advanced path.                         | Keep. Matches OpenBot and Rakazo's MCP path. Does not remove the friction.                                                                                                                                                         |
-| B   | Claudebot-owned verified OAuth client.                                                  | Defer. Needs brand verification, restricted-scope review, annual assessment, Limited Use review, and a legal entity and domain **[I]**. Ask Google about the model-provider transfer first.                                        |
-| C   | Broker (Composio, or Pipedream). One-click, no Google verification on claudebot's side. | Best near-term path. Opt-in, disclose the data path (mail goes to Composio, then the model provider). Do not make it the default. How a Composio session endpoint fits the catalog's `bearer` entry shape is **untested** **[I]**. |
-| D   | IMAP with an app password.                                                              | Not seen in any competitor. Avoids Google OAuth verification. Mail still goes to the model provider. Not evaluated beyond that **[I]**.                                                                                            |
-| E   | Closed beta on the 100-user unverified cap.                                             | Fallback only. Users still see the warning.                                                                                                                                                                                        |
+|     | Option                                                                              | Verdict                                                                                                                                                                                                                            |
+| --- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A   | Bring-your-own OAuth client (today). Keep as the advanced path.                     | Keep. Matches OpenBot and Rakazo's MCP path. Does not remove the friction.                                                                                                                                                         |
+| B   | Tomte-owned verified OAuth client.                                                  | Defer. Needs brand verification, restricted-scope review, annual assessment, Limited Use review, and a legal entity and domain **[I]**. Ask Google about the model-provider transfer first.                                        |
+| C   | Broker (Composio, or Pipedream). One-click, no Google verification on tomte's side. | Best near-term path. Opt-in, disclose the data path (mail goes to Composio, then the model provider). Do not make it the default. How a Composio session endpoint fits the catalog's `bearer` entry shape is **untested** **[I]**. |
+| D   | IMAP with an app password.                                                          | Not seen in any competitor. Avoids Google OAuth verification. Mail still goes to the model provider. Not evaluated beyond that **[I]**.                                                                                            |
+| E   | Closed beta on the 100-user unverified cap.                                         | Fallback only. Users still see the warning.                                                                                                                                                                                        |
 
 ## 6. Recommended direction (not yet decided)
 
@@ -113,7 +113,7 @@ Composio's own account of managed auth (`composio.dev/content/ship-gmail-integra
 - Does Google treat sending Gmail content to Anthropic, or to a user-chosen model, as a permitted Limited Use transfer? Needs an answer from Google, not from policy text.
 - With `access_type=offline` added, does `gmailmcp.googleapis.com` issue a refresh token? Test with a throwaway client; the SDK-side gap is already confirmed by grep.
 - Does a general agent platform qualify under Google's approved Gmail use cases? **[I]** gray area.
-- CASA cost and timeline for claudebot specifically. No Google figure found.
+- CASA cost and timeline for tomte specifically. No Google figure found.
 - Turnstone's Gmail setup. Not researched.
 - Is OpenBot's "Google User Data" policy backed by an approved Google client? Not visible in the public repo.
 

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { EventAccess } from "@claudebot/contract/api";
+import type { EventAccess } from "@tomte/contract/api";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 

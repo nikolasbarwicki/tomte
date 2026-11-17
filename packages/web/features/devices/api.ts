@@ -1,4 +1,4 @@
-import { DeviceList, PairingCodeResponse } from "@claudebot/contract/api";
+import { DeviceList, PairingCodeResponse } from "@tomte/contract/api";
 
 import { act, errorOf, post, readJson } from "@/host/api.ts";
 

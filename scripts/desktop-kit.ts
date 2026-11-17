@@ -8,10 +8,10 @@ import { join } from "node:path";
 
 import { HOST_BINARIES, sha256 } from "./release-kit.ts";
 
-export const APP_NAME = "Claudebot";
+export const APP_NAME = "Tomte";
 
-/** The bundle id of every release and normal local build; the user's installed Claudebot has it, and so do its caches and preferences. */
-export const PRODUCTION_BUNDLE_ID = "dev.claudebot.desktop";
+/** The bundle id of every release and normal local build; the user's installed Tomte has it, and so do its caches and preferences. */
+export const PRODUCTION_BUNDLE_ID = "dev.tomte.desktop";
 
 /** The bundle id of a `--update-url` verification build. Squirrel.Mac keeps `~/Library/Caches/<bundle id>.ShipIt` under the real home, so a fixture must never share the production id. */
 export const FIXTURE_BUNDLE_ID = `${PRODUCTION_BUNDLE_ID}.updatefixture`;
@@ -38,7 +38,7 @@ export function hostTarget(platform: DesktopPlatform, arch: DesktopArch): string
 }
 
 export function hostBinaryName(platform: DesktopPlatform, arch: DesktopArch): string {
-  return `claudebot-host-${hostTarget(platform, arch)}${platform === "win32" ? ".exe" : ""}`;
+  return `tomte-host-${hostTarget(platform, arch)}${platform === "win32" ? ".exe" : ""}`;
 }
 
 /** Folder under `--out` that one packaging run writes; the arches are in the name, so a mac run for both is its own folder. */
@@ -59,17 +59,17 @@ export function bundledAppPath(platform: "darwin" | "win32", arch: DesktopArch):
   return join(dir, platform === "darwin" ? `${APP_NAME}.app` : `${APP_NAME}.exe`);
 }
 
-/** The bundled host in the unpacked app, relative to the bundle folder; `claudebot-host` is the extra resource's name. */
+/** The bundled host in the unpacked app, relative to the bundle folder; `tomte-host` is the extra resource's name. */
 export function bundledHostPath(platform: DesktopPlatform, arch: DesktopArch): string {
   const dir = unpackedDir(platform, arch);
   return platform === "darwin"
-    ? join(dir, `${APP_NAME}.app`, "Contents", "Resources", "claudebot-host")
-    : join(dir, "resources", `claudebot-host${platform === "win32" ? ".exe" : ""}`);
+    ? join(dir, `${APP_NAME}.app`, "Contents", "Resources", "tomte-host")
+    : join(dir, "resources", `tomte-host${platform === "win32" ? ".exe" : ""}`);
 }
 
 /**
  * The files one OS contributes to a release: the installers and the update metadata electron-updater reads. electron-builder
- * names the x64 mac files without the arch (`Claudebot-1.0.0.dmg`, `Claudebot-1.0.0-mac.zip`) and updater's x64 mac lookup
+ * names the x64 mac files without the arch (`Tomte-1.0.0.dmg`, `Tomte-1.0.0-mac.zip`) and updater's x64 mac lookup
  * relies on `arm64` being absent from them. Windows and Linux names are set in `package-desktop.ts`.
  */
 export function desktopAssets(
@@ -144,7 +144,7 @@ export function updateProvider(repository: string | undefined, ci: boolean, fixt
     }
     return {
       provider: "generic" as const,
-      url: "https://updates.invalid/claudebot",
+      url: "https://updates.invalid/tomte",
       channel: CHANNEL,
     };
   }
@@ -173,9 +173,9 @@ function metadataVersion(text: string): string | undefined {
 }
 
 export interface DesktopRelease {
-  /** Folder one packaging run wrote (`<out>/Claudebot-<os>-<archs>`). */
+  /** Folder one packaging run wrote (`<out>/Tomte-<os>-<archs>`). */
   bundleDir: string;
-  /** Folder holding the release's host binaries, named `claudebot-host-<os>-<arch>[.exe]`. */
+  /** Folder holding the release's host binaries, named `tomte-host-<os>-<arch>[.exe]`. */
   hostDir: string;
   /** Where the installers and metadata are copied. */
   outDir: string;
@@ -214,7 +214,7 @@ export async function collectDesktopRelease(r: DesktopRelease): Promise<string[]
         (n) => n.endsWith("-mac.zip") && n.includes("arm64") === (arch === "arm64"),
       );
       if (zip === undefined) throw new Error(`no update zip is expected for ${arch}`);
-      const member = join(`${APP_NAME}.app`, "Contents", "Resources", "claudebot-host");
+      const member = join(`${APP_NAME}.app`, "Contents", "Resources", "tomte-host");
       const inZip = await hashZipMember(join(r.bundleDir, zip), member);
       if (inZip !== released) {
         throw new Error(

@@ -1,6 +1,6 @@
-import { BotProfileUpdate, type ToolAllowances } from "@claudebot/contract/api";
-import { BotAvatar } from "@claudebot/contract/avatars";
-import { ChatMode } from "@claudebot/contract/events";
+import { BotProfileUpdate, type ToolAllowances } from "@tomte/contract/api";
+import { BotAvatar } from "@tomte/contract/avatars";
+import { ChatMode } from "@tomte/contract/events";
 import { z } from "zod";
 
 import {

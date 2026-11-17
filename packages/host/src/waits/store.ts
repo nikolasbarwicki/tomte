@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 
-import type { WaitAction } from "@claudebot/contract/events";
+import type { WaitAction } from "@tomte/contract/events";
 
 export type WaitKind = "tool_approval" | "question" | "takeover" | "credential";
 type WaitState = "open" | "answered" | "expired" | "cancelled";

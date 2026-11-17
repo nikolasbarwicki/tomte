@@ -131,7 +131,7 @@ export function createEgressProxy(o: EgressProxyOptions = {}): EgressProxy {
     if (!address)
       return void res
         .writeHead(403, { "content-type": "text/plain" })
-        .end(`Blocked by claudebot: ${target.hostname} is not reachable from the bot's browser`);
+        .end(`Blocked by tomte: ${target.hostname} is not reachable from the bot's browser`);
     const headers: OutgoingHttpHeaders = { ...req.headers, host: target.host };
     for (const h of HOP_HEADERS) delete headers[h];
     const port = Number(target.port || 80);

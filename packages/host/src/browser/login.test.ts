@@ -23,9 +23,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { CredentialEntry, ServerEvent } from "@claudebot/contract/events";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { CredentialEntry, ServerEvent } from "@tomte/contract/events";
 
 import { createBot } from "../bots/index.ts";
 import { createHostServer, type HostServer } from "../host-server/index.ts";
@@ -367,7 +367,7 @@ describe("browser_login", () => {
         "login",
         entry.id,
         "--credential-provider",
-        "claudebot",
+        "tomte",
         "--no-navigate",
         "--url",
         SIGN_IN,
@@ -380,7 +380,7 @@ describe("browser_login", () => {
       args: string[];
     }[];
     const plugin = defined(plugins[0], "plugin");
-    expect(plugin.name).toBe("claudebot");
+    expect(plugin.name).toBe("tomte");
     expect(plugin.args[1]).toBe(`${server.agentUrl}${CREDENTIAL_EXCHANGE_PATH}`);
     expect(login.env.AGENT_BROWSER_PLUGINS).not.toContain(nonce);
 

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { EventAccess } from "@claudebot/contract/api";
+import { EventAccess } from "@tomte/contract/api";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 import { watchEvents, type EventsWatch } from "../testing/watch-events.ts";
@@ -46,8 +46,8 @@ async function botWithRoute(name: string) {
         env: {
           PATH: process.env.PATH ?? "",
           HOME: scratch,
-          CLAUDEBOT_EVENTS_URL: route.url,
-          CLAUDEBOT_EVENTS_TOKEN: route.token,
+          TOMTE_EVENTS_URL: route.url,
+          TOMTE_EVENTS_TOKEN: route.token,
         },
         stdout: "pipe",
         stderr: "pipe",
@@ -124,8 +124,8 @@ describe("the sender against a real host", () => {
       env: {
         PATH: process.env.PATH ?? "",
         HOME: scratch,
-        CLAUDEBOT_EVENTS_URL: route.url,
-        CLAUDEBOT_EVENTS_TOKEN: "not-the-token",
+        TOMTE_EVENTS_URL: route.url,
+        TOMTE_EVENTS_TOKEN: "not-the-token",
       },
       stderr: "pipe",
       stdout: "pipe",

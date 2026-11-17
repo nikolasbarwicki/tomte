@@ -42,7 +42,7 @@ describe("the credential plugin", () => {
     expect(reply).toEqual({
       protocol: PROTOCOL,
       success: true,
-      manifest: { name: "claudebot", capabilities: ["credential.read"] },
+      manifest: { name: "tomte", capabilities: ["credential.read"] },
     });
     expect(posted).toEqual([]);
   });

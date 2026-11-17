@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { EventAccess } from "@claudebot/contract/api";
+import type { EventAccess } from "@tomte/contract/api";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
@@ -96,9 +96,9 @@ const routineOf = async (botId: string, id: string) =>
 const runsOf = async (id: string) =>
   (await (await host.ui("/api/routines/runs", { id })).json()) as { status: string }[];
 
-/** The notices of a page's work event for a bot: every event of its "Claudebot" source. */
+/** The notices of a page's work event for a bot: every event of its "Tomte" source. */
 const noticesOf = (page: Page, botId: string) =>
-  page.work(botId)?.sources.find((s) => s.label === "Claudebot")?.events ?? [];
+  page.work(botId)?.sources.find((s) => s.label === "Tomte")?.events ?? [];
 
 /**
  * A bot that is not open, with a routine whose every run fails: the fake CLI ends the turn with a crash. The schedule never
@@ -149,7 +149,7 @@ test("a routine whose runs always fail pauses itself on the fifth failure and it
 
   // The bot was never open: its item is in the bots slice, and nothing was said to the bot about it.
   await host.until(() => page.bots()[botId]?.needsYou === 1);
-  expect(page.bots()[botId]?.needsYouSources).toEqual(["Claudebot"]);
+  expect(page.bots()[botId]?.needsYouSources).toEqual(["Tomte"]);
   expect(page.bots()[other]?.needsYou ?? 0).toBe(0);
   expect(host.messagesOf(botId).filter((m) => m.includes("paused after"))).toEqual([]);
 
@@ -223,7 +223,7 @@ test("a sender cannot post a notice: the events route refuses the kind", async (
     body: JSON.stringify({
       kind: "notice",
       key: "n1",
-      source: { id: "claudebot", label: "Claudebot" },
+      source: { id: "tomte", label: "Tomte" },
       title: "your routines are paused",
     }),
   });

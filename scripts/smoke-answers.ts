@@ -1,4 +1,4 @@
-// End-to-end smoke of the external-event answer round trip: the real `claudebot-notify` posts a report, the real UI answers it,
+// End-to-end smoke of the external-event answer round trip: the real `tomte-notify` posts a report, the real UI answers it,
 // and the host relays the answer to a fake `herdr` executable that records its argument list.
 //   bun run smoke:answers          (CHROME_PATH names a Chrome/Chromium binary; macOS's Google Chrome by default)
 // Everything is isolated in one run directory (see smoke-kit.ts): a temporary data root, in-memory database and secrets, the fake

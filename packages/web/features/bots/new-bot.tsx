@@ -1,5 +1,5 @@
-import { Bot } from "@claudebot/contract/events";
 import { useNavigate } from "@tanstack/react-router";
+import { Bot } from "@tomte/contract/events";
 import { useActionState, useState } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";

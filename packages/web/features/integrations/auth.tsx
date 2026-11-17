@@ -1,5 +1,5 @@
-import { OAuthStart } from "@claudebot/contract/api";
-import type { Integration, OwnClient } from "@claudebot/contract/events";
+import { OAuthStart } from "@tomte/contract/api";
+import type { Integration, OwnClient } from "@tomte/contract/events";
 import { Check, ChevronDown, Copy, ExternalLink } from "lucide-react";
 import {
   useActionState,

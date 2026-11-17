@@ -10,14 +10,14 @@ import { MAC_ENTITLEMENTS } from "./signing-kit.ts";
 
 /** Environment variable names the route reads. Values are read once and removed from the environment children inherit. */
 export const LOCAL_ENV = {
-  p12File: "CLAUDEBOT_LOCAL_P12_FILE",
-  p12PasswordFile: "CLAUDEBOT_LOCAL_P12_PASSWORD_FILE",
-  p12Password: "CLAUDEBOT_LOCAL_P12_PASSWORD",
-  apiKeyFile: "CLAUDEBOT_LOCAL_API_KEY_FILE",
-  apiKeyId: "CLAUDEBOT_LOCAL_API_KEY_ID",
-  apiIssuer: "CLAUDEBOT_LOCAL_API_ISSUER",
-  ascProfile: "CLAUDEBOT_LOCAL_ASC_PROFILE",
-  ascBin: "CLAUDEBOT_LOCAL_ASC_BIN",
+  p12File: "TOMTE_LOCAL_P12_FILE",
+  p12PasswordFile: "TOMTE_LOCAL_P12_PASSWORD_FILE",
+  p12Password: "TOMTE_LOCAL_P12_PASSWORD",
+  apiKeyFile: "TOMTE_LOCAL_API_KEY_FILE",
+  apiKeyId: "TOMTE_LOCAL_API_KEY_ID",
+  apiIssuer: "TOMTE_LOCAL_API_ISSUER",
+  ascProfile: "TOMTE_LOCAL_ASC_PROFILE",
+  ascBin: "TOMTE_LOCAL_ASC_BIN",
 } as const;
 
 /** A value that must never reach a log, a printed command line or a file: it prints as `<label>`, also through JSON and template strings. */

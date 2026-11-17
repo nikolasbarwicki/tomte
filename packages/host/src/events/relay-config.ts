@@ -1,7 +1,7 @@
 import { statSync, readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 
-import { SlotName, type ReplyTarget } from "@claudebot/contract/api";
+import { SlotName, type ReplyTarget } from "@tomte/contract/api";
 import { z } from "zod";
 
 /** What an adapter's `args` may name as a whole element. Everything else in `args` is literal text the operator wrote. */

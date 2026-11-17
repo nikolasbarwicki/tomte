@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { randomBytes } from "node:crypto";
 
-import type { ChannelStatus } from "@claudebot/contract/api";
+import type { ChannelStatus } from "@tomte/contract/api";
 
 import { NotFound } from "../platform/errors.ts";
 import { noticeMessage, type Notice } from "./notices.ts";
@@ -102,7 +102,7 @@ const NOTICE_RETRIES = 4;
 const RUNNING: ChannelStatus = { state: "running", detail: null, username: null };
 
 const LINKED =
-  "Linked. This chat is now connected to Claudebot. You can unlink it on the Channels page.";
+  "Linked. This chat is now connected to Tomte. You can unlink it on the Channels page.";
 const REFUSED = "That code did not work. Create a new one on the Channels page.";
 
 /** The code in a message: `/start <code>` or the code alone, in any case, with separators and spaces; undefined when the text does not have a code's shape. */

@@ -5,9 +5,9 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { PublicHostInfo } from "@claudebot/contract/api";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { PublicHostInfo } from "@tomte/contract/api";
 
 import { createBot } from "../bots/index.ts";
 import { createHostServer, type HostServer } from "../host-server/index.ts";
@@ -211,7 +211,7 @@ describe("endpoint hardening", () => {
     await connect(b);
     await ta.client.callTool({ name: "browser_open", arguments: { url: "https://example.com" } });
     const sessions = new Set(calls().map((c) => c.argv[c.argv.indexOf("--session") + 1]));
-    expect([...sessions]).toEqual([`claudebot-${a}`]);
+    expect([...sessions]).toEqual([`tomte-${a}`]);
     await closeAll();
   });
 
@@ -298,7 +298,7 @@ describe("tools", () => {
     const [first, second] = calls();
     const open = defined(first, "open call");
     const snapshot = defined(second, "snapshot call");
-    const session = `claudebot-${id}`;
+    const session = `tomte-${id}`;
     for (const c of [open, snapshot]) {
       expect(c.argv).toContain("--json");
       expect(c.argv.slice(c.argv.indexOf("--session"), c.argv.indexOf("--session") + 2)).toEqual([
@@ -414,7 +414,7 @@ describe("runtime lifecycle", () => {
       .filter((c) => c.argv.includes("close"));
     expect(
       closes.map((c) => defined(c.argv[c.argv.indexOf("--session") + 1], "session")).sort(),
-    ).toEqual([`claudebot-${a}`, `claudebot-${b}`].sort());
+    ).toEqual([`tomte-${a}`, `tomte-${b}`].sort());
   });
 });
 

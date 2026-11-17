@@ -23,8 +23,8 @@ let file: string;
 const digest = new Bun.CryptoHasher("sha256").update("SYNTHETIC UPLOAD").digest("hex");
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "claudebot-asc-notary-test-"));
-  file = join(root, "Claudebot-0.1.0-arm64.dmg");
+  root = await mkdtemp(join(tmpdir(), "tomte-asc-notary-test-"));
+  file = join(root, "Tomte-0.1.0-arm64.dmg");
   await writeFile(file, "SYNTHETIC UPLOAD");
 });
 
@@ -127,7 +127,7 @@ describe("notarizeWithAsc", () => {
     const logs: string[] = [];
     expect(await notarize(asc.run, logs)).toEqual({
       kind: "dmg",
-      file: "Claudebot-0.1.0-arm64.dmg",
+      file: "Tomte-0.1.0-arm64.dmg",
       sha256: digest,
       id: "sub-1",
       status: "Accepted",
@@ -162,7 +162,7 @@ describe("notarizeWithAsc", () => {
     const asc = fakeAsc(answer);
     const error = await notarize(asc.run).catch((e: Error) => e);
     const message = (error as Error).message;
-    expect(message).toContain("notarizing Claudebot-0.1.0-arm64.dmg with asc failed");
+    expect(message).toContain("notarizing Tomte-0.1.0-arm64.dmg with asc failed");
     expect(message).toContain("submission sub-1");
     expect(message).toContain(`sha256 ${digest}`);
     expect(message).toContain(URL);
@@ -200,7 +200,7 @@ describe("notarizeWithAsc", () => {
 });
 
 describe("notarizeSignedApp (electron-builder's afterSign)", () => {
-  const app = () => join(root, "mac-arm64", "Claudebot.app");
+  const app = () => join(root, "mac-arm64", "Tomte.app");
 
   /** Records every command; `ditto` creates the zip it is asked for, as the real one does. */
   function hookRun(status = "Accepted") {
@@ -232,10 +232,10 @@ describe("notarizeSignedApp (electron-builder's afterSign)", () => {
       ["xcrun", "stapler", "staple", app()],
       ["xcrun", "stapler", "validate", app()],
     ]);
-    expect(zip.endsWith("/Claudebot.zip")).toBe(true);
+    expect(zip.endsWith("/Tomte.zip")).toBe(true);
     expect(await readSubmissionRecord(recordFile)).toEqual({
       kind: "app",
-      file: "Claudebot.zip",
+      file: "Tomte.zip",
       sha256: new Bun.CryptoHasher("sha256").update("SYNTHETIC APP ZIP").digest("hex"),
       id: "app-sub",
       status: "Accepted",
@@ -262,7 +262,7 @@ describe("notarizeSignedApp (electron-builder's afterSign)", () => {
     const recordFile = join(root, "record.json");
     await expect(
       notarizeSignedApp({ run, asc: ASC, app: app(), recordFile, log: () => {} }),
-    ).rejects.toThrow(/notarizing Claudebot.zip with asc failed.*app-sub/s);
+    ).rejects.toThrow(/notarizing Tomte.zip with asc failed.*app-sub/s);
     expect(calls.some((c) => c.includes("stapler"))).toBe(false);
     expect(calls.at(-1)).toEqual(ascLogArgv(ASC, "app-sub"));
     expect(await Bun.file(recordFile).exists()).toBe(false);
@@ -277,7 +277,7 @@ describe("readSubmissionRecord", () => {
   };
   const good = {
     kind: "app" as const,
-    file: "Claudebot.zip",
+    file: "Tomte.zip",
     sha256: "ab",
     id: "s",
     status: "Accepted",

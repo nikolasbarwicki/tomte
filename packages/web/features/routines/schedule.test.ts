@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import type { Routine, Schedule } from "@claudebot/contract/events";
+import type { Routine, Schedule } from "@tomte/contract/events";
 
 import {
   browserZone,

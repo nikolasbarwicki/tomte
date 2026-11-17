@@ -56,7 +56,7 @@ export function linkTo(
     ...(item.panel && { panel: item.panel }),
     ...(item.section && { section: item.section }),
   }).toString();
-  return { label: "Open in Claudebot", url: `${url.origin}${path}${search ? `?${search}` : ""}` };
+  return { label: "Open in Tomte", url: `${url.origin}${path}${search ? `?${search}` : ""}` };
 }
 
 /**

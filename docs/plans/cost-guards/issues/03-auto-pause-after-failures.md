@@ -2,7 +2,7 @@
 
 **What to build:** After a run ends `failed`, the host checks the routine's last runs. Five failures in a row pause the routine and raise a notice, a needs-you item, on its bot. This is the gate's check: a looping routine pauses itself and tells me. It also introduces the notice, which tickets 05 and 06 reuse. See the spec sections "Auto-pause after failures" and "Notices".
 
-Notices reuse the external events store (`events/`, `external_events`), so the sidebar count, the Needs-you bar and the desktop banner show them with no new path, and ADR-0010's channel delivers any open needs-you item. A notice is the new event kind `notice` from the source `claudebot`. `events.post` delivers every kind except `progress` to the bot, so the host's notice path stores the event without delivering. `ExternalEventInput` (`packages/contract/src/api.ts`) must exclude `notice`: only the host raises it.
+Notices reuse the external events store (`events/`, `external_events`), so the sidebar count, the Needs-you bar and the desktop banner show them with no new path, and ADR-0010's channel delivers any open needs-you item. A notice is the new event kind `notice` from the source `tomte`. `events.post` delivers every kind except `progress` to the bot, so the host's notice path stores the event without delivering. `ExternalEventInput` (`packages/contract/src/api.ts`) must exclude `notice`: only the host raises it.
 
 **Blocked by:** None (can start immediately)
 

@@ -2,7 +2,7 @@
 // signed, whether a missing secret fails it, and what a signed build must look like. `package-desktop.ts` and
 // `signing.ts` do the work, `.github/workflows/release.yml` wires the secrets in (see AGENTS.md, "Releasing").
 //
-// Policy. A platform's signing secrets are all set (signed), all unset (unsigned, unless CLAUDEBOT_REQUIRE_SIGNING=true,
+// Policy. A platform's signing secrets are all set (signed), all unset (unsigned, unless TOMTE_REQUIRE_SIGNING=true,
 // which makes it an error) or partly set (always an error: a half-configured release must not quietly ship unsigned).
 // The values never pass through this file's results, only their names do, so nothing here can print a secret.
 
@@ -10,8 +10,8 @@ import { join } from "node:path";
 
 export type SigningPlatform = "darwin" | "win32";
 
-/** Repository variable (`vars.CLAUDEBOT_REQUIRE_SIGNING`) that turns a missing secret into a failed release. */
-const REQUIRE_SIGNING_VAR = "CLAUDEBOT_REQUIRE_SIGNING";
+/** Repository variable (`vars.TOMTE_REQUIRE_SIGNING`) that turns a missing secret into a failed release. */
+const REQUIRE_SIGNING_VAR = "TOMTE_REQUIRE_SIGNING";
 
 /** The entitlements file for everything the release signs on macOS (Electron app, helpers, the bundled host and the bundled browser). */
 export const MAC_ENTITLEMENTS = join(import.meta.dir, "entitlements.mac.plist");
@@ -43,7 +43,7 @@ export const TIMESTAMP_URL = "http://timestamp.digicert.com";
  *   ...), which the extra-resource copy signs file by file, and also the Electron app's own top-level DLLs and any in
  *   `app.asar.unpacked`, which `signApp` signs the same way. Every `.exe` stays signed by default, the engine and Chrome's
  *   among them.
- * - `!claudebot-host.exe` keeps the host out: it arrives signed (`signing.ts sign-host`) and a second signature would break the byte
+ * - `!tomte-host.exe` keeps the host out: it arrives signed (`signing.ts sign-host`) and a second signature would break the byte
  *   identity `release.ts desktop` checks. Never add a positive `.exe` pattern, it would beat this one.
  * - Chrome for Testing's one third-party DLL, `D3DCompiler_47.dll`, carries Microsoft's signature in the pinned zip and
  *   cannot be excluded (a `!` pattern loses to `.dll`), so it ends up with ours, replacing Microsoft's (nothing in Chrome is
@@ -56,7 +56,7 @@ export const SIGNED_WIN = {
     signingHashAlgorithms: ["sha256" as const],
     rfc3161TimeStampServer: TIMESTAMP_URL,
   },
-  signExts: [".dll", "!claudebot-host.exe"],
+  signExts: [".dll", "!tomte-host.exe"],
 };
 
 /** A signing configuration that cannot proceed: required but missing, or only partly set. */

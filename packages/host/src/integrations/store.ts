@@ -7,7 +7,7 @@ import {
   type IntegrationSkill,
   type IntegrationTool,
   type ToolPolicy,
-} from "@claudebot/contract/events";
+} from "@tomte/contract/events";
 
 export type IntegrationRecord = {
   id: string;

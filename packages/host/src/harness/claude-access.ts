@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { ClaudeSignIn } from "@claudebot/contract/api";
+import type { ClaudeSignIn } from "@tomte/contract/api";
 import { z } from "zod";
 
 import type { HostConfig } from "../platform/config.ts";
@@ -10,7 +10,7 @@ import { hostCommand } from "../platform/launch.ts";
 import { loginShellPath, type ResolvedCli } from "./cli.ts";
 
 /** The name and version the host reports to Claude Code and to the MCP servers it hosts. */
-const APP = "claudebot";
+const APP = "tomte";
 export const VERSION = "0.1.0";
 
 /** Whether the Claude CLI holds a sign-in; see `ClaudeSignIn`. */

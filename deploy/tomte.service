@@ -1,18 +1,18 @@
 [Unit]
-Description=claudebot host (remote mode)
+Description=tomte host (remote mode)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=claudebot
-Group=claudebot
-EnvironmentFile=/etc/claudebot/claudebot.env
-# Optional settings in that file beyond the installer's: CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS=14 pauses every routine after 14 days without you (0, the default, is off).
-LoadCredentialEncrypted=secrets-key:/etc/credstore.encrypted/claudebot.secrets-key
-ExecStart=/usr/local/bin/claudebot-host --mode remote --data-root /var/lib/claudebot --secrets-key-file %d/secrets-key
-WorkingDirectory=/var/lib/claudebot
-StateDirectory=claudebot
+User=tomte
+Group=tomte
+EnvironmentFile=/etc/tomte/tomte.env
+# Optional settings in that file beyond the installer's: TOMTE_PAUSE_AFTER_ABSENCE_DAYS=14 pauses every routine after 14 days without you (0, the default, is off).
+LoadCredentialEncrypted=secrets-key:/etc/credstore.encrypted/tomte.secrets-key
+ExecStart=/usr/local/bin/tomte-host --mode remote --data-root /var/lib/tomte --secrets-key-file %d/secrets-key
+WorkingDirectory=/var/lib/tomte
+StateDirectory=tomte
 StateDirectoryMode=0700
 UMask=0077
 StandardInput=null

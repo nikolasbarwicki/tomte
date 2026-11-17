@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
 
 // What the routine tool tests share: the schedule and refusal text they expect, the shape the tools answer with, and the panel's list.
-import type { Routine } from "@claudebot/contract/events";
+import type { Routine } from "@tomte/contract/events";
 
 import type { HandoffHost } from "./test-host.ts";
 

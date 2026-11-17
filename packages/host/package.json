@@ -1,5 +1,5 @@
 {
-  "name": "@claudebot/host",
+  "name": "@tomte/host",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,8 +7,8 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.318",
-    "@claudebot/contract": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@tomte/contract": "workspace:*",
     "vite": "^8.3.5",
     "zod": "^4.6.7"
   },

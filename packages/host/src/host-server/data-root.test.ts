@@ -11,9 +11,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { FACE_NAMES, STROKE_NAMES } from "@claudebot/contract/avatars";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { FACE_NAMES, STROKE_NAMES } from "@tomte/contract/avatars";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
@@ -82,7 +82,7 @@ test("a host started on a data root keeps its database, bots, memory and plugins
   expect((await host.ui("/api/send", { text: "hello" })).status).toBe(200);
   await host.until(() => existsSync(join(dataRoot, "memory.md")));
 
-  expect(existsSync(join(dataRoot, "claudebot.db"))).toBe(true);
+  expect(existsSync(join(dataRoot, "tomte.db"))).toBe(true);
   expect(JSON.parse(readFileSync(join(dataRoot, "bots", bot.id, "bot.json"), "utf8")).name).toBe(
     "Ada",
   );

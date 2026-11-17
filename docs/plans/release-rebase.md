@@ -7,7 +7,7 @@ Branch: `feat/release-rebase` (created at `feat/release` 9550c79). Target base: 
 
 `feat/release` forked from master at 8721430. Since then master gained: 9a4353e (ship browser engine + Chrome inside the app),
 f811477 (delete bot from sidebar), f9e5fab (remove herdr/omp integrations and the in-app Updates feature),
-c94a1b4 (TickTick), ff4c407 (sonnet/medium defaults), fcf4540 (external events, answers, claudebot-notify, Herdr relay).
+c94a1b4 (TickTick), ff4c407 (sonnet/medium defaults), fcf4540 (external events, answers, tomte-notify, Herdr relay).
 A trial merge conflicts in `AGENTS.md`, `packages/desktop/src/main.ts`, `scripts/package-desktop.ts`.
 
 ## Release commits to carry (oldest first, merges dropped)
@@ -39,7 +39,7 @@ Resolution rules:
 - `bun run check` green (master baseline: 980 tests, 0 fail, ~94.7% lines / ~91.9% functions; coverage must not drop below the repo threshold).
 - Release unit tests (`scripts/release-kit.test.ts` etc.) pass as part of check.
 - A local unsigned packaging dry run if the scripts support one without signing (e.g. the unsigned installer path) — run in an
-  isolated temp output dir, refuse if a Claudebot app is running, never invoke the local signing/notarization route.
+  isolated temp output dir, refuse if a Tomte app is running, never invoke the local signing/notarization route.
 - `git range-diff 8721430..feat/release master..feat/release-rebase` reviewed; report anything that changed meaning.
 
 ## Done

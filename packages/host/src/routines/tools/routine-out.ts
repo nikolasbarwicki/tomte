@@ -1,4 +1,4 @@
-import type { Routine, RunStatus } from "@claudebot/contract/events";
+import type { Routine, RunStatus } from "@tomte/contract/events";
 
 import type { RoutinesToolContext } from "./context.ts";
 

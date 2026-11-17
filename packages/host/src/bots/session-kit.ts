@@ -7,7 +7,7 @@ import {
   type PermissionResult,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { MemoryScope } from "@claudebot/contract/events";
+import type { MemoryScope } from "@tomte/contract/events";
 import { z } from "zod";
 
 import { VERSION } from "../harness/index.ts";
@@ -97,7 +97,7 @@ const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "NotebookRead"]);
 const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
 /**
- * Claudebot's permission rules for one session: host tools run freely, integration tools follow their setting, and files outside the
+ * Tomte's permission rules for one session: host tools run freely, integration tools follow their setting, and files outside the
  * session's roots and shell commands need the user. A tool the owner always allows for the bot (`allows`) skips the question; a
  * tool switched off in Integrations is denied whatever `allows` says.
  */

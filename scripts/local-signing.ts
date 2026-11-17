@@ -435,15 +435,15 @@ function buildSteps(config: LocalConfig): Step[] {
         ...(config.notary.kind === "asc"
           ? [
               "electron-builder's own notarization is off (notarize: false); its afterSign hook runs next, after signing and before the DMG and zip are built:",
-              `${line(appZipArgv(p.app, "<tmp>/Claudebot.zip"))} (this zip is uploaded)`,
-              `${line(ascSubmitArgv(config.notary, "<tmp>/Claudebot.zip"))}; on a rejection or an unreadable answer: ${line(ascLogArgv(config.notary, "<id>"))}`,
+              `${line(appZipArgv(p.app, "<tmp>/Tomte.zip"))} (this zip is uploaded)`,
+              `${line(ascSubmitArgv(config.notary, "<tmp>/Tomte.zip"))}; on a rejection or an unreadable answer: ${line(ascLogArgv(config.notary, "<id>"))}`,
               `xcrun stapler staple ${p.app}`,
               `xcrun stapler validate ${p.app}`,
             ]
           : [
-              "ditto -c -k --sequesterRsrc --keepParent Claudebot.app <tmp>/Claudebot.zip (this zip is uploaded)",
-              "xcrun notarytool submit <tmp>/Claudebot.zip --key <api key> --key-id <id> --issuer <issuer> --wait --output-format json; xcrun notarytool log <id> on a rejection",
-              "xcrun stapler staple -v Claudebot.app",
+              "ditto -c -k --sequesterRsrc --keepParent Tomte.app <tmp>/Tomte.zip (this zip is uploaded)",
+              "xcrun notarytool submit <tmp>/Tomte.zip --key <api key> --key-id <id> --issuer <issuer> --wait --output-format json; xcrun notarytool log <id> on a rejection",
+              "xcrun stapler staple -v Tomte.app",
             ]),
         "hdiutil (builds the DMG from the stapled app), zip of the stapled app, blockmaps, latest-mac.yml",
       ],
@@ -561,7 +561,7 @@ function buildSteps(config: LocalConfig): Step[] {
           ...Object.values(macAppCommands(p.app, "arm64")),
           ...browserParts,
           ["ditto", "-x", "-k", p.zip, "<temporary folder>"],
-          ...Object.values(macAppCommands("<temporary folder>/Claudebot.app", "arm64")),
+          ...Object.values(macAppCommands("<temporary folder>/Tomte.app", "arm64")),
           ...browserParts,
         ];
       },
@@ -774,16 +774,16 @@ const IDENTITY_RULE =
 /** What goes to Apple, per backend. */
 function notaryUploads(config: LocalConfig): string[] {
   const tail = [
-    "the signed DMG Claudebot-<version>-arm64.dmg (the stapled app and the Applications link)",
+    "the signed DMG Tomte-<version>-arm64.dmg (the stapled app and the Applications link)",
     "The update zip is not uploaded: it is made afterwards from the app whose ticket is already stapled.",
   ];
   return config.notary.kind === "asc"
     ? [
-        "Claudebot.zip: `ditto` of the signed Claudebot.app (Electron frameworks and helpers, app.asar, the signed host, resources), made by this route's afterSign hook in a temporary folder before electron-builder builds the DMG and the zip",
+        "Tomte.zip: `ditto` of the signed Tomte.app (Electron frameworks and helpers, app.asar, the signed host, resources), made by this route's afterSign hook in a temporary folder before electron-builder builds the DMG and the zip",
         ...tail,
       ]
     : [
-        "Claudebot.zip: `ditto` of the signed Claudebot.app (Electron frameworks and helpers, app.asar, the signed host, resources), made by @electron/notarize in a temporary folder",
+        "Tomte.zip: `ditto` of the signed Tomte.app (Electron frameworks and helpers, app.asar, the signed host, resources), made by @electron/notarize in a temporary folder",
         ...tail,
       ];
 }

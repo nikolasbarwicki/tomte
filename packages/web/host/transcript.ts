@@ -5,7 +5,7 @@ import type {
   ServerEvent,
   TaskState,
   WaitAction,
-} from "@claudebot/contract/events";
+} from "@tomte/contract/events";
 
 import { kTokens } from "@/lib/format.ts";
 

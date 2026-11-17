@@ -70,7 +70,7 @@ function fakeSource(kind: ItemKind, prefix: string): FakeSource {
 }
 
 function setup(
-  publicUrl = "https://claudebot.example.com",
+  publicUrl = "https://tomte.example.com",
   sources: FakeSource[] = [fakeSource("event", "a")],
 ) {
   const db = migrate(new Database(":memory:"));
@@ -78,7 +78,7 @@ function setup(
   const channels = createChannels({
     db,
     onActivity: () => {},
-    publicUrl: "https://claudebot.example",
+    publicUrl: "https://tomte.example",
   });
   channels.register(fake.channel);
   fake.adapters((kind, inbound) => channels.receive(kind, inbound));
@@ -109,7 +109,7 @@ describe("sending a card", () => {
     expect(fake.sent[0]!.message).toEqual({
       text: "heading e1",
       buttons: [[{ label: "Go", data: "a:e1:0" }]],
-      link: { label: "Open in Claudebot", url: "https://claudebot.example.com/bots/b9?panel=work" },
+      link: { label: "Open in Tomte", url: "https://tomte.example.com/bots/b9?panel=work" },
     });
   });
 
@@ -158,11 +158,11 @@ describe("sending a card", () => {
       await cards.sync();
       expect(fake.sent[0]!.message.link).toBeUndefined();
     }
-    const { fake, cards, sources, link } = setup("https://claudebot.example.com");
+    const { fake, cards, sources, link } = setup("https://tomte.example.com");
     sources[0]!.open("e1", { botId: "bot one" });
     await link();
     await cards.sync();
-    expect(fake.sent[0]!.message.link?.url).toBe("https://claudebot.example.com/bots/bot%20one");
+    expect(fake.sent[0]!.message.link?.url).toBe("https://tomte.example.com/bots/bot%20one");
   });
 
   test("long text is cut at 3000 characters with an ellipsis, and the card stays plain text", async () => {

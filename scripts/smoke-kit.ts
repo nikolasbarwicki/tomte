@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { format } from "node:util";
 
-import type { EventAccess } from "@claudebot/contract/api";
+import type { EventAccess } from "@tomte/contract/api";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
 
 import { startHandoffHost, type HandoffHost } from "../packages/host/src/testing/test-host.ts";
@@ -59,7 +59,7 @@ export interface Smoke {
 export interface SmokeOptions {
   /** Host flags, from the run directory (a relay configuration file lives in it). */
   hostFlags?: (runDir: string) => string[] | Promise<string[]>;
-  /** The environment the host's configuration is read from, such as `CLAUDEBOT_ASK_APPROVAL`; the process environment is left alone. */
+  /** The environment the host's configuration is read from, such as `TOMTE_ASK_APPROVAL`; the process environment is left alone. */
   env?: Record<string, string>;
   /** The host's timing overrides, the channel adapters it runs and where Telegram's API is (`startHandoffHost`'s fourth argument). */
   timing?: Parameters<typeof startHandoffHost>[3];
@@ -74,7 +74,7 @@ interface Session {
 
 export async function startSmoke(name: string, options: SmokeOptions = {}): Promise<Smoke> {
   const sharedDist = process.env.SMOKE_WEB_DIST;
-  const runDir = await mkdtemp(join(tmpdir(), `claudebot-smoke-${name}-`));
+  const runDir = await mkdtemp(join(tmpdir(), `tomte-smoke-${name}-`));
   const checks: string[] = [];
   const pageLog: string[] = [];
   const hostLog: string[] = [];
@@ -126,7 +126,7 @@ export async function startSmoke(name: string, options: SmokeOptions = {}): Prom
     });
     context = startedContext;
     await startedContext.addCookies([
-      { name: "claudebot_session", value: startedHost.deviceToken, url: startedHost.clientUrl },
+      { name: "tomte_session", value: startedHost.deviceToken, url: startedHost.clientUrl },
     ]);
     let pages = 0;
     const watch = (p: Page) => {
@@ -246,8 +246,8 @@ export async function runNotify(
     env: {
       PATH: process.env.PATH ?? "",
       HOME: home,
-      CLAUDEBOT_EVENTS_URL: access.url,
-      CLAUDEBOT_EVENTS_TOKEN: access.token,
+      TOMTE_EVENTS_URL: access.url,
+      TOMTE_EVENTS_TOKEN: access.token,
       ...env,
     },
     stdout: "pipe",

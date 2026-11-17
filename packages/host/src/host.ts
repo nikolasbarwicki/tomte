@@ -141,7 +141,7 @@ function runPhase(phase: string, cwd: string, sessionId: string) {
   const r = spawnSync(
     process.execPath,
     [...process.execArgv, ...process.argv.slice(1, 2), phase, cwd, sessionId],
-    { stdio: "inherit", env: { ...process.env, CLAUDEBOT_DATA_ROOT: config.dataRoot } },
+    { stdio: "inherit", env: { ...process.env, TOMTE_DATA_ROOT: config.dataRoot } },
   );
   if (r.status !== 0) {
     log(`phase ${phase} failed with exit ${r.status}`);
@@ -284,7 +284,7 @@ try {
     }
     default: {
       preflight();
-      const cwd = realpathSync(mkdtempSync(join(tmpdir(), "claudebot-ws-")));
+      const cwd = realpathSync(mkdtempSync(join(tmpdir(), "tomte-ws-")));
       const sessionId = randomUUID();
       log(`[host] workspace=${cwd}`);
       runPhase("create", cwd, sessionId); // process exits: the CLI goes with it

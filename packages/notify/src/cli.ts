@@ -1,4 +1,4 @@
-import { ReplyTarget, SlotName } from "@claudebot/contract/api";
+import { ReplyTarget, SlotName } from "@tomte/contract/api";
 
 import { ConfigError, describeSource, load, select, type Surroundings } from "./config.ts";
 import { buildEvent, checkIdentifier, isReportKind, REPORT_KINDS, type Report } from "./report.ts";
@@ -7,8 +7,8 @@ import { postEvent } from "./send.ts";
 /** Exit statuses, those of `notify-grok`: 2 for usage, 1 for configuration, 3 for a failed request. */
 export const EXIT = { ok: 0, config: 1, usage: 2, request: 3 } as const;
 
-const USAGE = `usage: claudebot-notify [--salt <text>] [--reply <kind>:<agent> [--reply-session <session>]] <${REPORT_KINDS.join("|")}> <task_id> <session_id> <message> [question_id]
-   or: claudebot-notify --which   (print the config file in use, or "environment")`;
+const USAGE = `usage: tomte-notify [--salt <text>] [--reply <kind>:<agent> [--reply-session <session>]] <${REPORT_KINDS.join("|")}> <task_id> <session_id> <message> [question_id]
+   or: tomte-notify --which   (print the config file in use, or "environment")`;
 
 /** How long a request may take before it counts as failed. */
 const TIMEOUT_MS = 8000;
@@ -25,7 +25,7 @@ type Parsed =
   | { command: "usage"; problem: string };
 
 /**
- * The reply target: `--reply <kind>:<agent>` or `CLAUDEBOT_REPLY`, with `--reply-session` or `CLAUDEBOT_REPLY_SESSION`.
+ * The reply target: `--reply <kind>:<agent>` or `TOMTE_REPLY`, with `--reply-session` or `TOMTE_REPLY_SESSION`.
  * The kind is everything before the first colon, so an agent name may contain colons.
  */
 function replyOf(
@@ -50,8 +50,8 @@ function replyOf(
  */
 function parse(argv: string[], env: Context["env"]): Parsed {
   let salt: string | undefined;
-  let reply = env.CLAUDEBOT_REPLY || undefined;
-  let replySession = env.CLAUDEBOT_REPLY_SESSION || undefined;
+  let reply = env.TOMTE_REPLY || undefined;
+  let replySession = env.TOMTE_REPLY_SESSION || undefined;
   let which = false;
   let i = 0;
   const value = () => {
@@ -110,7 +110,7 @@ function parse(argv: string[], env: Context["env"]): Parsed {
 
 /** Runs the sender on `argv` (without the program name) and returns the exit status. Secrets never reach `out` or `err`. */
 export async function run(argv: string[], ctx: Context): Promise<number> {
-  const say = (line: string) => ctx.err(`claudebot-notify: ${line}`);
+  const say = (line: string) => ctx.err(`tomte-notify: ${line}`);
   const parsed = parse(argv, ctx.env);
   if (parsed.command === "help") {
     ctx.out(USAGE);

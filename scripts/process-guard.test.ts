@@ -3,15 +3,15 @@ import { describe, expect, test } from "bun:test";
 import { outsideLineage, parseProcessTable, processesUnder, refusal } from "./process-guard.ts";
 
 const row = (pid: number, ppid: number, command: string) => ({ pid, ppid, tty: "??", command });
-const BUNDLE = "/work/a/dist/desktop/Claudebot-darwin-arm64";
+const BUNDLE = "/work/a/dist/desktop/Tomte-darwin-arm64";
 
 describe("parseProcessTable", () => {
   test("reads pid, ppid, tty and the whole command line, skipping blank lines", () => {
     const rows = parseProcessTable(
-      "  101     1 ??         /a b/Claudebot --flag x\n\n 7 101 ttys001  ps -axo pid=\n",
+      "  101     1 ??         /a b/Tomte --flag x\n\n 7 101 ttys001  ps -axo pid=\n",
     );
     expect(rows).toEqual([
-      { pid: 101, ppid: 1, tty: "??", command: "/a b/Claudebot --flag x" },
+      { pid: 101, ppid: 1, tty: "??", command: "/a b/Tomte --flag x" },
       { pid: 7, ppid: 101, tty: "ttys001", command: "ps -axo pid=" },
     ]);
   });
@@ -19,15 +19,11 @@ describe("parseProcessTable", () => {
 
 describe("processesUnder", () => {
   const rows = [
-    row(1, 0, `${BUNDLE}/Claudebot.app/Contents/MacOS/Claudebot`),
-    row(
-      2,
-      1,
-      `${BUNDLE}/Claudebot.app/Contents/Frameworks/Claudebot Helper (GPU).app/x --type=gpu`,
-    ),
+    row(1, 0, `${BUNDLE}/Tomte.app/Contents/MacOS/Tomte`),
+    row(2, 1, `${BUNDLE}/Tomte.app/Contents/Frameworks/Tomte Helper (GPU).app/x --type=gpu`),
     row(3, 1, `open ${BUNDLE}`),
-    row(4, 0, `${BUNDLE}-2/Claudebot.app/Contents/MacOS/Claudebot`),
-    row(5, 0, `/work/b${BUNDLE}/Claudebot.app/Contents/MacOS/Claudebot`),
+    row(4, 0, `${BUNDLE}-2/Tomte.app/Contents/MacOS/Tomte`),
+    row(5, 0, `/work/b${BUNDLE}/Tomte.app/Contents/MacOS/Tomte`),
     row(6, 0, "/usr/bin/vim notes.txt"),
   ];
 

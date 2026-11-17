@@ -1,4 +1,4 @@
-import { MAX_TEXT_DOCUMENT } from "@claudebot/contract/api";
+import { MAX_TEXT_DOCUMENT } from "@tomte/contract/api";
 import { PencilIcon } from "lucide-react";
 import { useState, useTransition } from "react";
 import { Streamdown } from "streamdown";

@@ -69,7 +69,7 @@ const SHOWN = {
 let hostDir: string;
 
 beforeEach(() => {
-  hostDir = mkdtempSync(join(tmpdir(), "claudebot-host-"));
+  hostDir = mkdtempSync(join(tmpdir(), "tomte-host-"));
   secrets = memorySecrets();
   changes = 0;
   clock = 1_000;
@@ -410,7 +410,7 @@ test("a command that fails to start is failed with the error and the session sti
   const bad = await integrations.addCustom({
     name: "bad",
     transport: "stdio",
-    command: "/nonexistent/claudebot-cmd",
+    command: "/nonexistent/tomte-cmd",
     args: [],
   });
   expect(bad.state).toBe("failed");
@@ -999,7 +999,7 @@ test("own client: built-ins sharing an app label sign in with the client entered
   }
 });
 
-const MOVED = "https://claudebot.example.com/oauth/callback";
+const MOVED = "https://tomte.example.com/oauth/callback";
 
 /** One database and keychain, two hosts: an integration signs in under `REDIRECT`, then a host with `to` as its redirect URL takes over. `edit` rewrites the stored secret first. */
 async function signedInThenMoved(

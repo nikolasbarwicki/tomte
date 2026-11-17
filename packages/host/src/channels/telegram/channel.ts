@@ -1,4 +1,4 @@
-import type { ChannelStatus } from "@claudebot/contract/api";
+import type { ChannelStatus } from "@tomte/contract/api";
 
 import { channelTokenSecretName, type SecretStore } from "../../platform/secrets.ts";
 import type { Channel, Receive } from "../types.ts";

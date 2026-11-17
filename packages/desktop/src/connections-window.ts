@@ -8,7 +8,7 @@ import {
 import type { Navigation } from "./navigation.ts";
 
 /** In memory (no `persist:` prefix) and apart from the default session, so no host page can reach the scheme and nothing the window does reaches disk. */
-const PARTITION = "claudebot-desktop-connections";
+const PARTITION = "tomte-desktop-connections";
 
 /** Must run before the app is ready: it is what lets the scheme load as a secure, standard origin. */
 export function registerConnectionsScheme(): void {

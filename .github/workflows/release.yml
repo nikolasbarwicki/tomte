@@ -13,7 +13,7 @@ name: Release
 # Signing (scripts/signing.ts, scripts/signing-kit.ts; AGENTS.md "Releasing"): `verify` decides per platform from which
 # secrets exist; the macOS and Windows host jobs sign their binary before the smoke run; the desktop job signs the app and
 # installers with the same certificate and checks the result. Without secrets the release is unsigned and says so in the
-# job summary, unless the repository variable CLAUDEBOT_REQUIRE_SIGNING is `true`, which fails the release instead.
+# job summary, unless the repository variable TOMTE_REQUIRE_SIGNING is `true`, which fails the release instead.
 #
 # Installers are released for macOS (arm64 and x64), Windows x64 and Linux x64 (scripts/desktop-kit.ts
 # SUPPORTED_DESKTOP); linux-arm64 is host-only. Both macOS arches are packaged in ONE job so electron-builder writes the one
@@ -62,10 +62,10 @@ jobs:
       # Decides, per platform, whether this release is signed, from which signing secrets exist (AGENTS.md, "Releasing"
       # lists them). Only whether each is set reaches the step, never a value. All of a platform's secrets: signed; none:
       # unsigned and the job summary says so; some: the release fails. With the repository variable
-      # CLAUDEBOT_REQUIRE_SIGNING=true a platform without secrets fails the release too, before anything is built.
+      # TOMTE_REQUIRE_SIGNING=true a platform without secrets fails the release too, before anything is built.
       - id: signing
         env:
-          CLAUDEBOT_REQUIRE_SIGNING: ${{ vars.CLAUDEBOT_REQUIRE_SIGNING }}
+          TOMTE_REQUIRE_SIGNING: ${{ vars.TOMTE_REQUIRE_SIGNING }}
           MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 != '' && 'set' || '' }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD != '' && 'set' || '' }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 != '' && 'set' || '' }}
@@ -96,7 +96,7 @@ jobs:
       run:
         shell: bash
     env:
-      BINARY: dist/host/claudebot-host-${{ matrix.target }}${{ matrix.ext }}
+      BINARY: dist/host/tomte-host-${{ matrix.target }}${{ matrix.ext }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -156,21 +156,21 @@ jobs:
               runner: macos-15,
               archs: "arm64 x64",
               hosts: "release-host-darwin-*",
-              bundle: Claudebot-darwin-arm64-x64,
+              bundle: Tomte-darwin-arm64-x64,
             }
           - {
               os: windows,
               runner: windows-2025,
               archs: "x64",
               hosts: "release-host-windows-x64",
-              bundle: Claudebot-win32-x64,
+              bundle: Tomte-win32-x64,
             }
           - {
               os: linux,
               runner: ubuntu-24.04,
               archs: "x64",
               hosts: "release-host-linux-x64",
-              bundle: Claudebot-linux-x64,
+              bundle: Tomte-linux-x64,
             }
     defaults:
       run:
@@ -206,7 +206,7 @@ jobs:
       # The secrets go to this step only, and only this OS's (the `&& … || ''` leaves the others empty).
       - name: Package
         env:
-          CLAUDEBOT_REQUIRE_SIGNING: ${{ vars.CLAUDEBOT_REQUIRE_SIGNING }}
+          TOMTE_REQUIRE_SIGNING: ${{ vars.TOMTE_REQUIRE_SIGNING }}
           MACOS_CERTIFICATE_P12: ${{ matrix.os == 'macos' && secrets.MACOS_CERTIFICATE_P12 || '' }}
           MACOS_CERTIFICATE_PASSWORD: ${{ matrix.os == 'macos' && secrets.MACOS_CERTIFICATE_PASSWORD || '' }}
           APPLE_API_KEY_P8: ${{ matrix.os == 'macos' && secrets.APPLE_API_KEY_P8 || '' }}
@@ -279,7 +279,7 @@ jobs:
           set -euo pipefail
           sed "s|^DEFAULT_REPO=\"\"\$|DEFAULT_REPO=\"$GITHUB_REPOSITORY\"|" deploy/install.sh >release/install.sh
           grep -qxF "DEFAULT_REPO=\"$GITHUB_REPOSITORY\"" release/install.sh
-          cp deploy/claudebot.service release/claudebot.service
+          cp deploy/tomte.service release/tomte.service
 
       # Fails unless all five host binaries and every supported OS's installers and update metadata are there; covers every
       # file in release/, SHA256SUMS excluded.

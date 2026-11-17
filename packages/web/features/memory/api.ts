@@ -1,4 +1,4 @@
-import type { MemoryUpdate } from "@claudebot/contract/api";
+import type { MemoryUpdate } from "@tomte/contract/api";
 
 import { act } from "@/host/api.ts";
 

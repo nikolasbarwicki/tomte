@@ -1,4 +1,4 @@
-import type { Integration } from "@claudebot/contract/events";
+import type { Integration } from "@tomte/contract/events";
 import { ChevronLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";

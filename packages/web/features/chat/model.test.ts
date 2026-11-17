@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import type { WorkEvent } from "@claudebot/contract/events";
+import type { WorkEvent } from "@tomte/contract/events";
 
 import type { Item } from "@/host/transcript.ts";
 
@@ -18,7 +18,7 @@ const work = (kind: "question" | "blocked" | "failed"): WorkEvent => ({
   sources: [
     {
       id: "s1",
-      label: "claudebot · 04-notify",
+      label: "tomte · 04-notify",
       status: "blocked",
       lastEventAt: 2,
       work: null,
@@ -78,7 +78,7 @@ test("the bar lists external items first, then unresolved request cards in the o
       r.type === "event" ? `event:${r.item.id}` : `${r.request.kind}:${r.request.id}`,
     ),
   ).toEqual(["event:e1", "wait:w1", "approve:a1"]);
-  expect(rowLabels(rows)).toEqual(["claudebot · 04-notify", "Takeover", "Approval"]);
+  expect(rowLabels(rows)).toEqual(["tomte · 04-notify", "Takeover", "Approval"]);
 });
 
 test("a request row carries its card's own buttons", () => {

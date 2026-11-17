@@ -168,7 +168,7 @@ describe("http through the proxy", () => {
     dialed.length = 0;
     const r = await viaProxy("http://rebind.test/");
     expect(r.status).toBe(403);
-    expect(r.body).toContain("Blocked by claudebot");
+    expect(r.body).toContain("Blocked by tomte");
     expect(dialed).toEqual([]);
   });
 

@@ -3,7 +3,7 @@ import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 // Smoke test for the packaged desktop app on this machine, run for real through playwright-core:
-//   bun scripts/smoke-desktop.ts [dist/desktop/Claudebot-darwin-arm64/mac-arm64/Claudebot.app]   (default: this machine's package output)
+//   bun scripts/smoke-desktop.ts [dist/desktop/Tomte-darwin-arm64/mac-arm64/Tomte.app]   (default: this machine's package output)
 // Launches the packaged `.app` binary (`bun run package:desktop` builds it) on a fresh temporary root that holds the
 // data root, the Electron user-data directory and the file-secrets key, with Chromium's mock keychain, so nothing
 // reaches the macOS keychain or a default folder. Three launches on that root:
@@ -14,7 +14,7 @@ import { join } from "node:path";
 //      handlers; the host killed alone and restarted from the tray; the tray's Quit with a real engine and Chrome running;
 //      the needs-you banner (EE-08): events posted while the window is hidden, with the notifier stubbed;
 //   4. relaunch on the same data root started with `--hidden`, then a graceful `app.quit()`.
-// Start at login is recorded through CLAUDEBOT_DESKTOP_LOGIN_ITEM_FILE (a file, not the OS: nothing is ever registered).
+// Start at login is recorded through TOMTE_DESKTOP_LOGIN_ITEM_FILE (a file, not the OS: nothing is ever registered).
 // The tray and its menu are read from the main process (`process.mainModule.exports.desktop`), and menu items are
 // invoked by calling the same `click` handler the real menu calls; the menu bar itself is not clicked.
 // After each end it checks that no process from the run remains. Never prints a token, cookie value or pairing code.
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     cleanup,
     settingsFile,
     loginItemFile,
-  } = await createSmokeRun(process.argv[2], "claudebot-desktop-smoke-");
+  } = await createSmokeRun(process.argv[2], "tomte-desktop-smoke-");
 
   const landing: { url: string; userAgent: string }[] = [];
   const landingServer = Bun.serve({
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
         userAgent: req.headers.get("user-agent") ?? "",
       });
       return new Response(
-        "<title>claudebot desktop smoke</title>fixture reached; you can close this tab",
+        "<title>tomte desktop smoke</title>fixture reached; you can close this tab",
         {
           headers: { "content-type": "text/html" },
         },
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
     console.log("\n[1b] install the managed browser engine into the temp data root (network)");
     const installed = Bun.spawnSync(
       [
-        join(appBundle, "Contents/Resources/claudebot-host"),
+        join(appBundle, "Contents/Resources/tomte-host"),
         "install-browser",
         "--data-root",
         dataRoot,
@@ -203,7 +203,7 @@ async function main(): Promise<void> {
       `the renderer has no Node: typeof process/require/module/Buffer = ${globals.join("/")} (raw CDP Runtime.evaluate)`,
     );
     const cookie = await second.app.evaluate(async ({ session }) => {
-      const found = await session.defaultSession.cookies.get({ name: "claudebot_session" });
+      const found = await session.defaultSession.cookies.get({ name: "tomte_session" });
       return found.map((c) => ({
         httpOnly: c.httpOnly,
         sameSite: c.sameSite,
@@ -414,15 +414,15 @@ async function main(): Promise<void> {
     info(`tray   ${JSON.stringify(view0)}`);
     check(
       view0.status === "running" &&
-        view0.tooltip === "Claudebot: host running" &&
+        view0.tooltip === "Tomte: host running" &&
         view0.items[0]!.label === view0.tooltip &&
         !view0.items[0]!.enabled,
-      'the tray tooltip and its first, disabled item say "Claudebot: host running"',
+      'the tray tooltip and its first, disabled item say "Tomte: host running"',
     );
     check(
       view0.items.map((i) => i.label).join("|") ===
-        `${view0.tooltip}||This computer||Manage Connections…||Open Claudebot|Start at login||Quit Claudebot`,
-      "the menu is: state, separator, This computer, separator, Manage Connections…, separator, Open Claudebot, Start at login, separator, Quit Claudebot",
+        `${view0.tooltip}||This computer||Manage Connections…||Open Tomte|Start at login||Quit Tomte`,
+      "the menu is: state, separator, This computer, separator, Manage Connections…, separator, Open Tomte, Start at login, separator, Quit Tomte",
     );
     check(
       view0.items.find((i) => i.label === "This computer")?.checked === true,
@@ -646,7 +646,7 @@ async function main(): Promise<void> {
     );
 
     console.log("  no banner while the window is visible; showing the window closes the banner");
-    await clickTray(bg, "Open Claudebot");
+    await clickTray(bg, "Open Tomte");
     await until("the window to show", 10_000, async () => (await trayView(bg)).visible);
     await until(
       "the banner to close with the window",
@@ -706,7 +706,7 @@ async function main(): Promise<void> {
     console.log(
       "  tray menu handlers (invoked by calling the items' click, not by clicking the menu bar)",
     );
-    await clickTray(bg, "Open Claudebot");
+    await clickTray(bg, "Open Tomte");
     await until("the window and the dock icon to show", 10_000, async () => {
       const v = await trayView(bg);
       return v.visible && v.dock;
@@ -714,7 +714,7 @@ async function main(): Promise<void> {
     const opened2 = await trayView(bg);
     check(
       opened2.windows === 1 && opened2.dock && CLIENT_URL.test(bg.page.url()),
-      `"Open Claudebot" showed the same window (windows ${opened2.windows}, dock icon visible ${opened2.dock}) on the client URL`,
+      `"Open Tomte" showed the same window (windows ${opened2.windows}, dock icon visible ${opened2.dock}) on the client URL`,
     );
     const deviceBefore = (await devices(bg.page)).body[0]!.id;
     info(`kill -9 the host alone (pid ${bgHost.pid})`);
@@ -724,10 +724,10 @@ async function main(): Promise<void> {
       return v.status === "stopped" && v;
     });
     check(
-      stoppedView.tooltip === "Claudebot: host stopped" &&
-        stoppedView.items[0]!.label === "Claudebot: host stopped" &&
+      stoppedView.tooltip === "Tomte: host stopped" &&
+        stoppedView.items[0]!.label === "Tomte: host stopped" &&
         stoppedView.items.some((i) => i.label === "Restart host" && i.enabled),
-      'the tray switched to "Claudebot: host stopped" and offers Restart host',
+      'the tray switched to "Tomte: host stopped" and offers Restart host',
     );
     check(
       (await bg.page.textContent("body"))?.includes("host is not running") === true,
@@ -789,7 +789,7 @@ async function main(): Promise<void> {
     const bgExit = new Promise<number | null>((res) => bgProc.once("exit", (code) => res(code)));
     const bgHostGone = gone(bgHost2.pid, "the host after the tray's Quit");
     const bgCliGone = gone(cli3.pid, "the Claude CLI child after the tray's Quit");
-    await clickTray(bg, "Quit Claudebot").catch(() => {});
+    await clickTray(bg, "Quit Tomte").catch(() => {});
     const bgCode = await Promise.race([bgExit, sleep(60_000).then(() => "timeout" as const)]);
     check(bgCode === 0, `the tray's Quit ended the app with exit code ${bgCode}`);
     info(
@@ -830,11 +830,11 @@ async function main(): Promise<void> {
         hiddenView.items.find((i) => i.label === "Start at login")?.checked === false,
       "the relaunch kept Start at login off: settings.json, the seam file and the checkbox all say false",
     );
-    await clickTray(third, "Open Claudebot");
+    await clickTray(third, "Open Tomte");
     await until("the window to be visible", 10_000, async () => (await trayView(third)).visible);
     check(
       CLIENT_URL.test(third.page.url()),
-      "Open Claudebot showed the hidden window, already signed in on the client URL",
+      "Open Tomte showed the hidden window, already signed in on the client URL",
     );
     const list3 = await devices(third.page);
     check(
@@ -872,7 +872,7 @@ async function main(): Promise<void> {
       );
     }
     info(
-      `~/Library entries named *claudebot* (three levels): before ${beforeTraces.length}, after ${traces.length}`,
+      `~/Library entries named *tomte* (three levels): before ${beforeTraces.length}, after ${traces.length}`,
     );
     for (const t of traces.filter((t) => !beforeTraces.includes(t))) info(`  new or changed: ${t}`);
     info(

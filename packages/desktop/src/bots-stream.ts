@@ -1,4 +1,4 @@
-import { BotsEvent, type BotSummary } from "@claudebot/contract/events";
+import { BotsEvent, type BotSummary } from "@tomte/contract/events";
 
 import type { HostFetch } from "./host-api.ts";
 

@@ -1,4 +1,4 @@
-import type { HandoffStatus } from "@claudebot/contract/events";
+import type { HandoffStatus } from "@tomte/contract/events";
 
 import type { Handoff, HandoffStore } from "../store.ts";
 import type { BotsToolContext, HandoffCard } from "./context.ts";

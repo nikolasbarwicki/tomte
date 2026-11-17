@@ -1,4 +1,4 @@
-title = "claudebot gitleaks config"
+title = "tomte gitleaks config"
 
 [extend]
 useDefault = true

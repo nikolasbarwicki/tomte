@@ -84,7 +84,7 @@ describe("downloading a file", () => {
 
   test("accepts the session cookie, as a plain link in the web page sends it", async () => {
     writeFileSync(join(files, "a.txt"), "hello");
-    const res = await download("a.txt", { cookie: `claudebot_session=${host.deviceToken}` });
+    const res = await download("a.txt", { cookie: `tomte_session=${host.deviceToken}` });
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("hello");
   });

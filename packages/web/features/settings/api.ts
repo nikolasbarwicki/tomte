@@ -1,4 +1,4 @@
-import { Instructions, ModelProviders } from "@claudebot/contract/api";
+import { Instructions, ModelProviders } from "@tomte/contract/api";
 
 import { act, errorOf, post, readJson } from "@/host/api.ts";
 

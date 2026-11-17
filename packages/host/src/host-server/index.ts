@@ -1,11 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { fileURLToPath } from "node:url";
 
-import type {
-  CredentialsEvent,
-  IntegrationsEvent,
-  RoutinesEvent,
-} from "@claudebot/contract/events";
+import type { CredentialsEvent, IntegrationsEvent, RoutinesEvent } from "@tomte/contract/events";
 
 import {
   allowsTool,

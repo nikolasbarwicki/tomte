@@ -108,7 +108,7 @@ async function main(): Promise<void> {
     },
   });
 
-  const run = await createSmokeRun(oldApp, "claudebot-desktop-update-smoke-");
+  const run = await createSmokeRun(oldApp, "tomte-desktop-update-smoke-");
   const { launch, launchEnv, quit, nothingRemains, sweep, cleanup, userData, fakeCli, launched } =
     run;
   const desktopLog = () => {

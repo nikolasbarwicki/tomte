@@ -1,4 +1,4 @@
-// Browser regression for a blocked report sent by the real claudebot-notify program:
+// Browser regression for a blocked report sent by the real tomte-notify program:
 //   bun scripts/smoke-blocked-ui.ts           (CHROME_PATH names a Chrome/Chromium binary; macOS's Google Chrome by default)
 // Same harness as smoke-needs-you-ui.ts: a temporary web build served by the whole-host test harness (in-memory database and
 // secrets, fake Claude CLI, temporary data root), driven by headless Chrome in a fresh profile; the sender runs as a

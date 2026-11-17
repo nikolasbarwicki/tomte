@@ -3,11 +3,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ChannelLinkCodeResponse, type EventAccess } from "@claudebot/contract/api";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { ChannelLinkCodeResponse, type EventAccess } from "@tomte/contract/api";
 
 import { defined } from "../testing/defined.ts";
 import { fakeTelegram, type FakeCall, type FakeTelegram } from "../testing/fake-telegram.ts";
@@ -411,7 +411,7 @@ describe("a question card", () => {
 
 describe("a takeover card", () => {
   test("shows the reason, the link to the browser panel and I'm done and Skip; words are refused; Skip tells the bot", async () => {
-    const t = await start(["--public-url", "https://claudebot.example.com"]);
+    const t = await start(["--public-url", "https://tomte.example.com"]);
     await t.link();
     const botId = await t.openBot();
     const call = await t.browserAs(botId);
@@ -424,8 +424,8 @@ describe("a takeover card", () => {
     expect(t.labels(c)).toEqual(["I'm done", "Skip"]);
     expect(t.links(c)).toEqual([
       {
-        text: "Open in Claudebot",
-        url: `https://claudebot.example.com/bots/${botId}?panel=browser`,
+        text: "Open in Tomte",
+        url: `https://tomte.example.com/bots/${botId}?panel=browser`,
       },
     ]);
     expect(t.waitId(c)).toBe(wait.id);

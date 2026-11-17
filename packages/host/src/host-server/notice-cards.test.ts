@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ChannelLinkCodeResponse } from "@claudebot/contract/api";
+import { ChannelLinkCodeResponse } from "@tomte/contract/api";
 
 import { fakeChannel, type FakeChannel } from "../testing/fake-channel.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
@@ -36,7 +36,7 @@ afterEach(async () => {
 async function start(flags: string[] = []) {
   fake = fakeChannel();
   host = await startHandoffHost(
-    ["--public-url", "https://claudebot.example.com", ...flags],
+    ["--public-url", "https://tomte.example.com", ...flags],
     undefined,
     undefined,
     { channelAdapters: (receive) => fake.adapters(receive), absenceCheckMs: 20 },
@@ -123,12 +123,12 @@ describe("a failures notice on the channel", () => {
   test("goes out as a card with its title, its body, Dismiss only and a link to the routines settings", async () => {
     const { botId, card } = await pausedBot();
     expect(card.to).toEqual(owner);
-    expect(card.message.text).toStartWith("Claudebot · nightly paused after 5 failed runs\n\n");
+    expect(card.message.text).toStartWith("Tomte · nightly paused after 5 failed runs\n\n");
     expect(card.message.text).not.toContain("Reply to this message");
     expect(card.message.buttons?.map((row) => row.map((b) => b.label))).toEqual([["Dismiss"]]);
     expect(card.message.link).toEqual({
-      label: "Open in Claudebot",
-      url: `https://claudebot.example.com/bots/${botId}?panel=settings&section=routines`,
+      label: "Open in Tomte",
+      url: `https://tomte.example.com/bots/${botId}?panel=settings&section=routines`,
     });
     // Once, however long the host runs.
     await Bun.sleep(100);
@@ -215,7 +215,7 @@ describe("the absence pause on the channel", () => {
     host.advanceClock(12 * DAY);
     await host.until(() => cardsSent().length === 1);
     expect(cardsSent()[0]!.message.text).toContain(
-      "Routines will pause in 2 days unless you open claudebot",
+      "Routines will pause in 2 days unless you open tomte",
     );
     expect(cardsSent()[0]!.message.text).toContain("nightly");
     expect(cardsSent()[0]!.message.buttons?.map((row) => row.map((b) => b.label))).toEqual([

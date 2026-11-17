@@ -69,13 +69,13 @@ describe("permissionAllowed", () => {
 });
 
 describe("decidePinnedNavigation", () => {
-  const PINNED = "claudebot-desktop://connections";
+  const PINNED = "tomte-desktop://connections";
 
   test("allows only the pinned scheme and host, and never hands anything to the system browser", () => {
     expect(decidePinnedNavigation(`${PINNED}/add`, PINNED)).toEqual({ action: "allow" });
     expect(decidePinnedNavigation(`${PINNED}/?m=1`, PINNED)).toEqual({ action: "allow" });
     for (const url of [
-      "claudebot-desktop://other/",
+      "tomte-desktop://other/",
       "https://example.com/",
       "http://127.0.0.1:4000/",
       "file:///etc/hosts",

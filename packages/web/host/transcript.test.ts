@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import type { ServerEvent } from "@claudebot/contract/events";
+import type { ServerEvent } from "@tomte/contract/events";
 
 import { reduce, type Item } from "./transcript.ts";
 

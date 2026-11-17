@@ -1,5 +1,5 @@
-import type { BotStatus, BotSummary } from "@claudebot/contract/events";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
+import type { BotStatus, BotSummary } from "@tomte/contract/events";
 import { PlugIcon, PlusIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode } from "react";
 

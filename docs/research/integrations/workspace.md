@@ -15,8 +15,8 @@ Method: I ran `curl` against each server's `.well-known` OAuth metadata, and sen
 - There is no official remote MCP server, and Obsidian has no cloud API. The vault lives on the user's own machine.
 - Best path: the community plugin "Local REST API" (coddingtonbear/obsidian-local-rest-api). It serves HTTPS on `https://127.0.0.1:27124` with a self-signed certificate, and optionally plain HTTP on `http://127.0.0.1:27123`. Auth is `Authorization: Bearer <api key>`, and the key is shown in the plugin's settings [UNVERIFIED port numbers/header from memory].
 - MCP options:
-  1. stdio `mcp-obsidian` (MarkusPfundstein, `uvx mcp-obsidian`), with env `OBSIDIAN_API_KEY`, `OBSIDIAN_HOST`, `OBSIDIAN_PORT`. It wraps the REST API. This runs today in claudebot as a **custom stdio server**.
-  2. Newer versions of the Local REST API plugin ship an MCP endpoint over HTTP on localhost [UNVERIFIED]. If so, it could be a catalog entry `url: "https://127.0.0.1:27124/mcp"` with `{ kind: "bearer", tokenLabel: "Local REST API key", tokenUrl: "obsidian://" }`. claudebot would have to accept the self-signed cert (pin it, or use the plain HTTP port) and allow localhost URLs in the catalog.
+  1. stdio `mcp-obsidian` (MarkusPfundstein, `uvx mcp-obsidian`), with env `OBSIDIAN_API_KEY`, `OBSIDIAN_HOST`, `OBSIDIAN_PORT`. It wraps the REST API. This runs today in tomte as a **custom stdio server**.
+  2. Newer versions of the Local REST API plugin ship an MCP endpoint over HTTP on localhost [UNVERIFIED]. If so, it could be a catalog entry `url: "https://127.0.0.1:27124/mcp"` with `{ kind: "bearer", tokenLabel: "Local REST API key", tokenUrl: "obsidian://" }`. tomte would have to accept the self-signed cert (pin it, or use the plain HTTP port) and allow localhost URLs in the catalog.
   3. Filesystem-only fallback: point a filesystem MCP server at the vault folder. Needs no plugin, but has no Obsidian semantics.
 - Proposed: either do not put it in the catalog and document it as a custom stdio recipe, or add a catalog entry using the localhost bearer option in item 2 once that is verified.
 - Gotchas: Obsidian must be running. Self-signed TLS. Each user's vault path and key are different.
@@ -35,7 +35,7 @@ Method: I ran `curl` against each server's `.well-known` OAuth metadata, and sen
 - Auth: the authorization server is `https://todoist.com`. Its metadata has `registration_endpoint` and `client_registration_types_supported: ["dynamic"]`, and also `client_id_metadata_document_supported: true`. Scope: `data:read_write`. Bearer is in the header. A personal API token (Settings → Integrations → Developer, https://app.todoist.com/app/settings/integrations/developer) is likely accepted as a bearer token [UNVERIFIED].
 - Proposed: `{ kind: "oauth", client: "dcr", alternative: { tokenLabel: "Todoist API token", tokenUrl: "https://app.todoist.com/app/settings/integrations/developer" } }`. Keep the alternative only if the bearer token is verified.
 - Write tools: add-tasks, update-tasks, complete-tasks, delete-object, add-projects/sections/comments [UNVERIFIED names]. delete-object should ask.
-- Gotchas: the OAuth AS lives on a different host from the MCP resource, so claudebot must follow `authorization_servers` from the protected-resource metadata.
+- Gotchas: the OAuth AS lives on a different host from the MCP resource, so tomte must follow `authorization_servers` from the protected-resource metadata.
 
 ## ticktick — TickTick
 

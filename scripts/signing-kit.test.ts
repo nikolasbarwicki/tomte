@@ -40,7 +40,7 @@ describe("planSigning", () => {
     expect(decision).toMatchObject({ signed: false, platform: "win32" });
     expect(decision.signed ? "" : decision.reason).toContain("WINDOWS_CERTIFICATE_PFX");
     expect(() => planSigning("win32", {}, true)).toThrow(
-      "win32 signing is required (CLAUDEBOT_REQUIRE_SIGNING=true or --sign) but none of its secrets are set",
+      "win32 signing is required (TOMTE_REQUIRE_SIGNING=true or --sign) but none of its secrets are set",
     );
   });
 
@@ -68,10 +68,10 @@ describe("planSigning", () => {
 
 describe("signingRequired", () => {
   test("only the exact value true requires signing", () => {
-    expect(signingRequired({ CLAUDEBOT_REQUIRE_SIGNING: "true" })).toBe(true);
-    expect(signingRequired({ CLAUDEBOT_REQUIRE_SIGNING: " true " })).toBe(true);
+    expect(signingRequired({ TOMTE_REQUIRE_SIGNING: "true" })).toBe(true);
+    expect(signingRequired({ TOMTE_REQUIRE_SIGNING: " true " })).toBe(true);
     for (const value of [undefined, "", "false", "1", "TRUE", "yes"]) {
-      expect(signingRequired({ CLAUDEBOT_REQUIRE_SIGNING: value })).toBe(false);
+      expect(signingRequired({ TOMTE_REQUIRE_SIGNING: value })).toBe(false);
     }
   });
 });
@@ -89,13 +89,13 @@ describe("packagingSigning", () => {
   });
 
   test("the requirement signs without --sign, so an unsigned build is impossible", () => {
-    const required = { CLAUDEBOT_REQUIRE_SIGNING: "true" };
+    const required = { TOMTE_REQUIRE_SIGNING: "true" };
     expect(packagingSigning("darwin", { ...required, ...MAC }, false).signed).toBe(true);
     expect(() => packagingSigning("darwin", required, false)).toThrow(SigningError);
   });
 
   test("Linux is never signed, not even when signing is required", () => {
-    expect(packagingSigning("linux", { CLAUDEBOT_REQUIRE_SIGNING: "true" }, true)).toMatchObject({
+    expect(packagingSigning("linux", { TOMTE_REQUIRE_SIGNING: "true" }, true)).toMatchObject({
       signed: false,
       platform: "linux",
     });
@@ -125,8 +125,8 @@ describe("signingSummary", () => {
 });
 
 // `codesign -dvv` as macOS prints it for a Developer ID signed app (stderr).
-const SIGNED = `Executable=/x/Claudebot.app/Contents/MacOS/Claudebot
-Identifier=dev.claudebot.desktop
+const SIGNED = `Executable=/x/Tomte.app/Contents/MacOS/Tomte
+Identifier=dev.tomte.desktop
 Format=app bundle with Mach-O thin (arm64)
 CodeDirectory v=20500 size=1234 flags=0x10000(runtime) hashes=30+7 location=embedded
 Signature size=9012
@@ -137,8 +137,8 @@ Timestamp=Nov 8, 2026 at 09:00:00
 Info.plist entries=22
 TeamIdentifier=ABCDE12345
 `;
-const ADHOC = `Executable=/x/claudebot-host
-Identifier=claudebot-host
+const ADHOC = `Executable=/x/tomte-host
+Identifier=tomte-host
 Format=Mach-O thin (arm64)
 CodeDirectory v=20400 size=500 flags=0x20002(adhoc,linker-signed) hashes=10+0 location=embedded
 Signature=adhoc
@@ -338,7 +338,7 @@ describe("SIGNED_WIN", () => {
   });
 
   test("leaves the host to the host job's signature, so release.ts can compare its bytes", () => {
-    expect(signs(String.raw`${resources}\claudebot-host.exe`)).toBe(false);
+    expect(signs(String.raw`${resources}\tomte-host.exe`)).toBe(false);
   });
 
   test("does not sign data files", () => {

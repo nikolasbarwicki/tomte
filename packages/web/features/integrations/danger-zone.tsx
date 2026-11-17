@@ -1,4 +1,4 @@
-import type { Integration } from "@claudebot/contract/events";
+import type { Integration } from "@tomte/contract/events";
 
 import { confirmAction } from "@/components/confirm.tsx";
 import { Button } from "@/components/ui/button";

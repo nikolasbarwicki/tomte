@@ -13,7 +13,7 @@
 
 - URL: `https://mcp.vercel.com` (resource `https://mcp.vercel.com/`), streamable HTTP, vendor-hosted, beta/public [status UNVERIFIED]. Docs: https://vercel.com/docs/mcp/vercel-mcp (linked from resource metadata).
 - DCR: YES — `registration_endpoint: https://vercel.com/api/login/oauth/register`; scope `openid`.
-- Bearer: no documented token path for the remote [UNVERIFIED]. Vercel docs say client allowlist for approved MCP clients may apply [UNVERIFIED] — test DCR from claudebot.
+- Bearer: no documented token path for the remote [UNVERIFIED]. Vercel docs say client allowlist for approved MCP clients may apply [UNVERIFIED] — test DCR from tomte.
 - auth: `{ kind: "oauth", client: "dcr" }`
 - Write tools: deploy_to_vercel, project/env management [UNVERIFIED names]; mostly read (deployments, logs, docs search).
 - Gotchas: project-scoped URL form `https://mcp.vercel.com/<team>/<project>` exists [UNVERIFIED].

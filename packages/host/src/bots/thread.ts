@@ -9,7 +9,7 @@ import {
   type SDKMessage,
   type SDKResultMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import { DEFAULT_EFFORT, DEFAULT_MODEL, type MemoryScope } from "@claudebot/contract/events";
+import { DEFAULT_EFFORT, DEFAULT_MODEL, type MemoryScope } from "@tomte/contract/events";
 
 import {
   claudeHarness,

@@ -1,5 +1,5 @@
 // Smoke test for a compiled host binary on this machine (the build script's output, run for real):
-//   bun scripts/smoke-host.ts [dist/host/claudebot-host-darwin-arm64]   (default: this machine's build output)
+//   bun scripts/smoke-host.ts [dist/host/tomte-host-darwin-arm64]   (default: this machine's build output)
 // Copies the binary to a temporary directory outside the repo and runs it from there on a temporary data root and a
 // free port. Installs the managed Claude CLI with `install-cli` (first use) unless CLAUDE_PATH names one, starts the
 // host, pairs a device with the `pair` subcommand, creates a bot the way the UI does, checks the event stream, loads
@@ -57,7 +57,7 @@ function clientUrl(server: HostProcess): Promise<string> {
   void (async () => {
     for await (const chunk of server.stdout) {
       seen += decoder.decode(chunk);
-      const found = /claudebot UI: (http:\/\/\S+)/.exec(seen)?.[1];
+      const found = /tomte UI: (http:\/\/\S+)/.exec(seen)?.[1];
       if (found) url.resolve(found);
     }
     url.reject(new Error(`the host exited before reporting its URL; stdout: ${seen}`));
@@ -146,7 +146,7 @@ async function main(): Promise<number> {
       import.meta.dir,
       "..",
       "dist/host",
-      `claudebot-host-${os}-${process.arch}${os === "windows" ? ".exe" : ""}`,
+      `tomte-host-${os}-${process.arch}${os === "windows" ? ".exe" : ""}`,
     );
   if (!existsSync(source)) {
     console.error(
@@ -155,12 +155,8 @@ async function main(): Promise<number> {
     return 2;
   }
 
-  const root = await mkdtemp(join(tmpdir(), "claudebot-host-smoke-"));
-  const binary = join(
-    root,
-    "bin",
-    source.endsWith(".exe") ? "claudebot-host.exe" : "claudebot-host",
-  );
+  const root = await mkdtemp(join(tmpdir(), "tomte-host-smoke-"));
+  const binary = join(root, "bin", source.endsWith(".exe") ? "tomte-host.exe" : "tomte-host");
   await mkdir(join(root, "bin"));
   await copyFile(source, binary);
   await chmod(binary, 0o755);
@@ -295,7 +291,7 @@ async function main(): Promise<number> {
         JSON.stringify({ protocol: "agent-browser.plugin.v1", type: "plugin.manifest" }),
       );
       check(
-        plugin.stdout.includes('"name":"claudebot"') && plugin.code === 0,
+        plugin.stdout.includes('"name":"tomte"') && plugin.code === 0,
         "answers the plugin manifest request",
       );
 

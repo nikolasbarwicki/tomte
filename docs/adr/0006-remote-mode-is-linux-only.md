@@ -14,7 +14,7 @@ A runtime probe, which would have shown whether a sandboxed bot can read the sig
 
 ## Decision
 
-Remote mode is supported on Linux only. `parseHostConfig` throws `InvalidConfig` for `--mode remote` (or `CLAUDEBOT_MODE=remote`) on every platform except `linux`. On macOS the message names the keychain and says to use local mode on a Mac and run remote mode on a Linux server.
+Remote mode is supported on Linux only. `parseHostConfig` throws `InvalidConfig` for `--mode remote` (or `TOMTE_MODE=remote`) on every platform except `linux`. On macOS the message names the keychain and says to use local mode on a Mac and run remote mode on a Linux server.
 
 Windows is refused too. The remote target is a Linux server, and neither the spec nor the tests cover remote mode on Windows. Refusing every platform except Linux avoids claiming support that no one verified.
 

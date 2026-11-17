@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import type { ServerEvent } from "@claudebot/contract/events";
+import type { ServerEvent } from "@tomte/contract/events";
 
 import { isFinal, type LoopTask, type SessionLog } from "./store.ts";
 import { MAX_FINDINGS, type TaskView, type WorkTask } from "./work-state.ts";

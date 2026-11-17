@@ -1,4 +1,4 @@
-import type { Routine, Schedule } from "@claudebot/contract/events";
+import type { Routine, Schedule } from "@tomte/contract/events";
 
 import type { RoutineInput, RoutinePatch } from "../input.ts";
 

@@ -13,7 +13,7 @@ Precedent: `docs/research/google-oauth-research.md` — Gmail is an own-client e
   - (also Slides `slidesmcp`, Chat `chatmcp`, People `people.googleapis.com/mcp/v1`, Classroom `classroommcp`)
 - **No DCR.** `curl https://<host>/.well-known/oauth-protected-resource/mcp/v1` → `authorization_servers: ["https://accounts.google.com/"]`, `bearer_methods_supported: ["header"]`. `accounts.google.com/.well-known/openid-configuration` has no `registration_endpoint` (grep count 0). No API-key/PAT path. → `auth: { kind: "oauth", client: "own" }`, same as Gmail.
 - Setup per project: enable REST API **and** MCP API (`calendar-json`+`calendarmcp`, `sheets`+`sheetsmcp`, `docs`+`docsmcp`, `drive`+`drivemcp`), configure consent screen + scopes, create **Web application** client with **"Use this client for an AI-powered agent"** checked (requests from clients without it are rejected).
-- **One Google client can serve all of them** [V]: the guide uses the same `OAUTH_CLIENT_ID`/secret for every server in the Antigravity config and one consent screen with all scopes added. Each server is still a separate MCP connection with its own token/consent (resource differs) [I]. Claudebot can reuse `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` across Gmail/Calendar/Sheets/Docs/Drive entries; steps list just adds "enable X API + X MCP API, add scopes".
+- **One Google client can serve all of them** [V]: the guide uses the same `OAUTH_CLIENT_ID`/secret for every server in the Antigravity config and one consent screen with all scopes added. Each server is still a separate MCP connection with its own token/consent (resource differs) [I]. Tomte can reuse `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` across Gmail/Calendar/Sheets/Docs/Drive entries; steps list just adds "enable X API + X MCP API, add scopes".
 - Refresh tokens: guide states Google only issues one with `access_type=offline` (+ `prompt=consent` to re-issue); `offline_access` scope doesn't work. Same SDK gap as Gmail — without it users re-auth ~hourly.
 - Unverified client: warning screen, 100-user cap, 7-day refresh-token expiry in Testing status (per Gmail research).
 
@@ -59,10 +59,10 @@ Precedent: `docs/research/google-oauth-research.md` — Gmail is an own-client e
 ## Gotchas
 
 - Every server is Developer Preview: the user's Cloud project must enroll, and access can change. Not GA.
-- Restricted `drive.readonly` is required for full Docs/Sheets/Drive search. Any claudebot-owned verified client would need CASA (same blocker as Gmail).
+- Restricted `drive.readonly` is required for full Docs/Sheets/Drive search. Any tomte-owned verified client would need CASA (same blocker as Gmail).
 - Workspace admins can block third-party apps or the API. The rejection troubleshooting points to Admin OAuth logs.
 - Service accounts with domain-wide delegation and Apps Script are handled differently (see the troubleshooting section). Not relevant to the loopback flow.
-- Redirect URI: the client must list claudebot's loopback `/oauth/callback`. Google Web clients accept `http://localhost:<port>` redirects [I, already working for Gmail].
+- Redirect URI: the client must list tomte's loopback `/oauth/callback`. Google Web clients accept `http://localhost:<port>` redirects [I, already working for Gmail].
 
 ## Sources read
 

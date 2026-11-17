@@ -1,5 +1,5 @@
-import type { ToolAllowances } from "@claudebot/contract/api";
-import type { BotSummary } from "@claudebot/contract/events";
+import type { ToolAllowances } from "@tomte/contract/api";
+import type { BotSummary } from "@tomte/contract/events";
 import { useEffect, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";

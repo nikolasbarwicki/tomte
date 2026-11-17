@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { HostEvent, LiveMessage } from "@claudebot/contract/events";
+import { HostEvent, LiveMessage } from "@tomte/contract/events";
 import { z } from "zod";
 
 import { errorOf, InvalidPayload, parseJson, readJson } from "./api.ts";

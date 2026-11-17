@@ -75,7 +75,7 @@ export interface MacAppCommands {
  */
 export function macAppCommands(app: string, arch: DesktopArch): MacAppCommands {
   // The bundled host is signed by the same identity as the app.
-  const host = join(app, "Contents", "Resources", "claudebot-host");
+  const host = join(app, "Contents", "Resources", "tomte-host");
   const b = browserPaths(app, arch);
   const engine = macPartCommands(b.engine, "file");
   const chrome = macPartCommands(b.chrome, "chrome");
@@ -239,7 +239,7 @@ export async function verifyMacBundle(
   log: Log = console.log,
   files: BundleFiles = diskFiles,
 ): Promise<string[]> {
-  const tmp = await mkdtemp(join(tmpdir(), "claudebot-verify-"));
+  const tmp = await mkdtemp(join(tmpdir(), "tomte-verify-"));
   const teams: string[] = [];
   try {
     for (const arch of archs) {
@@ -252,7 +252,7 @@ export async function verifyMacBundle(
       if (zip === undefined) throw new Error(`no update zip is expected for ${arch}`);
       const out = join(tmp, arch);
       await run(["ditto", "-x", "-k", join(bundleDir, zip), out]);
-      teams.push(await verifyMacApp(run, join(out, "Claudebot.app"), arch, log, files));
+      teams.push(await verifyMacApp(run, join(out, "Tomte.app"), arch, log, files));
     }
   } finally {
     await rm(tmp, { recursive: true, force: true });

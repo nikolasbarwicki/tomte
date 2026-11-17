@@ -5,7 +5,7 @@ import type { EngineStatus } from "./engine.ts";
 
 const missing: EngineStatus = {
   status: "unavailable",
-  reason: "browser engine not installed; run `claudebot-host install-browser`",
+  reason: "browser engine not installed; run `tomte-host install-browser`",
   installable: true,
 };
 

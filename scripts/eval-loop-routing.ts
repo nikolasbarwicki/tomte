@@ -8,7 +8,7 @@
 // MANUAL: a run spends real model calls on the user's own Claude sign-in, found the way the host finds it (`resolveCli` for the
 // CLI: CLAUDE_PATH, the managed install in the data root, then PATH; `ClaudeAccess` for its environment). No API key or token is
 // read or printed here. It is not part of `bun run check`. `--data-root <dir>` names the host data root whose managed CLI to use
-// (default: the OS application-data folder, or CLAUDEBOT_DATA_ROOT).
+// (default: the OS application-data folder, or TOMTE_DATA_ROOT).
 //
 // Each case is a fresh `FrontSession` with the real options, prompt and tools, on a temp data root with a seeded SQLite store:
 // the work state is the real `workState()` over the real `Observer.view()` of that store. Chat history is not replayed, so each
@@ -472,7 +472,7 @@ async function main(): Promise<number> {
     );
     return 2;
   }
-  const root = mkdtempSync(join(tmpdir(), "claudebot-loop-eval-"));
+  const root = mkdtempSync(join(tmpdir(), "tomte-loop-eval-"));
   // The fake CLI reads its directory from here for `auth status`; each case overrides it for its own session.
   process.env.FAKE_CLAUDE_DIR = join(root, "fake-auth");
   mkdirSync(process.env.FAKE_CLAUDE_DIR);

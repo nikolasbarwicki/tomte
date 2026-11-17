@@ -1,7 +1,7 @@
 // Browser smoke of the double-loop chat mode (ADR-0011):
 //   bun scripts/smoke-loop-ui.ts              (CHROME_PATH names a Chrome/Chromium binary; macOS's Google Chrome by default)
 // Same harness as the other smokes: a temporary web build served by the whole-host test harness (in-memory database and secrets,
-// temporary data root, `CLAUDEBOT_ASK_APPROVAL` on) driven by headless Chrome in a fresh profile. The "model" is the fake Claude
+// temporary data root, `TOMTE_ASK_APPROVAL` on) driven by headless Chrome in a fresh profile. The "model" is the fake Claude
 // CLI running the `loop.json` script written below, which stands in for the front's long-lived query: it streams the front's
 // text, starts and ends background agents, records findings through the host's own hooks and in-process MCP server, steers and
 // stops them, queues a task and asks the host for an agent's tool approval. No real model, OS notification or keychain is touched.
@@ -15,7 +15,7 @@ import { currentSession, getBot } from "../packages/host/src/bots/index.ts";
 import { writeSession, type SessionLine } from "../packages/host/src/testing/session-file.ts";
 import { recordRequests, startSmoke } from "./smoke-kit.ts";
 
-const smoke = await startSmoke("loop-ui", { env: { CLAUDEBOT_ASK_APPROVAL: "1" } });
+const smoke = await startSmoke("loop-ui", { env: { TOMTE_ASK_APPROVAL: "1" } });
 const { host, page, check, pageErrors } = smoke;
 const { sends } = recordRequests(page);
 const startedAt = Date.now();

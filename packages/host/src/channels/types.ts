@@ -1,4 +1,4 @@
-import type { ChannelStatus } from "@claudebot/contract/api";
+import type { ChannelStatus } from "@tomte/contract/api";
 
 /** A person on a channel, as the channel names them: its own stable id and a name for the Channels page. */
 export type Account = { id: string; label: string };

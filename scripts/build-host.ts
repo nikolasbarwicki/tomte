@@ -1,7 +1,7 @@
 // Builds the web UI, then compiles the host with that UI embedded into one standalone binary per target:
 //   bun run build:host                      all five targets
 //   bun run build:host darwin-arm64 …       only these targets, for local work
-// Binaries land in dist/host/ (gitignored) as claudebot-host-<os>-<arch>[.exe].
+// Binaries land in dist/host/ (gitignored) as tomte-host-<os>-<arch>[.exe].
 import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { parseArgs } from "node:util";
@@ -31,7 +31,7 @@ type Target = keyof typeof TARGETS;
 const isTarget = (name: string): name is Target => name in TARGETS;
 
 const outfile = (target: Target) =>
-  join(OUT, `claudebot-host-${target}${target.startsWith("windows") ? ".exe" : ""}`);
+  join(OUT, `tomte-host-${target}${target.startsWith("windows") ? ".exe" : ""}`);
 
 async function buildWeb(): Promise<void> {
   const web = Bun.spawn(["bun", "run", "build:web"], {

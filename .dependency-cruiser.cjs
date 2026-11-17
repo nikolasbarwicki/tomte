@@ -45,7 +45,7 @@ module.exports = {
           `${HOST}testing/pretend-linux\\.ts$`,
           // The desktop app's main process: bundled by scripts/build-desktop.ts and run by Electron, never imported.
           `${DESKTOP}src/main\\.ts$`,
-          // The notify sender's entry: run as the `claudebot-notify` bin, never imported.
+          // The notify sender's entry: run as the `tomte-notify` bin, never imported.
           `${NOTIFY}src/main\\.ts$`,
         ],
       },

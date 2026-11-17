@@ -115,7 +115,7 @@ export interface Harness {
   launch(input: HarnessLaunchInput): HarnessLaunch;
 }
 
-const APP_PREFIX = "claudebot";
+const APP_PREFIX = "tomte";
 
 export const claudeHarness: Harness = {
   launch({ hostServers, integrations, systemPromptAppend, isolation, stopsAgents }) {

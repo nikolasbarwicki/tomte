@@ -1,4 +1,4 @@
-import { BotModel, EffortLevel, type BotSummary } from "@claudebot/contract/events";
+import { BotModel, EffortLevel, type BotSummary } from "@tomte/contract/events";
 import { useTransition } from "react";
 
 import { confirmAction } from "@/components/confirm.tsx";

@@ -10,7 +10,7 @@ Options for the phone are a Telegram bot, Web Push to the installed web UI, a Sl
 
 ## Decision
 
-Claudebot has a channel interface, and Telegram is its first adapter.
+Tomte has a channel interface, and Telegram is its first adapter.
 
 - **The interface does three things.** A channel delivers a needs-you item (an open external event or an open human wait), delivers a routine result, and routes an answer back through the answer path of ADR-0008 and `docs/plans/answer-path-and-relay.md`. The host decides where an answer goes and closes the item, exactly as for an answer from the web UI. A channel never writes to a run or a session itself.
 - **A channel link, made with a one-time code.** The web UI shows a one-time code. The owner sends it to the channel's bot, and the host stores the owner's account id on that channel. Only one user is linked per channel. An update from anyone else is ignored: it gets no answer, and it reaches no code that does work. The code is single-use. Each customer in Stage 3 has their own host, so the same linking serves them.

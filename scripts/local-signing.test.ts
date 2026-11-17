@@ -33,7 +33,7 @@ const ASC = "/opt/homebrew/bin/asc";
 const PROFILE = "ASC API";
 const hashOf = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
 
-const DETAILS = `Executable=/x/Claudebot
+const DETAILS = `Executable=/x/Tomte
 CodeDirectory v=20500 size=1234 flags=0x10000(runtime) hashes=30+7 location=embedded
 Authority=Developer ID Application: Synthetic Co (ABCDE12345)
 Authority=Developer ID Certification Authority
@@ -189,16 +189,16 @@ class FakeMac {
     const flag = (name: string) => cmd[cmd.indexOf(name) + 1] as string;
     const out = flag("--out");
     const version = flag("--version");
-    const bundle = join(out, "Claudebot-darwin-arm64");
-    const app = join(bundle, "mac-arm64/Claudebot.app");
-    const host = join(app, "Contents/Resources/claudebot-host");
+    const bundle = join(out, "Tomte-darwin-arm64");
+    const app = join(bundle, "mac-arm64/Tomte.app");
+    const host = join(app, "Contents/Resources/tomte-host");
     if (cmd.includes("--local-notary-record")) {
       // The afterSign hook of the asc backend, as package-desktop.ts runs it before the dmg and zip exist.
       await writeFile(
         flag("--local-notary-record"),
         JSON.stringify({
           kind: "app",
-          file: "Claudebot.zip",
+          file: "Tomte.zip",
           sha256: "a".repeat(64),
           id: "app-sub-1",
           status: "Accepted",
@@ -216,24 +216,24 @@ class FakeMac {
       await mkdir(dirname(file), { recursive: true });
       await writeFile(file, "SYNTHETIC BROWSER FILE");
     }
-    const dmg = join(bundle, `Claudebot-${version}-arm64.dmg`);
-    const zip = join(bundle, `Claudebot-${version}-arm64-mac.zip`);
+    const dmg = join(bundle, `Tomte-${version}-arm64.dmg`);
+    const zip = join(bundle, `Tomte-${version}-arm64-mac.zip`);
     await writeFile(dmg, "SYNTHETIC DMG");
-    sh(["zip", "-q", "-r", zip, "Claudebot.app"], join(bundle, "mac-arm64"));
+    sh(["zip", "-q", "-r", zip, "Tomte.app"], join(bundle, "mac-arm64"));
     await writeFile(`${dmg}.blockmap`, "SYNTHETIC BLOCKMAP");
     await writeFile(
       join(bundle, "latest-mac.yml"),
       [
         `version: ${version}`,
         "files:",
-        `  - url: Claudebot-${version}-arm64-mac.zip`,
+        `  - url: Tomte-${version}-arm64-mac.zip`,
         `    sha512: ${await sha512Base64(zip)}`,
         `    size: ${(await stat(zip)).size}`,
-        `  - url: Claudebot-${version}-arm64.dmg`,
+        `  - url: Tomte-${version}-arm64.dmg`,
         `    sha512: ${await sha512Base64(dmg)}`,
         `    size: ${(await stat(dmg)).size}`,
         "    blockMapSize: 5",
-        `path: Claudebot-${version}-arm64-mac.zip`,
+        `path: Tomte-${version}-arm64-mac.zip`,
         "sha512: x",
         "",
       ].join("\n"),
@@ -255,7 +255,7 @@ let out: string;
 let inputs: LocalInputs;
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), "claudebot-local-signing-test-"));
+  root = await mkdtemp(join(tmpdir(), "tomte-local-signing-test-"));
   repoRoot = join(root, "repo");
   out = join(root, "repo/dist/rel-test");
   await mkdir(repoRoot, { recursive: true });
@@ -416,8 +416,8 @@ describe("runLocalSigning", () => {
     expect(dmgEntry.sha512).toBe(await sha512Base64(p.dmg));
     expect(dmgEntry.size).toBe((await stat(p.dmg)).size);
     const sums = await readFile(join(p.artifacts, "SHA256SUMS"), "utf8");
-    expect(sums).toContain("Claudebot-0.1.0-arm64.dmg");
-    expect(sums).toContain("Claudebot-0.1.0-arm64-mac.zip");
+    expect(sums).toContain("Tomte-0.1.0-arm64.dmg");
+    expect(sums).toContain("Tomte-0.1.0-arm64-mac.zip");
     expect(sums).toContain("latest-mac.yml");
     expect(sums).not.toContain("blockmap");
     expect(await exists(`${p.dmg}.blockmap`)).toBe(false);
@@ -575,7 +575,7 @@ describe("runLocalSigning", () => {
 
     test("when the input names no file", async () => {
       await rm(inputs.p12File as string);
-      await refused(await configure(), harness(), /CLAUDEBOT_LOCAL_P12_FILE does not name a file/);
+      await refused(await configure(), harness(), /TOMTE_LOCAL_P12_FILE does not name a file/);
     });
 
     test("into a folder that is not empty", async () => {
@@ -585,7 +585,7 @@ describe("runLocalSigning", () => {
     });
 
     test("while a process runs from the staging folder", async () => {
-      const h = harness({}, [{ pid: 4242, command: `${out}/Claudebot-darwin-arm64/x/Claudebot` }]);
+      const h = harness({}, [{ pid: 4242, command: `${out}/Tomte-darwin-arm64/x/Tomte` }]);
       await refused(await configure(), h, /4242|running process/);
     });
   });
@@ -603,7 +603,7 @@ describe("runLocalSigning with the notarytool backend", () => {
       submissions: [
         {
           kind: "dmg",
-          file: "Claudebot-0.1.0-arm64.dmg",
+          file: "Tomte-0.1.0-arm64.dmg",
           sha256: hashOf("SYNTHETIC DMG+signed"),
           id: "sub-123",
           status: "Accepted",
@@ -670,14 +670,14 @@ describe("runLocalSigning with the asc backend", () => {
       submissions: [
         {
           kind: "app",
-          file: "Claudebot.zip",
+          file: "Tomte.zip",
           sha256: "a".repeat(64),
           id: "app-sub-1",
           status: "Accepted",
         },
         {
           kind: "dmg",
-          file: "Claudebot-0.1.0-arm64.dmg",
+          file: "Tomte-0.1.0-arm64.dmg",
           sha256: hashOf("SYNTHETIC DMG+signed"),
           id: "dmg-sub-9",
           status: "Accepted",
@@ -686,7 +686,7 @@ describe("runLocalSigning with the asc backend", () => {
     });
     const log = h.logs.join("\n");
     expect(log).toContain("app notarized: submission app-sub-1");
-    expect(log).toContain("dmg Claudebot-0.1.0-arm64.dmg: submission dmg-sub-9, Accepted");
+    expect(log).toContain("dmg Tomte-0.1.0-arm64.dmg: submission dmg-sub-9, Accepted");
     expect(await readFile(join(config.paths.artifacts, "SHA256SUMS"), "utf8")).not.toContain(
       "NOTARIZATION",
     );
@@ -725,7 +725,7 @@ describe("runLocalSigning with the asc backend", () => {
     const named = { ...config.inputs, ascBin: join(root, "missing-asc") };
     const h = harness();
     await expect(runLocalSigning({ ...config, inputs: named }, h.deps)).rejects.toThrow(
-      /CLAUDEBOT_LOCAL_ASC_BIN does not name a file/,
+      /TOMTE_LOCAL_ASC_BIN does not name a file/,
     );
     expect(h.fake.calls).toEqual([]);
   });
@@ -746,8 +746,8 @@ describe("plan", () => {
     const text = renderPlan(await configure({ asc: true }));
     for (const word of [
       `Notary backend: asc, saved profile "ASC API", binary ${ASC}`,
-      `$ ${ASC} --profile "ASC API" notarization submit --file ${out}/Claudebot-darwin-arm64/Claudebot-0.1.0-arm64.dmg --wait --output json`,
-      `inside: ${ASC} --profile "ASC API" notarization submit --file <tmp>/Claudebot.zip --wait --output json`,
+      `$ ${ASC} --profile "ASC API" notarization submit --file ${out}/Tomte-darwin-arm64/Tomte-0.1.0-arm64.dmg --wait --output json`,
+      `inside: ${ASC} --profile "ASC API" notarization submit --file <tmp>/Tomte.zip --wait --output json`,
       `${ASC} --profile "ASC API" notarization log --id <id>`,
       "inside: ditto -c -k --sequesterRsrc --keepParent",
       "inside: xcrun stapler staple",

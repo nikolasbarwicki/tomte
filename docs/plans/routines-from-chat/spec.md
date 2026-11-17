@@ -6,7 +6,7 @@ Depends on nothing open. Gate step 4 of `docs/plans/grok-bot-replacement-roadmap
 
 ## Problem Statement
 
-Grok Bot lets me say "brief me every weekday at 8" and the routine exists. In claudebot I have to leave the chat, open the Routines panel, pick a preset, write the name and the instruction, and save. Routine CRUD exists only under `/api/routines/*`, which a bot cannot call. None of the bot-facing tools (`ask_user`, `remember`, `rewrite_memory`, the handoff tools, the browser tools) manages routines. I cannot cancel Grok Bot until this works from chat.
+Grok Bot lets me say "brief me every weekday at 8" and the routine exists. In tomte I have to leave the chat, open the Routines panel, pick a preset, write the name and the instruction, and save. Routine CRUD exists only under `/api/routines/*`, which a bot cannot call. None of the bot-facing tools (`ask_user`, `remember`, `rewrite_memory`, the handoff tools, the browser tools) manages routines. I cannot cancel Grok Bot until this works from chat.
 
 ## Solution
 

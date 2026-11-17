@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Installs the claudebot host as a systemd service on a Linux server. Run as root; `-h` explains the flags.
+# Installs the tomte host as a systemd service on a Linux server. Run as root; `-h` explains the flags.
 set -euo pipefail
 umask 022
 
-SERVICE=claudebot
-SERVICE_USER=claudebot
-DATA_ROOT=/var/lib/claudebot
-BIN=/usr/local/bin/claudebot-host
-ETC_DIR=/etc/claudebot
-ENV_FILE=$ETC_DIR/claudebot.env
+SERVICE=tomte
+SERVICE_USER=tomte
+DATA_ROOT=/var/lib/tomte
+BIN=/usr/local/bin/tomte-host
+ETC_DIR=/etc/tomte
+ENV_FILE=$ETC_DIR/tomte.env
 UNIT_DEST=/etc/systemd/system/$SERVICE.service
 DROPIN_DIR=/etc/systemd/system/$SERVICE.service.d
 ENC_CREDENTIAL=/etc/credstore.encrypted/$SERVICE.secrets-key
@@ -25,18 +25,18 @@ STABLE_SECONDS=7
 DEFAULT_HOST=127.0.0.1
 DEFAULT_PORT=8417
 # GitHub repository (OWNER/REPO) whose Releases hold the host binaries. Empty in the source tree on purpose: the release
-# workflow fills it in on the copy it publishes as a release asset, and --repo or $CLAUDEBOT_REPO sets it otherwise.
+# workflow fills it in on the copy it publishes as a release asset, and --repo or $TOMTE_REPO sets it otherwise.
 DEFAULT_REPO=""
 # Test seam (and GitHub Enterprise): where release downloads come from, as {base}/{repo}/releases/....
-RELEASE_BASE_URL=${CLAUDEBOT_RELEASE_BASE_URL:-https://github.com}
+RELEASE_BASE_URL=${TOMTE_RELEASE_BASE_URL:-https://github.com}
 
 usage() {
   cat <<'EOF'
 Usage: install.sh [--repo <OWNER/REPO>] [--version <version>] [options]
        install.sh --url <URL> --sha256 <hex> [options]
 
-Installs the claudebot host as a systemd service running as the unprivileged
-"claudebot" user. Run as root on a systemd Linux server (x86_64 or aarch64).
+Installs the tomte host as a systemd service running as the unprivileged
+"tomte" user. Run as root on a systemd Linux server (x86_64 or aarch64).
 
 By default the script downloads the host binary for this server's CPU from a GitHub
 Release, together with the release's SHA256SUMS, and aborts before installing anything
@@ -44,7 +44,7 @@ when the checksum does not match or has no entry for the binary.
 
 Download source (the default):
   --repo <OWNER/REPO>  GitHub repository that publishes the releases. Also read from
-                       $CLAUDEBOT_REPO. The copy of this script attached to a release
+                       $TOMTE_REPO. The copy of this script attached to a release
                        has it filled in; a copy from the source tree needs it.
   --version <version>  Release to install, e.g. 0.2.0 or v0.2.0-rc.1. Default: the
                        latest release. GitHub's "latest" skips pre-releases, so
@@ -56,14 +56,14 @@ Download source (your own file; replaces the above):
   --sha256 <hex>       Expected SHA-256 of the downloaded file. A mismatch aborts
                        before anything is installed. Needs --url.
 
-Options (written to /etc/claudebot/claudebot.env on the first run; a re-run keeps
+Options (written to /etc/tomte/tomte.env on the first run; a re-run keeps
 the file and only warns when a flag differs from it):
-  --public-url <origin>  Origin users type into the browser, e.g. https://claudebot.example.com
+  --public-url <origin>  Origin users type into the browser, e.g. https://tomte.example.com
   --host <addr>          Address the client listener binds (default 127.0.0.1)
   --port <n>             Port the client listener binds (default 8417)
   --allow-plain-http     Allow a non-loopback bind without an https public URL (private networks only)
 
-  --unit <path>          The systemd unit to install (default: claudebot.service next to this
+  --unit <path>          The systemd unit to install (default: tomte.service next to this
                          script; a script that is not in a checkout takes it from the release)
   -h, --help             Show this help
 EOF
@@ -124,8 +124,8 @@ if [[ -n $url || -n $sha256 ]]; then
   [[ -z $repo && -z $version ]] || die "--repo and --version choose a GitHub release, which --url replaces; pass one or the other"
   [[ $sha256 =~ ^[0-9a-fA-F]{64}$ ]] || die "--sha256 must be 64 hexadecimal characters"
 else
-  repo=${repo:-${CLAUDEBOT_REPO:-$DEFAULT_REPO}}
-  [[ -n $repo ]] || die "no GitHub repository to download from: pass --repo OWNER/REPO (or set CLAUDEBOT_REPO), or pass --url and --sha256"
+  repo=${repo:-${TOMTE_REPO:-$DEFAULT_REPO}}
+  [[ -n $repo ]] || die "no GitHub repository to download from: pass --repo OWNER/REPO (or set TOMTE_REPO), or pass --url and --sha256"
   [[ $repo =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || die "--repo must look like OWNER/REPO"
   if [[ -n $version ]]; then
     version=${version#v}
@@ -141,7 +141,7 @@ if [[ -n $port ]]; then
   port=$((10#$port))
 fi
 if [[ -n $public_url ]]; then
-  [[ $public_url =~ ^https?://[][A-Za-z0-9.:_-]+/?$ ]] || die "--public-url must be an http(s) origin such as https://claudebot.example.com"
+  [[ $public_url =~ ^https?://[][A-Za-z0-9.:_-]+/?$ ]] || die "--public-url must be an http(s) origin such as https://tomte.example.com"
   public_url=${public_url%/}
 fi
 
@@ -163,11 +163,11 @@ url=${url//\{target\}/$target}
 
 # The unit comes from --unit, else from next to this script, else (a script downloaded on its own) from the release.
 unit_from_release=""
-if [[ -z $unit && -f ${BASH_SOURCE[0]:-} && -r $(dirname -- "${BASH_SOURCE[0]}")/claudebot.service ]]; then
-  unit=$(dirname -- "${BASH_SOURCE[0]}")/claudebot.service
+if [[ -z $unit && -f ${BASH_SOURCE[0]:-} && -r $(dirname -- "${BASH_SOURCE[0]}")/tomte.service ]]; then
+  unit=$(dirname -- "${BASH_SOURCE[0]}")/tomte.service
 fi
 if [[ -z $unit ]]; then
-  [[ -z $url ]] || die "there is no claudebot.service next to this script: pass --unit <path>"
+  [[ -z $url ]] || die "there is no tomte.service next to this script: pass --unit <path>"
   unit_from_release=1
 else
   [[ -r $unit ]] || die "unit file $unit not found or not readable (pass --unit <path>)"
@@ -217,30 +217,30 @@ lookup_checksum() { # <SHA256SUMS file> <name>
 
 if [[ -n $url ]]; then
   say "Downloading the host binary ($target)"
-  fetch "$url" "$tmp/claudebot-host"
-  verify "$tmp/claudebot-host" "$(printf '%s' "$sha256" | tr 'A-F' 'a-f')" "$target host binary"
+  fetch "$url" "$tmp/tomte-host"
+  verify "$tmp/tomte-host" "$(printf '%s' "$sha256" | tr 'A-F' 'a-f')" "$target host binary"
 else
   redirect_protocols='=https'
   if [[ $RELEASE_BASE_URL != https://* ]]; then redirect_protocols='=https,http,file'; fi
   if [[ -n $version ]]; then
     release_url=$RELEASE_BASE_URL/$repo/releases/download/v$version
-    say "Installing claudebot $version from $repo"
+    say "Installing tomte $version from $repo"
   else
     release_url=$RELEASE_BASE_URL/$repo/releases/latest/download
-    say "Installing the latest claudebot release of $repo (a pre-release needs --version)"
+    say "Installing the latest tomte release of $repo (a pre-release needs --version)"
   fi
-  asset=claudebot-host-$target
+  asset=tomte-host-$target
   say "Downloading SHA256SUMS and the host binary ($target)"
   fetch "$release_url/SHA256SUMS" "$tmp/SHA256SUMS"
-  fetch "$release_url/$asset" "$tmp/claudebot-host"
+  fetch "$release_url/$asset" "$tmp/tomte-host"
   lookup_checksum "$tmp/SHA256SUMS" "$asset"
-  verify "$tmp/claudebot-host" "$listed" "$asset"
+  verify "$tmp/tomte-host" "$listed" "$asset"
   if [[ -n $unit_from_release ]]; then
-    say "Downloading claudebot.service"
-    fetch "$release_url/claudebot.service" "$tmp/claudebot.service"
-    lookup_checksum "$tmp/SHA256SUMS" claudebot.service
-    verify "$tmp/claudebot.service" "$listed" claudebot.service
-    unit=$tmp/claudebot.service
+    say "Downloading tomte.service"
+    fetch "$release_url/tomte.service" "$tmp/tomte.service"
+    lookup_checksum "$tmp/SHA256SUMS" tomte.service
+    verify "$tmp/tomte.service" "$listed" tomte.service
+    unit=$tmp/tomte.service
   fi
 fi
 say "Checksum verified"
@@ -283,22 +283,22 @@ warn_if_differs() { # <flag> <KEY> <wanted>
 
 if [[ -e $ENV_FILE ]]; then
   say "Keeping the existing $ENV_FILE"
-  warn_if_differs --public-url CLAUDEBOT_PUBLIC_URL "$public_url"
-  warn_if_differs --host CLAUDEBOT_HOST "$host"
-  warn_if_differs --port CLAUDEBOT_PORT "$port"
-  warn_if_differs --allow-plain-http CLAUDEBOT_ALLOW_PLAIN_HTTP "$allow_plain_http"
+  warn_if_differs --public-url TOMTE_PUBLIC_URL "$public_url"
+  warn_if_differs --host TOMTE_HOST "$host"
+  warn_if_differs --port TOMTE_PORT "$port"
+  warn_if_differs --allow-plain-http TOMTE_ALLOW_PLAIN_HTTP "$allow_plain_http"
 else
   say "Writing $ENV_FILE"
   {
-    echo "# claudebot host configuration: non-secret settings only. The secrets key is a systemd credential and never goes here."
+    echo "# tomte host configuration: non-secret settings only. The secrets key is a systemd credential and never goes here."
     echo "# After editing: systemctl restart $SERVICE"
-    echo "CLAUDEBOT_HOST=${host:-$DEFAULT_HOST}"
-    echo "CLAUDEBOT_PORT=${port:-$DEFAULT_PORT}"
-    if [[ -n $public_url ]]; then echo "CLAUDEBOT_PUBLIC_URL=$public_url"; fi
-    if [[ -n $allow_plain_http ]]; then echo "CLAUDEBOT_ALLOW_PLAIN_HTTP=1"; fi
-  } >"$tmp/claudebot.env"
+    echo "TOMTE_HOST=${host:-$DEFAULT_HOST}"
+    echo "TOMTE_PORT=${port:-$DEFAULT_PORT}"
+    if [[ -n $public_url ]]; then echo "TOMTE_PUBLIC_URL=$public_url"; fi
+    if [[ -n $allow_plain_http ]]; then echo "TOMTE_ALLOW_PLAIN_HTTP=1"; fi
+  } >"$tmp/tomte.env"
   install -d -m 0755 "$ETC_DIR"
-  install -o root -g root -m 0644 "$tmp/claudebot.env" "$ENV_FILE"
+  install -o root -g root -m 0644 "$tmp/tomte.env" "$ENV_FILE"
 fi
 
 # --- 6. Secrets key credential ---------------------------------------------------------------
@@ -337,8 +337,8 @@ fi
 # --- 7. Binary -------------------------------------------------------------------------------
 
 say "Installing $BIN"
-staged_bin=$(dirname "$BIN")/.claudebot-host.new.$$
-install -o root -g root -m 0755 "$tmp/claudebot-host" "$staged_bin"
+staged_bin=$(dirname "$BIN")/.tomte-host.new.$$
+install -o root -g root -m 0755 "$tmp/tomte-host" "$staged_bin"
 mv -f -- "$staged_bin" "$BIN"
 staged_bin=""
 
@@ -350,10 +350,10 @@ as_service_user() {
 }
 
 say "Installing the Claude CLI"
-as_service_user "$BIN" install-cli "${HOST_FLAGS[@]}" || die "claudebot-host install-cli failed (see above)"
+as_service_user "$BIN" install-cli "${HOST_FLAGS[@]}" || die "tomte-host install-cli failed (see above)"
 say "Installing the browser engine"
 as_service_user "$BIN" install-browser "${HOST_FLAGS[@]}" ||
-  warn "claudebot-host install-browser failed (see above): browser bots are unavailable until it succeeds; re-run this script to retry"
+  warn "tomte-host install-browser failed (see above): browser bots are unavailable until it succeeds; re-run this script to retry"
 
 # --- 9. Unit ---------------------------------------------------------------------------------
 
@@ -406,21 +406,21 @@ fi
 
 pair_command="sudo -u $SERVICE_USER -H $BIN pair ${HOST_FLAGS[*]}"
 sign_in_command="sudo -u $SERVICE_USER -H $BIN auth-login ${HOST_FLAGS[*]}"
-as_service_user "$BIN" pair "${HOST_FLAGS[@]}" >"$tmp/pair-code" || die "claudebot-host pair failed (see above)"
+as_service_user "$BIN" pair "${HOST_FLAGS[@]}" >"$tmp/pair-code" || die "tomte-host pair failed (see above)"
 pairing_code=$(<"$tmp/pair-code")
-[[ -n $pairing_code ]] || die "claudebot-host pair printed no code"
+[[ -n $pairing_code ]] || die "tomte-host pair printed no code"
 
-effective_public_url=$(env_value CLAUDEBOT_PUBLIC_URL)
-effective_host=$(env_value CLAUDEBOT_HOST)
+effective_public_url=$(env_value TOMTE_PUBLIC_URL)
+effective_host=$(env_value TOMTE_HOST)
 effective_host=${effective_host:-$DEFAULT_HOST}
 [[ $effective_host == *:* && $effective_host != "["* ]] && effective_host="[$effective_host]"
-effective_port=$(env_value CLAUDEBOT_PORT)
+effective_port=$(env_value TOMTE_PORT)
 effective_port=${effective_port:-$DEFAULT_PORT}
 
 cat <<EOF
 
 ================================================================================
-claudebot is installed and running.
+tomte is installed and running.
 
 1. Pair your first device. Pairing code:
 
@@ -437,7 +437,7 @@ else
   cat <<EOF
    No public URL is set, so the host only listens on http://$effective_host:$effective_port,
    which your browser cannot reach from outside this server. Put Caddy in front of it or
-   use Tailscale, then set CLAUDEBOT_PUBLIC_URL in $ENV_FILE: see the Caddy and Tailscale
+   use Tailscale, then set TOMTE_PUBLIC_URL in $ENV_FILE: see the Caddy and Tailscale
    sections of deploy/README.md.
 EOF
 fi
@@ -454,7 +454,7 @@ cat <<EOF
    "runuser -u $SERVICE_USER -- env HOME=$DATA_ROOT".
 
    Anthropic's terms for your Claude subscription apply to unattended and remote use of
-   the CLI; check that they cover how you run claudebot.
+   the CLI; check that they cover how you run tomte.
 EOF
 if [[ -z $sandbox_ok ]]; then
   cat <<'EOF'

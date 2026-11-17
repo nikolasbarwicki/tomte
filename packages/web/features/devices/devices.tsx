@@ -1,4 +1,4 @@
-import type { DeviceEntry } from "@claudebot/contract/api";
+import type { DeviceEntry } from "@tomte/contract/api";
 import { CheckIcon, CopyIcon, Laptop, Plus } from "lucide-react";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";

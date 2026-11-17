@@ -6,7 +6,7 @@ Gate step 5 of `docs/plans/grok-bot-replacement-roadmap.md` (section "Cost guard
 
 ## Problem Statement
 
-My routines run at night with nobody watching, on a VPS that is always on. If one loops, it burns my Claude plan's limits for days before I look. A bot that hangs holds its session, a Chrome and a slot in the 4 GB of memory. A routine that fails every night tells me nothing. If I stop using claudebot for weeks, every routine keeps running for nobody. And I cannot see what a run cost: the host drops the SDK's `total_cost_usd` and token counts, so I cannot tell a cheap routine from an expensive one.
+My routines run at night with nobody watching, on a VPS that is always on. If one loops, it burns my Claude plan's limits for days before I look. A bot that hangs holds its session, a Chrome and a slot in the 4 GB of memory. A routine that fails every night tells me nothing. If I stop using tomte for weeks, every routine keeps running for nobody. And I cannot see what a run cost: the host drops the SDK's `total_cost_usd` and token counts, so I cannot tell a cheap routine from an expensive one.
 
 ## Solution
 
@@ -79,14 +79,14 @@ There is no dollar budget in Stage 1. On a Claude plan `total_cost_usd` is an es
 
 ### Notices
 
-- A **notice** is a needs-you item the host raises about itself. It is stored as an external event of a new kind `notice` from the event source `claudebot` (label "Claudebot"), with a deterministic key. It never reaches the bot: unlike every other kind except `progress` it is not delivered. The user can only dismiss it.
+- A **notice** is a needs-you item the host raises about itself. It is stored as an external event of a new kind `notice` from the event source `tomte` (label "Tomte"), with a deterministic key. It never reaches the bot: unlike every other kind except `progress` it is not delivered. The user can only dismiss it.
 - This reuses the events store, so the sidebar count, the Needs-you bar, the desktop banner and a channel (ADR-0010: a channel delivers every open needs-you item) show it with no new code path.
 - The events route must keep refusing `notice`: it is host-only, so `ExternalEventInput` excludes it. The `external_events` kind CHECK cannot be altered, so the table is rebuilt as schema step 12 did.
 - A notice closes as `resolved` when the thing it reports is undone (the routine is resumed).
 
 ### Absence pause
 
-- **The setting.** `HostConfig.pauseAfterAbsenceDays`, a non-negative integer, from `--pause-after-absence-days` or `CLAUDEBOT_PAUSE_AFTER_ABSENCE_DAYS`; default 0 (off). The host has no stored settings store: every host setting today is a startup flag read once by `parseHostConfig` (`platform/config.ts`), so this follows that pattern. A stored setting with a UI is a Stage 3 decision, when the product's default is chosen. `deploy/README.md` and `deploy/claudebot.service` stay in step.
+- **The setting.** `HostConfig.pauseAfterAbsenceDays`, a non-negative integer, from `--pause-after-absence-days` or `TOMTE_PAUSE_AFTER_ABSENCE_DAYS`; default 0 (off). The host has no stored settings store: every host setting today is a startup flag read once by `parseHostConfig` (`platform/config.ts`), so this follows that pattern. A stored setting with a UI is a Stage 3 decision, when the product's default is chosen. `deploy/README.md` and `deploy/tomte.service` stay in step.
 - **Presence.** A new `presence` feature module (ADR-0003) keeps one row with the time of the owner's last action and the time of the last warning. It has two inputs.
   - The client boundary (`host-server/boundary.ts`) touches it when `devices.authenticate` accepts a request, except `GET /api/events`. The event stream cannot count: the desktop app follows it all day for the banner, and a tab keeps it open. `devices.last_seen_at` cannot be used for the same reason. Everything else a paired device sends (opening the UI, a click, a send) is a person.
   - A channel touches it when the linked owner account sends a message or presses a button. Spec 11, ticket 01 owns the channel; ticket 06 here wires it.

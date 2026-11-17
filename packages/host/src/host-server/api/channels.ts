@@ -5,7 +5,7 @@ import {
   ChannelTokenRequest,
   type ChannelLinkCodeResponse,
   type ChannelList,
-} from "@claudebot/contract/api";
+} from "@tomte/contract/api";
 
 import { NotFound } from "../../platform/errors.ts";
 import { json } from "../http.ts";

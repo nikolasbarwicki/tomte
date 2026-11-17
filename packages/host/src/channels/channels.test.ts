@@ -18,7 +18,7 @@ function setup() {
     db,
     now: () => clock,
     onActivity: () => void activity.count++,
-    publicUrl: "https://claudebot.example",
+    publicUrl: "https://tomte.example",
     noticeRetryMs: 1,
   });
   channels.register(fake.channel);
@@ -59,7 +59,7 @@ describe("a link code", () => {
     for (const write of [
       (c: string) => c,
       (c: string) => `/start ${c}`,
-      (c: string) => `/start@claudebot ${c.toLowerCase()}`,
+      (c: string) => `/start@tomte ${c.toLowerCase()}`,
       (c: string) => c.toLowerCase().replaceAll("-", " "),
       (c: string) => ` ${c.replaceAll("-", "_")} `,
     ]) {
@@ -208,7 +208,7 @@ describe("an update from the linked account", () => {
     const channels = createChannels({
       db,
       onActivity: () => {},
-      publicUrl: "https://claudebot.example",
+      publicUrl: "https://tomte.example",
     });
     channels.register(fakeChannel().channel);
     await channels.receive("fake", { from: owner, text: channels.createLinkCode("fake") });
@@ -292,7 +292,7 @@ describe("notify", () => {
         to: owner,
         message: {
           text: "Routine Digest failed: boom",
-          link: { url: "https://claudebot.example/bots/b1?panel=settings&section=routines" },
+          link: { url: "https://tomte.example/bots/b1?panel=settings&section=routines" },
         },
       },
     ]);

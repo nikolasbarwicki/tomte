@@ -1,4 +1,4 @@
-import { FACE_NAMES, STROKE_NAMES, type BotAvatar as Avatar } from "@claudebot/contract/avatars";
+import { FACE_NAMES, STROKE_NAMES, type BotAvatar as Avatar } from "@tomte/contract/avatars";
 import { useId } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";

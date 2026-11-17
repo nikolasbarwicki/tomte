@@ -72,7 +72,7 @@ export interface FakeTelegram {
 
 export function fakeTelegram(o: { token?: string; username?: string } = {}): FakeTelegram {
   const token = o.token ?? "123:fake-token";
-  const username = o.username ?? "fake_claudebot";
+  const username = o.username ?? "fake_tomte";
   const calls: FakeCall[] = [];
   /** Updates not yet confirmed, and the ones an offset confirmed (kept so `forgetConfirmations` can bring them back). */
   let pending: Update[] = [];
@@ -109,7 +109,7 @@ export function fakeTelegram(o: { token?: string; username?: string } = {}): Fak
 
         switch (method) {
           case "getMe":
-            return ok({ id: 1, is_bot: true, first_name: "Claudebot", username });
+            return ok({ id: 1, is_bot: true, first_name: "Tomte", username });
           case "getUpdates": {
             if (conflicting)
               return failure(

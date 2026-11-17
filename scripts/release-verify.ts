@@ -17,7 +17,7 @@ import { CHECKSUM_FILE, sha256 } from "./release-kit.ts";
 
 /** Release assets that are not built per target: the self-hoster's installer and its unit (`release.yml`, `publish`). */
 const INSTALLER = "install.sh";
-const SERVICE_UNIT = "claudebot.service";
+const SERVICE_UNIT = "tomte.service";
 
 interface UpdateFile {
   url: string;

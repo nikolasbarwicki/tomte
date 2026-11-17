@@ -1,10 +1,10 @@
 # Roadmap
 
-Source: competitor review of Rerun, OpenBot, Turnstone, Rakazo and MausBot against the codebase on 2026-11-06. Competitor facts come from their landing pages and public READMEs (Turnstone and MausBot: landing page only). "Claudebot lacks X" means no code for X was found.
+Source: competitor review of Rerun, OpenBot, Turnstone, Rakazo and MausBot against the codebase on 2026-11-06. Competitor facts come from their landing pages and public READMEs (Turnstone and MausBot: landing page only). "Tomte lacks X" means no code for X was found.
 
 Out of scope here: computer use (see [`research/cua-research.md`](research/cua-research.md)). Bot handoffs have landed (`packages/host/src/handoffs/`, ADR-0002) and are not tracked here. Items 7 and 8 build on them, as does the Chief of Staff template in item 3.
 
-## Where claudebot stands
+## Where tomte stands
 
 Ahead of every competitor on safety: per-bot credential grants in a keychain-backed vault, an egress proxy and shell sandbox for the browser, per-tool `off/ask/auto` policies on integrations, takeover and human waits, and untrusted-content wrapping. OpenBot runs `danger-full-access` with `approvalPolicy: never` per its README.
 
@@ -167,7 +167,7 @@ ADR-0002 deferred "A2A JSON-RPC between bots" and "exposing bots as A2A servers"
 
 ## 8. Bot-authored skills
 
-OpenBot lets agents create, revise and install local skills with versioning. Claudebot only imports skills from an integration's git repo. After item 3, add `create_skill` / `revise_skill` for skills scoped to one bot, with revisions retained.
+OpenBot lets agents create, revise and install local skills with versioning. Tomte only imports skills from an integration's git repo. After item 3, add `create_skill` / `revise_skill` for skills scoped to one bot, with revisions retained.
 
 ## Deferred
 

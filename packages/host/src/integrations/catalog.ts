@@ -1,4 +1,4 @@
-import type { CatalogInfo, IntegrationAuth, OwnClient } from "@claudebot/contract/events";
+import type { CatalogInfo, IntegrationAuth, OwnClient } from "@tomte/contract/events";
 
 import { ICONS } from "./icons.ts";
 

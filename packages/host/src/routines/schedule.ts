@@ -1,4 +1,4 @@
-import type { Schedule } from "@claudebot/contract/events";
+import type { Schedule } from "@tomte/contract/events";
 import { z } from "zod";
 
 /** How far back a missed occurrence may lie and still be caught up after downtime. */

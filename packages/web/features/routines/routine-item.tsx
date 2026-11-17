@@ -1,4 +1,4 @@
-import { RoutineRun, type Routine, type RunStatus } from "@claudebot/contract/events";
+import { RoutineRun, type Routine, type RunStatus } from "@tomte/contract/events";
 import { ChevronRightIcon, EllipsisIcon, PencilIcon, PlayIcon, TrashIcon } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { Streamdown } from "streamdown";

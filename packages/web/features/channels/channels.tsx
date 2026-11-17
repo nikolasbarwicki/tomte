@@ -1,4 +1,4 @@
-import type { ChannelEntry, ChannelLinkCodeResponse } from "@claudebot/contract/api";
+import type { ChannelEntry, ChannelLinkCodeResponse } from "@tomte/contract/api";
 import { CheckIcon, CopyIcon, ExternalLinkIcon, Link2Icon, SendIcon } from "lucide-react";
 import { useActionState, useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";

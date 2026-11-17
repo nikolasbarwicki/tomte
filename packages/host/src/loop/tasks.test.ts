@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import type { ServerEvent } from "@claudebot/contract/events";
+import type { ServerEvent } from "@tomte/contract/events";
 
 import { migrate } from "../platform/db.ts";
 import { createLoopStore, type LoopTask, type SessionLog } from "./store.ts";

@@ -18,7 +18,7 @@ import { memorySecrets, type SecretStore } from "./secrets.ts";
 let root: string;
 let keyFile: string;
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "claudebot-secrets-"));
+  root = mkdtempSync(join(tmpdir(), "tomte-secrets-"));
   keyFile = join(root, "secrets.key");
   writeFileSync(keyFile, crypto.getRandomValues(new Uint8Array(32)), { mode: 0o600 });
 });
@@ -141,7 +141,7 @@ describe("file store", () => {
 
   test("a file that is not a secrets file is refused", () => {
     writeFileSync(secretsFile(), "not json");
-    expect(() => openFileSecrets(root, keyFile)).toThrow(/not a claudebot secrets file/);
+    expect(() => openFileSecrets(root, keyFile)).toThrow(/not a tomte secrets file/);
   });
 
   test("opening writes nothing", () => {

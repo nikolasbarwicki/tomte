@@ -8,7 +8,7 @@ import { SigningError } from "./signing-kit.ts";
 import { verifyWindowsBundle } from "./win-verify.ts";
 
 const T = "AB".repeat(20);
-const BUNDLE = "/out/Claudebot-win32-x64";
+const BUNDLE = "/out/Tomte-win32-x64";
 const RESOURCES = join(BUNDLE, "win-unpacked/resources");
 const tree = (files = winBrowserFiles()) => treeFiles(files, "/resources/");
 
@@ -39,9 +39,9 @@ describe("verifyWindowsBundle", () => {
     await verify(run);
     expect(asked).toHaveLength(1);
     expect(asked[0]).toEqual([
-      join(BUNDLE, "Claudebot-Setup-0.1.0.exe"),
-      join(BUNDLE, "win-unpacked/Claudebot.exe"),
-      join(BUNDLE, "win-unpacked/resources/claudebot-host.exe"),
+      join(BUNDLE, "Tomte-Setup-0.1.0.exe"),
+      join(BUNDLE, "win-unpacked/Tomte.exe"),
+      join(BUNDLE, "win-unpacked/resources/tomte-host.exe"),
       join(RESOURCES, "browser-engine/agent-browser.exe"),
       ...[
         "chrome-win64/157.0.8103.38/chrome_elf.dll",
@@ -109,7 +109,7 @@ describe("verifyWindowsBundle", () => {
     const { run } = powershell();
     const exes = winBrowserFiles().filter((f) => !f.toLowerCase().endsWith(".dll"));
     await expect(verify(run, tree(exes))).rejects.toThrow("*.dll");
-    await expect(verify(run, tree(["claudebot-host.exe"]))).rejects.toThrow(
+    await expect(verify(run, tree(["tomte-host.exe"]))).rejects.toThrow(
       "the bundled browser is incomplete",
     );
   });

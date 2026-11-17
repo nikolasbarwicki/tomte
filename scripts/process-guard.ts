@@ -46,5 +46,5 @@ export function refusal(what: string, path: string, running: ProcessRow[]): stri
     .slice(0, 3)
     .map((p) => `  pid ${p.pid}  ${p.command.slice(0, 100)}`)
     .join("\n");
-  return `refusing to ${what}: ${running.length} running process${running.length === 1 ? "" : "es"} live in ${path} (is Claudebot running from there? quit it first, or choose another location)\n${sample}`;
+  return `refusing to ${what}: ${running.length} running process${running.length === 1 ? "" : "es"} live in ${path} (is Tomte running from there? quit it first, or choose another location)\n${sample}`;
 }

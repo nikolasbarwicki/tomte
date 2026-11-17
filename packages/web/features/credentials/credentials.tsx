@@ -1,4 +1,4 @@
-import type { BotSummary, CredentialEntry } from "@claudebot/contract/events";
+import type { BotSummary, CredentialEntry } from "@tomte/contract/events";
 import { KeyRound, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { useActionState, useState, useTransition } from "react";
 

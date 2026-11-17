@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 
 import { getSessionInfo } from "@anthropic-ai/claude-agent-sdk";
-import type { Bot, Routine, RoutineRun, RunTrigger, Schedule } from "@claudebot/contract/events";
+import type { Bot, Routine, RoutineRun, RunTrigger, Schedule } from "@tomte/contract/events";
 
 import {
   currentSession,

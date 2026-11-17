@@ -7,7 +7,7 @@ import type { BundleFiles } from "./bundle-files.ts";
 
 const FRAMEWORK = "Google Chrome for Testing Framework.framework";
 
-/** The macOS browser of one arch, relative to `Claudebot.app/Contents/Resources`. */
+/** The macOS browser of one arch, relative to `Tomte.app/Contents/Resources`. */
 export function macBrowserFiles(arch: string): string[] {
   const chrome = `browser-engine/chrome/chrome-mac-${arch}/Google Chrome for Testing.app`;
   const version = `${chrome}/Contents/Frameworks/${FRAMEWORK}/Versions/157.0.8103.38`;
@@ -45,7 +45,7 @@ export function winBrowserFiles(): string[] {
 }
 
 /**
- * A {@link BundleFiles} over `relative` paths under whatever precedes `marker` in a path (`Claudebot.app/Contents/Resources`
+ * A {@link BundleFiles} over `relative` paths under whatever precedes `marker` in a path (`Tomte.app/Contents/Resources`
  * or `win-unpacked/resources`), so one tree answers for every app a test checks, whichever folder it is in.
  */
 export function treeFiles(relative: readonly string[], marker: string): BundleFiles {

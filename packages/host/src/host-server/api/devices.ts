@@ -4,7 +4,7 @@ import {
   RevokeDeviceRequest,
   type DeviceList,
   type PairingCodeResponse,
-} from "@claudebot/contract/api";
+} from "@tomte/contract/api";
 
 import { json } from "../http.ts";
 import type { ApiContext } from "./context.ts";

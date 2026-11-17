@@ -1,4 +1,4 @@
-import type { ServerEvent } from "@claudebot/contract/events";
+import type { ServerEvent } from "@tomte/contract/events";
 
 import type { HandoffStore } from "../store.ts";
 

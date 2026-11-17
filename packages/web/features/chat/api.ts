@@ -1,4 +1,4 @@
-import type { BotModel, ChatMode, EffortLevel } from "@claudebot/contract/events";
+import type { BotModel, ChatMode, EffortLevel } from "@tomte/contract/events";
 
 import { act } from "@/host/api.ts";
 

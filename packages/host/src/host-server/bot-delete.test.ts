@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { FACE_NAMES, STROKE_NAMES } from "@claudebot/contract/avatars";
+import { FACE_NAMES, STROKE_NAMES } from "@tomte/contract/avatars";
 
 import { getBot } from "../bots/index.ts";
 import { parse, startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 const rows = (query: string, botId: string) => {
-  const db = new Database(join(host.dataRoot, "claudebot.db"), { readonly: true });
+  const db = new Database(join(host.dataRoot, "tomte.db"), { readonly: true });
   try {
     return db.query(query).all(botId);
   } finally {
@@ -119,7 +119,7 @@ test("deleting a bot removes the usage marks of all its sessions and no other bo
   const keep = host.createBot("Keep");
   const gone = host.createBot("Gone");
   const marks = () => {
-    const db = new Database(join(host.dataRoot, "claudebot.db"), { readonly: true });
+    const db = new Database(join(host.dataRoot, "tomte.db"), { readonly: true });
     try {
       return db
         .query<{ session_id: string; bot_id: string | null }, []>(
@@ -151,7 +151,7 @@ test("deleting a bot removes the usage marks of all its sessions and no other bo
   );
 
   // A mark from before the host kept the bot id: its session is found through the bot's own session list.
-  const legacy = new Database(join(host.dataRoot, "claudebot.db"));
+  const legacy = new Database(join(host.dataRoot, "tomte.db"));
   legacy
     .query("UPDATE session_usage_marks SET bot_id = NULL WHERE session_id = ?")
     .run(sessionsOf(gone)[0]!);

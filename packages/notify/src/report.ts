@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { ExternalEventInput, type ReplyTarget } from "@claudebot/contract/api";
+import { ExternalEventInput, type ReplyTarget } from "@tomte/contract/api";
 
 /** The words a coordinator reports with, as `notify-grok` takes them. */
 export const REPORT_KINDS = ["progress", "question", "blocked", "completed", "failed"] as const;

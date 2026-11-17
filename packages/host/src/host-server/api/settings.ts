@@ -4,8 +4,8 @@ import {
   type ModelProvider,
   type ModelProviders,
   type ProviderStatus,
-} from "@claudebot/contract/api";
-import { BotModel } from "@claudebot/contract/events";
+} from "@tomte/contract/api";
+import { BotModel } from "@tomte/contract/events";
 
 import {
   botMemoryPath,

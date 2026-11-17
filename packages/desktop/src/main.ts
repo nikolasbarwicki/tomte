@@ -56,7 +56,7 @@ function start(): void {
     loginItem,
     log,
   );
-  // An app the OS opened at login stays in the tray; the window waits for "Open Claudebot".
+  // An app the OS opened at login stays in the tray; the window waits for "Open Tomte".
   const window = createWindow(!loginItem.openedAtLogin());
   const background = keepInTray(window, () => quit !== "running");
   const logFile = join(app.getPath("userData"), "logs", "host.log");
@@ -191,9 +191,9 @@ function installUpdateOrExit(): void {
 
 app.enableSandbox();
 registerConnectionsScheme();
-// Electron's default user-data folder is named after the app, which on a case-insensitive disk is the host's default data root (`claudebot`): the two would share one folder. An explicit `--user-data-dir` wins.
+// Electron's default user-data folder is named after the app, which on a case-insensitive disk is the host's default data root (`tomte`): the two would share one folder. An explicit `--user-data-dir` wins.
 if (!app.commandLine.hasSwitch("user-data-dir"))
-  app.setPath("userData", join(app.getPath("appData"), "Claudebot Desktop"));
+  app.setPath("userData", join(app.getPath("appData"), "Tomte Desktop"));
 
 app.on("before-quit", (event) => {
   if (quit === "stopped") return;

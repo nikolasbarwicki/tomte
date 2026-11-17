@@ -1,4 +1,4 @@
-import type { FeatureStatus, WorkItemState } from "@claudebot/contract/events";
+import type { FeatureStatus, WorkItemState } from "@tomte/contract/events";
 
 /** How a source's derived status reads on its card and in its detail. */
 export const STATUS: Record<FeatureStatus, { label: string; style: string }> = {

@@ -5,8 +5,8 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { type EventAccess } from "@claudebot/contract/api";
-import { DEFAULT_EFFORT, DEFAULT_MODEL } from "@claudebot/contract/events";
+import { type EventAccess } from "@tomte/contract/api";
+import { DEFAULT_EFFORT, DEFAULT_MODEL } from "@tomte/contract/events";
 
 import { listBots } from "../bots/index.ts";
 import { defined } from "../testing/defined.ts";
@@ -62,7 +62,7 @@ const post = (botId: string, token: string | undefined, body: unknown, headers =
   });
 
 const rows = <T>(query: string, ...params: string[]) => {
-  const db = new Database(join(host.dataRoot, "claudebot.db"), { readonly: true });
+  const db = new Database(join(host.dataRoot, "tomte.db"), { readonly: true });
   try {
     return db.query(query).all(...params) as T[];
   } finally {
@@ -206,7 +206,7 @@ describe("who may post", () => {
       post(unknown, ta, event()),
       post("not-a-bot-id", ta, event()),
       post(a, host.deviceToken, event()),
-      post(a, undefined, event(), { cookie: `claudebot_session=${host.deviceToken}` }),
+      post(a, undefined, event(), { cookie: `tomte_session=${host.deviceToken}` }),
     ];
     const answers = await Promise.all(
       attempts.map(async (p) => {
@@ -389,18 +389,18 @@ describe("a bot's CLI", () => {
     expect(accessA.token).not.toBe(accessB.token);
     const envs = host.launches().map((l) => l.env);
     expect(envs).toHaveLength(2);
-    expect([envs[0]?.CLAUDEBOT_EVENTS_URL, envs[0]?.CLAUDEBOT_EVENTS_TOKEN]).toEqual([
+    expect([envs[0]?.TOMTE_EVENTS_URL, envs[0]?.TOMTE_EVENTS_TOKEN]).toEqual([
       accessA.url,
       accessA.token,
     ]);
-    expect([envs[1]?.CLAUDEBOT_EVENTS_URL, envs[1]?.CLAUDEBOT_EVENTS_TOKEN]).toEqual([
+    expect([envs[1]?.TOMTE_EVENTS_URL, envs[1]?.TOMTE_EVENTS_TOKEN]).toEqual([
       accessB.url,
       accessB.token,
     ]);
   });
 
   test("opens on the default model and effort, with the bot's events variables on top of the host's environment", async () => {
-    process.env.CLAUDEBOT_TEST_BASE = "from-host";
+    process.env.TOMTE_TEST_BASE = "from-host";
     try {
       await start();
       const a = host.createBot("A");
@@ -411,10 +411,10 @@ describe("a bot's CLI", () => {
       const launch = defined(host.launches()[0], "launch");
       expect(launch.argv).toContain(`--model=${DEFAULT_MODEL}`);
       expect(host.controls().map((c) => c.settings?.effortLevel)).toEqual([DEFAULT_EFFORT]);
-      expect(launch.env.CLAUDEBOT_TEST_BASE).toBe("from-host");
-      expect(launch.env.CLAUDEBOT_EVENTS_URL).toBe((await accessOf(a)).url);
+      expect(launch.env.TOMTE_TEST_BASE).toBe("from-host");
+      expect(launch.env.TOMTE_EVENTS_URL).toBe((await accessOf(a)).url);
     } finally {
-      delete process.env.CLAUDEBOT_TEST_BASE;
+      delete process.env.TOMTE_TEST_BASE;
     }
   });
 
@@ -431,12 +431,12 @@ describe("a bot's CLI", () => {
     expect(launch.argv).toContain("--model=haiku");
     expect(launch.argv).not.toContain(`--model=${DEFAULT_MODEL}`);
     expect(host.controls().map((c) => c.settings?.effortLevel)).toEqual(["max"]);
-    expect(launch.env.CLAUDEBOT_EVENTS_TOKEN).toBe((await accessOf(a)).token);
+    expect(launch.env.TOMTE_EVENTS_TOKEN).toBe((await accessOf(a)).token);
   });
 
   test("the bot's events variables win over the same names in the host's environment", async () => {
-    process.env.CLAUDEBOT_EVENTS_URL = "http://stale.invalid/events";
-    process.env.CLAUDEBOT_EVENTS_TOKEN = "stale-token";
+    process.env.TOMTE_EVENTS_URL = "http://stale.invalid/events";
+    process.env.TOMTE_EVENTS_TOKEN = "stale-token";
     try {
       await start();
       const a = host.createBot("A");
@@ -446,13 +446,10 @@ describe("a bot's CLI", () => {
 
       const access = await accessOf(a);
       const env = defined(host.launches()[0], "launch").env;
-      expect([env.CLAUDEBOT_EVENTS_URL, env.CLAUDEBOT_EVENTS_TOKEN]).toEqual([
-        access.url,
-        access.token,
-      ]);
+      expect([env.TOMTE_EVENTS_URL, env.TOMTE_EVENTS_TOKEN]).toEqual([access.url, access.token]);
     } finally {
-      delete process.env.CLAUDEBOT_EVENTS_URL;
-      delete process.env.CLAUDEBOT_EVENTS_TOKEN;
+      delete process.env.TOMTE_EVENTS_URL;
+      delete process.env.TOMTE_EVENTS_TOKEN;
     }
   });
 });

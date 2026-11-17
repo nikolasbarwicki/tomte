@@ -1,4 +1,4 @@
-import { API_VERSION, PairingResponse, PublicHostInfo } from "@claudebot/contract/api";
+import { API_VERSION, PairingResponse, PublicHostInfo } from "@tomte/contract/api";
 import { z } from "zod";
 
 import { ConnectionError } from "./connection-error.ts";
@@ -81,10 +81,10 @@ export function createHostClient(fetchHost: HostFetch): HostClient {
   return {
     async checkHost(origin) {
       const response = await send(origin, "/api/host-info");
-      const notClaudebot = `The server at ${origin} is not a Claudebot host (HTTP ${response.status}).`;
-      if (!response.ok) throw new ConnectionError(notClaudebot);
+      const notTomte = `The server at ${origin} is not a Tomte host (HTTP ${response.status}).`;
+      if (!response.ok) throw new ConnectionError(notTomte);
       const info = PublicHostInfo.safeParse(await response.json().catch(() => undefined));
-      if (!info.success) throw new ConnectionError(notClaudebot);
+      if (!info.success) throw new ConnectionError(notTomte);
       checkApiVersion(origin, info.data.apiVersion);
       return info.data;
     },

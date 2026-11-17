@@ -6,7 +6,7 @@ import {
   type IntegrationTool,
   type IntegrationTransport,
   type ToolPolicy,
-} from "@claudebot/contract/events";
+} from "@tomte/contract/events";
 
 export const TRANSPORT_LABEL: Record<IntegrationTransport["type"], string> = {
   http: "HTTP",

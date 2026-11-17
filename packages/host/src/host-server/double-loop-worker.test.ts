@@ -188,7 +188,7 @@ describe("TaskStop", () => {
       "--mode",
       "remote",
       "--secrets-key-file",
-      "/etc/claudebot-test/secrets.key",
+      "/etc/tomte-test/secrets.key",
     ]);
     h.setSandboxAvailable(false);
     const bot = await doubleLoopBot(h);
@@ -270,7 +270,7 @@ describe("approvals asked of a worker", () => {
   const BASH = { command: "ls invoices" };
 
   test("become a card that names the task while the front keeps answering, and the worker goes on once the user allows it", async () => {
-    const h = await start([], { CLAUDEBOT_ASK_APPROVAL: "1" });
+    const h = await start([], { TOMTE_ASK_APPROVAL: "1" });
     const bot = await doubleLoopBot(h);
     const watch = await watchEvents(h);
     h.loopScript(
@@ -339,7 +339,7 @@ describe("approvals asked of a worker", () => {
   });
 
   test("a declined approval is denied to the worker, which then carries on", async () => {
-    const h = await start([], { CLAUDEBOT_ASK_APPROVAL: "1" });
+    const h = await start([], { TOMTE_ASK_APPROVAL: "1" });
     await doubleLoopBot(h);
     const watch = await watchEvents(h);
     h.loopScript(

@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 
-import type { TaskState } from "@claudebot/contract/events";
+import type { TaskState } from "@tomte/contract/events";
 import { z } from "zod";
 
 /** One background task of a bot's session, as the store holds it. */

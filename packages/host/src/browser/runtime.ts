@@ -83,7 +83,7 @@ export interface BrowserRuntimes {
   remove(botId: string): Promise<void>;
   /** Starts the boot sweep and the periodic one. */
   start(): void;
-  /** Closes idle browsers and engine sessions with claudebot's prefix that no live runtime owns. */
+  /** Closes idle browsers and engine sessions with tomte's prefix that no live runtime owns. */
   sweep(): Promise<void>;
 }
 

@@ -11,7 +11,7 @@ const engineStateDir = () => join(homedir(), ".agent-browser");
 
 /**
  * The isolation a browser-enabled bot runs under. Claude's macOS sandbox always allows the SecurityServer Mach service,
- * so a sandboxed `security` command could read claudebot's keychain items; denying the user keychain files closes that.
+ * so a sandboxed `security` command could read tomte's keychain items; denying the user keychain files closes that.
  */
 export const browserIsolation = (): IsolationProfile => ({
   denyRead: [

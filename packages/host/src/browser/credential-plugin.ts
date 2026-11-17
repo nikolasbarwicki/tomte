@@ -1,4 +1,4 @@
-// claudebot's credential plugin for the browser engine (`agent-browser.plugin.v1`, `credential.resolve`).
+// tomte's credential plugin for the browser engine (`agent-browser.plugin.v1`, `credential.resolve`).
 // The engine daemon spawns it: as `bun credential-plugin.ts <url>` from source, or as the compiled host's
 // `credential-plugin <url>` subcommand. <url> is the host's loopback exchange URL, and the request's `itemRef`
 // is a one-time nonce. It prints only the protocol envelope on stdout and never logs.
@@ -32,7 +32,7 @@ export async function answerCredentialPlugin(
   if (input.type === "plugin.manifest")
     return reply({
       success: true,
-      manifest: { name: "claudebot", capabilities: ["credential.read"] },
+      manifest: { name: "tomte", capabilities: ["credential.read"] },
     });
   if (input.type !== "credential.resolve")
     return reply({ success: false, error: "unsupported request" });

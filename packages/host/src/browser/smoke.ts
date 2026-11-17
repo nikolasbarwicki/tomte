@@ -6,7 +6,7 @@ import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { getSessionMessages } from "@anthropic-ai/claude-agent-sdk";
-import { HostEvent, type ServerEvent } from "@claudebot/contract/events";
+import { HostEvent, type ServerEvent } from "@tomte/contract/events";
 import type { Server } from "bun";
 
 import { createBot } from "../bots/index.ts";
@@ -78,7 +78,7 @@ export async function runBrowserSmoke(config: HostConfig) {
 
   const password = `pw-${randomBytes(12).toString("hex")}`;
   const before = processes();
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "claudebot-browser-smoke-")));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "tomte-browser-smoke-")));
   const dataRoot = join(root, ".host");
   const workspace = ensureWorkspace(dataRoot);
   log(

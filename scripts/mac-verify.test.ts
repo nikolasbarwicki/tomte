@@ -26,7 +26,7 @@ const ENTITLEMENTS = `<key>com.apple.security.cs.allow-jit</key><true/>
 <key>com.apple.security.cs.disable-library-validation</key><true/>`;
 const WITHOUT_LIBRARY_VALIDATION = ENTITLEMENTS.split("\n").slice(0, 2).join("\n");
 
-const APP = "/b/Claudebot.app";
+const APP = "/b/Tomte.app";
 const RESOURCES = `${APP}/Contents/Resources`;
 const tree = (arch = "arm64") => treeFiles(macBrowserFiles(arch), "/Contents/Resources/");
 
@@ -68,7 +68,7 @@ describe("verifyMacApp", () => {
   test("runs the checks CI always ran, in the same order, then the browser's", async () => {
     const { calls, run } = recorder();
     const team = await verifyMacApp(run, APP, "arm64", () => {}, tree());
-    const host = `${RESOURCES}/claudebot-host`;
+    const host = `${RESOURCES}/tomte-host`;
     expect(team).toBe("ABCDE12345");
     expect(calls.slice(0, 7)).toEqual([
       ["codesign", "--verify", "--deep", "--strict", "--verbose=2", APP],
@@ -85,7 +85,7 @@ describe("verifyMacApp", () => {
     const { calls, run } = recorder();
     await verifyMacApp(run, APP, "arm64", () => {}, tree());
     const verified = calls.filter((c) => c[1] === "--verify").map((c) => c.at(-1));
-    expect(verified.slice(0, 2)).toEqual([APP, `${RESOURCES}/claudebot-host`]);
+    expect(verified.slice(0, 2)).toEqual([APP, `${RESOURCES}/tomte-host`]);
     const parts = verified.slice(2);
     expect(new Set(parts)).toEqual(
       new Set(
@@ -149,13 +149,7 @@ describe("verifyMacApp", () => {
   test("fails when the bundle has no browser at all", async () => {
     const { run } = recorder();
     await expect(
-      verifyMacApp(
-        run,
-        APP,
-        "arm64",
-        () => {},
-        treeFiles(["claudebot-host"], "/Contents/Resources/"),
-      ),
+      verifyMacApp(run, APP, "arm64", () => {}, treeFiles(["tomte-host"], "/Contents/Resources/")),
     ).rejects.toThrow("the bundled browser is incomplete");
   });
 
@@ -213,7 +207,7 @@ TeamIdentifier=not set
   });
 
   test("fails on Chrome or a Helper app without disable-library-validation, and on the host without it", async () => {
-    for (const path of ["Google Chrome for Testing.app", "Helper (GPU).app", "claudebot-host"]) {
+    for (const path of ["Google Chrome for Testing.app", "Helper (GPU).app", "tomte-host"]) {
       const { run } = recorder("ABCDE12345", {
         entitlements: (p) => (p.endsWith(path) ? WITHOUT_LIBRARY_VALIDATION : undefined),
       });
@@ -235,7 +229,7 @@ TeamIdentifier=not set
 
 describe("verifyMacBundle", () => {
   test("checks the unpacked app, then the app inside the update zip, browser included", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "claudebot-mac-verify-test-"));
+    const dir = await mkdtemp(join(tmpdir(), "tomte-mac-verify-test-"));
     try {
       const { calls, run } = recorder();
       const teams = await verifyMacBundle(run, dir, "0.1.0", ["arm64"], () => {}, tree());
@@ -245,10 +239,10 @@ describe("verifyMacBundle", () => {
         "ditto",
         "-x",
         "-k",
-        join(dir, "Claudebot-0.1.0-arm64-mac.zip"),
+        join(dir, "Tomte-0.1.0-arm64-mac.zip"),
       ]);
-      expect(calls[0]?.at(-1)).toBe(join(dir, "mac-arm64/Claudebot.app"));
-      expect(calls[unzip + 1]?.at(-1)).toEndWith("arm64/Claudebot.app");
+      expect(calls[0]?.at(-1)).toBe(join(dir, "mac-arm64/Tomte.app"));
+      expect(calls[unzip + 1]?.at(-1)).toEndWith("arm64/Tomte.app");
       const chromeChecks = calls.filter(
         (c) => c[1] === "-dvv" && c.at(-1)?.endsWith("Google Chrome for Testing.app"),
       );
@@ -259,7 +253,7 @@ describe("verifyMacBundle", () => {
   });
 
   test("fails when only the app inside the update zip lacks its browser", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "claudebot-mac-verify-test-"));
+    const dir = await mkdtemp(join(tmpdir(), "tomte-mac-verify-test-"));
     try {
       const { run } = recorder();
       const full = tree();
@@ -280,8 +274,8 @@ describe("verifyMacBundle", () => {
 describe("verifyDmg", () => {
   test("runs Gatekeeper, the ticket check, the signature check and reads the signer", async () => {
     const { calls, run } = recorder();
-    await verifyDmg(run, "/b/Claudebot.dmg", "ABCDE12345", () => {});
-    expect(calls).toEqual(Object.values(dmgCommands("/b/Claudebot.dmg")));
+    await verifyDmg(run, "/b/Tomte.dmg", "ABCDE12345", () => {});
+    expect(calls).toEqual(Object.values(dmgCommands("/b/Tomte.dmg")));
     expect(calls[0]).toEqual(
       expect.arrayContaining(["spctl", "-t", "open", "context:primary-signature"]),
     );

@@ -8,7 +8,7 @@ import type {
   SDKRateLimitInfo,
   SubagentStopHookInput,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { ServerEvent, TaskState } from "@claudebot/contract/events";
+import type { ServerEvent, TaskState } from "@tomte/contract/events";
 
 import { ASK_USER, RECORD_PROGRESS, type ProgressAttribution } from "./agents.ts";
 import type { PathGuard } from "./guard.ts";

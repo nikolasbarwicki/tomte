@@ -28,7 +28,7 @@
       "project": ["src/**/*.ts"],
     },
     "packages/notify": {
-      // The `claudebot-notify` bin, run by path or symlink and never imported.
+      // The `tomte-notify` bin, run by path or symlink and never imported.
       "entry": ["src/main.ts"],
       "project": ["src/**/*.ts"],
     },

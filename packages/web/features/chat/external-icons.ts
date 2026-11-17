@@ -1,4 +1,4 @@
-import type { ExternalEventKind } from "@claudebot/contract/events";
+import type { ExternalEventKind } from "@tomte/contract/events";
 import {
   CircleAlertIcon,
   CircleCheckIcon,

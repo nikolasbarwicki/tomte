@@ -1,4 +1,4 @@
-import type { HostInfo, PublicHostInfo } from "@claudebot/contract/api";
+import type { HostInfo, PublicHostInfo } from "@tomte/contract/api";
 import type {
   BotSummary,
   ContextEvent,
@@ -11,7 +11,7 @@ import type {
   RoutinesEvent,
   ServerEvent,
   WorkEvent,
-} from "@claudebot/contract/events";
+} from "@tomte/contract/events";
 
 import { reduce, type Item } from "./transcript.ts";
 

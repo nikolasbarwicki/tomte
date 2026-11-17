@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 
-import { LaunchToken, SidecarReady } from "@claudebot/contract/sidecar";
+import { LaunchToken, SidecarReady } from "@tomte/contract/sidecar";
 
 import { getBot } from "./bots/index.ts";
 import {
@@ -134,7 +134,7 @@ const opened = server.currentBotId() ? getBot(config.dataRoot, server.currentBot
 /** In sidecar mode stdout carries the ready line and nothing else. */
 const say = config.sidecar ? console.error : console.log;
 say(
-  `claudebot UI: ${server.clientUrl}  workspace=${ensureWorkspace(config.dataRoot)}  data=${config.dataRoot}  bot=${opened ? `${opened.name} (${opened.id})` : "none"}`,
+  `tomte UI: ${server.clientUrl}  workspace=${ensureWorkspace(config.dataRoot)}  data=${config.dataRoot}  bot=${opened ? `${opened.name} (${opened.id})` : "none"}`,
 );
 if (server.publicUrl !== server.clientUrl) say(`public URL: ${server.publicUrl}`);
 say(

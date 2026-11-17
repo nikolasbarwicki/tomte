@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import { BotAvatar, defaultAvatar } from "@claudebot/contract/avatars";
+import { BotAvatar, defaultAvatar } from "@tomte/contract/avatars";
 import {
   Bot,
   BotBrowserSettings,
@@ -20,7 +20,7 @@ import {
   DEFAULT_MODEL,
   EffortLevel,
   type MemoryScope,
-} from "@claudebot/contract/events";
+} from "@tomte/contract/events";
 import { z } from "zod";
 
 import { instructionsPath, readMemory, userMemoryPath } from "./memory.ts";

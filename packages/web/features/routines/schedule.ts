@@ -1,4 +1,4 @@
-import type { Routine, Schedule } from "@claudebot/contract/events";
+import type { Routine, Schedule } from "@tomte/contract/events";
 
 /** Editor-friendly shapes; every preset except `once` compiles to cron. `time` is "HH:MM", `day` is 0 (Sunday) to 6. */
 export type Preset =

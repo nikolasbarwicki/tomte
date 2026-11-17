@@ -13,7 +13,7 @@ import type {
   RoutinesEvent,
   ServerEvent,
   WorkEvent,
-} from "@claudebot/contract/events";
+} from "@tomte/contract/events";
 
 import {
   botFilesPath,

@@ -4,7 +4,7 @@ import type {
   SourceEvent,
   WaitAction,
   WorkEvent,
-} from "@claudebot/contract/events";
+} from "@tomte/contract/events";
 
 import type { Item } from "@/host/transcript.ts";
 

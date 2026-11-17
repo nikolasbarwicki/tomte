@@ -541,7 +541,7 @@ export function migrate(db: Database): Database {
   return db;
 }
 
-const DB_FILE = "claudebot.db";
+const DB_FILE = "tomte.db";
 
 /** Opens the database in the data root, creating the directory and the file on first run. */
 export function openDb(dataRoot: string): Database {

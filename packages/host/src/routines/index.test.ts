@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { Schedule } from "@claudebot/contract/events";
+import type { Schedule } from "@tomte/contract/events";
 import { z } from "zod";
 
 import { createBot, TurnError, type TurnUsage } from "../bots/index.ts";

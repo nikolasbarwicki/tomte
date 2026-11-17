@@ -1,4 +1,4 @@
-import { ChannelLinkCodeResponse, ChannelList } from "@claudebot/contract/api";
+import { ChannelLinkCodeResponse, ChannelList } from "@tomte/contract/api";
 
 import { act, errorOf, post, readJson } from "@/host/api.ts";
 

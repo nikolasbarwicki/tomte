@@ -1,5 +1,5 @@
-import type { BotSummary } from "@claudebot/contract/events";
 import { getRouteApi } from "@tanstack/react-router";
+import type { BotSummary } from "@tomte/contract/events";
 import { ArrowUpIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
 

@@ -1,4 +1,4 @@
-import { ExternalEventPosted, type ExternalEventInput } from "@claudebot/contract/api";
+import { ExternalEventPosted, type ExternalEventInput } from "@tomte/contract/api";
 import { z } from "zod";
 
 import type { Config } from "./config.ts";

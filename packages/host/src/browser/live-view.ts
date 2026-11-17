@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type { LiveMessage } from "@claudebot/contract/events";
+import type { LiveMessage } from "@tomte/contract/events";
 import { z } from "zod";
 
 import type { BotBrowser, BrowserRuntimes } from "./runtime.ts";

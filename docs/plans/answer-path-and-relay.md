@@ -16,13 +16,13 @@ External events already reach a bot and populate Work, the transcript and Needs 
 
 There is also no current notify-style sender or answer relay to the original coordinator. Commit `f9e5fab` deliberately removed product Herdr/OMP coupling. Preserve that architectural boundary: generic events, validated reply metadata and an opt-in adapter/instruction mechanism, not a restored global Updates feed or hard-wired Herdr subsystem.
 
-Prior evidence: `/tmp/claudebot-e2e/report.txt`, `browser.test.ts`, `interactions.test.ts` and screenshots on this Mac. Treat these scratch artifacts as reproduction aids, not production code. Baseline was 758 passing tests, 94.55% line coverage / 91.79% function coverage. Read `AGENTS.md`, `GLOSSARY.md`, ADRs 0003–0007, and `docs/agents/issue-tracker.md` before work.
+Prior evidence: `/tmp/tomte-e2e/report.txt`, `browser.test.ts`, `interactions.test.ts` and screenshots on this Mac. Treat these scratch artifacts as reproduction aids, not production code. Baseline was 758 passing tests, 94.55% line coverage / 91.79% function coverage. Read `AGENTS.md`, `GLOSSARY.md`, ADRs 0003–0007, and `docs/agents/issue-tracker.md` before work.
 
 ## Solution and User Stories
 
 - A user's answer stays correlated with its exact bot, external event and, where applicable, pending ask and question ID. Never infer ownership from matching titles, source labels or the most recently displayed question.
 - Free-text, transcript chips and Needs-you chips converge on the same answer lifecycle. Do not acknowledge on a failed request or merely because a chat message was queued. Retries and concurrent devices must not send/relay an answer twice.
-- A repository-provided `claudebot-notify` accepts the familiar notify argv, routes safely to the configured bot and supports `blocked` end to end.
+- A repository-provided `tomte-notify` accepts the familiar notify argv, routes safely to the configured bot and supports `blocked` end to end.
 - An optional reply target lets the originating coordinator receive the actual answer, with its question ID and session preserved. The host stays generic and obeys the existing permission/auth boundaries.
 - A permanent isolated smoke proves sender → HTTP route → Needs you → answer → relay argv, plus browser regressions for all three bugs.
 
@@ -92,7 +92,7 @@ The coordinator coordinates, reviews and integrates; implementation goes to tick
 
 **Acceptance criteria:**
 
-- Supply a runnable/documented repository script/bin named `claudebot-notify`, compatible with `notify-grok <progress|question|blocked|completed|failed> <task_id> <session> "<message>" [question_id]`.
+- Supply a runnable/documented repository script/bin named `tomte-notify`, compatible with `notify-grok <progress|question|blocked|completed|failed> <task_id> <session> "<message>" [question_id]`.
 - Map `completed`→`done`; preserve `progress`, `question`, `failed`; add **blocked** as a supported kind end to end: route schema/validation, storage/read/replay, wrapper, transcript icon/state, Work status and Needs-you actions/counts. A blocked report wakes the bot and remains actionable, never silently coerced to progress.
 - Define/document bounded, collision-resistant source/key/title/body mapping from project/task/session/question ID. Preserve full answer correlation and a stable key across network retries, without collapsing distinct messages or sources. Handle Unicode, quoting, multiline text and schema limits deliberately.
 - Provide per-repo/worktree project routing and an env-file configuration model mirroring existing `notify-grok`; inspect that helper's routing behavior without printing/altering its credential files. A `--which` mode prints the selected config/path, never tokens. Respect explicitly supplied event URL/token environment and document precedence, missing-config/errors and setup.
@@ -105,7 +105,7 @@ The coordinator coordinates, reviews and integrates; implementation goes to tick
 
 ### 05 — Answer relay to coordinator
 
-**Problem:** acknowledging inside Claudebot does not tell the originating agent the user's answer.
+**Problem:** acknowledging inside Tomte does not tell the originating agent the user's answer.
 
 **Architecture decision required:** write a short ADR comparing (A) bot-mediated relay, giving the answer-handling bot a safe trusted relay instruction/argv from validated reply metadata, and (B) a generic opt-in locally configured relay hook that executes a fixed trusted adapter. Keep the application generic; do not restore the removed Herdr integration. Choose autonomously when the tradeoffs are clear. If the choice is genuinely ambiguous or would widen permissions, emit a text `question` with a question ID and wait in the pane, never an OS/modal dialog.
 
@@ -148,14 +148,14 @@ The coordinator coordinates, reviews and integrates; implementation goes to tick
 
 ## Reporting Contract
 
-Run reports **from a claudebot worktree**:
+Run reports **from a tomte worktree**:
 
 ```sh
-GROK_NOTIFY_PROJECT=claudebot notify-grok --which
-GROK_NOTIFY_PROJECT=claudebot notify-grok <progress|question|blocked|completed|failed> <task_id> <session> "<message>" [question_id]
+GROK_NOTIFY_PROJECT=tomte notify-grok --which
+GROK_NOTIFY_PROJECT=tomte notify-grok <progress|question|blocked|completed|failed> <task_id> <session> "<message>" [question_id]
 ```
 
-Before every send, confirm `--which` resolves exactly to `~/.config/grok-bot/notify-claudebot.env`. It currently resolves to `notify.env` (Conductor) because the project env is not yet set up. **Do not send to that fallback.** Do not create/read/dump the env file yourself; Nikolas will run `notify-grok-setup claudebot`. Keep doing unblocked work, retain pending reports locally, and retry the route check at later milestones once the env exists. Do not use an alternative service or silently fall back to Conductor.
+Before every send, confirm `--which` resolves exactly to `~/.config/grok-bot/notify-tomte.env`. It currently resolves to `notify.env` (Conductor) because the project env is not yet set up. **Do not send to that fallback.** Do not create/read/dump the env file yourself; Nikolas will run `notify-grok-setup tomte`. Keep doing unblocked work, retain pending reports locally, and retry the route check at later milestones once the env exists. Do not use an alternative service or silently fall back to Conductor.
 
 Use ticket task IDs such as `01-free-text-acks-event`, `02-ask-user-acks-event`, `03-needs-you-routes-ask`, `04-notify-sender`, `05-answer-relay`, `06-e2e-smoke`; session is the actual coordinator OMP session identifier, recorded at startup (agent name `answers-1109` may be included for orientation). Batch progress into real milestones. Report questions, blockers, failures and completions promptly when routing is correct. For a real question, write it with a stable question ID, recommended answer and decision needed in the pane, send if routing permits, then stop and wait there for the reply. If routing is unavailable, do not misroute: leave the visible question in the pane and wait.
 

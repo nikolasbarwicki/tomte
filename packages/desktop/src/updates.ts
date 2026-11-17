@@ -1,5 +1,5 @@
 /** `off` in this variable disables the update check for that process. The smoke kit sets it for every launch it makes, so no smoke ever asks a feed for anything. */
-export const UPDATES_ENV = "CLAUDEBOT_DESKTOP_UPDATES";
+export const UPDATES_ENV = "TOMTE_DESKTOP_UPDATES";
 
 /** The first check waits, so the host and the window come up first; later checks follow at this pace. */
 const FIRST_CHECK_DELAY_MS = 30_000;

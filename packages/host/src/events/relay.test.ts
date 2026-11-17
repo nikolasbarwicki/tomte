@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { EventAccess } from "@claudebot/contract/api";
+import type { EventAccess } from "@tomte/contract/api";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
@@ -19,7 +19,7 @@ const ARGS = ["--session", "{session}", "agent", "prompt", "{agent}", "{message}
 const FAKE_RELAY = `#!/bin/sh
 printf '%s\\0' "$@" >> "$RELAY_LOG"
 printf '\\001' >> "$RELAY_LOG"
-printf '%s' "$CLAUDEBOT_TEST_SECRET" > "$RELAY_LOG.secret"
+printf '%s' "$TOMTE_TEST_SECRET" > "$RELAY_LOG.secret"
 pwd > "$RELAY_LOG.cwd"
 mode=$(cat "$RELAY_LOG.mode" 2>/dev/null || echo 0)
 if [ "$mode" = hang ]; then exec sleep 30; fi
@@ -203,7 +203,7 @@ const send = (text: string, eventId: string, answer?: string) =>
 const retry = (botId: string, id: string) => host.ui("/api/bots/events/relay/retry", { botId, id });
 
 const relayRow = (id: string) => {
-  const db = new Database(join(host.dataRoot, "claudebot.db"), { readonly: true });
+  const db = new Database(join(host.dataRoot, "tomte.db"), { readonly: true });
   try {
     return db
       .query<
@@ -387,7 +387,7 @@ describe("what the adapter receives is data, never shell", () => {
   });
 
   test("the adapter starts in the temporary directory with the host's secrets absent from its environment", async () => {
-    process.env.CLAUDEBOT_TEST_SECRET = "must-not-leak";
+    process.env.TOMTE_TEST_SECRET = "must-not-leak";
     try {
       const { id, page } = await idleBot();
       await send("hi", id);
@@ -395,7 +395,7 @@ describe("what the adapter receives is data, never shell", () => {
       expect(readFileSync(`${paths().log}.secret`, "utf8")).toBe("");
       expect(readFileSync(`${paths().log}.cwd`, "utf8").trim()).toMatch(/\/(tmp|var)\b|\/T\b/);
     } finally {
-      delete process.env.CLAUDEBOT_TEST_SECRET;
+      delete process.env.TOMTE_TEST_SECRET;
     }
   });
 
@@ -611,8 +611,8 @@ describe("the sender and the relay together", () => {
         env: {
           PATH: process.env.PATH ?? "",
           HOME: scratch,
-          CLAUDEBOT_EVENTS_URL: route.url,
-          CLAUDEBOT_EVENTS_TOKEN: route.token,
+          TOMTE_EVENTS_URL: route.url,
+          TOMTE_EVENTS_TOKEN: route.token,
         },
         stdout: "pipe",
         stderr: "pipe",

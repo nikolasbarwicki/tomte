@@ -77,7 +77,7 @@ function readSealed(file: string): Map<string, Sealed> {
   try {
     return new Map(Object.entries(document.parse(JSON.parse(text)).secrets));
   } catch {
-    throw new Error(`the secrets file ${file} is not a claudebot secrets file`);
+    throw new Error(`the secrets file ${file} is not a tomte secrets file`);
   }
 }
 

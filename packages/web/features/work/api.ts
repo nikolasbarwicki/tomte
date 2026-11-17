@@ -1,4 +1,4 @@
-import { EventAccess } from "@claudebot/contract/api";
+import { EventAccess } from "@tomte/contract/api";
 
 import { act, errorOf, post, readJson } from "@/host/api.ts";
 

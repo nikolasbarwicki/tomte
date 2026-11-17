@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 
-import type { ServerEvent, WaitAction } from "@claudebot/contract/events";
+import type { ServerEvent, WaitAction } from "@tomte/contract/events";
 
 import { createWaitStore, type Wait, type WaitKind, type WaitPayloads } from "./store.ts";
 

@@ -96,7 +96,7 @@ function page(res: ServerResponse, status: number, message: string) {
   res
     .writeHead(status, { "content-type": "text/html; charset=utf-8" })
     .end(
-      `<!doctype html><meta charset="utf-8"><title>Claudebot</title><body style="font:16px system-ui;max-width:32rem;margin:4rem auto"><p>${htmlEscape(message)}</p>`,
+      `<!doctype html><meta charset="utf-8"><title>Tomte</title><body style="font:16px system-ui;max-width:32rem;margin:4rem auto"><p>${htmlEscape(message)}</p>`,
     );
 }
 

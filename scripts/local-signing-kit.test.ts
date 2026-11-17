@@ -73,7 +73,7 @@ describe("Secret", () => {
 });
 
 describe("readLocalInputs and inputProblems", () => {
-  test("reads the CLAUDEBOT_LOCAL_* names and treats blank as unset", () => {
+  test("reads the TOMTE_LOCAL_* names and treats blank as unset", () => {
     const inputs = readLocalInputs({
       [LOCAL_ENV.p12File]: " /a/b.p12 ",
       [LOCAL_ENV.apiKeyId]: "  ",
@@ -172,10 +172,10 @@ describe("resolveLocalConfig", () => {
     const p = config.paths;
     expect(config.version).toBe("0.3.0");
     expect(p.keychain).toBe("/work/out/.signing/r1.keychain-db");
-    expect(p.stagedHost).toBe("/work/out/host/claudebot-host-darwin-arm64");
-    expect(p.dmg).toBe("/work/out/Claudebot-darwin-arm64/Claudebot-0.3.0-arm64.dmg");
-    expect(p.zip).toBe("/work/out/Claudebot-darwin-arm64/Claudebot-0.3.0-arm64-mac.zip");
-    expect(p.app).toBe("/work/out/Claudebot-darwin-arm64/mac-arm64/Claudebot.app");
+    expect(p.stagedHost).toBe("/work/out/host/tomte-host-darwin-arm64");
+    expect(p.dmg).toBe("/work/out/Tomte-darwin-arm64/Tomte-0.3.0-arm64.dmg");
+    expect(p.zip).toBe("/work/out/Tomte-darwin-arm64/Tomte-0.3.0-arm64-mac.zip");
+    expect(p.app).toBe("/work/out/Tomte-darwin-arm64/mac-arm64/Tomte.app");
     expect(p.artifacts).toBe("/work/out/artifacts");
     expect(config.problems).toEqual([]);
   });
@@ -214,7 +214,7 @@ describe("resolveLocalConfig", () => {
     expect(config.paths.notarization).toBe("/work/out/artifacts/NOTARIZATION.json");
   });
 
-  test("an explicit CLAUDEBOT_LOCAL_ASC_BIN wins over PATH", () => {
+  test("an explicit TOMTE_LOCAL_ASC_BIN wins over PATH", () => {
     const inputs = { ...ASC_ONLY, ascBin: "/custom/asc" };
     expect(resolve({}, { inputs, which: () => "/opt/homebrew/bin/asc" }).notary).toMatchObject({
       bin: "/custom/asc",
@@ -313,20 +313,20 @@ describe("state file", () => {
 describe("replaceUpdateFile", () => {
   const YML = `version: 0.1.0
 files:
-  - url: Claudebot-0.1.0-arm64-mac.zip
+  - url: Tomte-0.1.0-arm64-mac.zip
     sha512: ZIPHASH
     size: 100
-  - url: Claudebot-0.1.0-arm64.dmg
+  - url: Tomte-0.1.0-arm64.dmg
     sha512: OLDDMGHASH
     size: 200
     blockMapSize: 5
-path: Claudebot-0.1.0-arm64-mac.zip
+path: Tomte-0.1.0-arm64-mac.zip
 sha512: ZIPHASH
 releaseDate: '2026-01-01'
 `;
 
   test("replaces the sha512 and size of that file and drops its blockMapSize, nothing else", () => {
-    const out = replaceUpdateFile(YML, "Claudebot-0.1.0-arm64.dmg", {
+    const out = replaceUpdateFile(YML, "Tomte-0.1.0-arm64.dmg", {
       sha512: "NEWHASH",
       size: 321,
     });

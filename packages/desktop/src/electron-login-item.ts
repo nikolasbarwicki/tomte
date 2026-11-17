@@ -12,7 +12,7 @@ const osLoginItem: LoginItem = {
     process.argv.includes(HIDDEN_FLAG) || app.getLoginItemSettings().wasOpenedAtLogin,
 };
 
-/** The OS login item, or the file named by CLAUDEBOT_DESKTOP_LOGIN_ITEM_FILE when it is set (see `LOGIN_ITEM_FILE_ENV`). */
+/** The OS login item, or the file named by TOMTE_DESKTOP_LOGIN_ITEM_FILE when it is set (see `LOGIN_ITEM_FILE_ENV`). */
 export function createLoginItem(env: NodeJS.ProcessEnv = process.env): LoginItem {
   const file = env[LOGIN_ITEM_FILE_ENV];
   if (!file) return osLoginItem;

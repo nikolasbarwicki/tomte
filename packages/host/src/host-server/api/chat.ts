@@ -1,4 +1,4 @@
-import { BotModel, EffortLevel } from "@claudebot/contract/events";
+import { BotModel, EffortLevel } from "@tomte/contract/events";
 import { z } from "zod";
 
 import { getBot } from "../../bots/index.ts";

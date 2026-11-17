@@ -1,4 +1,4 @@
-import type { ModelProvider } from "@claudebot/contract/api";
+import type { ModelProvider } from "@tomte/contract/api";
 import { RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useState, useTransition } from "react";
 

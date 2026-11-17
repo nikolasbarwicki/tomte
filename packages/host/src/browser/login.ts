@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
 
-import type { CredentialEntry } from "@claudebot/contract/events";
+import type { CredentialEntry } from "@tomte/contract/events";
 import { z } from "zod";
 
 import type { Credentials } from "../credentials/index.ts";
@@ -17,7 +17,7 @@ import type { BotBrowser } from "./runtime.ts";
 export const CREDENTIAL_EXCHANGE_PATH = "/api/browser/credential-exchange";
 
 /** The engine's name for the credential plugin; the action policy allows exactly `plugin:<name>:credential.read`. */
-const CREDENTIAL_PLUGIN_NAME = "claudebot";
+const CREDENTIAL_PLUGIN_NAME = "tomte";
 
 export const NONCE_TTL_MS = 60_000;
 

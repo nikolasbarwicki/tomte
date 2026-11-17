@@ -1,4 +1,4 @@
-import { PairingRequest, type PairingResponse } from "@claudebot/contract/api";
+import { PairingRequest, type PairingResponse } from "@tomte/contract/api";
 
 import type { DeviceAuth } from "../../device-auth/index.ts";
 import { InvalidBody, readJsonObject } from "../../platform/json-body.ts";

@@ -1,4 +1,4 @@
-import type { BotSummary } from "@claudebot/contract/events";
+import type { BotSummary } from "@tomte/contract/events";
 
 /** One OS banner, as the banner logic asks for it. */
 export interface Note {

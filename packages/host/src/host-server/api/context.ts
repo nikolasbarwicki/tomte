@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { ServerResponse } from "node:http";
 
-import type { HostEvent } from "@claudebot/contract/events";
+import type { HostEvent } from "@tomte/contract/events";
 import type { z } from "zod";
 
 import type { Browser } from "../../browser/index.ts";

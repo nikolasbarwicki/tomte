@@ -5,20 +5,20 @@ import { parseArgs } from "node:util";
 
 // Packages the desktop app for this machine, unsigned and unnotarized, into dist/desktop/ (gitignored):
 //   bun run package:desktop [--out <dir>] [--version <semver>] [--arch <arm64|x64>]... [--host-dir <dir>] [--update-url <http://127.0.0.1:port>]
-// Bundles the main process and runs electron-builder with asar on. It writes, into <out>/Claudebot-<os>-<archs>/, the
+// Bundles the main process and runs electron-builder with asar on. It writes, into <out>/Tomte-<os>-<archs>/, the
 // installers (macOS: dmg and zip; Windows: NSIS; Linux: AppImage and deb), the update metadata electron-updater reads
-// (latest-mac.yml, latest.yml, latest-linux.yml) and the unpacked app (mac-<arch>/Claudebot.app, win-unpacked/,
+// (latest-mac.yml, latest.yml, latest-linux.yml) and the unpacked app (mac-<arch>/Tomte.app, win-unpacked/,
 // linux-unpacked/). Nothing is published, and nothing is signed unless `--sign` is given (below).
-// The host binary goes in as the extra resource `claudebot-host`, next to the app's other resources, and the browser
+// The host binary goes in as the extra resource `tomte-host`, next to the app's other resources, and the browser
 // (scripts/browser-bundle.ts, for the arch being packaged) as `browser-engine` beside it, where the host looks for it.
 // By default each arch's host is built for this run into dist/host; `--host-dir` bundles the already-built binaries in
-// <dir> instead (named claudebot-host-<os>-<arch>[.exe], as build:host and the release workflow's artifacts are) and
+// <dir> instead (named tomte-host-<os>-<arch>[.exe], as build:host and the release workflow's artifacts are) and
 // builds none.
 // `--arch` (repeatable, default this machine's) packages several CPUs in one run, which is how the macOS release gets one
 // latest-mac.yml for both arm64 and x64 (electron-builder writes one file per OS and run). `--version` defaults to the host's VERSION.
 // `--update-url` bakes a loopback `http` feed into app-update.yml instead of GitHub Releases, for verifying auto-update on this machine; it is refused in CI.
 // It refuses, before building or deleting anything, when a process is running from the folder it would replace.
-// `--sign` (or CLAUDEBOT_REQUIRE_SIGNING=true) signs this OS's app with the certificates in the environment (names in
+// `--sign` (or TOMTE_REQUIRE_SIGNING=true) signs this OS's app with the certificates in the environment (names in
 // scripts/signing-kit.ts SIGNING_SECRETS): macOS Developer ID, hardened runtime and notarized, Windows Authenticode. It
 // exits before building when one of them is missing. Without it the build is unsigned, whatever the environment holds,
 // and no keychain identity is ever looked up. The bundled host must already be signed (`scripts/signing.ts sign-host`).
@@ -127,7 +127,7 @@ const SIGNED_MAC = {
   entitlements: MAC_ENTITLEMENTS,
   entitlementsInherit: MAC_ENTITLEMENTS,
   notarize: true,
-  signIgnore: ["/Contents/Resources/claudebot-host$"],
+  signIgnore: ["/Contents/Resources/tomte-host$"],
 };
 const INSTALLER_TARGETS: Record<DesktopPlatform, string[]> = {
   darwin: ["dmg", "zip"],
@@ -238,10 +238,10 @@ async function main(): Promise<void> {
     join(appDir, "package.json"),
     `${JSON.stringify(
       {
-        name: "claudebot-desktop",
+        name: "tomte-desktop",
         productName: APP_NAME,
         version: VERSION,
-        description: "Claudebot desktop app",
+        description: "Tomte desktop app",
         author: APP_NAME,
         ...(REPOSITORY === undefined ? {} : { homepage: `https://github.com/${REPOSITORY}` }),
         main: "main.cjs",
@@ -255,7 +255,7 @@ async function main(): Promise<void> {
   for (const [arch, hostBinary] of hostBinaries) {
     const dir = join(STAGE, "host", arch);
     await mkdir(dir, { recursive: true });
-    const resource = join(dir, `claudebot-host${HOST_EXE}`);
+    const resource = join(dir, `tomte-host${HOST_EXE}`);
     await copyFile(hostBinary, resource);
     await chmod(resource, 0o755);
     await prepareBrowserBundle(join(STAGE, "browser", arch), arch);
@@ -285,7 +285,7 @@ async function main(): Promise<void> {
         });
       }
     } else if (signing.signed && signing.platform === "darwin") {
-      secretsDir = await mkdtemp(join(tmpdir(), "claudebot-notary-"));
+      secretsDir = await mkdtemp(join(tmpdir(), "tomte-notary-"));
       const key = join(secretsDir, "AuthKey.p8");
       await writeFile(key, credentials.APPLE_API_KEY_P8 ?? "", { mode: 0o600 });
       Object.assign(process.env, {
@@ -314,8 +314,8 @@ async function main(): Promise<void> {
         directories: { output: bundleDir },
         extraResources: [
           {
-            from: join(STAGE, "host", "${arch}", `claudebot-host${HOST_EXE}`),
-            to: `claudebot-host${HOST_EXE}`,
+            from: join(STAGE, "host", "${arch}", `tomte-host${HOST_EXE}`),
+            to: `tomte-host${HOST_EXE}`,
           },
           { from: join(STAGE, "browser", "${arch}", BUNDLE_DIR), to: BUNDLE_DIR },
         ],
@@ -341,7 +341,7 @@ async function main(): Promise<void> {
         // Named without an arch: only linux x64 is released, and `${arch}` would spell it x86_64 and amd64 per target.
         linux: {
           category: "Development",
-          executableName: "claudebot",
+          executableName: "tomte",
           maintainer: APP_NAME,
           artifactName: "${productName}-${version}.${ext}",
         },

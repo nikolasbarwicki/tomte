@@ -1,4 +1,4 @@
-import { SESSION_COOKIE } from "@claudebot/contract/sidecar";
+import { SESSION_COOKIE } from "@tomte/contract/sidecar";
 
 /** A browser stays paired for as long as browsers let a cookie live. */
 const SESSION_MAX_AGE_SECONDS = 400 * 24 * 60 * 60;

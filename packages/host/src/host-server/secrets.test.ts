@@ -17,7 +17,7 @@ let root: string;
 let dataRoot: string;
 let keyFile: string;
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "claudebot-remote-secrets-"));
+  root = mkdtempSync(join(tmpdir(), "tomte-remote-secrets-"));
   dataRoot = join(root, "data");
   keyFile = join(root, "secrets.key");
 });

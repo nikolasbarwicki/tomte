@@ -17,11 +17,11 @@ export interface TrayActions {
 export function hostStatusText(state: HostState): string {
   switch (state.status) {
     case "starting":
-      return "Claudebot: host starting";
+      return "Tomte: host starting";
     case "running":
-      return "Claudebot: host running";
+      return "Tomte: host running";
     case "stopped":
-      return "Claudebot: host stopped";
+      return "Tomte: host stopped";
   }
 }
 
@@ -52,7 +52,7 @@ export function trayMenu(
             click: () => actions.restartToUpdate(),
           },
         ]),
-    { label: "Open Claudebot", click: () => actions.open() },
+    { label: "Open Tomte", click: () => actions.open() },
     {
       label: "Start at login",
       type: "checkbox",
@@ -60,6 +60,6 @@ export function trayMenu(
       click: () => actions.setStartAtLogin(!startAtLogin),
     },
     { type: "separator" },
-    { label: "Quit Claudebot", click: () => actions.quit() },
+    { label: "Quit Tomte", click: () => actions.quit() },
   ];
 }

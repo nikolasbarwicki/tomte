@@ -8,7 +8,7 @@ import { z } from "zod";
 import { setChatMode } from "../bots/index.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
-const KEY_FILE = "/etc/claudebot-test/secrets.key";
+const KEY_FILE = "/etc/tomte-test/secrets.key";
 const REMOTE = ["--mode", "remote", "--secrets-key-file", KEY_FILE];
 
 const Settings = z.object({
@@ -78,9 +78,9 @@ describe("remote mode shell isolation", () => {
     });
     const denied = sandbox!.filesystem.denyRead;
     const expected = [
-      join(h.dataRoot, "claudebot.db"),
-      join(h.dataRoot, "claudebot.db-wal"),
-      join(h.dataRoot, "claudebot.db-shm"),
+      join(h.dataRoot, "tomte.db"),
+      join(h.dataRoot, "tomte.db-wal"),
+      join(h.dataRoot, "tomte.db-shm"),
       join(h.dataRoot, "secrets.enc"),
       KEY_FILE,
       join(h.dataRoot, "claude"),

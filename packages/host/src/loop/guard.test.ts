@@ -35,7 +35,7 @@ describe("the path guard", () => {
       "../outside.txt",
       "notes/../../outside.txt",
       join(outside, "memory.md"),
-      join(scratch, "claudebot.db"),
+      join(scratch, "tomte.db"),
       "/etc/passwd",
       "~/.ssh/id_rsa",
       "~",

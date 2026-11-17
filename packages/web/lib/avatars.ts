@@ -5,7 +5,7 @@ import {
   type BotAvatar,
   type Face,
   type Stroke,
-} from "@claudebot/contract/avatars";
+} from "@tomte/contract/avatars";
 import type { CSSProperties } from "react";
 
 /** One-line doodle faces on a 160×160 canvas; each path is drawn without lifting the pen, so it can animate as a single stroke. */

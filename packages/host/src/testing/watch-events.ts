@@ -1,4 +1,4 @@
-import type { Routine } from "@claudebot/contract/events";
+import type { Routine } from "@tomte/contract/events";
 
 import type { HandoffHost } from "./test-host.ts";
 

@@ -1,4 +1,4 @@
-import type { SourceEvent, WorkItem, WorkSource } from "@claudebot/contract/events";
+import type { SourceEvent, WorkItem, WorkSource } from "@tomte/contract/events";
 import {
   ActivityIcon,
   ArchiveIcon,

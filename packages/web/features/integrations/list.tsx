@@ -1,4 +1,4 @@
-import type { Integration } from "@claudebot/contract/events";
+import type { Integration } from "@tomte/contract/events";
 import { ChevronRight, Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";

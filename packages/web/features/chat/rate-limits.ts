@@ -1,4 +1,4 @@
-import type { ServerEvent } from "@claudebot/contract/events";
+import type { ServerEvent } from "@tomte/contract/events";
 
 type RateLimit = Extract<ServerEvent, { type: "rate_limit" }>;
 

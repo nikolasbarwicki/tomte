@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 // Smoke test of the desktop app's hidden title bar (macOS only), run for real against the packaged `.app`:
-//   bun scripts/smoke-desktop-titlebar.ts [dist/desktop/Claudebot-darwin-arm64/mac-arm64/Claudebot.app]
+//   bun scripts/smoke-desktop-titlebar.ts [dist/desktop/Tomte-darwin-arm64/mac-arm64/Tomte.app]
 // One launch on a fresh temp root (fake Claude CLI, file secrets, mock keychain, login-item file seam; see the kit). It
 //   - reads the web UI's header and the real traffic lights' geometry (Accessibility frames of the three native buttons)
 //     and asserts the lights sit inside the header, vertically centred, with no control or title under them, both with
@@ -262,7 +262,7 @@ function assertHeader(
 // ---- main ----------------------------------------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const run = await createSmokeRun(process.argv[2], "claudebot-desktop-titlebar-smoke-");
+  const run = await createSmokeRun(process.argv[2], "tomte-desktop-titlebar-smoke-");
   await mkdir(OUT_DIR, { recursive: true });
   console.log(`temp root ${run.root}`);
   console.log(`app       ${run.appBundle}`);
@@ -592,9 +592,9 @@ async function main(): Promise<void> {
       !view.visible && alive(l.pid) && alive(hostPid) && view.status === "running",
       `native close hid the window to the tray: visible ${view.visible}, app pid ${l.pid} and host pid ${hostPid} alive, tray says ${view.status}`,
     );
-    await clickTray(l, "Open Claudebot");
+    await clickTray(l, "Open Tomte");
     await until("the window to be shown again", 10_000, async () => (await windowState(l)).visible);
-    check(true, 'tray "Open Claudebot" shows the window again');
+    check(true, 'tray "Open Tomte" shows the window again');
     await frontmost(l);
     await sleep(500);
 

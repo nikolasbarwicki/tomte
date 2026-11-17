@@ -4,7 +4,7 @@ Status: proposed
 
 ## Context
 
-Bots have distinct purposes and sometimes need each other's help. Claudebot runs bots on Claude Code today, and Codex and OpenCode are planned. Each bot runs one turn at a time in one session, and the host already delivers its own messages into a bot's session through a queue (`deliver()`), which human waits use to resume a bot without holding a tool call open.
+Bots have distinct purposes and sometimes need each other's help. Tomte runs bots on Claude Code today, and Codex and OpenCode are planned. Each bot runs one turn at a time in one session, and the host already delivers its own messages into a bot's session through a queue (`deliver()`), which human waits use to resume a bot without holding a tool call open.
 
 ## Decision
 
@@ -15,7 +15,7 @@ A bot asks another bot for help by creating a handoff: a task with an id, a brie
 - **Blocking subagent-style call.** The requester's tool call waits for the assignee's result. Rejected: a bot runs one turn at a time, so A waiting on B while B asks A deadlocks, and long work hits harness tool-call timeouts.
 - **In-process tools on the Claude Code `host` server.** Rejected for the same reason as in ADR-0001: each new harness would need its own copy.
 - **A2A JSON-RPC between bots now.** Each bot as an A2A server with its own HTTP endpoint and agent card. Deferred: every bot lives in one host process, and bots call tools, not HTTP clients. Keeping A2A's data model makes exposing it later a translation layer, not a redesign.
-- **Shared task board that bots claim from.** Deferred: it suits teams of interchangeable workers; claudebot bots have distinct purposes, so a directed request matches better.
+- **Shared task board that bots claim from.** Deferred: it suits teams of interchangeable workers; tomte bots have distinct purposes, so a directed request matches better.
 
 ## Consequences
 

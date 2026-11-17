@@ -4,7 +4,7 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { PairingResponse } from "@claudebot/contract/api";
+import { PairingResponse } from "@tomte/contract/api";
 
 import { listBots } from "../bots/index.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
@@ -96,10 +96,10 @@ describe("the device token", () => {
   test("the session cookie is accepted as the same credential", async () => {
     const host = await start();
     const info = (cookie: string) => fetch(`${host.clientUrl}/api/info`, { headers: { cookie } });
-    const cookie = `claudebot_session=${host.deviceToken}`;
+    const cookie = `tomte_session=${host.deviceToken}`;
     expect((await info(cookie)).status).toBe(200);
     expect((await info(`other=1; ${cookie}; more=2`)).status).toBe(200);
-    expect((await info("claudebot_session=not-a-token")).status).toBe(401);
+    expect((await info("tomte_session=not-a-token")).status).toBe(401);
   });
 
   test("the static app, the login page and the OAuth callback load without one", async () => {
@@ -154,7 +154,7 @@ describe("pairing", () => {
     const { token } = PairingResponse.parse(await res.json());
 
     const cookie = res.headers.get("set-cookie") ?? "";
-    expect(cookie).toContain(`claudebot_session=${token}`);
+    expect(cookie).toContain(`tomte_session=${token}`);
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("SameSite=Strict");
     expect(cookie).not.toContain("Secure");
@@ -166,7 +166,7 @@ describe("pairing", () => {
   });
 
   test("the cookie is Secure when the public URL is HTTPS", async () => {
-    const host = await start(["--public-url", "https://claudebot.example.com"]);
+    const host = await start(["--public-url", "https://tomte.example.com"]);
     const code = host.server.devices.createPairingCode();
     const res = await exchange(host, { code, name: "browser" });
     expect(res.status).toBe(200);
@@ -174,8 +174,8 @@ describe("pairing", () => {
   });
 
   test("the public URL's origin and host are accepted, an unrelated one is not", async () => {
-    const host = await start(["--public-url", "https://claudebot.example.com"]);
-    const publicOrigin = { origin: "https://claudebot.example.com", ...host.authHeaders };
+    const host = await start(["--public-url", "https://tomte.example.com"]);
+    const publicOrigin = { origin: "https://tomte.example.com", ...host.authHeaders };
     const post = (headers: Record<string, string>) =>
       fetch(`${host.clientUrl}/api/integrations/list`, {
         method: "POST",
@@ -183,14 +183,12 @@ describe("pairing", () => {
         body: "{}",
       });
     expect((await post(publicOrigin)).status).toBe(200);
-    expect((await post({ ...publicOrigin, origin: "https://claudebot.example.org" })).status).toBe(
-      403,
-    );
+    expect((await post({ ...publicOrigin, origin: "https://tomte.example.org" })).status).toBe(403);
     expect(
-      await withHost(host, "/api/info", { host: "claudebot.example.com", ...host.authHeaders }),
+      await withHost(host, "/api/info", { host: "tomte.example.com", ...host.authHeaders }),
     ).toBe(200);
     expect(
-      await withHost(host, "/api/info", { host: "claudebot.example.org", ...host.authHeaders }),
+      await withHost(host, "/api/info", { host: "tomte.example.org", ...host.authHeaders }),
     ).toBe(403);
   });
 

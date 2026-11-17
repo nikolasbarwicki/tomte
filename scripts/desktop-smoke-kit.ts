@@ -24,7 +24,7 @@ export const FAKE_CLAUDE = join(ROOT, "packages/host/src/testing/fake-claude.ts"
 export const EVIDENCE_DIR = join(ROOT, ".scratch");
 const DEFAULT_APP = join(
   ROOT,
-  `dist/desktop/Claudebot-${process.platform}-${process.arch}/${process.arch === "arm64" ? "mac-arm64" : "mac"}/Claudebot.app`,
+  `dist/desktop/Tomte-${process.platform}-${process.arch}/${process.arch === "arm64" ? "mac-arm64" : "mac"}/Tomte.app`,
 );
 
 export const CLIENT_URL = /^http:\/\/127\.0\.0\.1:\d+\//;
@@ -85,11 +85,11 @@ export function listing(dir: string, depth = 2): string[] {
   return rows.sort();
 }
 
-/** Everything under ~/Library, three levels deep, whose name mentions claudebot: where a default user-data folder, cache, preferences file or saved state would be. */
+/** Everything under ~/Library, three levels deep, whose name mentions tomte: where a default user-data folder, cache, preferences file or saved state would be. */
 export function libraryTraces(): string[] {
   const library = join(homedir(), "Library");
   const out = Bun.spawnSync(
-    ["find", library, "-maxdepth", "3", "-iname", "*claudebot*", "-not", "-path", "*/Containers/*"],
+    ["find", library, "-maxdepth", "3", "-iname", "*tomte*", "-not", "-path", "*/Containers/*"],
     { stderr: "ignore" },
   ).stdout.toString();
   return out
@@ -100,8 +100,8 @@ export function libraryTraces(): string[] {
 }
 
 export const defaultFolders = [
-  join(homedir(), "Library/Application Support/claudebot"),
-  join(homedir(), "Library/Application Support/Claudebot Desktop"),
+  join(homedir(), "Library/Application Support/tomte"),
+  join(homedir(), "Library/Application Support/Tomte Desktop"),
 ];
 
 export interface Launched {
@@ -164,7 +164,7 @@ export interface SmokeRun {
   keyFile: string;
   /** The launches' `$HOME`: the engine's Chrome download, sockets and session state go here, never into the real home. */
   homeDir: string;
-  /** Where the app records Start at login instead of asking the OS (`CLAUDEBOT_DESKTOP_LOGIN_ITEM_FILE`). */
+  /** Where the app records Start at login instead of asking the OS (`TOMTE_DESKTOP_LOGIN_ITEM_FILE`). */
   loginItemFile: string;
   /** The desktop settings file the app writes in its user-data folder. */
   settingsFile: string;
@@ -201,7 +201,7 @@ export async function createSmokeRun(
 ): Promise<SmokeRun> {
   if (process.platform !== "darwin") fail("only the macOS package is smoke-tested here");
   const appBundle = resolve(appArg ?? DEFAULT_APP);
-  const executable = join(appBundle, "Contents/MacOS/Claudebot");
+  const executable = join(appBundle, "Contents/MacOS/Tomte");
   if (!existsSync(executable))
     fail(`no packaged app at ${appBundle}; run \`bun run package:desktop\``);
   // The `finally` of every smoke kills what is left under the bundle path, so a copy somebody is using must never be there.
@@ -213,7 +213,7 @@ export async function createSmokeRun(
 
   const root = await mkdtemp(join(tmpdir(), rootPrefix));
   // The engine's socket paths must stay under 104 bytes, so the home is short and apart from the root.
-  const homeDir = await mkdtemp("/tmp/claudebot-desktop-home-");
+  const homeDir = await mkdtemp("/tmp/tomte-desktop-home-");
   const needles = [root, realpathSync(root), homeDir, realpathSync(homeDir), appBundle];
   const dataRoot = join(root, "data");
   const userData = join(root, "user-data");
@@ -238,13 +238,13 @@ export async function createSmokeRun(
   }, 200);
   sampler.unref();
 
-  /** The environment of a launch: this process's, minus any claudebot or Claude setting of the developer's. */
+  /** The environment of a launch: this process's, minus any tomte or Claude setting of the developer's. */
   function launchEnv(extra: Record<string, string>): Record<string, string> {
     const base = Object.fromEntries(
       Object.entries(process.env).filter(
         (e): e is [string, string] =>
           e[1] !== undefined &&
-          !e[0].startsWith("CLAUDEBOT_") &&
+          !e[0].startsWith("TOMTE_") &&
           !e[0].startsWith("ELECTRON_") &&
           e[0] !== "CLAUDE_PATH" &&
           e[0] !== "CLAUDE_CONFIG_DIR",
@@ -253,10 +253,10 @@ export async function createSmokeRun(
     return {
       ...base,
       HOME: homeDir,
-      CLAUDEBOT_DATA_ROOT: dataRoot,
-      CLAUDEBOT_SECRETS: "file",
-      CLAUDEBOT_SECRETS_KEY_FILE: keyFile,
-      CLAUDEBOT_DESKTOP_LOGIN_ITEM_FILE: loginItemFile,
+      TOMTE_DATA_ROOT: dataRoot,
+      TOMTE_SECRETS: "file",
+      TOMTE_SECRETS_KEY_FILE: keyFile,
+      TOMTE_DESKTOP_LOGIN_ITEM_FILE: loginItemFile,
       // No smoke asks an update feed for anything; a launch that wants the check on says so through `extra`.
       [UPDATES_ENV]: "off",
       ...extra,
@@ -300,7 +300,7 @@ export async function createSmokeRun(
 
   const hostOf = (mainPid: number) =>
     processes().find(
-      (p) => p.ppid === mainPid && p.command.includes("Contents/Resources/claudebot-host"),
+      (p) => p.ppid === mainPid && p.command.includes("Contents/Resources/tomte-host"),
     );
 
   /** Waits for the process to be gone and returns how long it took. */

@@ -1,4 +1,4 @@
-import type { BotSummary } from "@claudebot/contract/events";
+import type { BotSummary } from "@tomte/contract/events";
 import { useActionState, useState } from "react";
 import { toast } from "sonner";
 

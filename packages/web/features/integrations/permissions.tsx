@@ -1,4 +1,4 @@
-import type { Integration, IntegrationTool, ToolPolicy } from "@claudebot/contract/events";
+import type { Integration, IntegrationTool, ToolPolicy } from "@tomte/contract/events";
 import { Info, Search } from "lucide-react";
 import { useState } from "react";
 

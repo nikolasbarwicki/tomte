@@ -76,7 +76,7 @@ export async function verifyWindowsBundle(
   files: BundleFiles = diskFiles,
 ): Promise<void> {
   const paths = await signedFiles(files, bundleDir, version);
-  const tmp = await mkdtemp(join(tmpdir(), "claudebot-verify-"));
+  const tmp = await mkdtemp(join(tmpdir(), "tomte-verify-"));
   try {
     const script = join(tmp, "verify.ps1");
     const list = join(tmp, "files.txt");

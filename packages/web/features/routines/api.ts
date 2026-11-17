@@ -1,4 +1,4 @@
-import type { Schedule } from "@claudebot/contract/events";
+import type { Schedule } from "@tomte/contract/events";
 
 import { act, post } from "@/host/api.ts";
 

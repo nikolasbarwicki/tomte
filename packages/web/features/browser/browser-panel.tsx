@@ -1,4 +1,4 @@
-import { LiveMessage } from "@claudebot/contract/events";
+import { LiveMessage } from "@tomte/contract/events";
 import {
   EllipsisIcon,
   GlobeIcon,

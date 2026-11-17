@@ -12,8 +12,8 @@ import {
   type UpdateEvent,
 } from "./updates.ts";
 
-const GITHUB_FEED = "provider: github\nowner: acme\nrepo: claudebot\n";
-const PLACEHOLDER_FEED = "provider: generic\nurl: https://updates.invalid/claudebot\n";
+const GITHUB_FEED = "provider: github\nowner: acme\nrepo: tomte\n";
+const PLACEHOLDER_FEED = "provider: generic\nurl: https://updates.invalid/tomte\n";
 const LOOPBACK_FEED = "provider: generic\nurl: http://127.0.0.1:4555\n";
 
 describe("when updates are off", () => {

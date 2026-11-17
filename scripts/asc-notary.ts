@@ -15,7 +15,7 @@ import { sha256 } from "./release-kit.ts";
 /** What was uploaded to Apple's notary service and what came back; holds no secret. */
 export interface NotarySubmission {
   kind: "app" | "dmg";
-  /** The uploaded file's name (`Claudebot.zip` for the app). */
+  /** The uploaded file's name (`Tomte.zip` for the app). */
   file: string;
   sha256: string;
   /** `undefined` only when asc reported Accepted without a readable id. */
@@ -163,7 +163,7 @@ export async function notarizeSignedApp(r: {
   recordFile: string;
   log: (line: string) => void;
 }): Promise<void> {
-  const work = await mkdtemp(join(tmpdir(), "claudebot-asc-notary-"));
+  const work = await mkdtemp(join(tmpdir(), "tomte-asc-notary-"));
   try {
     const zip = join(work, `${basename(r.app, ".app")}.zip`);
     await r.run(appZipArgv(r.app, zip));

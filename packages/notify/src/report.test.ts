@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 
-import { ExternalEventInput } from "@claudebot/contract/api";
+import { ExternalEventInput } from "@tomte/contract/api";
 
 import { buildEvent, checkIdentifier, truncate, type Report } from "./report.ts";
 
@@ -99,13 +99,13 @@ describe("title and body", () => {
 
 describe("source", () => {
   test("is one per project and task: the session, kind and message do not change it", () => {
-    const base = buildEvent(report(), { project: "claudebot" }).source;
+    const base = buildEvent(report(), { project: "tomte" }).source;
     const same = buildEvent(report({ kind: "failed", session: "other", message: "different" }), {
-      project: "claudebot",
+      project: "tomte",
     }).source;
     expect(same).toEqual(base);
-    expect(base.label).toBe("claudebot · 04-notify-sender");
-    expect(base.id).toMatch(/^notify:claudebot-04-notify-sender:[0-9a-f]{24}$/);
+    expect(base.label).toBe("tomte · 04-notify-sender");
+    expect(base.id).toMatch(/^notify:tomte-04-notify-sender:[0-9a-f]{24}$/);
   });
 
   test("without a project the label is the task", () => {
@@ -147,7 +147,7 @@ describe("key", () => {
       key({ questionId: "Q-1" }),
       key({ questionId: "Q-2" }),
       key({ message: "wave 1 running." }),
-      key({}, { project: "claudebot" }),
+      key({}, { project: "tomte" }),
       key({}, { salt: "again" }),
       key({}, { salt: "again 2" }),
     ]);

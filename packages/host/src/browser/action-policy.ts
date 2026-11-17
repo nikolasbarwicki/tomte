@@ -31,7 +31,7 @@ const ALLOWED_ACTIONS = [
   "stream_status",
   // `auth login` is checked as `auth_login`, and again for the credential plugin it asks.
   "auth_login",
-  "plugin:claudebot:credential.read",
+  "plugin:tomte:credential.read",
 ] as const;
 
 /** Spelled out as well, so the intent survives someone widening the allow list. */
@@ -57,7 +57,7 @@ export const ACTION_POLICY = { default: "deny", allow: ALLOWED_ACTIONS, deny: DE
 
 /** Writes the policy where the engine can read it; the caller owns the returned directory. */
 export function writeActionPolicy(): { dir: string; file: string } {
-  const dir = mkdtempSync(join(tmpdir(), "claudebot-browser-"));
+  const dir = mkdtempSync(join(tmpdir(), "tomte-browser-"));
   const file = join(dir, "action-policy.json");
   writeFileSync(file, JSON.stringify(ACTION_POLICY), { mode: 0o600 });
   return { dir, file };

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { ChannelLinkCodeResponse, ChannelList } from "@claudebot/contract/api";
+import { ChannelLinkCodeResponse, ChannelList } from "@tomte/contract/api";
 
 import { fakeChannel, type FakeChannel } from "../testing/fake-channel.ts";
 import { clientPost } from "../testing/paired-device.ts";

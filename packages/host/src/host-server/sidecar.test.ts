@@ -5,8 +5,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { DeviceList } from "@claudebot/contract/api";
-import { LAUNCH_DEVICE_NAME, SESSION_COOKIE, SidecarReady } from "@claudebot/contract/sidecar";
+import { DeviceList } from "@tomte/contract/api";
+import { LAUNCH_DEVICE_NAME, SESSION_COOKIE, SidecarReady } from "@tomte/contract/sidecar";
 
 import { acquireDataRootLock } from "../platform/data-root-lock.ts";
 
@@ -53,16 +53,16 @@ function fakeCli() {
   return { path, stateDir };
 }
 
-/** This process's environment without any claudebot setting of the developer's, with the fake CLI and the file secrets backend. */
+/** This process's environment without any tomte setting of the developer's, with the fake CLI and the file secrets backend. */
 function hostEnv(): Record<string, string> {
   const keyFile = join(scratch, "secrets.key");
   if (!existsSync(keyFile)) writeFileSync(keyFile, randomBytes(32), { mode: 0o600 });
   const env = Object.fromEntries(
     Object.entries(process.env).filter(
-      (e): e is [string, string] => e[1] !== undefined && !e[0].startsWith("CLAUDEBOT_"),
+      (e): e is [string, string] => e[1] !== undefined && !e[0].startsWith("TOMTE_"),
     ),
   );
-  return { ...env, CLAUDE_PATH: fakeCli().path, CLAUDEBOT_SECRETS_KEY_FILE: keyFile };
+  return { ...env, CLAUDE_PATH: fakeCli().path, TOMTE_SECRETS_KEY_FILE: keyFile };
 }
 
 const dataRootOf = () => join(scratch, "data");
@@ -186,7 +186,7 @@ describe("a host started with --sidecar", () => {
     expect(stdout.all).toHaveLength(1);
     expect(stdout.all.join("\n")).not.toContain(token);
     expect(await stderr).not.toContain(token);
-    expect(await stderr).toContain("claudebot UI:");
+    expect(await stderr).toContain("tomte UI:");
   });
 
   test("closing stdin shuts the host down with exit 0 and frees the data-root lock", async () => {
@@ -268,7 +268,7 @@ describe("a host started without --sidecar", () => {
     const proc = start(stdin());
     procs.push(proc);
     if (proc.stdin && typeof proc.stdin !== "number") await proc.stdin.end();
-    const url = /claudebot UI: (\S+)/.exec(await lines(proc.stdout).next())?.[1];
+    const url = /tomte UI: (\S+)/.exec(await lines(proc.stdout).next())?.[1];
     expect(url).toBeDefined();
 
     await Bun.sleep(500);

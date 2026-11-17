@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import type { CatalogCategory, Integration, IntegrationTool } from "@claudebot/contract/events";
+import type { CatalogCategory, Integration, IntegrationTool } from "@tomte/contract/events";
 
 import { byCategory, health, listSections, needsAttention, toolGroups } from "./model.ts";
 

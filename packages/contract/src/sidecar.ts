@@ -15,4 +15,4 @@ export const LaunchToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 export const LAUNCH_DEVICE_NAME = "This computer";
 
 /** The cookie that carries a device token for the browser UI; scripts send the same token as a bearer instead. */
-export const SESSION_COOKIE = "claudebot_session";
+export const SESSION_COOKIE = "tomte_session";

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { ChannelLinkCodeResponse } from "@claudebot/contract/api";
+import { ChannelLinkCodeResponse } from "@tomte/contract/api";
 
 import { fakeTelegram, type FakeTelegram } from "../testing/fake-telegram.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
@@ -114,7 +114,7 @@ describe("a failed run", () => {
   });
 
   test("links to the bot's routines panel when the public URL is not loopback", async () => {
-    const t = await start({ hostFlags: ["--public-url", "https://claudebot.example.com"] });
+    const t = await start({ hostFlags: ["--public-url", "https://tomte.example.com"] });
     t.host.askOnMessage("Which list?", undefined, { crash: true });
     await t.startRun();
     await t.host.until(() => t.notices().length > 0);
@@ -123,8 +123,8 @@ describe("a failed run", () => {
     };
     expect(markup.inline_keyboard.flat()).toEqual([
       {
-        text: "Open in Claudebot",
-        url: `https://claudebot.example.com/bots/${t.botId}?panel=settings&section=routines`,
+        text: "Open in Tomte",
+        url: `https://tomte.example.com/bots/${t.botId}?panel=settings&section=routines`,
       },
     ]);
   });
@@ -169,7 +169,7 @@ describe("a routine that sends its result", () => {
 
   test("links to the routines panel when the public URL is not loopback", async () => {
     const t = await start({
-      hostFlags: ["--public-url", "https://claudebot.example.com"],
+      hostFlags: ["--public-url", "https://tomte.example.com"],
       notifyResult: true,
     });
     await t.startRun();
@@ -178,7 +178,7 @@ describe("a routine that sends its result", () => {
       inline_keyboard: { url?: string }[][];
     };
     expect(markup.inline_keyboard.flat().map((b) => b.url)).toEqual([
-      `https://claudebot.example.com/bots/${t.botId}?panel=settings&section=routines`,
+      `https://tomte.example.com/bots/${t.botId}?panel=settings&section=routines`,
     ]);
   });
 

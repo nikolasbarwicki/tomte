@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { EventAccess } from "@claudebot/contract/api";
+import type { EventAccess } from "@tomte/contract/api";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
@@ -85,7 +85,7 @@ async function watch(): Promise<Page> {
 const bodyOf = async <T>(res: Response): Promise<T> => (await res.json()) as T;
 
 const stateOf = (id: string) => {
-  const db = new Database(join(host.dataRoot, "claudebot.db"), { readonly: true });
+  const db = new Database(join(host.dataRoot, "tomte.db"), { readonly: true });
   try {
     return db
       .query<{ state: string }, [string]>("SELECT state FROM external_events WHERE id = ?")

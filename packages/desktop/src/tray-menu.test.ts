@@ -35,9 +35,9 @@ function setup(state: HostState, startAtLogin = true, readyUpdate?: string) {
 describe("the tray menu", () => {
   test("leads with the host state as a disabled item, which is also the tooltip text", () => {
     for (const [state, text] of [
-      [{ status: "starting" }, "Claudebot: host starting"],
-      [running, "Claudebot: host running"],
-      [stopped, "Claudebot: host stopped"],
+      [{ status: "starting" }, "Tomte: host starting"],
+      [running, "Tomte: host running"],
+      [stopped, "Tomte: host stopped"],
     ] as const) {
       expect(hostStatusText(state)).toBe(text);
       expect(setup(state).items[0]).toEqual({ label: text, enabled: false });
@@ -54,8 +54,8 @@ describe("the tray menu", () => {
 
   test("Open and Quit call their actions", () => {
     const menu = setup(running);
-    menu.click("Open Claudebot");
-    menu.click("Quit Claudebot");
+    menu.click("Open Tomte");
+    menu.click("Quit Tomte");
     expect(menu.calls).toEqual(["open", "quit"]);
   });
 
@@ -73,17 +73,17 @@ describe("the tray menu", () => {
     const menu = setup(running);
     const labels = menu.items.map((i) => i.label ?? "-");
     expect(labels).toEqual([
-      "Claudebot: host running",
+      "Tomte: host running",
       "-",
       "This computer",
       "Work",
       "-",
       "Manage Connections…",
       "-",
-      "Open Claudebot",
+      "Open Tomte",
       "Start at login",
       "-",
-      "Quit Claudebot",
+      "Quit Tomte",
     ]);
     expect(menu.item("Work")).toMatchObject({ type: "radio", checked: true });
     expect(menu.item("This computer")).toMatchObject({ type: "radio", checked: false });

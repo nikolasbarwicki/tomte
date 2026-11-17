@@ -1,12 +1,12 @@
 // The local macOS signing route: signs and notarizes an arm64 build on this Mac for personal testing, from a certificate
-// and an App Store Connect API key you hold: a `.p8` file, or a saved profile of the `asc` CLI (CLAUDEBOT_LOCAL_ASC_PROFILE).
+// and an App Store Connect API key you hold: a `.p8` file, or a saved profile of the `asc` CLI (TOMTE_LOCAL_ASC_PROFILE).
 // Guide, prerequisites and the list of what is verified: docs/release/local-signing.md.
 //   bun scripts/sign-local.ts plan    --out <new folder> [--version <semver>] [--add-to-search-list]
 //       prints every operation in order with redacted arguments, all paths, the identity rule and the global settings
 //       touched. Runs nothing and reads no file. This is the default command.
 //   bun scripts/sign-local.ts run     --out <new folder> [--version <semver>] [--add-to-search-list] --confirm-keychain-and-notary-upload
 //       creates a temporary keychain inside <out>, imports the certificate, signs, notarizes (uploads to Apple), staples
-//       and verifies. Refuses in CI. Credentials come only from the CLAUDEBOT_LOCAL_* environment variables (local-signing-kit.ts).
+//       and verifies. Refuses in CI. Credentials come only from the TOMTE_LOCAL_* environment variables (local-signing-kit.ts).
 //   bun scripts/sign-local.ts cleanup --out <folder>
 //       finishes the cleanup of a run that was killed hard: deletes its temporary keychain and signing folder.
 // `--arch arm64` is the only accepted architecture (and the default).

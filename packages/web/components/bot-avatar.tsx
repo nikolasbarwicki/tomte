@@ -1,4 +1,4 @@
-import { type BotAvatar as Avatar } from "@claudebot/contract/avatars";
+import { type BotAvatar as Avatar } from "@tomte/contract/avatars";
 
 import { FACES, STROKES } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";

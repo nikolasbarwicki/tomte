@@ -4,15 +4,6 @@ import { existsSync, rmSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
 import type { McpServerConfig, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
-import type { OAuthStart } from "@claudebot/contract/api";
-import type {
-  CatalogInfo,
-  Integration,
-  IntegrationAuth,
-  IntegrationTransport,
-  OwnClient,
-  ToolPolicy,
-} from "@claudebot/contract/events";
 import {
   auth as mcpAuth,
   type OAuthClientProvider,
@@ -31,6 +22,15 @@ import {
   type OAuthClientInformationMixed,
   type OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
+import type { OAuthStart } from "@tomte/contract/api";
+import type {
+  CatalogInfo,
+  Integration,
+  IntegrationAuth,
+  IntegrationTransport,
+  OwnClient,
+  ToolPolicy,
+} from "@tomte/contract/events";
 import { z } from "zod";
 
 import { InvalidInput, NotFound } from "../platform/errors.ts";
@@ -134,7 +134,7 @@ class OAuthState implements OAuthClientProvider {
   ) {}
   get clientMetadata() {
     return {
-      client_name: "Claudebot",
+      client_name: "Tomte",
       redirect_uris: [this.redirectUrl],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
@@ -230,7 +230,7 @@ async function discover(
   token?: string,
   env?: Record<string, string>,
 ): Promise<DiscoveredTool[]> {
-  const client = new Client({ name: "claudebot", version: "0.1.0" });
+  const client = new Client({ name: "tomte", version: "0.1.0" });
   const timer = new AbortController();
   const timeout = setTimeout(() => timer.abort(), DISCOVERY_TIMEOUT_MS);
   try {
@@ -285,7 +285,7 @@ export function createIntegrations(deps: {
   catalog?: readonly CatalogEntry[];
   now?: () => number;
   onChange: () => void;
-  /** Where providers send the browser back after sign-in; the Claudebot server's own /oauth/callback. */
+  /** Where providers send the browser back after sign-in; the Tomte server's own /oauth/callback. */
   oauthRedirectUrl: string;
 }) {
   const { db, secrets, onChange } = deps;

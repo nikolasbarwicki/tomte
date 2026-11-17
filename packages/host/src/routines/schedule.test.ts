@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Schedule } from "@claudebot/contract/events";
+import type { Schedule } from "@tomte/contract/events";
 
 import {
   WINDOW_MS,

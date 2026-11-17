@@ -9,7 +9,7 @@ import {
   type SDKMessage,
   type SDKResultMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { MemoryScope } from "@claudebot/contract/events";
+import type { MemoryScope } from "@tomte/contract/events";
 
 import {
   Inbox,
@@ -48,7 +48,7 @@ import { FRONT_PROMPT } from "./prompt.ts";
 import type { Tasks } from "./tasks.ts";
 import { MAX_PARALLEL, restartNotice, workState } from "./work-state.ts";
 
-/** Tools the front and its agents use without asking: the front's own, its queue tools, the researcher's web research and every agent's progress recorder. The worker's tools are not here: they follow Claudebot's rules. */
+/** Tools the front and its agents use without asking: the front's own, its queue tools, the researcher's web research and every agent's progress recorder. The worker's tools are not here: they follow Tomte's rules. */
 const PRE_APPROVED = [
   ...FRONT_BUILTIN_TOOLS,
   QUEUE_TASK,
@@ -164,7 +164,7 @@ export class FrontSession {
       });
     const own = rules(o.delegate);
     // Nobody answers a permission prompt for an agent's web research or for the front's own agent calls, so those never ask. Every
-    // other call follows Claudebot's rules, and an agent's card says which task it is for.
+    // other call follows Tomte's rules, and an agent's card says which task it is for.
     this.canUseTool = (name, input, options) =>
       PRE_APPROVED.includes(name)
         ? Promise.resolve({ behavior: "allow", updatedInput: input })

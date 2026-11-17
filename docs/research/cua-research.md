@@ -1,9 +1,9 @@
-# Computer use for claudebot (via Cua): research and recommendation
+# Computer use for tomte (via Cua): research and recommendation
 
 Researched 2026-11-05/06. Status: research only, no decision yet; next step is the spike in Part B.
 
 - **Part A** (sections 0–9 and "Implications"): facts from primary sources, each with its URL. Anything not directly observed is marked [UNVERIFIED].
-- **Part B** (sections 10–16): analysis for claudebot — capabilities, proposed design, initial scope, spike, pros/cons, recommendations. Inferences there are marked [INFERENCE].
+- **Part B** (sections 10–16): analysis for tomte — capabilities, proposed design, initial scope, spike, pros/cons, recommendations. Inferences there are marked [INFERENCE].
 
 # Part A: Cua facts
 
@@ -25,7 +25,7 @@ The brief asks about the Computer SDK, Agent SDK, computer-server and Cua Cloud.
 | Cua Spaces                | macOS app (Tauri on Linux/Windows) that gives agents full desktops. Has multiplayer cursors, "teleport" of signed-in apps, and a Keyvault. Free for individuals. Pro is $18/mo ($180/yr); Teams is $30/seat/mo.                    | FSL-1.1-MIT                                                                       | https://github.com/trycua/cua, https://cua.ai/pricing                               |
 | Lume                      | CLI, local HTTP API (`lume serve`, port 7777) and MCP for macOS and Linux VMs on Apple Silicon, using Virtualization.framework.                                                                                                    | MIT                                                                               | https://cua.ai/docs/lume/quickstart, https://cua.ai/docs/lume/reference/http-api.md |
 | Lumier                    | Docker-compatible interface for Lume VMs.                                                                                                                                                                                          | MIT                                                                               | https://github.com/trycua/cua                                                       |
-| Cua Bench, CUA-S1         | Benchmarks and RL tooling; small specialized "System 1" models. Not relevant to claudebot.                                                                                                                                         | MIT (code)                                                                        | https://github.com/trycua/cua                                                       |
+| Cua Bench, CUA-S1         | Benchmarks and RL tooling; small specialized "System 1" models. Not relevant to tomte.                                                                                                                                             | MIT (code)                                                                        | https://github.com/trycua/cua                                                       |
 
 **Activity and maturity** (GitHub API, 2026-11-05):
 
@@ -101,7 +101,7 @@ The brief asks about the Computer SDK, Agent SDK, computer-server and Cua Cloud.
 - `cua-agent` (Python ComputerAgent with LiteLLM, which supported Anthropic CU, OpenAI CUA, UI-TARS and composed grounding loops) is **deprecated**.
 - Cua now says "Bring your own agent". The harness owns the model and the loop, and "Cua Driver never calls a model API".
 - Sources: https://cua.ai/docs/cua-sdk/guides/cua-cloud-ended, https://cua.ai/docs/cua-driver/guides/connect-your-agent
-- **For claudebot, Claude Code is the agent.** No Cua agent layer is needed.
+- **For tomte, Claude Code is the agent.** No Cua agent layer is needed.
 
 ## 6. Live view and human takeover
 
@@ -113,7 +113,7 @@ The brief asks about the Computer SDK, Agent SDK, computer-server and Cua Cloud.
   - The viewer needs a secure context (https or localhost).
   - Source: https://cua.ai/docs/cua-sdk/guides/desktop.md
 - **Multiplayer presence:** each participant gets their own cursor ("Step in… then hand the desktop back"). Sources: https://github.com/trycua/cua, spacesd README presence section.
-- Embedding: put the viewer URL in an iframe in the claudebot UI. Iframe embedding policy (CSP/X-Frame-Options) is [UNVERIFIED].
+- Embedding: put the viewer URL in an iframe in the tomte UI. Iframe embedding policy (CSP/X-Frame-Options) is [UNVERIFIED].
 - **macOS Lume images without spacesd use VNC** (`cua sb view`, SSH and VNC). Source: https://cua.ai/docs/cua-sdk/reference/os-image-catalog.md. Lume's VNC port and password handling are [UNVERIFIED].
 - noVNC is not part of the current stack. [UNVERIFIED] The legacy computer-server images used it.
 
@@ -162,27 +162,27 @@ The brief asks about the Computer SDK, Agent SDK, computer-server and Cua Cloud.
   - #1858: request for an HTTP server mode for remote control.
   - Source: https://github.com/trycua/cua/issues
 - Windows on Apple Silicon is emulated and slow. Source: https://cua.ai/docs/cua-sdk/guides/local-runtimes
-- Licensing: spacesd, the viewer and Spaces are FSL-1.1-MIT. Fine for self-hosting claudebot; a hosted competing service is not allowed. Source: https://github.com/trycua/cua (Licensing)
+- Licensing: spacesd, the viewer and Spaces are FSL-1.1-MIT. Fine for self-hosting tomte; a hosted competing service is not allowed. Source: https://github.com/trycua/cua (Licensing)
 - API churn: computer-server → spacesd broke compatibility within months.
 
-## Implications for claudebot
+## Implications for tomte
 
-1. **Cua MCP straight into Claude Code (simplest).** Give each bot `cua mcp --sandbox <bot> --permissions computer:...` (stdio) as an extra MCP server. Cua handles sandbox lifecycle; screenshots are capped at 1200 px. Downsides: a stdio process per bot outside claudebot's HTTP MCP endpoint, and no central audit or takeover gating.
-2. **Host-side proxy MCP endpoint (matches the existing browser design).** claudebot's Streamable-HTTP MCP server exposes `computer_*` tools. Behind it, claudebot calls each sandbox's cua-spacesd, either through `@trycua/cua` (`sb.spacesd()` typed gRPC) or by proxying the in-guest Streamable-HTTP `/mcp` with the bearer token.
+1. **Cua MCP straight into Claude Code (simplest).** Give each bot `cua mcp --sandbox <bot> --permissions computer:...` (stdio) as an extra MCP server. Cua handles sandbox lifecycle; screenshots are capped at 1200 px. Downsides: a stdio process per bot outside tomte's HTTP MCP endpoint, and no central audit or takeover gating.
+2. **Host-side proxy MCP endpoint (matches the existing browser design).** tomte's Streamable-HTTP MCP server exposes `computer_*` tools. Behind it, tomte calls each sandbox's cua-spacesd, either through `@trycua/cua` (`sb.spacesd()` typed gRPC) or by proxying the in-guest Streamable-HTTP `/mcp` with the bearer token.
    - The token stays host-side.
-   - claudebot can enforce "user has taken over → refuse agent input".
-   - claudebot can downscale screenshots to fit Claude's limits.
+   - tomte can enforce "user has taken over → refuse agent input".
+   - tomte can downscale screenshots to fit Claude's limits.
    - Recommended. Risk: whether the `@trycua/cua` native addon loads under Bun is [UNVERIFIED]. Fall back to gRPC-Web over `fetch`, or shell out to the `cua` CLI.
 3. **Live view:** use an iframe of `sb.viewer_url({ttl_seconds})` (H.264 viewer with input, so human takeover is built in, plus presence cursors). Use `--view-only` links for watch mode. This needs https or localhost.
 4. **OS choice:** start with the Linux container (`ghcr.io/trycua/linux:24.04`). It is cheap, ships spacesd plus the viewer, and gVisor isolates it. macOS VMs are limited to 2 per Mac, need about 50 GB each, and the image lacks spacesd.
 5. **Don't use:** cua-agent, cua-computer, computer-server or cuabot (deprecated, and cuabot is insecure). Don't use Cua Cloud (ended).
 6. **Host desktop control:** `cua-driver mcp` on the host lets a bot drive the user's real Mac. It defaults to `standard` mode (any app), so it is high-risk. Gate it behind an explicit opt-in or `bounded` manifest mode.
 
-# Part B: Analysis for claudebot
+# Part B: Analysis for tomte
 
 ## 10. Bottom line
 
-Build computer use as a second host-owned MCP endpoint next to the browser one: claudebot's own `computer_*` tools, backed by one Cua Linux desktop container per bot. Leave macOS VMs and control of the user's own Mac out of the first version. This reuses the design of [ADR 0001](../adr/0001-browser-engine-behind-host-mcp-endpoint.md) almost unchanged.
+Build computer use as a second host-owned MCP endpoint next to the browser one: tomte's own `computer_*` tools, backed by one Cua Linux desktop container per bot. Leave macOS VMs and control of the user's own Mac out of the first version. This reuses the design of [ADR 0001](../adr/0001-browser-engine-behind-host-mcp-endpoint.md) almost unchanged.
 
 Build it only if bots' failing tasks involve desktop apps, files, or sites that block automated browsers. For ordinary websites the bot browser stays the better tool (faster, cheaper, sees page text directly). Target end state: keep both; the bot tries the browser first and falls back to the desktop.
 
@@ -236,7 +236,7 @@ flowchart LR
 - `src/browser/human-waits.ts` and `takeover.ts`: "Needs you" card, I'm done / Skip, 30-minute auto-skip.
 - `src/browser/lane.ts` (one call at a time) and the routines rule (no takeover unattended).
 - The `LiveMessage` frame shape (`src/contract/events.ts`) the UI already renders.
-- The install-command pattern: pinned version plus SHA-256 in claudebot's source.
+- The install-command pattern: pinned version plus SHA-256 in tomte's source.
 
 **Bot tools:**
 
@@ -272,7 +272,7 @@ flowchart LR
 Each answer can change the design:
 
 1. Does `@trycua/cua` load under Bun? If not, use the CLI.
-2. Can the container reach claudebot on the host (Docker Desktop `host.docker.internal` → host loopback)? Main security risk; likely yes by default [INFERENCE].
+2. Can the container reach tomte on the host (Docker Desktop `host.docker.internal` → host loopback)? Main security risk; likely yes by default [INFERENCE].
 3. Cold and warm desktop boot time; screenshot round-trip latency.
 4. Can the viewer be framed, and can access be watch-only?
 5. Does Claude Code handle MCP image results well over a ~30-step task (context growth, accuracy)?
@@ -280,13 +280,13 @@ Each answer can change the design:
 
 ## 15. Pros and cons
 
-|                    | Pros                                                                                                                                         | Cons                                                                                                                                           |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| What bots can do   | Desktop apps, file downloads/uploads, any GUI. Maybe sites that reject automated Chrome (untested).                                          | Overlaps the browser for most web tasks. Pixel clicks are slower and less reliable than ref clicks.                                            |
-| Fit with claudebot | Reuses ADR 0001's design, takeover, human waits and lease almost unchanged. Harness-neutral for free.                                        | A second engine to install, pin, clean up after crashes and keep secure.                                                                       |
-| Cua                | Open source (MIT; FSL-1.1-MIT for spacesd/viewer), native binaries, no Python, sandboxes, built-in viewer with shared control, ~31.8k stars. | 0.x, heavy churn and recent breaking rewrites, ~1,400 open issues, telemetry on by default (can be disabled). macOS side lags Linux.           |
-| Cost               | Local, no cloud bill.                                                                                                                        | ~2 vCPU / 4 GiB per sandbox; on a Mac without Docker, Cua's shared Linux VM can take up to 75% of RAM. ~1.4k tokens per screenshot.            |
-| Safety             | Container isolation; host keeps the token and enforces policy.                                                                               | Anything on screen can attempt prompt injection, with no structured page text to wrap as untrusted. Container network open unless locked down. |
+|                  | Pros                                                                                                                                         | Cons                                                                                                                                           |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| What bots can do | Desktop apps, file downloads/uploads, any GUI. Maybe sites that reject automated Chrome (untested).                                          | Overlaps the browser for most web tasks. Pixel clicks are slower and less reliable than ref clicks.                                            |
+| Fit with tomte   | Reuses ADR 0001's design, takeover, human waits and lease almost unchanged. Harness-neutral for free.                                        | A second engine to install, pin, clean up after crashes and keep secure.                                                                       |
+| Cua              | Open source (MIT; FSL-1.1-MIT for spacesd/viewer), native binaries, no Python, sandboxes, built-in viewer with shared control, ~31.8k stars. | 0.x, heavy churn and recent breaking rewrites, ~1,400 open issues, telemetry on by default (can be disabled). macOS side lags Linux.           |
+| Cost             | Local, no cloud bill.                                                                                                                        | ~2 vCPU / 4 GiB per sandbox; on a Mac without Docker, Cua's shared Linux VM can take up to 75% of RAM. ~1.4k tokens per screenshot.            |
+| Safety           | Container isolation; host keeps the token and enforces policy.                                                                               | Anything on screen can attempt prompt injection, with no structured page text to wrap as untrusted. Container network open unless locked down. |
 
 ## 16. Recommendations
 

@@ -48,7 +48,7 @@ async function writeRelease(version = VERSION): Promise<void> {
     if (metadata.has(name) || name === "SHA256SUMS" || name === "install.sh") continue;
     await writeFile(join(dir, name), `bytes of ${name}`);
   }
-  await writeFile(join(dir, "install.sh"), 'set -e\nDEFAULT_REPO="acme/claudebot-fixture"\n');
+  await writeFile(join(dir, "install.sh"), 'set -e\nDEFAULT_REPO="acme/tomte-fixture"\n');
   for (const platform of ["darwin", "win32", "linux"] as const) {
     const archs = platform === "darwin" ? (["arm64", "x64"] as const) : (["x64"] as const);
     const { installers, metadata: name } = desktopAssets(platform, archs, version);
@@ -78,35 +78,33 @@ describe("verifyRelease", () => {
 
   test("a tampered asset is a checksum mismatch", async () => {
     await writeRelease();
-    await writeFile(join(dir, "claudebot-host-linux-x64"), "tampered");
+    await writeFile(join(dir, "tomte-host-linux-x64"), "tampered");
     expect(await verifyRelease(dir, VERSION)).toEqual([
-      "sha256 mismatch: claudebot-host-linux-x64 does not match SHA256SUMS",
+      "sha256 mismatch: tomte-host-linux-x64 does not match SHA256SUMS",
     ]);
   });
 
   test("a missing asset is named, and SHA256SUMS still lists it", async () => {
     await writeRelease();
-    await rm(join(dir, `Claudebot-${VERSION}.deb`));
+    await rm(join(dir, `Tomte-${VERSION}.deb`));
     const problems = await verifyRelease(dir, VERSION);
-    expect(problems).toContain(`missing: Claudebot-${VERSION}.deb`);
-    expect(problems).toContain(
-      `SHA256SUMS lists Claudebot-${VERSION}.deb, which is not in the folder`,
-    );
+    expect(problems).toContain(`missing: Tomte-${VERSION}.deb`);
+    expect(problems).toContain(`SHA256SUMS lists Tomte-${VERSION}.deb, which is not in the folder`);
   });
 
   test("a missing blockmap fails but the deb has none to miss", async () => {
     await writeRelease();
-    await rm(join(dir, `Claudebot-Setup-${VERSION}.exe.blockmap`));
+    await rm(join(dir, `Tomte-Setup-${VERSION}.exe.blockmap`));
     expect(await verifyRelease(dir, VERSION)).toContain(
-      `missing: Claudebot-Setup-${VERSION}.exe.blockmap`,
+      `missing: Tomte-Setup-${VERSION}.exe.blockmap`,
     );
   });
 
   test("another version's folder reports every asset as missing and unexpected", async () => {
     await writeRelease("0.1.0");
     const problems = await verifyRelease(dir, VERSION);
-    expect(problems).toContain(`missing: Claudebot-Setup-${VERSION}.exe`);
-    expect(problems).toContain("unexpected: Claudebot-Setup-0.1.0.exe");
+    expect(problems).toContain(`missing: Tomte-Setup-${VERSION}.exe`);
+    expect(problems).toContain("unexpected: Tomte-Setup-0.1.0.exe");
   });
 
   test("a file the checksums do not cover is named", async () => {
@@ -150,7 +148,7 @@ describe("verifyRelease", () => {
     await writeFile(join(dir, "latest.yml"), `version: ${VERSION}\nfiles:\n`);
     const problems = await verifyRelease(dir, VERSION);
     expect(problems).toContain("latest.yml lists no files");
-    expect(problems).toContain(`latest.yml does not list Claudebot-Setup-${VERSION}.exe`);
+    expect(problems).toContain(`latest.yml does not list Tomte-Setup-${VERSION}.exe`);
   });
 
   test("a malformed SHA256SUMS is reported, not skipped", async () => {

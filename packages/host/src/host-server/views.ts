@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 
-import type { BotStatus, BotsEvent, FilesEvent, MemoryEvent } from "@claudebot/contract/events";
+import type { BotStatus, BotsEvent, FilesEvent, MemoryEvent } from "@tomte/contract/events";
 
 import {
   BROWSER_FILES_DIR,

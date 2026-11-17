@@ -1,4 +1,4 @@
-import type { Bot, MemoryScope, ServerEvent } from "@claudebot/contract/events";
+import type { Bot, MemoryScope, ServerEvent } from "@tomte/contract/events";
 
 import { frontContext, type HostDelegate, type ThreadEnv } from "../bots/index.ts";
 import { ProgressAttribution, createLoopServer } from "./agents.ts";

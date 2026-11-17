@@ -23,7 +23,7 @@ const scripts = process.argv.length > 2 ? process.argv.slice(2) : SMOKES;
 
 const ownDist =
   process.env.SMOKE_WEB_DIST === undefined
-    ? await mkdtemp(join(tmpdir(), "claudebot-smoke-web-"))
+    ? await mkdtemp(join(tmpdir(), "tomte-smoke-web-"))
     : undefined;
 if (ownDist !== undefined) buildWeb(ownDist);
 const dist = ownDist ?? process.env.SMOKE_WEB_DIST;

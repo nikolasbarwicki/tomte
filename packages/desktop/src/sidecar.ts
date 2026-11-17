@@ -5,7 +5,7 @@ import { dirname } from "node:path";
 import { createInterface } from "node:readline";
 import { StringDecoder } from "node:string_decoder";
 
-import { LaunchToken, SidecarReady } from "@claudebot/contract/sidecar";
+import { LaunchToken, SidecarReady } from "@tomte/contract/sidecar";
 
 /** The first launch installs the Claude CLI, which downloads it, so the ready line can be slow. */
 const READY_TIMEOUT_MS = 180_000;

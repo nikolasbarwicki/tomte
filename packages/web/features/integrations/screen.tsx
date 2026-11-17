@@ -1,4 +1,4 @@
-import type { Integration } from "@claudebot/contract/events";
+import type { Integration } from "@tomte/contract/events";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 

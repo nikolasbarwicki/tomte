@@ -7,7 +7,7 @@ import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
 const MAIN = join(import.meta.dir, "..", "main.ts");
 const PRETEND_LINUX = join(import.meta.dir, "..", "testing", "pretend-linux.ts");
-const KEY_FILE = "/etc/claudebot-test/secrets.key";
+const KEY_FILE = "/etc/tomte-test/secrets.key";
 const REMOTE = ["--mode", "remote", "--secrets-key-file", KEY_FILE];
 
 /** The variable names the CLI may start with in remote mode: what the host gives it, plus what the SDK and the test wrapper add. */
@@ -26,8 +26,8 @@ const ALLOWED = [
   "CLAUDE_AGENT_SDK_VERSION",
   "CLAUDE_CODE_SDK_READS_SESSION_STATE",
   // The bot's own events route and token (ADR-0007), added on top of the allowlist for that bot only.
-  "CLAUDEBOT_EVENTS_URL",
-  "CLAUDEBOT_EVENTS_TOKEN",
+  "TOMTE_EVENTS_URL",
+  "TOMTE_EVENTS_TOKEN",
   // Added by the test host's /bin/sh wrapper around the fake CLI.
   "PWD",
   "SHLVL",
@@ -36,7 +36,7 @@ const ALLOWED = [
 /** Host process variables the CLI must never see. */
 const HOST_SECRETS = {
   ANTHROPIC_API_KEY: "sk-ant-synthetic-test-key",
-  CREDENTIALS_DIRECTORY: "/run/credentials/claudebot.service",
+  CREDENTIALS_DIRECTORY: "/run/credentials/tomte.service",
   JUNK_FOR_TEST: "junk-value",
 };
 

@@ -1,5 +1,5 @@
 {
-  "name": "@claudebot/contract",
+  "name": "@tomte/contract",
   "private": true,
   "type": "module",
   "exports": {
