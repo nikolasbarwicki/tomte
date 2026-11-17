@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 
 import { getBot, getOrigin, listBots, setOrigin } from "../bots/index.ts";
 import type { CardChat, Channels } from "../channels/index.ts";
-import type { Chats } from "./chats.ts";
+import { NO_REFS, type Chats } from "./chats.ts";
 
 /**
  * What the card router needs to give words to a bot (ADR-0010, spec `docs/plans/chief-of-staff/spec.md`, "Phone: `@Name` and replies"): the
@@ -17,7 +17,7 @@ export function createPhoneChat(d: {
 }): CardChat {
   return {
     async send(botId, text, channel) {
-      const sent = await d.chats.send(botId, text, text, []);
+      const sent = await d.chats.send(botId, text, text, NO_REFS);
       if (sent.outcome !== "refused") setOrigin(d.db, botId, channel, d.now());
       return sent;
     },

@@ -2,9 +2,17 @@ import { closeSync, createReadStream, existsSync } from "node:fs";
 import { basename } from "node:path";
 import { pipeline } from "node:stream/promises";
 
+import { AttachRequest, MAX_ATTACHMENT_BYTES } from "@tomte/contract/api";
 import { z } from "zod";
 
-import { botFilesPath, deleteFile, openFileInside, resolveInside } from "../../bots/index.ts";
+import {
+  BadAttachment,
+  botFilesPath,
+  deleteFile,
+  openFileInside,
+  resolveInside,
+  saveAttachment,
+} from "../../bots/index.ts";
 import { json } from "../http.ts";
 import type { ApiContext, OpenChatRoutes } from "./context.ts";
 
@@ -25,6 +33,26 @@ function attachment(name: string): string {
 /** The open bot's Files panel. */
 export function fileRoutes({ dataRoot, reveal }: ApiContext): OpenChatRoutes {
   return {
+    "/api/files/attach": async ({ res, parse }, chat) => {
+      const files = parse(AttachRequest).files.map((f) => ({
+        path: f.path,
+        bytes: Buffer.from(f.data, "base64"),
+      }));
+      if (files.reduce((n, f) => n + f.bytes.length, 0) > MAX_ATTACHMENT_BYTES)
+        return json(
+          res,
+          { error: `an attachment holds at most ${MAX_ATTACHMENT_BYTES / 2 ** 20} MB` },
+          413,
+        );
+      try {
+        return json(res, {
+          attachment: saveAttachment(botFilesPath(dataRoot, chat.bot.id), files),
+        });
+      } catch (e) {
+        if (e instanceof BadAttachment) return json(res, { error: e.message }, 400);
+        throw e;
+      }
+    },
     "/api/files/delete": async ({ res, parse }, chat) => {
       if (!deleteFile(botFilesPath(dataRoot, chat.bot.id), parse(FilePath).path))
         return json(res, { error: "no such file" }, 404);

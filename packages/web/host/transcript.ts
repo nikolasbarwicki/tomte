@@ -1,4 +1,5 @@
 import type {
+  Attachment,
   ExternalEventState,
   HandoffStatus,
   Relay,
@@ -10,13 +11,19 @@ import type {
 import { kTokens } from "@/lib/format.ts";
 
 export type Item =
-  | { kind: "user"; text: string; mentions?: { id: string; name: string }[] | undefined }
+  | {
+      kind: "user";
+      text: string;
+      mentions?: { id: string; name: string }[] | undefined;
+      attachments?: Attachment[] | undefined;
+    }
   /** A message sent while the bot was busy; shown below the live thread until it runs or is cancelled. */
   | {
       kind: "queued";
       id: string;
       text: string;
       mentions?: { id: string; name: string }[] | undefined;
+      attachments?: Attachment[] | undefined;
     }
   | { kind: "assistant" | "error" | "info"; text: string }
   | { kind: "tool"; name: string; input: string }
@@ -88,7 +95,10 @@ export type Item =
 
 export function reduce(items: Item[], e: ServerEvent): Item[] {
   if (e.type === "queued")
-    return [...items, { kind: "queued", id: e.id, text: e.text, mentions: e.mentions }];
+    return [
+      ...items,
+      { kind: "queued", id: e.id, text: e.text, mentions: e.mentions, attachments: e.attachments },
+    ];
   if (e.type === "dequeued") return items.filter((i) => !(i.kind === "queued" && i.id === e.id));
   // Queued messages stay after the live thread, so output that arrives while they wait carries on from the item before them.
   const queued = items.filter((i) => i.kind === "queued");
@@ -109,7 +119,10 @@ function reduceLive(
   const last = items[items.length - 1];
   switch (e.type) {
     case "user":
-      return [...items, { kind: "user", text: e.text, mentions: e.mentions }];
+      return [
+        ...items,
+        { kind: "user", text: e.text, mentions: e.mentions, attachments: e.attachments },
+      ];
     case "text_start":
       return [...items, { kind: "assistant", text: "" }];
     case "delta":

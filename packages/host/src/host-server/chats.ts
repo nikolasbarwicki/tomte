@@ -4,6 +4,7 @@ import type { FSWatcher } from "node:fs";
 
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type {
+  Attachment,
   Bot,
   BotModel,
   BotsEvent,
@@ -92,6 +93,18 @@ export interface OpenChat {
   newSession(): boolean;
 }
 
+/** What a user message carries besides its text: the bots it mentions and the files and folders attached to it. */
+export type MessageRefs = { mentions: Mention[]; attachments: Attachment[] };
+
+/** A message that carries nothing besides its text. */
+export const NO_REFS: MessageRefs = { mentions: [], attachments: [] };
+
+/** The refs as a transcript event carries them: an empty list is left out. */
+const shownRefs = ({ mentions, attachments }: MessageRefs) => ({
+  ...(mentions.length > 0 && { mentions }),
+  ...(attachments.length > 0 && { attachments }),
+});
+
 export interface Chats {
   /** Runs a routine turn in its bot's chat once the bot is free, or headless when the bot has no chat. */
   execute: Executor;
@@ -110,7 +123,7 @@ export interface Chats {
     botId: string,
     text: string,
     shown: string,
-    mentions: Mention[],
+    refs: MessageRefs,
     eventId?: string,
     answer?: string,
   ): Promise<SendOutcome>;
@@ -154,7 +167,7 @@ type UserEntry = {
   id: string;
   text: string;
   shown: string;
-  mentions: Mention[];
+  refs: MessageRefs;
   eventId?: string;
   said?: string;
 };
@@ -231,15 +244,22 @@ export function createChats(deps: ChatsDeps): Chats {
     });
   const announceBots = () => broadcast(chatsBotsEvent());
 
-  const queuedEvent = (e: UserEntry): ServerEvent =>
-    e.mentions.length
-      ? { type: "queued", id: e.id, text: e.shown, mentions: e.mentions }
-      : { type: "queued", id: e.id, text: e.shown };
+  const queuedEvent = (e: UserEntry): ServerEvent => ({
+    type: "queued",
+    id: e.id,
+    text: e.shown,
+    ...shownRefs(e.refs),
+  });
 
   /** Shows a user message in the transcript and records it as the bot's latest; called when it reaches the bot. */
-  function userSaid(chat: Chat, text: string, mentions: Mention[]) {
-    emit(chat, mentions.length ? { type: "user", text, mentions } : { type: "user", text });
-    recordMessage(db, chat.bot.id, { from: "user", text, at: Date.now() });
+  function userSaid(chat: Chat, text: string, refs: MessageRefs) {
+    emit(chat, { type: "user", text, ...shownRefs(refs) });
+    const named = refs.attachments.map((a) => a.path.slice(a.path.lastIndexOf("/") + 1));
+    recordMessage(db, chat.bot.id, {
+      from: "user",
+      text: text || named.join(", "),
+      at: Date.now(),
+    });
   }
 
   /** Closes a chat that is neither shown nor running; its session resumes from disk when the bot is opened again. */
@@ -321,7 +341,7 @@ export function createChats(deps: ChatsDeps): Chats {
       for (const e of entries) {
         if (e.source === "user") {
           emit(chat, { type: "dequeued", id: e.id });
-          userSaid(chat, e.shown, e.mentions);
+          userSaid(chat, e.shown, e.refs);
           if (e.eventId) deps.items.acted(chat.bot.id, e.eventId, e.said ?? e.shown);
         } else showDelivered(chat, e.text);
       }
@@ -758,7 +778,7 @@ export function createChats(deps: ChatsDeps): Chats {
     chat: Chat,
     text: string,
     shown: string,
-    mentions: Mention[],
+    refs: MessageRefs,
     eventId?: string,
     answer?: string,
   ): SendOutcome {
@@ -772,7 +792,7 @@ export function createChats(deps: ChatsDeps): Chats {
         return { outcome: "refused", reason: "an answer to that item is already queued" };
     }
     if (chat.front) {
-      userSaid(chat, shown, mentions);
+      userSaid(chat, shown, refs);
       pushToFront(chat, text, false);
       if (eventId !== undefined) deps.items.acted(chat.bot.id, eventId, answer ?? shown);
       return { outcome: "sent" };
@@ -783,14 +803,14 @@ export function createChats(deps: ChatsDeps): Chats {
         id: randomUUID(),
         text,
         shown,
-        mentions,
+        refs,
         ...(eventId !== undefined && { eventId, said: answer ?? shown }),
       };
       chat.inbox.push(entry);
       emit(chat, queuedEvent(entry));
       return { outcome: "queued", queued: entry.id };
     }
-    userSaid(chat, shown, mentions);
+    userSaid(chat, shown, refs);
     void turn(chat, text);
     if (eventId !== undefined) deps.items.acted(chat.bot.id, eventId, answer ?? shown);
     return { outcome: "sent" };
@@ -800,7 +820,7 @@ export function createChats(deps: ChatsDeps): Chats {
     botId: string,
     text: string,
     shown: string,
-    mentions: Mention[],
+    refs: MessageRefs,
     eventId?: string,
     answer?: string,
   ): Promise<SendOutcome> {
@@ -811,7 +831,7 @@ export function createChats(deps: ChatsDeps): Chats {
       const t = await deps.transcript(bot);
       chat = chats.get(botId) ?? createChat(bot, t);
     }
-    const outcome = sendIn(chat, text, shown, mentions, eventId, answer);
+    const outcome = sendIn(chat, text, shown, refs, eventId, answer);
     // A chat opened only for this message is closed again unless the message started something in it.
     release(chat);
     return outcome;

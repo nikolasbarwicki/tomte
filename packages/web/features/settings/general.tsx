@@ -86,7 +86,7 @@ function WorkspaceItem() {
           Bots run in this folder on the host, so the files they read and write live here.
         </ItemDescription>
       </ItemContent>
-      <ItemFooter className="bg-muted/50 rounded-md py-1 pr-1 pl-2.5">
+      <ItemFooter className="bg-muted/50 min-w-0 rounded-md py-1 pr-1 pl-2.5">
         <code className="min-w-0 flex-1 truncate font-mono text-xs" title={cwd}>
           {cwd ?? "…"}
         </code>

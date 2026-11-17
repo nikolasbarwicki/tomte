@@ -1,22 +1,29 @@
-import { ArrowUpIcon } from "@phosphor-icons/react";
+import { ArrowUpIcon, FileIcon, FolderIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 import { getRouteApi } from "@tanstack/react-router";
-import type { BotSummary } from "@tomte/contract/events";
+import type { Attachment, BotSummary } from "@tomte/contract/events";
 import { useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
-import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
 import { sendMessage } from "@/host/api.ts";
 import { useWork } from "@/host/hooks.ts";
 import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
+import { attach } from "./api.ts";
+import { draftsFromInput, draftsFromTransfer, type DraftAttachment } from "./attachments.ts";
 import { bindMentions, type MentionTarget } from "./mentions.ts";
 import { needsYouItems } from "./model.ts";
 
@@ -38,6 +45,16 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
   const [sending, startSending] = useTransition();
   const textarea = useRef<HTMLTextAreaElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
+  // Files and folders to send with the message; each is saved on the host when the message is sent, and keeps where it was
+  // saved (`saved`) when the send fails, so sending again does not save it twice.
+  const [drafts, setDrafts] = useState<(DraftAttachment & { saved?: Attachment })[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const filePicker = useRef<HTMLInputElement>(null);
+  const folderPicker = useRef<HTMLInputElement>(null);
+  const addDrafts = (more: DraftAttachment[]) => {
+    if (more.length) setDrafts((ds) => [...ds, ...more]);
+    textarea.current?.focus();
+  };
 
   // A draft that arrives while the composer is open (the Needs you bar's "Answer…") replaces what was typed.
   const [takenDraft, setTakenDraft] = useState(draft);
@@ -96,24 +113,36 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
 
   const send = () => {
     const text = input.trim();
-    if (!text || sending) return;
+    if ((!text && drafts.length === 0) || sending) return;
     const sent = mentions;
     const eventId = answered?.id;
+    const pending = drafts;
     setInput("");
     setPicked([]);
     setCaret(0);
     setAnswering(undefined);
+    setDrafts([]);
     startSending(async () => {
-      if (
-        !(await sendMessage(
+      const saved: Attachment[] = [];
+      for (const d of pending) {
+        const a = d.saved ?? (await attach(d.files));
+        if (!a) break;
+        saved.push(a);
+      }
+      const ok =
+        saved.length === pending.length &&
+        (await sendMessage(
           text,
           sent.map((m) => m.id),
           eventId,
-        ))
-      ) {
+          undefined,
+          saved,
+        ));
+      if (!ok) {
         setInput(text);
         setPicked(sent);
         setAnswering(eventId);
+        setDrafts(pending.map((d, i) => ({ ...d, ...(saved[i] && { saved: saved[i] }) })));
       }
     });
   };
@@ -123,7 +152,7 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
 
   return (
     <div className="shrink-0 px-4 pb-4">
-      <div className="relative mx-auto max-w-3xl">
+      <div className="relative mx-auto max-w-220">
         {candidates.length > 0 && (
           <div
             role="listbox"
@@ -168,7 +197,87 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
             send();
           }}
         >
-          <InputGroup className="bg-background dark:bg-input/30 rounded-2xl shadow-xs">
+          <input
+            ref={filePicker}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              const { files } = e.currentTarget;
+              if (files) addDrafts(draftsFromInput(files, false));
+              e.currentTarget.value = "";
+            }}
+          />
+          <input
+            ref={folderPicker}
+            type="file"
+            hidden
+            {...{ webkitdirectory: "" }}
+            onChange={(e) => {
+              const { files } = e.currentTarget;
+              if (files) addDrafts(draftsFromInput(files, true));
+              e.currentTarget.value = "";
+            }}
+          />
+          <InputGroup
+            data-dragging={dragging || undefined}
+            className={cn(
+              "bg-card border-border/70 rounded-2xl shadow-(--composer-shadow) transition-[border-color,background-color]",
+              // Focus darkens the border a step: no ring, and nothing in the bot's color.
+              "has-[[data-slot=input-group-control]:focus-visible]:border-foreground/20 has-[[data-slot=input-group-control]:focus-visible]:ring-0",
+              "data-dragging:border-foreground/30 data-dragging:bg-muted/50",
+            )}
+            onDragOver={(e) => {
+              if (!e.dataTransfer.types.includes("Files")) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+              setDragging(true);
+            }}
+            onDragLeave={(e) => {
+              const to = e.relatedTarget;
+              if (!(to instanceof Node && e.currentTarget.contains(to))) setDragging(false);
+            }}
+            onDrop={(e) => {
+              if (!e.dataTransfer.types.includes("Files")) return;
+              e.preventDefault();
+              setDragging(false);
+              void draftsFromTransfer(e.dataTransfer).then(addDrafts);
+            }}
+          >
+            {drafts.length > 0 && (
+              <InputGroupAddon align="block-start" className="flex-wrap gap-1.5 px-3 pt-3">
+                {drafts.map((d) => (
+                  <span
+                    key={d.key}
+                    className="bg-muted text-foreground inline-flex h-7 max-w-60 items-center gap-1.5 rounded-lg pr-0.5 pl-2 text-xs"
+                  >
+                    {d.folder ? (
+                      <FolderIcon className="text-muted-foreground shrink-0" />
+                    ) : (
+                      <FileIcon className="text-muted-foreground shrink-0" />
+                    )}
+                    <span className="truncate">{d.name}</span>
+                    {d.folder && (
+                      <span className="text-muted-foreground shrink-0 tabular-nums">
+                        {d.files.length} {d.files.length === 1 ? "file" : "files"}
+                      </span>
+                    )}
+                    <InputGroupButton
+                      size="icon-xs"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-foreground size-6 rounded-md"
+                      aria-label={`Remove ${d.name}`}
+                      onClick={() => {
+                        setDrafts((ds) => ds.filter((x) => x.key !== d.key));
+                        textarea.current?.focus();
+                      }}
+                    >
+                      <XIcon />
+                    </InputGroupButton>
+                  </span>
+                ))}
+              </InputGroupAddon>
+            )}
             <div className="relative w-full">
               {/* The textarea's own text is transparent; this copy paints it, so mentions can take their bot's color. Stroke rather
                   than a heavier weight embolds them, since a wider glyph would push the caret out of line with the text. */}
@@ -221,6 +330,11 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
                   setHighlight(0);
                 }}
                 onSelect={(e) => syncCaret(e.currentTarget)}
+                onPaste={(e) => {
+                  if (e.clipboardData.files.length === 0) return;
+                  e.preventDefault();
+                  void draftsFromTransfer(e.clipboardData).then(addDrafts);
+                }}
                 onKeyDown={(e) => {
                   if (candidates.length > 0) {
                     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -245,16 +359,34 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
               />
             </div>
             <InputGroupAddon align="block-end">
-              <p className="hidden items-center gap-1 text-xs font-normal whitespace-nowrap @xl:flex">
-                <Kbd>@</Kbd> hand off to a bot · <Kbd>Shift</Kbd>
-                <Kbd>Enter</Kbd> new line
-              </p>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <InputGroupButton
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground hover:text-foreground rounded-full"
+                      aria-label="Attach files or a folder"
+                    />
+                  }
+                >
+                  <PlusIcon />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="start" className="w-44">
+                  <DropdownMenuItem onClick={() => filePicker.current?.click()}>
+                    <FileIcon /> Files…
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => folderPicker.current?.click()}>
+                    <FolderIcon /> Folder…
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <InputGroupButton
                 type="submit"
                 variant="default"
                 size="icon-sm"
                 className="ml-auto rounded-full"
-                disabled={sending || !input.trim()}
+                disabled={sending || (!input.trim() && drafts.length === 0)}
                 aria-label="Send"
               >
                 {sending ? <Spinner /> : <ArrowUpIcon />}

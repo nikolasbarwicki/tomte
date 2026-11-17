@@ -23,6 +23,7 @@ import {
 } from "@tomte/contract/events";
 import { z } from "zod";
 
+import { ATTACHMENTS_DIR } from "./attachments.ts";
 import { CHIEF_OF_STAFF_INSTRUCTIONS } from "./chief-of-staff.ts";
 import { instructionsPath, readMemory, userMemoryPath, writeMemory } from "./memory.ts";
 import { type HostDelegate } from "./session-kit.ts";
@@ -62,6 +63,13 @@ export {
   listAllowances,
   removeAllowance,
 } from "./allowance-store.ts";
+export {
+  attachmentExists,
+  attachmentTags,
+  BadAttachment,
+  parseAttachments,
+  saveAttachment,
+} from "./attachments.ts";
 export {
   deleteFile,
   listFiles,
@@ -323,6 +331,7 @@ export function botContext(dataRoot: string, bot: Bot) {
       `## Your files`,
       `Your own files folder is ${files}. The user browses it in the app's sidebar.`,
       `Save every file you produce for the user (reports, notes, drafts, exports, scripts, data, images) inside that folder, with descriptive names and subfolders when useful. Write elsewhere only when the user explicitly asks you to change files in the workspace or another location.`,
+      `What the user attaches to a message is saved in its ${ATTACHMENTS_DIR} subfolder; the message ends with an <attachment kind="file|folder" path="…"/> tag for each, with its absolute path. Read it from there.`,
     ].join("\n");
   return {
     sessionId: currentSession(bot),

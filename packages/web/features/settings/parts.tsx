@@ -15,7 +15,7 @@ export function Group({
   className?: string;
 }) {
   return (
-    <section className={cn("grid gap-2", className)}>
+    <section className={cn("grid grid-cols-1 gap-2", className)}>
       <div>
         <h3 className="text-sm font-medium">{title}</h3>
         {description && <p className="text-muted-foreground text-xs">{description}</p>}

@@ -51,75 +51,87 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * A warm, paper-like palette after Nuphos's design tokens (nuphos/nuphos, packages/design-tokens, Apache-2.0). The app is a sheet on a
+ * desk: the sidebar and the window chrome sit on the canvas (`--sidebar`), the working area is one raised sheet (`--background`), and areas
+ * are told apart by surface and elevation, not by divider lines. Translucent tints (`--accent`, `--sidebar-accent`) work on any surface.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --link: oklch(0.55 0.17 255);
+  --background: #fcfbf9;
+  --foreground: #1c1a17;
+  --card: #fffffe;
+  --card-foreground: #1c1a17;
+  --popover: #fffffe;
+  --popover-foreground: #1c1a17;
+  --primary: #1c1a17;
+  --primary-foreground: #fcfbf9;
+  --secondary: #eeece8;
+  --secondary-foreground: #1c1a17;
+  --muted: #eeece8;
+  --muted-foreground: #69645d;
+  --accent: rgb(28 26 23 / 0.06);
+  --accent-foreground: #1c1a17;
+  --destructive: #b91c1c;
+  --border: #e2dfda;
+  --input: #e2dfda;
+  --ring: #69645d;
+  --link: #2f4f7f;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.94 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #f5f4f2;
+  --sidebar-foreground: #1c1a17;
+  --sidebar-primary: #1c1a17;
+  --sidebar-primary-foreground: #fcfbf9;
+  --sidebar-accent: rgb(28 26 23 / 0.07);
+  --sidebar-accent-foreground: #1c1a17;
+  --sidebar-border: #e2dfda;
+  --sidebar-ring: #69645d;
+  --sheet-shadow:
+    0 0 0 1px rgb(28 26 23 / 0.05), 0 1px 2px rgb(0 0 0 / 0.04), 0 3px 8px -3px rgb(0 0 0 / 0.1);
+  --composer-shadow: 0 1px 2px rgb(16 24 40 / 0.035), 0 14px 36px -20px rgb(16 24 40 / 0.1);
 }
 
+/* As warm as the light theme, no warmer: it reads as black. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --link: oklch(0.72 0.13 250);
+  --background: #1a1917;
+  --foreground: #f2f0ec;
+  --card: #242321;
+  --card-foreground: #f2f0ec;
+  --popover: #242321;
+  --popover-foreground: #f2f0ec;
+  --primary: #f2f0ec;
+  --primary-foreground: #1a1917;
+  --secondary: #272624;
+  --secondary-foreground: #f2f0ec;
+  --muted: #272624;
+  --muted-foreground: #a09c95;
+  --accent: rgb(255 255 255 / 0.08);
+  --accent-foreground: #f2f0ec;
+  --destructive: #ef6252;
+  --border: #33312e;
+  --input: #3a3835;
+  --ring: #a09c95;
+  --link: #7c9ccb;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.922 0 0);
-  --sidebar-primary-foreground: oklch(0.205 0 0);
-  --sidebar-accent: oklch(0.3 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar: #141312;
+  --sidebar-foreground: #f2f0ec;
+  --sidebar-primary: #f2f0ec;
+  --sidebar-primary-foreground: #1a1917;
+  --sidebar-accent: rgb(255 255 255 / 0.08);
+  --sidebar-accent-foreground: #f2f0ec;
+  --sidebar-border: #33312e;
+  --sidebar-ring: #a09c95;
+  --sheet-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.05), 0 1px 2px rgb(0 0 0 / 0.2), 0 3px 8px -3px rgb(0 0 0 / 0.5);
+  --composer-shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 14px 36px -20px rgb(0 0 0 / 0.5);
 }
 
 @layer base {
@@ -131,6 +143,10 @@
   }
   html {
     @apply font-sans;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 18%, transparent) transparent;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--link) 22%, transparent);
   }
 }
 

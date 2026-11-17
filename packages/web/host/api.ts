@@ -1,3 +1,4 @@
+import type { Attachment } from "@tomte/contract/events";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -67,6 +68,7 @@ export type SendOutcome = "answered" | "sent" | "queued";
  * Sends a chat message to the open bot, as the composer does; `mentions` are the ids of bots it hands off to. `eventId` is the
  * needs-you item the message answers: the host resolves the bot's pending question about it (with `answer`, or the text), or
  * sends the message, and closes the item once the bot has it, never while the message only waits in the queue.
+ * `attachments` are files and folders already saved in the bot's files folder (`attach` in the chat feature).
  * Resolves to what happened, or `undefined` when the host refused it (shown as a toast).
  */
 export async function sendMessage(
@@ -74,12 +76,14 @@ export async function sendMessage(
   mentions: string[],
   eventId?: string,
   answer?: string,
+  attachments: Attachment[] = [],
 ): Promise<SendOutcome | undefined> {
   const res = await post("/api/send", {
     text,
     mentions,
     ...(eventId !== undefined && { eventId }),
     ...(answer !== undefined && { answer }),
+    ...(attachments.length > 0 && { attachments }),
   });
   if (!res.ok) {
     toast.error(await errorOf(res));
@@ -87,6 +91,9 @@ export async function sendMessage(
   }
   return ((await res.json()) as { outcome: SendOutcome }).outcome;
 }
+
+/** Where the browser fetches the open bot's file `path` as a download; the session cookie authenticates the request. */
+export const downloadUrl = (path: string) => `/api/files/download?path=${encodeURIComponent(path)}`;
 
 /** Asks the host to stream `botId`'s chat; a no-op when it already is. */
 export function openBot(botId: string): void {

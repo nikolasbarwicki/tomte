@@ -30,6 +30,7 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { SettingsNav } from "@/features/settings/index.ts";
 import { deleteBot } from "@/host/api.ts";
 import { usePublicHostInfo } from "@/host/hooks.ts";
 import { shortTime } from "@/lib/format.ts";
@@ -119,9 +120,19 @@ export function AppSidebar({
     onNewBot();
     reveal();
   };
+  // The sidebar sits 8px inside the window (`variant="inset"`), so its strip under the native window controls ends where the sheet's 40px top bar does.
+  const strip = <TitlebarStrip className="h-[max(0px,calc(env(titlebar-area-height,0px)-16px))]" />;
+  if (matchRoute({ to: "/settings", fuzzy: true }))
+    return (
+      <Sidebar variant="inset">
+        {strip}
+        <SettingsNav onNavigate={reveal} />
+        <SidebarRail />
+      </Sidebar>
+    );
   return (
-    <Sidebar>
-      <TitlebarStrip className="border-sidebar-border [:root[data-wco]_&]:border-b" />
+    <Sidebar variant="inset">
+      {strip}
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Bots</SidebarGroupLabel>

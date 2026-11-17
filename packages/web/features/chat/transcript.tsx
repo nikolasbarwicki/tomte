@@ -5,6 +5,8 @@ import {
   RobotIcon,
   WarningCircleIcon,
   CheckCircleIcon,
+  FileIcon,
+  FolderIcon,
   ProhibitIcon,
   GlobeIcon,
   HandIcon,
@@ -14,7 +16,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
-import type { BotSummary, HandoffStatus, Presence } from "@tomte/contract/events";
+import type { Attachment, BotSummary, HandoffStatus, Presence } from "@tomte/contract/events";
 import { useState, useTransition } from "react";
 import { Streamdown } from "streamdown";
 
@@ -54,6 +56,7 @@ import {
   TraceLine,
   TraceTitle,
 } from "@/components/ui/trace";
+import { downloadUrl } from "@/host/api.ts";
 import type { Item } from "@/host/transcript.ts";
 import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
@@ -135,7 +138,7 @@ export function Transcript({
       followKey={sent}
       busy={busy}
       className="flex-1"
-      contentClassName="mx-auto w-full max-w-3xl gap-4 px-4 py-6"
+      contentClassName="mx-auto w-full max-w-228 gap-4 px-4 py-6"
     >
       {rows.map((row, i) => (
         <ScrollerItem
@@ -175,7 +178,13 @@ export function Transcript({
       )}
       {queued.map((q) => (
         <ScrollerItem key={q.id}>
-          <UserMessage text={q.text} mentions={q.mentions} bots={bots} queuedId={q.id} />
+          <UserMessage
+            text={q.text}
+            mentions={q.mentions}
+            attachments={q.attachments}
+            bots={bots}
+            queuedId={q.id}
+          />
         </ScrollerItem>
       ))}
     </Scroller>
@@ -198,7 +207,14 @@ function RowView({
 }) {
   switch (row.kind) {
     case "user":
-      return <UserMessage text={row.text} mentions={row.mentions} bots={bots} />;
+      return (
+        <UserMessage
+          text={row.text}
+          mentions={row.mentions}
+          attachments={row.attachments}
+          bots={bots}
+        />
+      );
     case "assistant":
       return (
         <Message>
@@ -290,11 +306,13 @@ function RowView({
 function UserMessage({
   text,
   mentions = [],
+  attachments = [],
   bots,
   queuedId,
 }: {
   text: string;
   mentions?: { id: string; name: string }[] | undefined;
+  attachments?: Attachment[] | undefined;
   bots: BotSummary[];
   queuedId?: string;
 }) {
@@ -306,30 +324,61 @@ function UserMessage({
   return (
     <Message align="end">
       <MessageContent>
-        <Bubble align="end" className={cn(queuedId && "opacity-60")}>
-          <BubbleContent className="whitespace-pre-wrap">
-            {[...leading.flatMap((s) => [s, " "]), ...bound.segments].map((s, i) => {
-              if (typeof s === "string") return s;
-              const target = bots.find((b) => b.id === s.mention.id);
-              return target ? (
-                <Link
-                  key={i}
-                  to="/bots/$botId"
-                  params={{ botId: target.id }}
-                  style={botTheme(target.avatar.color)}
-                  className="bot-theme bg-background text-primary hover:bg-secondary inline-flex items-baseline gap-1 rounded-full px-1.5 font-semibold transition-colors"
-                >
-                  <BotAvatar avatar={target.avatar} className="size-[1.1em] self-center" />
-                  {s.text.slice(1)}
-                </Link>
-              ) : (
-                <span key={i} className="font-semibold">
-                  {s.text}
-                </span>
+        {attachments.length > 0 && (
+          <ul className={cn("flex flex-wrap justify-end gap-1.5", queuedId && "opacity-60")}>
+            {attachments.map((a) => {
+              const name = a.path.slice(a.path.lastIndexOf("/") + 1);
+              const chip =
+                "border-border/70 bg-card text-foreground inline-flex h-8 max-w-64 items-center gap-1.5 rounded-lg border px-2.5 text-xs";
+              return (
+                <li key={a.path} className="min-w-0">
+                  {a.folder ? (
+                    <span className={chip} title={a.path}>
+                      <FolderIcon className="text-muted-foreground size-4 shrink-0" />
+                      <span className="truncate">{name}</span>
+                    </span>
+                  ) : (
+                    <a
+                      href={downloadUrl(a.path)}
+                      download
+                      title={`Download ${a.path}`}
+                      className={cn(chip, "hover:bg-muted transition-colors")}
+                    >
+                      <FileIcon className="text-muted-foreground size-4 shrink-0" />
+                      <span className="truncate">{name}</span>
+                    </a>
+                  )}
+                </li>
               );
             })}
-          </BubbleContent>
-        </Bubble>
+          </ul>
+        )}
+        {text && (
+          <Bubble align="end" className={cn(queuedId && "opacity-60")}>
+            <BubbleContent className="whitespace-pre-wrap">
+              {[...leading.flatMap((s) => [s, " "]), ...bound.segments].map((s, i) => {
+                if (typeof s === "string") return s;
+                const target = bots.find((b) => b.id === s.mention.id);
+                return target ? (
+                  <Link
+                    key={i}
+                    to="/bots/$botId"
+                    params={{ botId: target.id }}
+                    style={botTheme(target.avatar.color)}
+                    className="bot-theme bg-background text-primary hover:bg-secondary inline-flex items-baseline gap-1 rounded-full px-1.5 font-semibold transition-colors"
+                  >
+                    <BotAvatar avatar={target.avatar} className="size-[1.1em] self-center" />
+                    {s.text.slice(1)}
+                  </Link>
+                ) : (
+                  <span key={i} className="font-semibold">
+                    {s.text}
+                  </span>
+                );
+              })}
+            </BubbleContent>
+          </Bubble>
+        )}
         {queuedId && (
           <div className="text-muted-foreground flex items-center justify-end gap-1 text-xs">
             Queued · runs after the current turn

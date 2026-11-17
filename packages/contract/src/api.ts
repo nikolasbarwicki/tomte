@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { BotAvatar } from "./avatars.ts";
-import { EventSource, ExternalEventKind, WorkSnapshot } from "./events.ts";
+import { Attachment, EventSource, ExternalEventKind, WorkSnapshot } from "./events.ts";
 
 /** Whether bots can get a browser on this host, and why not. */
 export const BrowserAvailability = z.discriminatedUnion("status", [
@@ -130,6 +130,23 @@ export type ChannelTokenRequest = z.infer<typeof ChannelTokenRequest>;
 
 /** The largest `/api/bots/<botId>/events` request body in bytes; a larger one gets 413. */
 export const MAX_EVENT_BODY_BYTES = 64 * 1024;
+
+/** The most bytes one attachment (a file, or a folder's files together) may hold; the request carries them base64-encoded. */
+export const MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024;
+
+/**
+ * The `/api/files/attach` request: one file or one folder the user attaches to a message, saved in the open bot's files
+ * folder. Each `path` is the file's path as the user picked it, `/`-separated (`report.pdf`, or `notes/2026/june.md` for a
+ * folder's file); every path starts with the same first segment, the attachment's name. `data` is the file's bytes in base64.
+ */
+export const AttachRequest = z.object({
+  files: z.array(z.object({ path: z.string().min(1).max(1024), data: z.string() })).min(1),
+});
+export type AttachRequest = z.infer<typeof AttachRequest>;
+
+/** Where the host saved an attachment; the message that carries it names this. */
+export const AttachResponse = z.object({ attachment: Attachment });
+export type AttachResponse = z.infer<typeof AttachResponse>;
 
 /**
  * A name that is safe to place in a program's argument list as an element of its own: letters, digits and `. _ : -`,

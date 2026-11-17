@@ -2,7 +2,7 @@ import { itemActions } from "@tomte/contract/item-actions";
 
 import type { Answered, CardItem, CardSource } from "../channels/index.ts";
 import type { EventItem, Events } from "../events/index.ts";
-import type { Chats, SendOutcome } from "./chats.ts";
+import { NO_REFS, type Chats, type SendOutcome } from "./chats.ts";
 
 /** What a card is edited to once its external event is no longer open. */
 const OUTCOMES: Record<EventItem["state"], string> = {
@@ -51,7 +51,7 @@ export function createEventCards(d: {
   chats: Pick<Chats, "send">;
 }): CardSource {
   const say = (item: EventItem, text: string, answer?: string) =>
-    d.chats.send(item.botId, text, text, [], item.id, answer).then(answeredOf);
+    d.chats.send(item.botId, text, text, NO_REFS, item.id, answer).then(answeredOf);
   const openItem = (id: string): EventItem | Answered => {
     const item = d.events.item(id);
     if (!item) return { outcome: "refused", reason: "no such item" };

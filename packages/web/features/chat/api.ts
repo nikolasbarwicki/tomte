@@ -1,6 +1,38 @@
-import type { BotModel, ChatMode, EffortLevel } from "@tomte/contract/events";
+import { AttachResponse } from "@tomte/contract/api";
+import type { Attachment, BotModel, ChatMode, EffortLevel } from "@tomte/contract/events";
+import { toast } from "sonner";
 
-import { act } from "@/host/api.ts";
+import { act, errorOf, post, readJson } from "@/host/api.ts";
+
+/** A file the user picked or dropped, with its path as picked: `report.pdf`, or `notes/june.md` inside a folder. */
+export type PickedFile = { path: string; file: File };
+
+/** The file's bytes in base64: a data URL without its prefix, which the browser encodes natively. */
+function base64Of(file: File): Promise<string> {
+  const { promise, resolve, reject } = Promise.withResolvers<string>();
+  const reader = new FileReader();
+  reader.onload = () => {
+    const url = typeof reader.result === "string" ? reader.result : "";
+    resolve(url.slice(url.indexOf(",") + 1));
+  };
+  reader.onerror = () => reject(reader.error ?? new Error(`could not read ${file.name}`));
+  reader.readAsDataURL(file);
+  return promise;
+}
+
+/** Saves one attachment (a file, or a folder's files) in the open bot's files folder; `undefined` when the host refused it (shown as a toast). */
+export async function attach(files: PickedFile[]): Promise<Attachment | undefined> {
+  const res = await post("/api/files/attach", {
+    files: await Promise.all(
+      files.map(async (f) => ({ path: f.path, data: await base64Of(f.file) })),
+    ),
+  });
+  if (!res.ok) {
+    toast.error(await errorOf(res));
+    return undefined;
+  }
+  return (await readJson(res, AttachResponse)).attachment;
+}
 
 export const cancelSend = (id: string) => act("/api/send/cancel", { id });
 

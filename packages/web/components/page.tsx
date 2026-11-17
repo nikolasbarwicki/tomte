@@ -1,17 +1,15 @@
 import type { ReactNode } from "react";
 
-import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
-/** The top bar of every view: the sidebar toggle, then the view's own title and actions. It is the desktop app's title bar: a drag region (see tailwind.css), indented past the native window controls while it starts at the window's left edge (`--titlebar-inset`, set by the shell), and as tall as the controls' overlay (`TITLE_BAR_HEIGHT` in the desktop package). */
-export function AppBar({ children }: { children: ReactNode }) {
+/** The top bar of every view: the sidebar toggle, then the view's own title and actions. It is the desktop app's title bar: a drag region (see tailwind.css), indented past the native window controls while it starts at the window's left edge (`--titlebar-inset`, set by the shell). It is the sheet's top row, so it starts 8px below the window's top, and 40px tall it shares its centre line with the native controls (`TITLE_BAR_HEIGHT` in the desktop package is 8 + 40 + 8). */
+export function AppBar({ children }: { children?: ReactNode }) {
   return (
     <header
       data-titlebar
-      className="flex h-14 shrink-0 items-center gap-2 border-b pr-3 pl-[calc(--spacing(3)+var(--titlebar-inset,0px))]"
+      className="flex h-10 shrink-0 items-center gap-2 pr-2 pl-[calc(--spacing(3)+var(--titlebar-inset,0px))]"
     >
-      <SidebarTrigger />
-      <Separator orientation="vertical" className="my-auto mr-1 h-4 self-auto!" />
+      <SidebarTrigger className="text-muted-foreground" />
       {children}
     </header>
   );

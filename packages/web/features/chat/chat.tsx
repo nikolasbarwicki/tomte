@@ -31,7 +31,8 @@ export function ChatView({
   panel,
 }: {
   bot: BotSummary;
-  panel: (controls: { onClose: () => void }) => ReactNode;
+  /** The panel; `onClose` is set when it opens as a sheet over the chat (narrow windows), where the chat's toggle is hidden. */
+  panel: (controls: { onClose?: () => void }) => ReactNode;
 }) {
   const chat = useChat();
   const { items, context, rateLimits } = chat;
@@ -82,15 +83,24 @@ export function ChatView({
       });
   };
 
-  const panelContent = panel({ onClose: () => setPanelOpen(false) });
+  const split = wide && panelOpen;
 
+  // Side by side, the chat and the panel are two sheets on the desk (the shell's sheet steps back for `data-split`).
   return (
-    <div className="flex h-full min-h-0">
-      <div className="bot-theme flex min-w-0 flex-1 flex-col" style={botTheme(bot.avatar.color)}>
+    <div data-split={split || undefined} className={cn("flex h-full min-h-0", split && "gap-2")}>
+      <div
+        className={cn(
+          "bot-theme flex min-w-0 flex-1 flex-col",
+          split && "overflow-hidden rounded-xl bg-background shadow-(--sheet-shadow)",
+        )}
+        style={botTheme(bot.avatar.color)}
+      >
         <AppBar>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-medium">{bot.name}</h1>
-            {bot.purpose && <p className="text-muted-foreground truncate text-xs">{bot.purpose}</p>}
+          <div className="flex min-w-0 flex-1 items-baseline gap-2">
+            <h1 className="min-w-0 truncate text-sm font-medium">{bot.name}</h1>
+            {bot.purpose && (
+              <p className="text-muted-foreground min-w-0 truncate text-xs">{bot.purpose}</p>
+            )}
           </div>
           {bot.chatMode === "double_loop" && <RateLimitMeter limits={rateLimits} />}
           <ContextMeter context={context} />
@@ -140,9 +150,9 @@ export function ChatView({
         <Composer bot={bot} bots={bots} />
       </div>
       {wide ? (
-        panelOpen && (
-          <aside className="flex w-[400px] shrink-0 flex-col border-l xl:w-[440px]">
-            {panelContent}
+        split && (
+          <aside className="bg-background flex w-[400px] shrink-0 flex-col overflow-hidden rounded-xl shadow-(--sheet-shadow) xl:w-[440px]">
+            {panel({})}
           </aside>
         )
       ) : (
@@ -156,7 +166,7 @@ export function ChatView({
             <SheetDescription className="sr-only">
               Work, tasks, files, browser and settings
             </SheetDescription>
-            {panelContent}
+            {panel({ onClose: () => setSheetOpen(false) })}
           </SheetContent>
         </Sheet>
       )}

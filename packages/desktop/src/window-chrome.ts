@@ -1,8 +1,9 @@
 import type { BrowserWindowConstructorOptions } from "electron";
 
 /**
- * Height in pixels of the web UI's top bar (`AppBar` is `h-14`). On macOS Electron centres the traffic lights in a
- * Window Controls Overlay of this height, so the two must stay equal.
+ * Height in pixels of the Window Controls Overlay. On macOS Electron centres the traffic lights in it, so it is the web
+ * UI's top bar (`AppBar`, `h-10`, the top row of the content sheet that starts 8px below the window's top) plus 8px
+ * above and below: the lights and the bar share one centre line.
  */
 export const TITLE_BAR_HEIGHT = 56;
 

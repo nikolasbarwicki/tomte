@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import type { EventItem } from "../events/index.ts";
+import { NO_REFS } from "./chats.ts";
 import { createEventCards } from "./event-cards.ts";
 
 const item = (over: Partial<EventItem> = {}): EventItem => ({
@@ -97,7 +98,7 @@ test("a reply answers with the item's heading in front, as the web draft does", 
       "b1",
       "auth-sso · Which database?: Postgres",
       "auth-sso · Which database?: Postgres",
-      [],
+      NO_REFS,
       "e1",
       "Postgres",
     ],

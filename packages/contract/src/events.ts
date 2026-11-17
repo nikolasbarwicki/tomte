@@ -4,6 +4,11 @@ import { BotAvatar } from "./avatars.ts";
 
 const Mentions = z.array(z.object({ id: z.string(), name: z.string() }));
 
+/** A file or folder the user attached to a message: `path` is relative to the bot's files folder. */
+export const Attachment = z.object({ path: z.string().min(1), folder: z.boolean() });
+export type Attachment = z.infer<typeof Attachment>;
+const Attachments = z.array(Attachment);
+
 /** One button on a wait card. */
 export const WaitAction = z.object({ id: z.string(), label: z.string() });
 export type WaitAction = z.infer<typeof WaitAction>;
@@ -110,13 +115,19 @@ export const TaskState = z.enum([
 export type TaskState = z.infer<typeof TaskState>;
 
 export const ServerEvent = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("user"), text: z.string(), mentions: Mentions.exactOptional() }),
+  z.object({
+    type: z.literal("user"),
+    text: z.string(),
+    mentions: Mentions.exactOptional(),
+    attachments: Attachments.exactOptional(),
+  }),
   /** A user message sent while the bot was busy; it waits as pending until `dequeued`, then shows as `user` if it ran. */
   z.object({
     type: z.literal("queued"),
     id: z.string(),
     text: z.string(),
     mentions: Mentions.exactOptional(),
+    attachments: Attachments.exactOptional(),
   }),
   z.object({ type: z.literal("dequeued"), id: z.string() }),
   z.object({ type: z.literal("text_start") }),

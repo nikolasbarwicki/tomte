@@ -1,7 +1,13 @@
-import { BotModel, EffortLevel } from "@tomte/contract/events";
+import { Attachment, BotModel, EffortLevel } from "@tomte/contract/events";
 import { z } from "zod";
 
-import { getBot, setOrigin } from "../../bots/index.ts";
+import {
+  attachmentExists,
+  attachmentTags,
+  botFilesPath,
+  getBot,
+  setOrigin,
+} from "../../bots/index.ts";
 import { withMentions, type Mention } from "../../handoffs/index.ts";
 import { json } from "../http.ts";
 import type { ApiContext, OpenChatRoutes } from "./context.ts";
@@ -9,6 +15,8 @@ import type { ApiContext, OpenChatRoutes } from "./context.ts";
 const Send = z.object({
   text: z.string(),
   mentions: z.array(z.string()).default([]),
+  /** Files and folders saved through `/api/files/attach` that the message carries. */
+  attachments: z.array(Attachment).default([]),
   /** The needs-you item this message answers. The host resolves the bot's pending question about it, or else sends the message and closes the item once it reaches the bot. */
   eventId: z.string().min(1).optional(),
   /** With `eventId`: what a pending question about the item receives, when it is not the message itself (a chip's option). */
@@ -24,7 +32,10 @@ const Effort = z.object({ effort: EffortLevel });
 export function chatRoutes({ dataRoot, db, chats, browser, routines }: ApiContext): OpenChatRoutes {
   return {
     "/api/send": async ({ res, parse }, chat) => {
-      const { text, mentions: ids, eventId, answer } = parse(Send);
+      const { text, mentions: ids, attachments, eventId, answer } = parse(Send);
+      const files = botFilesPath(dataRoot, chat.bot.id);
+      const gone = attachments.find((a) => !attachmentExists(files, a));
+      if (gone) return json(res, { error: `${gone.path} is not in the bot's files any more` }, 400);
       const mentions: Mention[] = [];
       for (const id of ids) {
         const target = id !== chat.bot.id ? getBot(dataRoot, id) : undefined;
@@ -35,9 +46,11 @@ export function chatRoutes({ dataRoot, db, chats, browser, routines }: ApiContex
       }
       const sent = await chats.send(
         chat.bot.id,
-        withMentions(text, mentions),
+        [withMentions(text, mentions), ...attachmentTags(files, attachments)]
+          .filter(Boolean)
+          .join("\n"),
         text,
-        mentions,
+        { mentions, attachments },
         eventId,
         answer,
       );

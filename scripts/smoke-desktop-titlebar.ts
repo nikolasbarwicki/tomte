@@ -234,8 +234,8 @@ function assertHeader(
     `${label}: nothing with a pointer cursor sits in the drag region (${m.clickableInDrag.join(", ") || "none"})`,
   );
   check(
-    header.box.height === 56 && m.wco.rect.height === 56,
-    `${label}: header is ${header.box.height}px tall, the overlay ${m.wco.rect.height}px`,
+    header.box.y === 8 && header.box.height === 40 && m.wco.rect.height === 56,
+    `${label}: header is the sheet's ${header.box.height}px top row at y ${header.box.y} (8 + 40 + 8 = the ${m.wco.rect.height}px overlay)`,
   );
   const box = lights ?? { x: 0, y: 0, width: wcoRight, height: 0 };
   if (lights) {
@@ -376,9 +376,9 @@ async function main(): Promise<void> {
     check(
       expanded.strip !== undefined &&
         expanded.strip.region === "drag" &&
-        expanded.strip.box.height === 56 &&
-        expanded.strip.box.y === 0,
-      `the sidebar's top strip is a 56px drag region at the window's top (${JSON.stringify(expanded.strip)})`,
+        expanded.strip.box.height === 40 &&
+        expanded.strip.box.y === 8,
+      `the sidebar's top strip is a 40px drag region level with the header (${JSON.stringify(expanded.strip)})`,
     );
     check(
       expanded.sidebar === "expanded" && expanded.header!.paddingLeft === 12,
@@ -571,8 +571,8 @@ async function main(): Promise<void> {
     await sleep(2000);
     const back = await l.page.evaluate(measureHeader);
     check(
-      back.wco.visible && back.rootFlag && back.strip?.box.height === 56,
-      "after fullscreen the overlay, data-wco and the 56px strip are back",
+      back.wco.visible && back.rootFlag && back.strip?.box.height === 40,
+      "after fullscreen the overlay, data-wco and the 40px strip are back",
     );
     const restored = await windowState(l);
     check(
@@ -690,7 +690,7 @@ async function main(): Promise<void> {
         `browser: the sidebar strip has ${web.strip!.box.height}px height`,
       );
       check(
-        web.header!.paddingLeft === 12 && web.header!.box.height === 56,
+        web.header!.paddingLeft === 12 && web.header!.box.height === 40,
         `browser: header padding-left ${web.header!.paddingLeft}px, height ${web.header!.box.height}px`,
       );
       await tab.screenshot({ path: join(OUT_DIR, "after-browser.png") });
