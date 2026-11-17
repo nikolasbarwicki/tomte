@@ -1,5 +1,5 @@
+import { ArrowSquareOutIcon } from "@phosphor-icons/react";
 import type { Integration } from "@tomte/contract/events";
-import { ExternalLink } from "lucide-react";
 
 import { Switch } from "@/components/ui/switch";
 
@@ -22,7 +22,7 @@ export function Skills({ integration: i }: { integration: Integration }) {
             className="text-link inline-flex items-center gap-1"
           >
             From {repo.replace(/^https:\/\//, "")}
-            <ExternalLink className="size-3" />
+            <ArrowSquareOutIcon className="size-3" />
           </a>
         ) : (
           dir && (

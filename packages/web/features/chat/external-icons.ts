@@ -1,20 +1,20 @@
-import type { ExternalEventKind } from "@tomte/contract/events";
 import {
-  CircleAlertIcon,
-  CircleCheckIcon,
+  WarningCircleIcon,
+  CheckCircleIcon,
   HandIcon,
   InfoIcon,
-  MessageCircleQuestionIcon,
-  OctagonXIcon,
-  type LucideIcon,
-} from "lucide-react";
+  QuestionIcon,
+  XCircleIcon,
+  type Icon,
+} from "@phosphor-icons/react";
+import type { ExternalEventKind } from "@tomte/contract/events";
 
 /** The icon of an external event, by kind: on its transcript row and in the Needs you bar. */
 export const EXTERNAL_ICONS = {
-  question: MessageCircleQuestionIcon,
+  question: QuestionIcon,
   blocked: HandIcon,
-  failed: CircleAlertIcon,
-  done: CircleCheckIcon,
-  stopped: OctagonXIcon,
+  failed: WarningCircleIcon,
+  done: CheckCircleIcon,
+  stopped: XCircleIcon,
   notice: InfoIcon,
-} satisfies Record<Exclude<ExternalEventKind, "progress">, LucideIcon>;
+} satisfies Record<Exclude<ExternalEventKind, "progress">, Icon>;

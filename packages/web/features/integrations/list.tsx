@@ -1,5 +1,5 @@
+import { CaretRightIcon, PlusIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import type { Integration } from "@tomte/contract/events";
-import { ChevronRight, Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -32,7 +32,7 @@ export function IntegrationsList({
   return (
     <div className="flex flex-col gap-6">
       <div className="relative">
-        <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+        <MagnifyingGlassIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
         <Input
           type="search"
           placeholder="Search integrations, tools and skills…"
@@ -120,7 +120,7 @@ function Row({
           <Connect integration={i} onOpen={open} />
         )}
       </div>
-      <ChevronRight aria-hidden className="text-muted-foreground size-4 shrink-0" />
+      <CaretRightIcon aria-hidden className="text-muted-foreground size-4 shrink-0" />
     </li>
   );
 }
@@ -180,12 +180,12 @@ function Connect({ integration: i, onOpen }: { integration: Integration; onOpen:
       <span className="text-muted-foreground hidden text-xs sm:inline">{effort(i.auth)}</span>
       {isOneClick(i.auth) ? (
         <SignInButton integration={i} size="sm" variant="outline" className="relative z-10">
-          <Plus data-icon="inline-start" />
+          <PlusIcon data-icon="inline-start" />
           Connect
         </SignInButton>
       ) : (
         <Button size="sm" variant="outline" className="relative z-10" onClick={onOpen}>
-          <Plus data-icon="inline-start" />
+          <PlusIcon data-icon="inline-start" />
           Connect
         </Button>
       )}

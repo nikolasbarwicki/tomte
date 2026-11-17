@@ -1,12 +1,12 @@
-import { Link } from "@tanstack/react-router";
 import {
   CpuIcon,
   InfoIcon,
-  MessageSquareTextIcon,
-  MonitorSmartphoneIcon,
-  SendIcon,
+  ChatTeardropTextIcon,
+  DevicesIcon,
+  PaperPlaneRightIcon,
   SlidersHorizontalIcon,
-} from "lucide-react";
+} from "@phosphor-icons/react";
+import { Link } from "@tanstack/react-router";
 import type { ComponentType, ReactNode } from "react";
 
 import { AppBar } from "@/components/page.tsx";
@@ -31,7 +31,7 @@ const SECTIONS: Record<
   instructions: {
     label: "Instructions",
     description: "What every bot is told, and what they all know about you.",
-    icon: MessageSquareTextIcon,
+    icon: ChatTeardropTextIcon,
   },
   models: {
     label: "Models",
@@ -41,13 +41,13 @@ const SECTIONS: Record<
   connections: {
     label: "Connections",
     description: "The host this app talks to, and the devices paired with it.",
-    icon: MonitorSmartphoneIcon,
+    icon: DevicesIcon,
   },
   channels: {
     label: "Channels",
     description:
       "Where the host reaches you outside this app. Link your account with a one-time code; messages from any other account are ignored.",
-    icon: SendIcon,
+    icon: PaperPlaneRightIcon,
   },
   about: {
     label: "About",

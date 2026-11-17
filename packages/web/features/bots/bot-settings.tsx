@@ -1,16 +1,16 @@
-import { getRouteApi } from "@tanstack/react-router";
-import type { BotSummary } from "@tomte/contract/events";
 import {
   BrainIcon,
-  CalendarClockIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  MessagesSquareIcon,
-  PencilIcon,
+  CalendarDotsIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+  ChatsIcon,
+  PencilSimpleIcon,
   ShieldCheckIcon,
-  Trash2Icon,
-  type LucideIcon,
-} from "lucide-react";
+  TrashIcon,
+  type Icon,
+} from "@phosphor-icons/react";
+import { getRouteApi } from "@tanstack/react-router";
+import type { BotSummary } from "@tomte/contract/events";
 import { useTransition, type ReactNode } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
@@ -72,7 +72,7 @@ export function BotSettings({
           className="-ml-2"
           onClick={() => open(undefined)}
         >
-          <ChevronLeftIcon /> Settings
+          <CaretLeftIcon /> Settings
         </Button>
         <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{TITLES[section]}</h2>
       </div>
@@ -132,12 +132,12 @@ function Overview({ bot, open }: { bot: BotSummary; open: (section: BotSection) 
           </p>
         </div>
         <Button variant="outline" size="xs" onClick={() => open("profile")}>
-          <PencilIcon /> Edit
+          <PencilSimpleIcon /> Edit
         </Button>
       </div>
       <div className="grid gap-2">
         <Row
-          icon={MessagesSquareIcon}
+          icon={ChatsIcon}
           title="Chat & model"
           summary={
             double
@@ -155,7 +155,7 @@ function Overview({ bot, open }: { bot: BotSummary; open: (section: BotSection) 
           onClick={() => open("memory")}
         />
         <Row
-          icon={CalendarClockIcon}
+          icon={CalendarDotsIcon}
           title="Routines"
           summary={
             routines === undefined
@@ -192,7 +192,7 @@ function Overview({ bot, open }: { bot: BotSummary; open: (section: BotSection) 
             disabled={bot.status === "working" || removing}
             onClick={() => void remove()}
           >
-            {removing ? <Spinner /> : <Trash2Icon />} Delete bot
+            {removing ? <Spinner /> : <TrashIcon />} Delete bot
           </Button>
         </div>
       </section>
@@ -206,7 +206,7 @@ function Row({
   summary,
   onClick,
 }: {
-  icon: LucideIcon;
+  icon: Icon;
   title: string;
   summary: string;
   onClick: () => void;
@@ -225,7 +225,7 @@ function Row({
         <ItemTitle>{title}</ItemTitle>
         <ItemDescription className="line-clamp-1">{summary}</ItemDescription>
       </ItemContent>
-      <ChevronRightIcon className="text-muted-foreground size-4 shrink-0" />
+      <CaretRightIcon className="text-muted-foreground size-4 shrink-0" />
     </Item>
   );
 }

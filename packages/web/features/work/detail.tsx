@@ -1,17 +1,17 @@
-import type { SourceEvent, WorkItem, WorkSource } from "@tomte/contract/events";
 import {
-  ActivityIcon,
+  PulseIcon,
   ArchiveIcon,
   ArrowLeftIcon,
-  ChevronRightIcon,
-  CircleAlertIcon,
-  CircleCheckIcon,
+  CaretRightIcon,
+  WarningCircleIcon,
+  CheckCircleIcon,
   HandIcon,
   InfoIcon,
-  MessageCircleQuestionIcon,
-  OctagonXIcon,
-  type LucideIcon,
-} from "lucide-react";
+  QuestionIcon,
+  XCircleIcon,
+  type Icon,
+} from "@phosphor-icons/react";
+import type { SourceEvent, WorkItem, WorkSource } from "@tomte/contract/events";
 
 import { RelayStatus } from "@/components/relay-status.tsx";
 import { Badge } from "@/components/ui/badge";
@@ -36,13 +36,13 @@ import { ITEM, STATUS } from "./styles.ts";
 /** A button's message goes to the bot as the user's own chat message, so it shows in the transcript. */
 const tell = (text: string) => void sendMessage(text, []);
 
-const EVENT_ICONS: Record<SourceEvent["kind"], LucideIcon> = {
-  question: MessageCircleQuestionIcon,
+const EVENT_ICONS: Record<SourceEvent["kind"], Icon> = {
+  question: QuestionIcon,
   blocked: HandIcon,
-  failed: CircleAlertIcon,
-  done: CircleCheckIcon,
-  stopped: OctagonXIcon,
-  progress: ActivityIcon,
+  failed: WarningCircleIcon,
+  done: CheckCircleIcon,
+  stopped: XCircleIcon,
+  progress: PulseIcon,
   notice: InfoIcon,
 };
 
@@ -160,7 +160,7 @@ function ItemRow({ source, item }: { source: WorkSource; item: WorkItem }) {
     <li className="rounded-lg border">
       <Collapsible className="group">
         <CollapsibleTrigger className="hover:bg-muted/50 focus-visible:ring-ring/50 flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm outline-none focus-visible:ring-3">
-          <ChevronRightIcon className="text-muted-foreground size-4 shrink-0 transition-transform group-data-[open]:rotate-90" />
+          <CaretRightIcon className="text-muted-foreground size-4 shrink-0 transition-transform group-data-[open]:rotate-90" />
           <span className="min-w-0 flex-1 truncate" title={item.label}>
             {item.label}
           </span>

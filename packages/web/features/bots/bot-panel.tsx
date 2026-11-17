@@ -1,14 +1,14 @@
-import { getRouteApi } from "@tanstack/react-router";
-import type { BotFile, BotSummary } from "@tomte/contract/events";
 import {
-  DownloadIcon,
-  EllipsisIcon,
+  DownloadSimpleIcon,
+  DotsThreeIcon,
   FileIcon,
   FolderOpenIcon,
-  SettingsIcon,
+  GearIcon,
   TrashIcon,
   XIcon,
-} from "lucide-react";
+} from "@phosphor-icons/react";
+import { getRouteApi } from "@tanstack/react-router";
+import type { BotFile, BotSummary } from "@tomte/contract/events";
 import { useTransition, type ReactNode } from "react";
 
 import { confirmAction } from "@/components/confirm.tsx";
@@ -122,7 +122,7 @@ export function BotPanel({
           </TabsTrigger>
           {!hasSources && workTrigger}
           <TabsTrigger value="settings" aria-label="Settings" title="Settings">
-            <SettingsIcon />
+            <GearIcon />
           </TabsTrigger>
         </TabsList>
         <Button variant="ghost" size="icon-sm" aria-label="Close panel" onClick={onClose}>
@@ -252,11 +252,11 @@ function FileRow({ file: f }: { file: BotFile }) {
             />
           }
         >
-          {pending ? <Spinner /> : <EllipsisIcon />}
+          {pending ? <Spinner /> : <DotsThreeIcon />}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
           <DropdownMenuItem render={<a href={downloadUrl(f.path)} download />}>
-            <DownloadIcon /> Download
+            <DownloadSimpleIcon /> Download
           </DropdownMenuItem>
           {canReveal && (
             <DropdownMenuItem onClick={reveal}>

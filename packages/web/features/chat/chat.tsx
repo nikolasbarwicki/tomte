@@ -1,6 +1,6 @@
+import { ChatTeardropDotsIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
 import { getRouteApi } from "@tanstack/react-router";
 import type { BotSummary } from "@tomte/contract/events";
-import { MessageSquarePlusIcon, PanelRightIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useState, useTransition, type ReactNode } from "react";
 
 import { confirmAction } from "@/components/confirm.tsx";
@@ -106,7 +106,7 @@ export function ChatView({
                 />
               }
             >
-              {starting ? <Spinner /> : <MessageSquarePlusIcon />}
+              {starting ? <Spinner /> : <ChatTeardropDotsIcon />}
             </TooltipTrigger>
             <TooltipContent>New session</TooltipContent>
           </Tooltip>
@@ -123,7 +123,7 @@ export function ChatView({
                 />
               }
             >
-              <PanelRightIcon />
+              <SidebarSimpleIcon />
             </TooltipTrigger>
             <TooltipContent>Work, tasks, files, browser and settings</TooltipContent>
           </Tooltip>

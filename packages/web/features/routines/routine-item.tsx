@@ -1,5 +1,11 @@
+import {
+  CaretRightIcon,
+  DotsThreeIcon,
+  PencilSimpleIcon,
+  PlayIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { RoutineRun, type Routine, type RunStatus } from "@tomte/contract/events";
-import { ChevronRightIcon, EllipsisIcon, PencilIcon, PlayIcon, TrashIcon } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { Streamdown } from "streamdown";
 import { z } from "zod";
@@ -152,11 +158,11 @@ export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
               />
             }
           >
-            {removing ? <Spinner /> : <EllipsisIcon />}
+            {removing ? <Spinner /> : <DotsThreeIcon />}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-36">
             <DropdownMenuItem onClick={onEdit}>
-              <PencilIcon /> Edit
+              <PencilSimpleIcon /> Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => void remove()}>
@@ -167,7 +173,7 @@ export function RoutineItem({ r, onEdit }: { r: Routine; onEdit: () => void }) {
       </div>
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger className="group/runs text-muted-foreground hover:text-foreground flex w-full items-center gap-1 border-t px-3 py-1.5 text-xs">
-          <ChevronRightIcon className="size-3.5 transition-transform group-data-panel-open/runs:rotate-90" />
+          <CaretRightIcon className="size-3.5 transition-transform group-data-panel-open/runs:rotate-90" />
           Run history
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -204,7 +210,7 @@ function RunRow({ run }: { run: RoutineRun }) {
   return (
     <Collapsible disabled={!hasBody}>
       <CollapsibleTrigger className="group/run hover:bg-muted/60 flex w-full items-start gap-2 rounded-md px-1 py-1 text-left text-xs disabled:hover:bg-transparent">
-        <ChevronRightIcon
+        <CaretRightIcon
           className={cn(
             "mt-0.5 size-3 shrink-0 text-muted-foreground transition-transform group-data-panel-open/run:rotate-90",
             !hasBody && "invisible",

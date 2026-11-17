@@ -1,5 +1,11 @@
+import {
+  CheckIcon,
+  CopyIcon,
+  ArrowSquareOutIcon,
+  LinkIcon,
+  PaperPlaneRightIcon,
+} from "@phosphor-icons/react";
 import type { ChannelEntry, ChannelLinkCodeResponse } from "@tomte/contract/api";
-import { CheckIcon, CopyIcon, ExternalLinkIcon, Link2Icon, SendIcon } from "lucide-react";
 import { useActionState, useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -130,7 +136,7 @@ function ChannelRow({
   return (
     <div className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0">
       <div className="flex items-center gap-3">
-        <SendIcon className="text-muted-foreground size-5 shrink-0" />
+        <PaperPlaneRightIcon className="text-muted-foreground size-5 shrink-0" />
         <div className="grid min-w-0 flex-1 gap-0.5">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium">{name}</span>
@@ -161,7 +167,7 @@ function ChannelRow({
           </Button>
         )}
         <Button size="sm" disabled={creating || c.status.state !== "running"} onClick={link}>
-          {creating ? <Spinner data-icon="inline-start" /> : <Link2Icon data-icon="inline-start" />}
+          {creating ? <Spinner data-icon="inline-start" /> : <LinkIcon data-icon="inline-start" />}
           Link account
         </Button>
       </div>
@@ -254,7 +260,7 @@ function LinkCodeDialog({
             className="text-muted-foreground inline-flex items-center gap-1 text-sm break-all underline"
           >
             {link.url}
-            <ExternalLinkIcon className="size-3 shrink-0" />
+            <ArrowSquareOutIcon className="size-3 shrink-0" />
           </a>
         )}
         <DialogFooter>

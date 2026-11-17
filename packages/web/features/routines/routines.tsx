@@ -1,5 +1,5 @@
+import { AlarmIcon, PlusIcon } from "@phosphor-icons/react";
 import type { Routine } from "@tomte/contract/events";
-import { AlarmClockIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,7 @@ export function Routines({ botId }: { botId: string }) {
         <Empty className="border border-dashed p-6">
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <AlarmClockIcon />
+              <AlarmIcon />
             </EmptyMedia>
             <EmptyTitle className="text-sm">No routines yet</EmptyTitle>
             <EmptyDescription className="text-xs">

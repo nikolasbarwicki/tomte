@@ -1,4 +1,4 @@
-import { BriefcaseBusinessIcon } from "lucide-react";
+import { BriefcaseIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -48,7 +48,7 @@ export function Work({ botId }: { botId: string }) {
         <Empty className="border border-dashed p-6">
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <BriefcaseBusinessIcon />
+              <BriefcaseIcon />
             </EmptyMedia>
             <EmptyTitle className="text-sm">No work yet</EmptyTitle>
             <EmptyDescription className="text-xs">

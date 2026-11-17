@@ -1,4 +1,4 @@
-import { ChevronRightIcon } from "lucide-react";
+import { CaretRightIcon } from "@phosphor-icons/react";
 import * as React from "react";
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -107,7 +107,7 @@ function TraceCollapsibleTrigger({
     >
       {children}
       <TraceIcon className="transition-transform group-aria-expanded/trace-collapsible-trigger:rotate-90">
-        <ChevronRightIcon />
+        <CaretRightIcon />
       </TraceIcon>
     </CollapsibleTrigger>
   );

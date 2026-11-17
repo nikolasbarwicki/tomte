@@ -1,5 +1,5 @@
+import { GlobeIcon } from "@phosphor-icons/react";
 import type { BotSummary } from "@tomte/contract/events";
-import { GlobeIcon } from "lucide-react";
 import { useTransition } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";

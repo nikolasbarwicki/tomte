@@ -1,4 +1,4 @@
-import { ArrowDownIcon } from "lucide-react";
+import { ArrowDownIcon } from "@phosphor-icons/react";
 import { useLayoutEffect, useRef, useState, type ReactNode, type WheelEvent } from "react";
 
 import { Button } from "@/components/ui/button";

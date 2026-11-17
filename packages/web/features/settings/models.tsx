@@ -1,5 +1,5 @@
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react";
 import type { ModelProvider } from "@tomte/contract/api";
-import { RefreshCwIcon } from "lucide-react";
 import { useCallback, useEffect, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -61,7 +61,7 @@ export function Models() {
           {refreshing ? (
             <Spinner data-icon="inline-start" />
           ) : (
-            <RefreshCwIcon data-icon="inline-start" />
+            <ArrowsClockwiseIcon data-icon="inline-start" />
           )}
           Refresh
         </Button>

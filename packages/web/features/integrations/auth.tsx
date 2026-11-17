@@ -1,6 +1,6 @@
+import { CheckIcon, CaretDownIcon, CopyIcon, ArrowSquareOutIcon } from "@phosphor-icons/react";
 import { OAuthStart } from "@tomte/contract/api";
 import type { Integration, OwnClient } from "@tomte/contract/events";
-import { Check, ChevronDown, Copy, ExternalLink } from "lucide-react";
 import {
   useActionState,
   useState,
@@ -73,7 +73,7 @@ export function Alternative({ label, children }: { label: string; children: Reac
         }
       >
         {label}
-        <ChevronDown
+        <CaretDownIcon
           data-icon="inline-end"
           className="transition-transform group-data-panel-open:rotate-180"
         />
@@ -103,7 +103,7 @@ function CopyBlock({ value }: { value: string }) {
         aria-label="Copy redirect address"
         onClick={() => void copy()}
       >
-        {copied ? <Check /> : <Copy />}
+        {copied ? <CheckIcon /> : <CopyIcon />}
       </Button>
     </div>
   );
@@ -224,7 +224,7 @@ export function TokenForm({ integration: i }: { integration: Integration }) {
                 className="inline-flex items-center gap-1"
               >
                 Create {label.tokenLabel ?? "a token"}
-                <ExternalLink className="size-3" />
+                <ArrowSquareOutIcon className="size-3" />
               </a>
             </FieldDescription>
           )}

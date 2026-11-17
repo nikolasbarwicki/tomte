@@ -1,20 +1,20 @@
-import { Link } from "@tanstack/react-router";
-import type { BotSummary, HandoffStatus, Presence } from "@tomte/contract/events";
 import {
-  AlarmClockIcon,
+  AlarmIcon,
   ArrowDownLeftIcon,
   ArrowUpRightIcon,
-  BotIcon,
-  CircleAlertIcon,
-  CircleCheckIcon,
-  CircleOffIcon,
+  RobotIcon,
+  WarningCircleIcon,
+  CheckCircleIcon,
+  ProhibitIcon,
   GlobeIcon,
   HandIcon,
-  MessageCircleQuestionIcon,
-  ShieldQuestionIcon,
+  QuestionIcon,
+  ShieldWarningIcon,
   WrenchIcon,
   XIcon,
-} from "lucide-react";
+} from "@phosphor-icons/react";
+import { Link } from "@tanstack/react-router";
+import type { BotSummary, HandoffStatus, Presence } from "@tomte/contract/events";
 import { useState, useTransition } from "react";
 import { Streamdown } from "streamdown";
 
@@ -110,7 +110,7 @@ export function Transcript({
       <Empty className="min-h-0 flex-1">
         <EmptyHeader>
           <EmptyMedia variant="icon">
-            <BotIcon />
+            <RobotIcon />
           </EmptyMedia>
           <EmptyTitle>Message {bot.name}</EmptyTitle>
           <EmptyDescription>
@@ -216,7 +216,7 @@ function RowView({
     case "error":
       return (
         <Alert variant="destructive">
-          <CircleAlertIcon />
+          <WarningCircleIcon />
           <AlertDescription className="break-words whitespace-pre-wrap">
             {row.text}
           </AlertDescription>
@@ -240,7 +240,7 @@ function RowView({
       return (
         <Marker variant="separator" className="text-xs">
           <MarkerIcon>
-            <AlarmClockIcon className="size-3.5" />
+            <AlarmIcon className="size-3.5" />
           </MarkerIcon>
           <MarkerContent>
             Routine <span className="text-foreground font-semibold">{row.name}</span> ·{" "}
@@ -384,12 +384,12 @@ function Report({ text, task }: { text: string; task: string | undefined }) {
 function TaskLine({ item }: { item: Extract<Item, { kind: "task" }> }) {
   const running = item.state === "running";
   const [icon, label] = {
-    queued: [<CircleOffIcon key="i" />, "Queued"],
+    queued: [<ProhibitIcon key="i" />, "Queued"],
     running: [<Spinner key="i" className="text-primary" />, "Working on"],
-    interrupted: [<CircleOffIcon key="i" />, "Interrupted"],
-    done: [<CircleCheckIcon key="i" />, "Done"],
-    failed: [<CircleAlertIcon key="i" />, "Failed"],
-    cancelled: [<CircleOffIcon key="i" />, "Stopped"],
+    interrupted: [<ProhibitIcon key="i" />, "Interrupted"],
+    done: [<CheckCircleIcon key="i" />, "Done"],
+    failed: [<WarningCircleIcon key="i" />, "Failed"],
+    cancelled: [<ProhibitIcon key="i" />, "Stopped"],
   }[item.state];
   return (
     <Marker role={running ? "status" : undefined}>
@@ -469,11 +469,11 @@ function Request({
         <ItemActions className="text-muted-foreground text-xs">
           {expired && answer === undefined ? (
             <>
-              <CircleOffIcon className="size-3.5" /> No longer waiting: its turn ended
+              <ProhibitIcon className="size-3.5" /> No longer waiting: its turn ended
             </>
           ) : (
             <>
-              <CircleCheckIcon className="size-3.5" /> {answer}
+              <CheckCircleIcon className="size-3.5" /> {answer}
             </>
           )}
         </ItemActions>
@@ -507,7 +507,7 @@ function WaitCard({
   const takeover = item.waitKind === "takeover";
   return (
     <Request
-      icon={takeover ? <HandIcon /> : <ShieldQuestionIcon />}
+      icon={takeover ? <HandIcon /> : <ShieldWarningIcon />}
       title={item.title}
       description={item.detail}
       answer={item.resolved}
@@ -561,7 +561,7 @@ function AskCard({ item }: { item: Extract<Item, { kind: "ask" }> }) {
   );
   return (
     <Request
-      icon={<MessageCircleQuestionIcon />}
+      icon={<QuestionIcon />}
       title="The bot asks"
       description={item.question}
       answer={item.answer}
@@ -601,7 +601,7 @@ function ApproveCard({ item }: { item: Extract<Item, { kind: "approve" }> }) {
   const open = item.answer === undefined;
   return (
     <Request
-      icon={<ShieldQuestionIcon />}
+      icon={<ShieldWarningIcon />}
       title={
         <span>
           Allow <span className="font-mono">{item.tool}</span>?

@@ -1,4 +1,4 @@
-import { CopyIcon, KeyRoundIcon, RefreshCwIcon } from "lucide-react";
+import { CopyIcon, KeyIcon, ArrowsClockwiseIcon } from "@phosphor-icons/react";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -85,10 +85,10 @@ export function EventsEndpoint({ botId }: { botId: string }) {
             })
           }
         >
-          <KeyRoundIcon /> Copy token
+          <KeyIcon /> Copy token
         </Button>
         <Button variant="outline" size="sm" disabled={busy} onClick={() => void rotate()}>
-          {busy ? <Spinner /> : <RefreshCwIcon />} Replace token
+          {busy ? <Spinner /> : <ArrowsClockwiseIcon />} Replace token
         </Button>
       </div>
     </section>

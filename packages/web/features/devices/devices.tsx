@@ -1,5 +1,5 @@
+import { CheckIcon, CopyIcon, LaptopIcon, PlusIcon } from "@phosphor-icons/react";
 import type { DeviceEntry } from "@tomte/contract/api";
-import { CheckIcon, CopyIcon, Laptop, Plus } from "lucide-react";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -63,7 +63,7 @@ export function Devices() {
           </p>
         </div>
         <Button size="sm" disabled={creating} onClick={newCode}>
-          {creating ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
+          {creating ? <Spinner data-icon="inline-start" /> : <PlusIcon data-icon="inline-start" />}
           Pair a device
         </Button>
       </div>
@@ -102,7 +102,7 @@ function DeviceRow({ device: d, onRevoked }: { device: DeviceEntry; onRevoked: (
   };
   return (
     <div className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-      <Laptop className="text-muted-foreground size-5 shrink-0" />
+      <LaptopIcon className="text-muted-foreground size-5 shrink-0" />
       <div className="grid min-w-0 flex-1 gap-0.5">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium">{d.name}</span>

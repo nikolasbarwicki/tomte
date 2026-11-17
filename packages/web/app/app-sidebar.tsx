@@ -1,6 +1,12 @@
+import {
+  PlugIcon,
+  PlusIcon,
+  GearIcon,
+  SlidersHorizontalIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import type { BotStatus, BotSummary } from "@tomte/contract/events";
-import { PlugIcon, PlusIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
@@ -85,7 +91,7 @@ function BotContextMenu({ bot, children }: { bot: BotSummary; children: ReactNod
           disabled={bot.status === "working"}
           onClick={() => void remove()}
         >
-          <Trash2Icon /> Delete bot
+          <TrashIcon /> Delete bot
         </DropdownMenuItem>
       </ContextMenuContent>
     </ContextMenu>
@@ -221,7 +227,7 @@ export function AppSidebar({
               }
               onClick={reveal}
             >
-              <SettingsIcon />
+              <GearIcon />
               <span>Settings</span>
             </SidebarMenuButton>
             {claudeSignedOut && (

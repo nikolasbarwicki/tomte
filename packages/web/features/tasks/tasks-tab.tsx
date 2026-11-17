@@ -1,4 +1,9 @@
-import { CircleAlertIcon, CircleCheckIcon, CircleOffIcon, ListChecksIcon } from "lucide-react";
+import {
+  WarningCircleIcon,
+  CheckCircleIcon,
+  ProhibitIcon,
+  ListChecksIcon,
+} from "@phosphor-icons/react";
 import { useMemo, type ReactNode } from "react";
 
 import {
@@ -14,9 +19,9 @@ import { useChat } from "@/host/hooks.ts";
 import { groupTasks, waitsFor, type TaskRow } from "./model.ts";
 
 const ENDED = {
-  done: [<CircleCheckIcon key="i" />, "Done"],
-  failed: [<CircleAlertIcon key="i" />, "Failed"],
-  cancelled: [<CircleOffIcon key="i" />, "Stopped"],
+  done: [<CheckCircleIcon key="i" />, "Done"],
+  failed: [<WarningCircleIcon key="i" />, "Failed"],
+  cancelled: [<ProhibitIcon key="i" />, "Stopped"],
 } as const;
 
 /** The Tasks tab of a double-loop bot: what runs now with its status line and findings, what is queued and what waits for what, and what ended lately. */
@@ -87,11 +92,7 @@ function RunningTask({ task }: { task: TaskRow }) {
     <li className="grid gap-1" data-task={task.taskId} data-state={task.state}>
       <div className="flex items-start gap-2">
         <span className="mt-0.5 shrink-0">
-          {interrupted ? (
-            <CircleOffIcon className="size-4" />
-          ) : (
-            <Spinner className="text-primary" />
-          )}
+          {interrupted ? <ProhibitIcon className="size-4" /> : <Spinner className="text-primary" />}
         </span>
         <span className="text-sm font-medium">{task.goal}</span>
       </div>

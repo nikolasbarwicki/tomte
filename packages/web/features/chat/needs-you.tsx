@@ -1,14 +1,14 @@
+import {
+  BellRingingIcon,
+  CaretDownIcon,
+  HandIcon,
+  QuestionIcon,
+  ShieldWarningIcon,
+  type Icon,
+} from "@phosphor-icons/react";
 import { getRouteApi } from "@tanstack/react-router";
 import type { BotSummary } from "@tomte/contract/events";
 import { itemActions, type ItemAction } from "@tomte/contract/item-actions";
-import {
-  BellRingIcon,
-  ChevronDownIcon,
-  HandIcon,
-  MessageCircleQuestionIcon,
-  ShieldQuestionIcon,
-  type LucideIcon,
-} from "lucide-react";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -30,10 +30,10 @@ import {
 
 const botRoute = getRouteApi("/bots/$botId");
 
-const REQUEST_ICONS: Record<string, LucideIcon> = {
+const REQUEST_ICONS: Record<string, Icon> = {
   Takeover: HandIcon,
-  Approval: ShieldQuestionIcon,
-  Question: MessageCircleQuestionIcon,
+  Approval: ShieldWarningIcon,
+  Question: QuestionIcon,
 };
 
 const showCard = (request: RequestRow) =>
@@ -132,13 +132,13 @@ export function NeedsYou({ bot }: { bot: BotSummary }) {
           if (e.detail > 0) e.currentTarget.blur();
         }}
       >
-        <BellRingIcon className="size-4 shrink-0" />
+        <BellRingingIcon className="size-4 shrink-0" />
         <span className="font-medium">Needs you</span>
         <span className="rounded-full bg-amber-500/25 px-1.5 text-xs font-semibold tabular-nums">
           {rows.length}
         </span>
         <span className="min-w-0 flex-1 truncate opacity-80">{rowLabels(rows).join(", ")}</span>
-        <ChevronDownIcon
+        <CaretDownIcon
           className={cn("size-4 shrink-0 transition-transform", expanded && "rotate-180")}
         />
       </button>
@@ -152,7 +152,7 @@ export function NeedsYou({ bot }: { bot: BotSummary }) {
             );
             if (row.type === "request") {
               const { request } = row;
-              const Icon = REQUEST_ICONS[request.label] ?? ShieldQuestionIcon;
+              const Icon = REQUEST_ICONS[request.label] ?? ShieldWarningIcon;
               return (
                 <li
                   key={request.id}

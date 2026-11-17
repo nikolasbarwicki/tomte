@@ -1,5 +1,5 @@
+import { PencilSimpleIcon } from "@phosphor-icons/react";
 import { MAX_TEXT_DOCUMENT } from "@tomte/contract/api";
-import { PencilIcon } from "lucide-react";
 import { useState, useTransition } from "react";
 import { Streamdown } from "streamdown";
 
@@ -52,7 +52,7 @@ export function MemoryEditor({
             aria-label={`Edit ${title}`}
             onClick={() => setDraft({ text, base: text })}
           >
-            <PencilIcon /> Edit
+            <PencilSimpleIcon /> Edit
           </Button>
         )}
       </div>

@@ -1,5 +1,5 @@
+import { InfoIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import type { Integration, IntegrationTool, ToolPolicy } from "@tomte/contract/events";
-import { Info, Search } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ export function Permissions({ integration: i }: { integration: Integration }) {
     >
       <div className="flex flex-col gap-3 border-b p-4">
         <p className="text-muted-foreground flex gap-2 text-xs">
-          <Info className="mt-px size-3.5 shrink-0" />
+          <InfoIcon className="mt-px size-3.5 shrink-0" />
           <span>
             Off hides a tool, Ask waits for your approval, Auto runs it.{" "}
             <strong className="text-foreground font-medium">
@@ -62,7 +62,7 @@ export function Permissions({ integration: i }: { integration: Integration }) {
           </span>
         </p>
         <div className="relative">
-          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+          <MagnifyingGlassIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
           <Input
             type="search"
             placeholder="Search tools…"

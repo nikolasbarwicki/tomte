@@ -1,5 +1,5 @@
+import { PlusIcon } from "@phosphor-icons/react";
 import type { Integration } from "@tomte/contract/events";
-import { Plus } from "lucide-react";
 import { useState } from "react";
 
 import { Page } from "@/components/page.tsx";
@@ -49,7 +49,7 @@ export function Integrations({
       actions={
         <Dialog open={adding} onOpenChange={setAdding}>
           <DialogTrigger render={<Button size="sm" variant="outline" />}>
-            <Plus data-icon="inline-start" />
+            <PlusIcon data-icon="inline-start" />
             Add custom
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">

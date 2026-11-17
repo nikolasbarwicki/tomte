@@ -1,12 +1,12 @@
-import { LiveMessage } from "@tomte/contract/events";
 import {
-  EllipsisIcon,
+  DotsThreeIcon,
   GlobeIcon,
   HandIcon,
-  LogOutIcon,
-  MousePointerClickIcon,
-  RotateCwIcon,
-} from "lucide-react";
+  SignOutIcon,
+  CursorClickIcon,
+  ArrowClockwiseIcon,
+} from "@phosphor-icons/react";
+import { LiveMessage } from "@tomte/contract/events";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { confirmAction } from "@/components/confirm.tsx";
@@ -251,7 +251,7 @@ export function BrowserPanel({
               />
             }
           >
-            {configuring ? <Spinner /> : <EllipsisIcon />}
+            {configuring ? <Spinner /> : <DotsThreeIcon />}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             {canShowWindow && (
@@ -273,11 +273,11 @@ export function BrowserPanel({
                 })
               }
             >
-              <RotateCwIcon /> Restart browser
+              <ArrowClockwiseIcon /> Restart browser
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => void signOut()}>
-              <LogOutIcon /> Sign out of everything
+              <SignOutIcon /> Sign out of everything
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -349,7 +349,7 @@ export function BrowserPanel({
                   disabled={holder === "draining" || controlling}
                   onClick={() => control("take")}
                 >
-                  {holder === "draining" || controlling ? <Spinner /> : <MousePointerClickIcon />}
+                  {holder === "draining" || controlling ? <Spinner /> : <CursorClickIcon />}
                   {holder === "draining" ? "Taking control…" : "Take control"}
                 </Button>
                 <span className="text-muted-foreground text-xs">

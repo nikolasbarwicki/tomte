@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRightIcon } from "@phosphor-icons/react";
 
 import { Section } from "./parts.tsx";
 
@@ -23,7 +23,7 @@ export function TryIt({
               className="group hover:bg-muted/50 focus-visible:bg-muted/50 flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm outline-none"
             >
               <span className="min-w-0 flex-1">“{p}”</span>
-              <ArrowRight className="text-muted-foreground size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
+              <ArrowRightIcon className="text-muted-foreground size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
             </button>
           </li>
         ))}

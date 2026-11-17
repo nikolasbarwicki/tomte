@@ -1,4 +1,4 @@
-import { BotIcon, PlusIcon } from "lucide-react";
+import { RobotIcon, PlusIcon } from "@phosphor-icons/react";
 
 import { AppBar } from "@/components/page.tsx";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ export function Welcome({
         <Empty className="flex-1">
           <EmptyHeader>
             <EmptyMedia variant="icon">
-              <BotIcon />
+              <RobotIcon />
             </EmptyMedia>
             <EmptyTitle>{hasBots ? "Pick a bot" : "Create your first bot"}</EmptyTitle>
             <EmptyDescription>

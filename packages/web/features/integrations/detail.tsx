@@ -1,5 +1,5 @@
+import { CaretLeftIcon } from "@phosphor-icons/react";
 import type { Integration } from "@tomte/contract/events";
-import { ChevronLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -58,7 +58,7 @@ function Header({ integration: i, onBack }: { integration: Integration; onBack: 
         className="text-muted-foreground -ml-2 self-start"
         onClick={onBack}
       >
-        <ChevronLeft data-icon="inline-start" />
+        <CaretLeftIcon data-icon="inline-start" />
         Integrations
       </Button>
       <div className="flex flex-wrap items-start gap-4">
