@@ -678,15 +678,25 @@ export function createChats(deps: ChatsDeps): Chats {
     return chat;
   }
 
+  /** The whole chat as one message, so the page replaces its chat in one update instead of one per row. */
+  const chatEvent = (chat: Chat): HostEvent => ({
+    type: "chat",
+    botId: chat.bot.id,
+    events: [
+      ...chat.history,
+      ...(chat.front
+        ? [
+            ...chat.front.observer.statusEvents(),
+            { type: "presence" as const, state: chat.presence },
+            ...rateLimits.values(),
+          ]
+        : []),
+    ],
+  });
+
   /** Sends the page everything about the chat it now shows. */
   function show(chat: Chat) {
-    broadcast({ type: "reset", botId: chat.bot.id });
-    for (const e of chat.history) broadcast(e);
-    if (chat.front) {
-      for (const e of chat.front.observer.statusEvents()) broadcast(e);
-      broadcast({ type: "presence", state: chat.presence });
-      for (const e of rateLimits.values()) broadcast(e);
-    }
+    broadcast(chatEvent(chat));
     announceBots();
     for (const e of memoryEvents(dataRoot, chat.bot.id)) broadcast(e);
     filesWatcher?.close();
@@ -934,19 +944,7 @@ export function createChats(deps: ChatsDeps): Chats {
     },
     replayOpen: () =>
       current
-        ? [
-            deps.routinesEvent(current.bot.id),
-            deps.workEvent(current.bot.id),
-            { type: "reset", botId: current.bot.id },
-            ...current.history,
-            ...(current.front
-              ? [
-                  ...current.front.observer.statusEvents(),
-                  { type: "presence" as const, state: current.presence },
-                  ...rateLimits.values(),
-                ]
-              : []),
-          ]
+        ? [deps.routinesEvent(current.bot.id), deps.workEvent(current.bot.id), chatEvent(current)]
         : [],
     close() {
       for (const chat of chats.values()) {

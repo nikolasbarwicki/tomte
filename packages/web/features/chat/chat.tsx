@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useBots, useChat } from "@/host/hooks.ts";
+import { useBots, useChat, useOpenBotId } from "@/host/hooks.ts";
 import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +44,7 @@ export function ChatView({
   const live = livePresence(bot.chatMode, chat);
   const busy = live !== "idle";
   const bots = useBots() ?? [];
+  const streamed = useOpenBotId() === bot.id;
   const controls = usePanel();
   const { wide, open } = controls;
   const [starting, startNewSession] = useTransition();
@@ -109,7 +110,7 @@ export function ChatView({
                   variant="ghost"
                   size="icon-sm"
                   aria-label="New session"
-                  disabled={busy || starting}
+                  disabled={busy || starting || !streamed}
                   onClick={() => void confirmNewSession()}
                 />
               }

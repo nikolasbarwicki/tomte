@@ -6,6 +6,7 @@ import { ChannelLinkCodeResponse } from "@tomte/contract/api";
 
 import { fakeTelegram, type FakeTelegram } from "../testing/fake-telegram.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 const DAY = 24 * 60 * 60_000;
 const owner = { id: 4242, first_name: "Owner", last_name: "One" };
@@ -212,8 +213,9 @@ describe("a routine that sends its result", () => {
           text = parts.pop() ?? "";
           for (const p of parts) {
             if (!p.startsWith("data: ")) continue;
-            const e = JSON.parse(p.slice(6)) as { type: string; id?: string };
-            if (e.type === "ask" && e.id) asks.push(e.id);
+            for (const e of eventsOf(p.slice(6)) as { type: string; id?: string }[]) {
+              if (e.type === "ask" && e.id) asks.push(e.id);
+            }
           }
         }
       } catch {

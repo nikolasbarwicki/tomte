@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { startHandoffHost, parse, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
 let claudeConfig: string;
@@ -65,7 +66,7 @@ async function pageEvents(): Promise<{ type: string; [k: string]: unknown }[]> {
   return text
     .split("\n\n")
     .filter((l) => l.startsWith("data: "))
-    .map((l) => JSON.parse(l.slice(6)));
+    .flatMap((l) => eventsOf(l.slice(6)));
 }
 const cards = async () =>
   (await pageEvents()).filter((e): e is Card & typeof e => e.type === "handoff");

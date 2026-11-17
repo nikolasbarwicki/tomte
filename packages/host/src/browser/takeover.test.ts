@@ -32,6 +32,7 @@ import { migrate } from "../platform/db.ts";
 import { memorySecrets } from "../platform/secrets.ts";
 import { defined } from "../testing/defined.ts";
 import { asDevice, pairDevice } from "../testing/paired-device.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 const FAKE_ENGINE = join(import.meta.dir, "..", "testing", "fake-agent-browser.ts");
 const FAKE_CLAUDE = join(import.meta.dir, "..", "testing", "fake-claude.ts");
@@ -146,7 +147,8 @@ function events() {
       if (done) return;
       const parts = (buffer + value).split("\n\n");
       buffer = parts.pop() ?? "";
-      for (const p of parts) received.push(JSON.parse(p.replace(/^data: /, "")));
+      for (const p of parts)
+        received.push(...(eventsOf(p.replace(/^data: /, "")) as ServerEvent[]));
     }
   })();
   return received;

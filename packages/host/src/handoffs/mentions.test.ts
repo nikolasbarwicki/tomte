@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { defined } from "../testing/defined.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
 let claudeConfig: string;
@@ -38,7 +39,7 @@ async function pageEvents(): Promise<{ type: string; [k: string]: unknown }[]> {
   return text
     .split("\n\n")
     .filter((l) => l.startsWith("data: "))
-    .map((l) => JSON.parse(l.slice(6)));
+    .flatMap((l) => eventsOf(l.slice(6)));
 }
 const open = (id: string) => host.ui("/api/open", { id, botId: id });
 

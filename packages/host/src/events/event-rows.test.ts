@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type { EventAccess } from "@tomte/contract/api";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
 let scratch: string;
@@ -43,7 +44,7 @@ async function pageEvents(): Promise<Streamed[]> {
   return text
     .split("\n\n")
     .filter((l) => l.startsWith("data: "))
-    .map((l) => JSON.parse(l.slice(6)));
+    .flatMap((l) => eventsOf(l.slice(6)));
 }
 const rowsOf = (events: Streamed[]) => events.filter((e) => e.type === "external");
 const open = (id: string) => host.ui("/api/open", { id, botId: id });

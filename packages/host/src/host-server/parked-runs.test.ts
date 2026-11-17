@@ -7,6 +7,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 const DAY = 24 * 60 * 60_000;
 const TOOL = "mcp__fx__send_mail";
@@ -71,7 +72,7 @@ async function watch() {
         text += new TextDecoder().decode(r.value);
         const parts = text.split("\n\n");
         text = parts.pop() ?? "";
-        for (const p of parts) if (p.startsWith("data: ")) seen.push(JSON.parse(p.slice(6)));
+        for (const p of parts) if (p.startsWith("data: ")) seen.push(...eventsOf(p.slice(6)));
       }
     } catch {
       // The test ended the stream.

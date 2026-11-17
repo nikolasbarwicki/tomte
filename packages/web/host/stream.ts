@@ -18,7 +18,7 @@ export function connectHostStream(
   const es = new EventSource("/api/events");
   es.onmessage = (m) => {
     const e = parseJson(m.data, HostEvent, "/api/events");
-    if (e.type === "reset") {
+    if (e.type === "chat") {
       const previous = store.get().openBotId;
       store.dispatch(e);
       onReset(previous, e.botId);

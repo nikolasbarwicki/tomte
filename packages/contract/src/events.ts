@@ -171,7 +171,6 @@ export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("done") }),
   z.object({ type: z.literal("error"), message: z.string() }),
   z.object({ type: z.literal("info"), text: z.string() }),
-  z.object({ type: z.literal("reset"), botId: z.string() }),
   /** A fresh Claude Code session started inside the same bot; earlier messages are no longer in context. */
   z.object({ type: z.literal("session") }),
   /** A routine's turn starts in this chat; its prompt stays hidden like other host messages. */
@@ -580,6 +579,14 @@ export const IntegrationsEvent = z.object({
 });
 export type IntegrationsEvent = z.infer<typeof IntegrationsEvent>;
 
+/** The whole chat of the bot the host now streams, in one message: it replaces the chat the page had. Sent when the host opens a bot and to a page that connects. */
+export const ChatEvent = z.object({
+  type: z.literal("chat"),
+  botId: z.string(),
+  events: z.array(ServerEvent),
+});
+export type ChatEvent = z.infer<typeof ChatEvent>;
+
 /** One message on the page's `/api/events` stream. */
 export const HostEvent = z.union([
   ServerEvent,
@@ -588,6 +595,7 @@ export const HostEvent = z.union([
   RoutinesEvent,
   WorkEvent,
   BotsEvent,
+  ChatEvent,
   IntegrationsEvent,
 ]);
 export type HostEvent = z.infer<typeof HostEvent>;

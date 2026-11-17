@@ -14,7 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
 import type { Attachment, BotSummary, Presence } from "@tomte/contract/events";
-import { useState, useTransition } from "react";
+import { memo, useState, useTransition } from "react";
 import { Streamdown } from "streamdown";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
@@ -43,6 +43,7 @@ import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent } from "@/components/ui/message";
 import { Spinner } from "@/components/ui/spinner";
 import { downloadUrl } from "@/host/api.ts";
+import { useChatLoaded } from "@/host/hooks.ts";
 import type { Item } from "@/host/transcript.ts";
 import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
@@ -103,6 +104,14 @@ export function Transcript({
   onShowTasks: () => void;
 }) {
   const busy = presence !== "idle";
+  const loaded = useChatLoaded();
+  if (!loaded) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        <Spinner className="text-muted-foreground size-5" />
+      </div>
+    );
+  }
   if (items.length === 0 && !busy) {
     return (
       <Empty className="min-h-0 flex-1">
@@ -400,8 +409,9 @@ function UserMessage({
   );
 }
 
-/** A message from the bot: a bubble set as a chat reply, with its copy button and time on hover. */
-function Reply({ text, at }: { text: string; at?: number | undefined }) {
+/** A message from the bot: a bubble set as a chat reply, with its copy button and time on hover. Memoized on its text, so a
+ * replayed or growing transcript does not parse the Markdown of every earlier reply again. */
+const Reply = memo(function Reply({ text, at }: { text: string; at?: number | undefined }) {
   return (
     <Message>
       <MessageContent>
@@ -416,7 +426,7 @@ function Reply({ text, at }: { text: string; at?: number | undefined }) {
       </MessageContent>
     </Message>
   );
-}
+});
 
 /** One line for a background task: its goal and where it stands, with the live status line while it runs. */
 function TaskLine({ item }: { item: Extract<Item, { kind: "task" }> }) {

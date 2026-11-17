@@ -6,6 +6,7 @@ import { getBot } from "../bots/index.ts";
 import { createLoopStore } from "../loop/index.ts";
 import { defined } from "../testing/defined.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
 beforeEach(async () => {
@@ -34,12 +35,13 @@ async function summaryOf(botId: string) {
       text += new TextDecoder().decode(chunk.value);
       for (const part of text.split("\n\n")) {
         if (!part.startsWith("data: ")) continue;
-        const event = JSON.parse(part.slice(6)) as { type: string };
-        if (event.type === "bots")
-          return defined(
-            BotsEvent.parse(event).bots.find((b) => b.id === botId),
-            "bot summary",
-          );
+        for (const event of eventsOf(part.slice(6)) as { type: string }[]) {
+          if (event.type === "bots")
+            return defined(
+              BotsEvent.parse(event).bots.find((b) => b.id === botId),
+              "bot summary",
+            );
+        }
       }
     }
   } finally {

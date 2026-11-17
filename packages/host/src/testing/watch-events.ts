@@ -4,6 +4,15 @@ import type { HandoffHost } from "./test-host.ts";
 
 type PageEvent = { type: string; [k: string]: unknown };
 
+/**
+ * The events of one `/api/events` frame's data. The host sends the open chat whole, as one `chat` event; it is read as a `chat`
+ * marker with its bot id followed by the rows it holds, the order a page applies them in.
+ */
+export function eventsOf(data: string): PageEvent[] {
+  const e = JSON.parse(data) as PageEvent;
+  return e.type === "chat" ? [{ type: "chat", botId: e.botId }, ...(e.events as PageEvent[])] : [e];
+}
+
 /** What a page saw on its event stream, by event id and bot id. */
 export interface EventsWatch {
   stop(): void;
@@ -38,7 +47,7 @@ export async function watchEvents(
         text += new TextDecoder().decode(r.value);
         const parts = text.split("\n\n");
         text = parts.pop() ?? "";
-        for (const p of parts) if (p.startsWith("data: ")) seen.push(JSON.parse(p.slice(6)));
+        for (const p of parts) if (p.startsWith("data: ")) seen.push(...eventsOf(p.slice(6)));
       }
     } catch {
       // The test ended the stream.

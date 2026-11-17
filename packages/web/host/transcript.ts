@@ -250,7 +250,6 @@ function reduceLive(
         },
       ];
     case "done":
-    case "reset":
     case "context":
     case "presence":
     case "rate_limit":

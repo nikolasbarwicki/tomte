@@ -5,7 +5,6 @@ import type {
   FilesEvent,
   HostEvent as StreamEvent,
   Integration,
-  MemoryScope,
   Presence,
   RoutinesEvent,
   ServerEvent,
@@ -23,6 +22,31 @@ export type HostEvent =
   | { type: "host-info"; info: HostInfo }
   | { type: "public-info"; info: PublicHostInfo };
 
+export type ChatState = {
+  items: Item[];
+  /** A standard bot's turn is running. A double-loop bot never sets it from a turn: it shows `presence`. */
+  busy: boolean;
+  /** What a double-loop bot's presence line shows; `idle` for every other bot. */
+  presence: Presence;
+  context: ContextEvent | undefined;
+  /** The subscription's rate limit per window, as the host last reported it; only a double-loop bot is sent any. */
+  rateLimits: Record<string, RateLimit>;
+};
+
+/**
+ * What the page knows about one bot. It is kept after the host moves to another bot, so going back shows the bot at once while
+ * the host sends it again; whatever the host sends replaces it.
+ */
+export type BotView = {
+  /** Undefined until the host has sent this bot's chat. */
+  chat: ChatState | undefined;
+  /** The bot's own directions (memory scope `bot`). */
+  memory: string;
+  files: FilesEvent;
+  routines: RoutinesEvent | undefined;
+  work: WorkEvent | undefined;
+};
+
 /** What the host has streamed to the page. */
 export type HostState = {
   info: HostInfo | undefined;
@@ -30,23 +54,28 @@ export type HostState = {
   publicInfo: PublicHostInfo | undefined;
   /** Undefined until the host's first bots event arrives. */
   bots: BotSummary[] | undefined;
-  /** The bot whose chat the host is streaming; `chat`, `memory`, `files`, `routines` and `work` describe it. */
+  /** The bot whose chat the host is streaming: chat, memory and files events are about it. */
   openBotId: string | undefined;
-  chat: {
-    items: Item[];
-    /** A standard bot's turn is running. A double-loop bot never sets it from a turn: it shows `presence`. */
-    busy: boolean;
-    /** What a double-loop bot's presence line shows; `idle` for every other bot. */
-    presence: Presence;
-    context: ContextEvent | undefined;
-    /** The subscription's rate limit per window, as the host last reported it; only a double-loop bot is sent any. */
-    rateLimits: Record<string, RateLimit>;
-  };
-  memory: Record<MemoryScope, string>;
-  files: FilesEvent;
-  routines: RoutinesEvent | undefined;
-  work: WorkEvent | undefined;
+  views: Record<string, BotView>;
+  /** What every bot knows about the user (memory scope `user`). */
+  userMemory: string;
   integrations: Integration[];
+};
+
+export const emptyChat: ChatState = {
+  items: [],
+  busy: false,
+  presence: "idle",
+  context: undefined,
+  rateLimits: {},
+};
+
+export const emptyView: BotView = {
+  chat: undefined,
+  memory: "",
+  files: { type: "files", dir: "", files: [] },
+  routines: undefined,
+  work: undefined,
 };
 
 export const initialHostState: HostState = {
@@ -54,11 +83,8 @@ export const initialHostState: HostState = {
   publicInfo: undefined,
   bots: undefined,
   openBotId: undefined,
-  chat: { items: [], busy: false, presence: "idle", context: undefined, rateLimits: {} },
-  memory: { user: "", bot: "" },
-  files: { type: "files", dir: "", files: [] },
-  routines: undefined,
-  work: undefined,
+  views: {},
+  userMemory: "",
   integrations: [],
 };
 
@@ -72,39 +98,55 @@ export function applyEvent(s: HostState, e: HostEvent): HostState {
     case "integrations":
       return { ...s, integrations: e.integrations };
     case "memory":
-      return { ...s, memory: { ...s.memory, [e.scope]: e.text } };
+      return e.scope === "user"
+        ? { ...s, userMemory: e.text }
+        : withView(s, s.openBotId, (v) => ({ ...v, memory: e.text }));
     case "files":
-      return { ...s, files: e };
+      return withView(s, s.openBotId, (v) => ({ ...v, files: e }));
     case "routines":
-      return { ...s, routines: e };
+      return withView(s, e.botId, (v) => ({ ...v, routines: e }));
     case "work":
-      return { ...s, work: e };
+      return withView(s, e.botId, (v) => ({ ...v, work: e }));
     case "bots":
-      return { ...s, bots: e.bots };
-    case "reset":
-      return {
-        ...s,
-        openBotId: e.botId,
-        chat: { items: [], busy: false, presence: "idle", context: undefined, rateLimits: {} },
-      };
-    case "context":
-      return { ...s, chat: { ...s.chat, context: e } };
-    case "presence":
-      return { ...s, chat: { ...s.chat, presence: e.state } };
-    case "rate_limit":
-      return {
-        ...s,
-        chat: { ...s.chat, rateLimits: { ...s.chat.rateLimits, [e.window ?? ""]: e } },
-      };
+      return { ...s, bots: e.bots, views: withoutRemoved(s.views, e.bots) };
+    case "chat":
+      return withView({ ...s, openBotId: e.botId }, e.botId, (v) => ({
+        ...v,
+        chat: e.events.reduce(applyChatEvent, emptyChat),
+      }));
     default:
-      return { ...s, chat: applyChatEvent(s.chat, e) };
+      return withView(s, s.openBotId, (v) => ({
+        ...v,
+        chat: applyChatEvent(v.chat ?? emptyChat, e),
+      }));
   }
 }
 
-function applyChatEvent(
-  chat: HostState["chat"],
-  e: Exclude<ServerEvent, { type: "reset" | "context" | "presence" | "rate_limit" }>,
-): HostState["chat"] {
+function withView(
+  s: HostState,
+  botId: string | undefined,
+  update: (v: BotView) => BotView,
+): HostState {
+  if (botId === undefined) return s;
+  return { ...s, views: { ...s.views, [botId]: update(s.views[botId] ?? emptyView) } };
+}
+
+/** Drops the views of deleted bots; the same object when every view's bot is still there. */
+function withoutRemoved(views: Record<string, BotView>, bots: BotSummary[]) {
+  const ids = new Set(bots.map((b) => b.id));
+  if (Object.keys(views).every((id) => ids.has(id))) return views;
+  return Object.fromEntries(Object.entries(views).filter(([id]) => ids.has(id)));
+}
+
+function applyChatEvent(chat: ChatState, e: ServerEvent): ChatState {
+  switch (e.type) {
+    case "context":
+      return { ...chat, context: e };
+    case "presence":
+      return { ...chat, presence: e.state };
+    case "rate_limit":
+      return { ...chat, rateLimits: { ...chat.rateLimits, [e.window ?? ""]: e } };
+  }
   const context = e.type === "session" ? undefined : chat.context;
   const busy =
     e.type === "user" ||

@@ -9,7 +9,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { InputGroupButton } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { useChat } from "@/host/hooks.ts";
+import { useChat, useOpenBotId } from "@/host/hooks.ts";
 import { cn } from "@/lib/utils";
 
 import { setChatMode, setEffort, setModel } from "./api.ts";
@@ -68,6 +68,8 @@ function ModelSettings({ bot }: { bot: BotSummary }) {
   const doubleLoop = bot.chatMode === "double_loop";
   const [switching, startSwitch] = useTransition();
   const [applying, startApply] = useTransition();
+  // Model and effort apply to the chat the host streams, which is another bot's for a moment after switching.
+  const streamed = useOpenBotId() === bot.id;
 
   const switchTo = async (mode: ChatMode) => {
     const next = mode === "double_loop";
@@ -130,7 +132,7 @@ function ModelSettings({ bot }: { bot: BotSummary }) {
           options={BotModel.options}
           labels={MODEL_LABELS}
           value={bot.model}
-          disabled={applying}
+          disabled={applying || !streamed}
           onChange={(model) => startApply(async () => void (await setModel(model)))}
         />
         <Choice
@@ -138,7 +140,7 @@ function ModelSettings({ bot }: { bot: BotSummary }) {
           options={EffortLevel.options}
           labels={EFFORT_LABELS}
           value={bot.effort}
-          disabled={applying}
+          disabled={applying || !streamed}
           onChange={(effort) => startApply(async () => void (await setEffort(effort)))}
         />
         <p className="text-muted-foreground text-xs text-pretty">

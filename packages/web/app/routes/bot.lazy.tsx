@@ -9,7 +9,7 @@ import { Routines } from "@/features/routines/index.ts";
 import { TasksTab } from "@/features/tasks/index.ts";
 import { EventsEndpoint, Work } from "@/features/work/index.ts";
 import { markSeen, openBot } from "@/host/api.ts";
-import { useBots, useOpenBotId } from "@/host/hooks.ts";
+import { ShownBot, useBots, useOpenBotId } from "@/host/hooks.ts";
 
 import { BotRail } from "../bot-rail.tsx";
 import { useNewBot } from "../shell.tsx";
@@ -43,47 +43,50 @@ export const Route = createLazyRoute("/bots/$botId")({
     }, [botId, shown, bot?.status]);
 
     if (bots && !bot) return <Navigate to="/" replace />;
-    if (!shown) return <Welcome loading hasBots onNewBot={newBot} />;
+    if (!bot) return <Welcome loading hasBots onNewBot={newBot} />;
+    // What the page last saw of this bot shows at once; the host's replay replaces it as soon as it arrives.
     return (
-      <ChatView
-        key={bot.id}
-        bot={bot}
-        rail={(controls) => <BotRail bot={bot} controls={controls} />}
-        panel={(controls) => (
-          <BotPanel
-            bot={bot}
-            section={controls.section}
-            slots={{
-              work: <Work botId={bot.id} onConnect={() => controls.show("events")} />,
-              tasks: <TasksTab />,
-              browser: <BrowserTab bot={bot} />,
-              routines: <Routines botId={bot.id} />,
-              events: <EventsEndpoint key={bot.id} botId={bot.id} />,
-              memory: (
-                <div className="grid gap-6">
-                  <MemoryEditor
-                    scope="user"
-                    title="About you"
-                    description="What every bot knows about you. Shared by all bots."
-                    empty="Nothing remembered yet."
-                  />
-                  <MemoryEditor
-                    scope="bot"
-                    botId={bot.id}
-                    title={`How ${bot.name} works`}
-                    description="Directions only this bot follows."
-                    empty="No directions yet."
-                  />
-                </div>
-              ),
-            }}
-            switcher={
-              !controls.wide && <BotRail bot={bot} controls={controls} orientation="horizontal" />
-            }
-            onClose={controls.close}
-          />
-        )}
-      />
+      <ShownBot value={bot.id}>
+        <ChatView
+          key={bot.id}
+          bot={bot}
+          rail={(controls) => <BotRail bot={bot} controls={controls} />}
+          panel={(controls) => (
+            <BotPanel
+              bot={bot}
+              section={controls.section}
+              slots={{
+                work: <Work botId={bot.id} onConnect={() => controls.show("events")} />,
+                tasks: <TasksTab />,
+                browser: <BrowserTab bot={bot} />,
+                routines: <Routines botId={bot.id} />,
+                events: <EventsEndpoint key={bot.id} botId={bot.id} />,
+                memory: (
+                  <div className="grid gap-6">
+                    <MemoryEditor
+                      scope="user"
+                      title="About you"
+                      description="What every bot knows about you. Shared by all bots."
+                      empty="Nothing remembered yet."
+                    />
+                    <MemoryEditor
+                      scope="bot"
+                      botId={bot.id}
+                      title={`How ${bot.name} works`}
+                      description="Directions only this bot follows."
+                      empty="No directions yet."
+                    />
+                  </div>
+                ),
+              }}
+              switcher={
+                !controls.wide && <BotRail bot={bot} controls={controls} orientation="horizontal" />
+              }
+              onClose={controls.close}
+            />
+          )}
+        />
+      </ShownBot>
     );
   },
 });

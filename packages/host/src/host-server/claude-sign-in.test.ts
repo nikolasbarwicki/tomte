@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 const MAIN = join(import.meta.dir, "..", "main.ts");
 const PRETEND_LINUX = join(import.meta.dir, "..", "testing", "pretend-linux.ts");
@@ -99,7 +100,7 @@ async function chatError(h: HandoffHost): Promise<string> {
       .split("\n\n")
       .slice(0, -1)
       .filter((l) => l.startsWith("data: "))
-      .map((l) => JSON.parse(l.slice(6)) as { type: string; message?: string })
+      .flatMap((l) => eventsOf(l.slice(6)) as { type: string; message?: string }[])
       .find((e) => e.type === "error");
     if (error) {
       ctl.abort();

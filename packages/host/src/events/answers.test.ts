@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { EventAccess } from "@tomte/contract/api";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
 let scratch: string;
@@ -56,7 +57,7 @@ async function watch(): Promise<Page> {
         text += new TextDecoder().decode(r.value);
         const parts = text.split("\n\n");
         text = parts.pop() ?? "";
-        for (const p of parts) if (p.startsWith("data: ")) seen.push(JSON.parse(p.slice(6)));
+        for (const p of parts) if (p.startsWith("data: ")) seen.push(...eventsOf(p.slice(6)));
       }
     } catch {
       // The test ended the stream.

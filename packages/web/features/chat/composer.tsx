@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { sendMessage } from "@/host/api.ts";
-import { useWork } from "@/host/hooks.ts";
+import { useOpenBotId, useWork } from "@/host/hooks.ts";
 import { botTheme } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +44,8 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
   const answered = needsYouItems(useWork(), bot.id).find((i) => i.id === answering);
   const [highlight, setHighlight] = useState(0);
   const [sending, startSending] = useTransition();
+  // The host sends to the chat it streams, which is another bot's for a moment after switching.
+  const streamed = useOpenBotId() === bot.id;
   const textarea = useRef<HTMLTextAreaElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   // Files and folders to send with the message; each is saved on the host when the message is sent, and keeps where it was
@@ -114,7 +116,7 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
 
   const send = () => {
     const text = input.trim();
-    if ((!text && drafts.length === 0) || sending) return;
+    if ((!text && drafts.length === 0) || sending || !streamed) return;
     const sent = mentions;
     const eventId = answered?.id;
     const pending = drafts;
@@ -388,7 +390,7 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
                 variant="default"
                 size="icon-sm"
                 className="ml-auto rounded-full"
-                disabled={sending || (!input.trim() && drafts.length === 0)}
+                disabled={sending || !streamed || (!input.trim() && drafts.length === 0)}
                 aria-label="Send"
               >
                 {sending ? <Spinner /> : <ArrowUpIcon />}

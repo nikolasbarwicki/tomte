@@ -7,6 +7,7 @@ import { botMemoryPath, getBot, readMemory, setChatMode } from "../bots/index.ts
 import { defined } from "../testing/defined.ts";
 import { writeSession } from "../testing/session-file.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
 let scratch: string;
@@ -44,7 +45,7 @@ async function pageEvents(): Promise<Streamed[]> {
   return text
     .split("\n\n")
     .filter((l) => l.startsWith("data: "))
-    .map((l) => JSON.parse(l.slice(6)));
+    .flatMap((l) => eventsOf(l.slice(6)));
 }
 
 const presenceOf = (events: Streamed[]) => events.find((e) => e.type === "presence")?.state;

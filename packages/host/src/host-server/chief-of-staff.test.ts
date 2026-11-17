@@ -5,6 +5,7 @@ import { Bot, BotsEvent } from "@tomte/contract/events";
 import { getBot } from "../bots/index.ts";
 import { defined } from "../testing/defined.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
 beforeEach(async () => {
@@ -46,8 +47,9 @@ async function summaries() {
       text += new TextDecoder().decode(chunk.value);
       for (const part of text.split("\n\n")) {
         if (!part.startsWith("data: ")) continue;
-        const event = JSON.parse(part.slice(6)) as { type: string };
-        if (event.type === "bots") return BotsEvent.parse(event).bots;
+        for (const event of eventsOf(part.slice(6)) as { type: string }[]) {
+          if (event.type === "bots") return BotsEvent.parse(event).bots;
+        }
       }
     }
   } finally {

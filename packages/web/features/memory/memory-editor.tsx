@@ -23,7 +23,7 @@ export function MemoryEditor({
   empty,
   ...target
 }: Scope & { title: string; description: string; empty: string }) {
-  const text = useMemory()[target.scope];
+  const text = useMemory(target.scope);
   const [draft, setDraft] = useState<{ text: string; base: string }>();
   const [saving, startSaving] = useTransition();
   const id = `memory-${target.scope}`;

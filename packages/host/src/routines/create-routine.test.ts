@@ -9,6 +9,7 @@ import {
   type ToolOut,
 } from "../testing/routines-kit.ts";
 import { parse, startHandoffHost, type BotCaller, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
 beforeEach(async () => void (host = await startHandoffHost()));
@@ -77,7 +78,7 @@ describe("create_routine", () => {
       seen
         .split("\n\n")
         .filter((l) => l.startsWith("data: "))
-        .map((l) => JSON.parse(l.slice(6)) as { type: string; routines?: { name: string }[] })
+        .flatMap((l) => eventsOf(l.slice(6)) as { type: string; routines?: { name: string }[] }[])
         .some((e) => e.type === "routines" && e.routines?.some((r) => r.name === "Pushed"));
     await Bun.sleep(100);
     expect(carries()).toBe(false);

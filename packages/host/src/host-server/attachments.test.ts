@@ -14,6 +14,7 @@ import { join } from "node:path";
 
 import { botFilesPath } from "../bots/index.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
 let botId: string;
@@ -62,7 +63,7 @@ async function userEvents(): Promise<unknown[]> {
   return text
     .split("\n\n")
     .filter((l) => l.startsWith("data: "))
-    .map((l) => JSON.parse(l.slice(6)) as { type: string })
+    .flatMap((l) => eventsOf(l.slice(6)) as { type: string }[])
     .filter((e) => e.type === "user");
 }
 

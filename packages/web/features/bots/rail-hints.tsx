@@ -70,9 +70,8 @@ function FilesHint() {
 }
 
 function MemoryHint() {
-  const memory = useMemory();
-  const directions = lines(memory.bot);
-  const facts = lines(memory.user);
+  const directions = lines(useMemory("bot"));
+  const facts = lines(useMemory("user"));
   return directions + facts === 0
     ? "Empty"
     : `${plural(directions, "direction")} · ${facts} about you`;

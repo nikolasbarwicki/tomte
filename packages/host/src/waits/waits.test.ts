@@ -10,6 +10,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 
 import { defined } from "../testing/defined.ts";
 import { parse, startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 const DAY = 24 * 60 * 60_000;
 const TOOL = "mcp__fx__send_mail";
@@ -76,7 +77,7 @@ async function watch() {
         text += new TextDecoder().decode(r.value);
         const parts = text.split("\n\n");
         text = parts.pop() ?? "";
-        for (const p of parts) if (p.startsWith("data: ")) seen.push(JSON.parse(p.slice(6)));
+        for (const p of parts) if (p.startsWith("data: ")) seen.push(...eventsOf(p.slice(6)));
       }
     } catch {
       // The test ended the stream.
@@ -278,7 +279,7 @@ describe("questions", () => {
     await host.restart();
     host.stopAsking();
     const page = await watch();
-    await host.until(() => page.events().some((e) => e.type === "reset"));
+    await host.until(() => page.events().some((e) => e.type === "chat"));
     // The turn the question belonged to ended with the restart: nothing replays it, nothing tells the bot, the event stays open.
     await Bun.sleep(100);
     expect(page.asks()).toEqual([]);

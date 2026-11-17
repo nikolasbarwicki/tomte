@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { eventsOf } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
 let claudeConfig: string;
@@ -39,7 +40,7 @@ async function pageEvents(): Promise<PageEvent[]> {
   return text
     .split("\n\n")
     .filter((l) => l.startsWith("data: "))
-    .map((l) => JSON.parse(l.slice(6)));
+    .flatMap((l) => eventsOf(l.slice(6)));
 }
 const asks = async () => (await pageEvents()).filter((e) => e.type === "ask");
 /** The one question shown to a page that connects once the fake CLI has asked it. */
