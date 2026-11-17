@@ -5,9 +5,10 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { Progress } from "@/components/ui/progress";
 import type { RateLimit } from "@/host/state.ts";
 import { dateTime } from "@/lib/format.ts";
+import { untilReset } from "@/lib/usage-limits.ts";
 import { cn } from "@/lib/utils";
 
-import { rateLimitRows, untilReset, type RateLimitRow } from "./rate-limits.ts";
+import { rateLimitRows, type RateLimitRow } from "./rate-limits.ts";
 
 const TONE = {
   allowed: "text-muted-foreground",

@@ -2,6 +2,7 @@ import {
   type ClaudeGateway,
   type ClaudeLoginCode,
   ClaudeLoginStart,
+  ClaudeUsage,
   Instructions,
   ModelProviders,
 } from "@tomte/contract/api";
@@ -25,6 +26,13 @@ export async function loadProviders(): Promise<ModelProviders["providers"]> {
   const res = await post("/api/providers", {});
   if (!res.ok) throw new Error(await errorOf(res));
   return (await readJson(res, ModelProviders)).providers;
+}
+
+/** The Claude subscription's session and weekly usage as the CLI reports it now; throws the host's error message when it cannot tell. */
+export async function loadClaudeUsage(): Promise<ClaudeUsage> {
+  const res = await post("/api/providers/claude/usage", {});
+  if (!res.ok) throw new Error(await errorOf(res));
+  return readJson(res, ClaudeUsage);
 }
 
 /** Starts a Claude sign-in on the host; resolves to the page to sign in at, or undefined after a toast when the host could not start one. */

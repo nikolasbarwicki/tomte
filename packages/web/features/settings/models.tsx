@@ -33,6 +33,7 @@ import {
   startClaudeLogin,
   submitClaudeLoginCode,
 } from "./api.ts";
+import { PlanUsage } from "./usage.tsx";
 
 /** How often the page asks again while a sign-in waits, so one the CLI completes on its own shows. */
 const LOGIN_POLL_MS = 3000;
@@ -158,6 +159,7 @@ function ProviderCard({
             ))}
           </ul>
         )}
+        {p.status === "connected" && !p.gateway && !p.login && <PlanUsage revision={p} />}
         <CustomProvider provider={p} onChange={onChange} />
       </CardContent>
     </Card>

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { ClaudeLoginStart, ModelProviders } from "@tomte/contract/api";
+import { ClaudeLoginStart, ClaudeUsage, ModelProviders } from "@tomte/contract/api";
 
 import { defined } from "../testing/defined.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
@@ -152,4 +152,70 @@ test("bots never load the owner's own Claude Code settings or claude.ai connecto
   const sources = argv.filter((a: string) => a.startsWith("--setting-sources"));
   expect(sources).toEqual(["--setting-sources="]);
   expect(env.ENABLE_CLAUDEAI_MCP_SERVERS).toBe("false");
+});
+
+describe("plan usage", () => {
+  const usage = async () => {
+    const res = await host.ui("/api/providers/claude/usage", {});
+    return { status: res.status, body: await res.json() };
+  };
+
+  test("reports the session and weekly windows the CLI reports, in that order", async () => {
+    host.setPlanUsage({
+      rate_limits_available: true,
+      rate_limits: {
+        seven_day: { utilization: 41.5, resets_at: "2026-11-20T09:00:00Z" },
+        five_hour: { utilization: 73, resets_at: "2026-11-17T15:00:00Z" },
+        seven_day_opus: null,
+        seven_day_sonnet: { utilization: null, resets_at: null },
+        model_scoped: [{ display_name: "Fable", utilization: 120, resets_at: "nonsense" }],
+      },
+    });
+    const { status, body } = await usage();
+    expect(status).toBe(200);
+    const parsed = ClaudeUsage.parse(body);
+    expect(parsed.available).toBe(true);
+    expect(parsed.windows).toEqual([
+      {
+        window: "five_hour",
+        name: null,
+        percent: 73,
+        resetsAt: Date.parse("2026-11-17T15:00:00Z"),
+      },
+      {
+        window: "seven_day",
+        name: null,
+        percent: 41.5,
+        resetsAt: Date.parse("2026-11-20T09:00:00Z"),
+      },
+      { window: "seven_day_sonnet", name: null, percent: null, resetsAt: null },
+      { window: "model", name: "Fable", percent: 100, resetsAt: null },
+    ]);
+  });
+
+  test("is unavailable when plan limits do not apply, while signed out and with a custom provider", async () => {
+    expect((await usage()).body).toMatchObject({ available: false, windows: [] });
+
+    host.setPlanUsage({
+      rate_limits_available: true,
+      rate_limits: { five_hour: { utilization: 5 } },
+    });
+    host.setSignedIn(false);
+    expect((await usage()).body).toMatchObject({ available: false, windows: [] });
+
+    host.setSignedIn(true);
+    await host.ui("/api/providers/claude/gateway", {
+      baseUrl: "https://gateway.example.test",
+      auth: "bearer",
+      token: TOKEN,
+    });
+    expect((await usage()).body).toMatchObject({ available: false, windows: [] });
+  });
+
+  test("answers 502 with the reason when the CLI cannot report it", async () => {
+    host.setPlanUsage({ error: "usage endpoint unavailable" });
+    const { status, body } = await usage();
+    expect(status).toBe(502);
+    expect(body).toEqual({ error: expect.stringContaining("usage endpoint unavailable") });
+  });
 });

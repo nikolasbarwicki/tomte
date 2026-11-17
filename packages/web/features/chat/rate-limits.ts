@@ -1,5 +1,7 @@
 import type { ServerEvent } from "@tomte/contract/events";
 
+import { usageLimitLabel } from "@/lib/usage-limits.ts";
+
 type RateLimit = Extract<ServerEvent, { type: "rate_limit" }>;
 
 export type RateLimitRow = {
@@ -10,15 +12,6 @@ export type RateLimitRow = {
   status: RateLimit["status"];
   /** When the window resets, in epoch milliseconds. */
   resetsAt: number | undefined;
-};
-
-const LABELS: Record<string, string> = {
-  five_hour: "5-hour limit",
-  seven_day: "Weekly limit",
-  seven_day_opus: "Weekly Opus limit",
-  seven_day_sonnet: "Weekly Sonnet limit",
-  seven_day_overage_included: "Weekly limit",
-  overage: "Extra usage",
 };
 
 const SEVERITY: Record<RateLimit["status"], number> = {
@@ -34,7 +27,7 @@ export function rateLimitRows(limits: Record<string, RateLimit>): RateLimitRow[]
       const window = l.window ?? "";
       return {
         window,
-        label: LABELS[window] ?? (window ? window.replaceAll("_", " ") : "Usage limit"),
+        label: usageLimitLabel(window),
         percent:
           l.utilization === undefined
             ? undefined
@@ -46,14 +39,4 @@ export function rateLimitRows(limits: Record<string, RateLimit>): RateLimitRow[]
     .sort(
       (a, b) => SEVERITY[b.status] - SEVERITY[a.status] || (b.percent ?? -1) - (a.percent ?? -1),
     );
-}
-
-/** How long until `resetsAt`, as "2h 5m", "45m" or "3d 4h"; "now" once it has passed. */
-export function untilReset(resetsAt: number, now: number): string {
-  const minutes = Math.max(0, Math.ceil((resetsAt - now) / 60_000));
-  if (minutes === 0) return "now";
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ${minutes % 60}m`;
-  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }

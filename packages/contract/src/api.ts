@@ -313,3 +313,26 @@ export type ModelProvider = z.infer<typeof ModelProvider>;
 /** The `/api/providers` response. */
 export const ModelProviders = z.object({ providers: z.array(ModelProvider) });
 export type ModelProviders = z.infer<typeof ModelProviders>;
+
+/**
+ * One plan usage window of the Claude subscription, as the CLI's `/usage` reports it. `window` is the CLI's key (`five_hour` is the
+ * session limit, `seven_day` the weekly one, `seven_day_opus` ...; a string, so a window a newer CLI adds still parses), `name` the
+ * server's label for a per-model weekly window (null for the others). `percent` is the share used, 0 to 100, and `resetsAt` when the
+ * window resets, in epoch milliseconds; either is null when the CLI did not say.
+ */
+export const UsageWindow = z.object({
+  window: z.string(),
+  name: z.string().nullable(),
+  percent: z.number().nullable(),
+  resetsAt: z.number().nullable(),
+});
+export type UsageWindow = z.infer<typeof UsageWindow>;
+
+/** The `/api/providers/claude/usage` response. `available` is false when plan limits do not apply (a custom provider, an API key, signed out); `windows` is then empty. */
+export const ClaudeUsage = z.object({
+  available: z.boolean(),
+  windows: z.array(UsageWindow),
+  /** When the host asked, in epoch milliseconds. */
+  checkedAt: z.number(),
+});
+export type ClaudeUsage = z.infer<typeof ClaudeUsage>;

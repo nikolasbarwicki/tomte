@@ -2,6 +2,7 @@ import {
   ClaudeGateway,
   ClaudeLoginCode,
   type ClaudeLoginStart,
+  type ClaudeUsage,
   Instructions,
   MemoryUpdate,
   type ModelProvider,
@@ -90,6 +91,13 @@ export function settingsRoutes({
         login: claude.login.pending() ?? null,
       };
       return json(res, { providers: [claudeProvider] } satisfies ModelProviders);
+    },
+    "/api/providers/claude/usage": async ({ res }) => {
+      try {
+        return json(res, (await claude.usage()) satisfies ClaudeUsage);
+      } catch (e) {
+        return json(res, { error: `Could not read usage: ${(e as Error).message}` }, 502);
+      }
     },
     "/api/providers/claude/login": async ({ res }) => {
       try {

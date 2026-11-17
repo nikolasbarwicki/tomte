@@ -2,12 +2,13 @@ import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { ClaudeGateway, ClaudeSignIn, ModelProvider } from "@tomte/contract/api";
+import type { ClaudeGateway, ClaudeSignIn, ClaudeUsage, ModelProvider } from "@tomte/contract/api";
 import { z } from "zod";
 
 import type { HostConfig } from "../platform/config.ts";
 import { hostCommand } from "../platform/launch.ts";
 import { createClaudeLogin, type ClaudeLogin } from "./claude-login.ts";
+import { readClaudeUsage } from "./claude-usage.ts";
 import { loginShellPath, type ResolvedCli } from "./cli.ts";
 
 /** The name and version the host reports to Claude Code and to the MCP servers it hosts. */
@@ -76,6 +77,8 @@ export interface ClaudeAccess {
   report(): ClaudeReport;
   /** Runs `auth status` (and `--version` until it answered) and keeps the answers; one run at a time. */
   checkSignIn(): Promise<SignInState>;
+  /** The subscription's plan usage (session and weekly limits) as the CLI reports it now; unavailable without a sign-in or with a custom provider. One check at a time; rejects when the CLI cannot answer. */
+  usage(): Promise<ClaudeUsage>;
   /** Remote mode only: resolves when a run may start, and rejects with `SignedOut` naming the sign-in command. A signed-out state is re-checked once first, so a sign-in made while the host runs is picked up. */
   requireSignIn(): Promise<void>;
   /** The custom provider the CLI uses instead of the sign-in, without its token. */
@@ -175,11 +178,20 @@ export function createClaudeAccess(config: HostConfig, cli: ResolvedCli): Claude
     checkSignIn,
   );
 
+  let usageRunning: Promise<ClaudeUsage> | undefined;
+  const readUsage = async (): Promise<ClaudeUsage> => {
+    const checkedAt = Date.now();
+    if (gateway || (await checkSignIn()) !== "signed-in")
+      return { available: false, windows: [], checkedAt };
+    return { ...(await readClaudeUsage(cli, env(), config.dataRoot)), checkedAt };
+  };
+
   return {
     env,
     signInState: () => current.state,
     report: () => current,
     checkSignIn,
+    usage: () => (usageRunning ??= readUsage().finally(() => (usageRunning = undefined))),
     async requireSignIn() {
       if (config.mode !== "remote") return;
       if (running) await running;

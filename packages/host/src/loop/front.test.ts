@@ -72,6 +72,7 @@ function openFront({
       signInState: () => "unknown",
       checkSignIn: async () => "unknown",
       requireSignIn: async () => {},
+      usage: async () => ({ available: false, windows: [], checkedAt: 0 }),
       report: () => ({ state: "unknown", account: null, cliVersion: null }),
       gateway: () => undefined,
       setGateway: () => {},

@@ -162,6 +162,8 @@ export interface HandoffHost {
     cacheCreation?: number;
     error?: string;
   }): void;
+  /** What the fake CLI answers to the experimental `get_usage` request from now on: the SDK's own answer shape, or `{ error }` to fail it. */
+  setPlanUsage(answer: Record<string, unknown>): void;
   /** The client listener's URL: the web UI and `/api/*`. Follows `restart()`. */
   readonly clientUrl: string;
   /** The agent listener's URL: the browser and bots endpoints. Follows `restart()`. */
@@ -374,6 +376,8 @@ export async function startHandoffHost(
           ...(usage.error !== undefined && { error: usage.error }),
         }),
       ),
+    setPlanUsage: (answer) =>
+      writeFileSync(join(claudeDir, "plan-usage.json"), JSON.stringify(answer)),
     release: () => rmSync(join(claudeDir, "hold"), { force: true }),
     advanceClock: (ms) => {
       clock += ms;
