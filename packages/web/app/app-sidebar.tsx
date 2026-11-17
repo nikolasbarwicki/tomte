@@ -149,22 +149,29 @@ export function AppSidebar({
                     render={<Link to="/bots/$botId" params={{ botId: b.id }} />}
                     onClick={reveal}
                     title={b.purpose || undefined}
-                    className="h-auto items-center gap-2.5 py-2"
+                    className="h-auto items-center gap-2.5 py-2 data-active:font-normal"
                   >
                     <StatusAvatar bot={b} />
                     <span className="grid min-w-0 flex-1 gap-0.5">
                       <span className="flex min-w-0 items-baseline gap-2">
-                        <span className={cn("truncate", b.status === "unseen" && "font-semibold")}>
-                          {b.name}
-                        </span>
-                        {b.chiefOfStaff && (
+                        <span className="flex min-w-0 items-baseline gap-2">
                           <span
-                            className="bg-muted text-muted-foreground shrink-0 rounded-full px-1.5 text-[11px] font-medium"
-                            data-chief-of-staff
+                            className={cn(
+                              "max-w-full shrink-0 truncate",
+                              b.status === "unseen" && "font-semibold",
+                            )}
                           >
-                            Chief of Staff
+                            {b.name}
                           </span>
-                        )}
+                          {b.chiefOfStaff && (
+                            <span
+                              className="bg-muted text-muted-foreground min-w-0 truncate rounded-full px-1.5 text-[11px] font-medium"
+                              data-chief-of-staff
+                            >
+                              Chief of Staff
+                            </span>
+                          )}
+                        </span>
                         {b.needsYou > 0 && (
                           <span
                             className="shrink-0 rounded-full bg-amber-500/15 px-1.5 text-[11px] font-medium text-amber-700 tabular-nums dark:text-amber-400"
