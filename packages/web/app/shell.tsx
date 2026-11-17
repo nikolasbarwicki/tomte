@@ -47,8 +47,8 @@ export function Shell() {
           integrationsNeedingAttention={integrations.filter(needsAttention).length}
           onNewBot={newBot}
         />
-        {/* Collapsed (or on a narrow window, where the sidebar is a sheet) the inset's bars start under the native window controls; expanded, the sidebar's own strip holds them. From md up the inset is the sheet on the desk (the sidebar's `variant="inset"`): 8px from the window's edges, with its own corners and shadow. A view that lays out sheets of its own (`data-split`, the chat beside its panel and the rail) gets a bare inset instead. */}
-        <SidebarInset className="min-h-0 min-w-0 overflow-hidden [--titlebar-inset:env(titlebar-area-x,0px)] has-data-split:overflow-visible has-data-split:bg-transparent md:peer-data-[state=expanded]:[--titlebar-inset:0px] md:peer-data-[variant=inset]:shadow-(--sheet-shadow) md:peer-data-[variant=inset]:has-data-split:shadow-none">
+        {/* On a narrow window, where the sidebar is a sheet, the inset's bars start under the native window controls; from md up the sidebar is always there (its narrowest stop is a rail as wide as the controls) and its own strip holds them. From md up the inset is the sheet on the desk (the sidebar's `variant="inset"`): 8px from the window's edges, with its own corners and shadow. A view that lays out sheets of its own (`data-split`, the chat beside its panel and the rail) gets a bare inset instead. */}
+        <SidebarInset className="min-h-0 min-w-0 overflow-hidden [--titlebar-inset:env(titlebar-area-x,0px)] has-data-split:overflow-visible has-data-split:bg-transparent md:[--titlebar-inset:0px] md:peer-data-[variant=inset]:shadow-(--sheet-shadow) md:peer-data-[variant=inset]:has-data-split:shadow-none">
           <Outlet />
         </SidebarInset>
         {/* The desk's margin above the sheet and the sidebar moves the window too. */}

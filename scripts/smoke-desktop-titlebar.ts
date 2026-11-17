@@ -6,11 +6,11 @@ import { join } from "node:path";
 // One launch on a fresh temp root (fake Claude CLI, file secrets, mock keychain, login-item file seam; see the kit). It
 //   - reads the web UI's header and the real traffic lights' geometry (Accessibility frames of the three native buttons)
 //     and asserts the lights sit inside the header, vertically centred, with no control or title under them, both with
-//     the sidebar expanded and collapsed;
+//     the sidebar at its full stop and at its rail;
 //   - reads `-webkit-app-region` of the header, of the sidebar strip and of every interactive control in the header;
 //   - drives the NATIVE buttons through Accessibility (System Events, by this app's pid only): close (hides to the tray,
 //     host alive), minimize, fullscreen, and posts real mouse events (a small Swift helper): a drag on the header moves
-//     the window, a click on the sidebar trigger toggles the sidebar without moving it;
+//     the window, ⌘B takes the sidebar to its rail and back without moving it;
 //   - captures native window screenshots (`screencapture -l<CGWindowID>`, that one window only) and page screenshots;
 //   - checks the host-stopped page (a draggable strip, nothing under the lights) and that the Connections window keeps
 //     its standard title bar;
@@ -98,8 +98,7 @@ function measureHeader(): HeaderMeasure {
     },
     rootFlag: document.documentElement.hasAttribute("data-wco"),
     sidebar:
-      document.querySelector('[data-slot="sidebar"][data-state]')?.getAttribute("data-state") ??
-      null,
+      document.querySelector('[data-slot="sidebar"][data-stop]')?.getAttribute("data-stop") ?? null,
     header: header
       ? {
           box: box(header),
@@ -381,48 +380,32 @@ async function main(): Promise<void> {
       `the sidebar's top strip is a 40px drag region level with the header (${JSON.stringify(expanded.strip)})`,
     );
     check(
-      expanded.sidebar === "expanded" && expanded.header!.paddingLeft === 12,
+      expanded.sidebar === "full" && expanded.header!.paddingLeft === 12,
       `expanded: header padding-left is ${expanded.header!.paddingLeft}px (the lights sit over the sidebar strip)`,
     );
     await screenshots(l, "after");
 
-    console.log("\n[2] sidebar trigger: a real click toggles it, it does not drag");
+    console.log("\n[2] the rail: ⌘B narrows the sidebar to its faces, the lights stay over it");
     const before = await windowState(l);
-    const trigger =
-      expanded.controls.find((c) => c.desc.includes("sidebar-trigger")) ??
-      fail("no sidebar trigger in the header");
-    const clickAt = {
-      x: before.content.x + trigger.box.x + trigger.box.width / 2,
-      y: before.content.y + trigger.box.y + trigger.box.height / 2,
-    };
     await frontmost(l);
     await sleep(300);
-    if (native.accessible) {
-      const r = native.mouse("click", Math.round(clickAt.x), Math.round(clickAt.y));
-      check(
-        r.ok,
-        `real mouse click posted at the sidebar trigger (${Math.round(clickAt.x)}, ${Math.round(clickAt.y)})${r.stderr ? `: ${r.stderr}` : ""}`,
-      );
-    } else {
-      await l.page.click('[data-slot="sidebar-trigger"]');
-      info("LIMIT: no Accessibility; the trigger was clicked through Playwright, not the OS");
-    }
+    await l.page.keyboard.press("Meta+b");
     await until(
-      "the sidebar to collapse",
+      "the sidebar to reach its rail",
       5000,
-      async () => (await l.page.evaluate(measureHeader)).sidebar === "collapsed",
+      async () => (await l.page.evaluate(measureHeader)).sidebar === "rail",
     );
     await sleep(500);
     const collapsed = await l.page.evaluate(measureHeader);
-    const afterClick = await windowState(l);
+    const afterToggle = await windowState(l);
     check(
-      JSON.stringify(afterClick.bounds) === JSON.stringify(before.bounds),
-      `the click toggled the sidebar (now ${collapsed.sidebar}) and did not move or resize the window`,
+      JSON.stringify(afterToggle.bounds) === JSON.stringify(before.bounds),
+      `⌘B took the sidebar to its ${collapsed.sidebar} and did not move or resize the window`,
     );
-    assertHeader("collapsed sidebar", collapsed, await lightsOf(), collapsed.wco.rect.x);
+    assertHeader("sidebar rail", collapsed, await lightsOf(), collapsed.wco.rect.x);
     check(
-      collapsed.header!.paddingLeft === 12 + collapsed.wco.rect.x,
-      `collapsed: header padding-left ${collapsed.header!.paddingLeft}px = 12px + the overlay's left edge ${collapsed.wco.rect.x}px`,
+      collapsed.header!.paddingLeft === 12,
+      `rail: header padding-left is ${collapsed.header!.paddingLeft}px (the lights still sit over the sidebar)`,
     );
     await screenshots(l, "after-collapsed");
 
@@ -489,20 +472,12 @@ async function main(): Promise<void> {
       x: Math.round(headerBox.x + headerBox.width - 160),
       y: Math.round(headerBox.y + headerBox.height / 2),
     });
-    // Expand again with a real click on the trigger so the sidebar strip can be dragged too.
-    const now = await windowState(l);
-    const collapsedTrigger = collapsed.controls.find((c) => c.desc.includes("sidebar-trigger"))!;
-    if (native.accessible) {
-      native.mouse(
-        "click",
-        Math.round(now.content.x + collapsedTrigger.box.x + collapsedTrigger.box.width / 2),
-        Math.round(now.content.y + collapsedTrigger.box.y + collapsedTrigger.box.height / 2),
-      );
-    } else await l.page.click('[data-slot="sidebar-trigger"]');
+    // Back to the full sidebar so its strip can be dragged too.
+    await l.page.keyboard.press("Meta+b");
     await until(
-      "the sidebar to expand",
+      "the sidebar to open again",
       5000,
-      async () => (await l.page.evaluate(measureHeader)).sidebar === "expanded",
+      async () => (await l.page.evaluate(measureHeader)).sidebar === "full",
     );
     await sleep(500);
     await dragFrom("sidebar strip", { x: 150, y: 28 });
@@ -694,14 +669,14 @@ async function main(): Promise<void> {
         `browser: header padding-left ${web.header!.paddingLeft}px, height ${web.header!.box.height}px`,
       );
       await tab.screenshot({ path: join(OUT_DIR, "after-browser.png") });
-      await tab.click('[data-slot="sidebar-trigger"]');
+      await tab.keyboard.press("Meta+b");
       await sleep(600);
       const webCollapsed = await tab.evaluate(measureHeader);
       check(
-        webCollapsed.sidebar === "collapsed" &&
+        webCollapsed.sidebar === "rail" &&
           webCollapsed.header!.paddingLeft === 12 &&
-          webCollapsed.children[0]!.box.x === 12,
-        `browser, sidebar collapsed: header padding-left ${webCollapsed.header!.paddingLeft}px, trigger at x ${webCollapsed.children[0]!.box.x}`,
+          webCollapsed.header!.box.x === 76,
+        `browser, sidebar rail: header padding-left ${webCollapsed.header!.paddingLeft}px, header at x ${webCollapsed.header!.box.x}`,
       );
       await tab.screenshot({ path: join(OUT_DIR, "after-browser-collapsed.png") });
     } finally {

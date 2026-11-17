@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
-/** The top bar of every view: the sidebar toggle, then the view's own title and actions. It is the desktop app's title bar: a drag region (see tailwind.css), indented past the native window controls while it starts at the window's left edge (`--titlebar-inset`, set by the shell). It is the sheet's top row, so it starts 8px below the window's top, and 40px tall it shares its centre line with the native controls (`TITLE_BAR_HEIGHT` in the desktop package is 8 + 40 + 8). */
+/** The top bar of every view: the sidebar's button (phones only; on a wider window the sidebar is always there and has its edge), then the view's own title and actions. It is the desktop app's title bar: a drag region (see tailwind.css), indented past the native window controls while it starts at the window's left edge (`--titlebar-inset`, set by the shell). It is the sheet's top row, so it starts 8px below the window's top, and 40px tall it shares its centre line with the native controls (`TITLE_BAR_HEIGHT` in the desktop package is 8 + 40 + 8). */
 export function AppBar({ children }: { children?: ReactNode }) {
   return (
     <header
