@@ -320,7 +320,7 @@ describe("answering with no question pending", () => {
     const res = await sendAnswer("auth-sso · Which database?: Postgres", eventId, "Postgres");
     expect(await res.json()).toEqual({ ok: true, outcome: "sent" });
     await host.until(() => page.rows()[eventId] === "acted");
-    expect(host.messagesOf(botId)).toContain("auth-sso · Which database?: Postgres");
+    await host.until(() => host.messagesOf(botId).includes("auth-sso · Which database?: Postgres"));
   });
 
   test("a busy bot queues it and the item stays open until it is delivered: outcome queued", async () => {

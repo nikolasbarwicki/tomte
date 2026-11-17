@@ -22,7 +22,7 @@
 // - `{ httpTool: { server, tool, args?, agent_id? } }`: a tool call on a host HTTP MCP server (`bots`, `routines`, `browser`) as the real CLI makes it: first a `can_use_tool` control request for `mcp__<server>__<tool>` (its answer is appended to `permission-results.jsonl`), and only when the host allows it the JSON-RPC call, whose result is appended to `tool-results.jsonl` as `{ server, tool, result }`. A denial makes no call.
 // - `{ result: "text" }`: emits the turn's `result` message; steps may follow (background work that reports after the turn).
 // - `{ sleep: ms }`; `{ waitFor: "<file name>" }` polls until that file exists in the directory (a test sequences steps with it); `{ exit: code }` ends the process, as a crash.
-// With a script run, the process also exits when stdin ends, instead of waiting for steps still running.
+// Like the real CLI, the process exits when stdin ends, instead of waiting for a turn or steps still running: its host is gone.
 import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -349,7 +349,6 @@ const denies = (r: unknown) => {
   return reply?.hookSpecificOutput?.permissionDecision === "deny" || reply?.decision === "block";
 };
 
-let ranScript = false;
 /** Runs `steps`; true once a `result` step has emitted the turn's result. */
 const runSteps = async (steps: Step[], vars: Substitutions): Promise<boolean> => {
   let answered = false;
@@ -526,7 +525,6 @@ for await (const line of createInterface({ input: process.stdin })) {
       );
       const script = takeScript(text);
       if (script) {
-        ranScript = true;
         const queued = /q-[0-9a-f]+/.exec(text)?.[0] ?? "";
         if (!(await runSteps(script.steps, { n, queued }))) out(resultMessage(defaultResult()));
         return;
@@ -602,4 +600,4 @@ for await (const line of createInterface({ input: process.stdin })) {
     }
   }
 }
-if (ranScript) process.exit(0);
+process.exit(0);
