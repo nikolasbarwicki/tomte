@@ -51,9 +51,12 @@ describe("managed Claude CLI", () => {
     dir = mkdtempSync(join(tmpdir(), "cli-"));
     dataRoot = join(dir, "data");
     delete process.env.CLAUDE_PATH;
-    // Only tar is on PATH, so no claude binary can be found there.
+    // Only tar and gzip are on PATH, so no claude binary can be found there.
+    // GNU tar shells out to gzip for -z; BSD tar does not need it on PATH.
     mkdirSync(join(dir, "tools"));
     symlinkSync(Bun.which("tar")!, join(dir, "tools", "tar"));
+    const gzip = Bun.which("gzip");
+    if (gzip) symlinkSync(gzip, join(dir, "tools", "gzip"));
     process.env.PATH = join(dir, "tools");
   });
   afterEach(() => {

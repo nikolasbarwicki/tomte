@@ -22,13 +22,7 @@ Git hooks come from lefthook (`lefthook.yml`) and are installed by `bun install`
 
 `.github/workflows/ci.yml` runs on every pull request and on pushes to `main`/`master`. Jobs: `check` (`bun install --frozen-lockfile`, then `bun run check`), `pr-title` (pull requests only; commitlint on the PR title, since squash merges use it as the commit message), `sherif` (`bunx sherif`, monorepo dependency consistency), `secrets` (gitleaks over the full history, config in `.gitleaks.toml`) and `audit` (`bun audit`, non-blocking until it exits 0; then drop `continue-on-error` in the workflow). The Bun version comes from `.bun-version`.
 
-Branch protection is repo settings, not code. Once the repo is on GitHub, require the `check`, `secrets`, `pr-title` and `sherif` jobs (not `audit` while it is non-blocking) (replace `OWNER/REPO` and the branch):
-
-```sh
-gh api -X PUT repos/OWNER/REPO/branches/main/protection --input - <<'JSON'
-{"required_status_checks":{"strict":true,"contexts":["check","secrets","pr-title","sherif"]},"enforce_admins":false,"required_pull_request_reviews":null,"restrictions":null}
-JSON
-```
+No server-side branch protection: the repo is private on GitHub's free plan, which does not offer protected branches or rulesets there, so CI reports but cannot block a merge or a push. The gates that block are local, in `lefthook.yml`: pre-commit (oxfmt, oxlint, gitleaks on staged files), commit-msg (commitlint) and pre-push (`bun run check`). Never skip them (`--no-verify`); a red CI run on `master` is fixed forward at once. Dependency updates are manual (`bun outdated`, then a normal commit through the same gates); there is no Renovate or Dependabot.
 
 ### Browser smokes
 

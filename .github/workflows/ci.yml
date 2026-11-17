@@ -39,6 +39,11 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # Browser tests need the Linux sandbox marked available: status()
+      # requires bwrap and socat on PATH (see packages/host/src/browser/sandbox.ts).
+      - name: Install Linux sandbox tools
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap socat
+
       - run: bun run check
 
   pr-title:
