@@ -2,7 +2,7 @@
 
 Source: competitor review of Rerun, OpenBot, Turnstone, Rakazo and MausBot against the codebase on 2026-11-06. Competitor facts come from their landing pages and public READMEs (Turnstone and MausBot: landing page only). "Tomte lacks X" means no code for X was found.
 
-Out of scope here: computer use (see [`research/cua-research.md`](research/cua-research.md)). Bot handoffs have landed (`packages/host/src/handoffs/`, ADR-0002) and are not tracked here. Items 7 and 8 build on them, as does the Chief of Staff template in item 3.
+Out of scope here: computer use (see [`research/cua-research.md`](research/cua-research.md)). Bot handoffs have landed (`packages/host/src/handoffs/`, ADR-0002) and are not tracked here. Items 7 and 8 build on them, as does the Chief of Staff, which is a switch on a bot (item 3).
 
 ## Where tomte stands
 
@@ -61,10 +61,10 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 **Plan.**
 
 - **Shipped:** `create_routine`, `list_routines` and `update_routine`, served at `/mcp/routines` on the agent listener (`mcp__routines__*`), calling the same code as the HTTP routes. There is no delete tool: a bot pauses a routine with `update_routine` `active: false`. The scripted chat test is `routines/gate-check.test.ts`; the check with the real model is the owner's (gate step 4 in `docs/plans/grok-bot-replacement-roadmap.md`).
-- Add `create_bot` (name, purpose, initial memory). Pair it with the unfinished bot delete flow (item 6) so created bots can be cleaned up.
-- Ship a Chief of Staff template that combines these with `hand_off`. Handoffs and the routine tools have landed, so this waits only on `create_bot`.
+- **Shipped:** `create_bot(name, purpose, memory?, chat_mode?)` on the bots endpoint (`mcp__bots__create_bot`), for every bot. Each call raises the normal approval card with no "always allow" and the bot exists only after the owner approves; scheduled runs are refused and the host holds at most 20 bots. The new bot starts with the browser off. See `docs/plans/chief-of-staff/spec.md`. The unfinished bot delete flow (item 6) still decides how created bots are cleaned up.
+- The Chief of Staff is not a template: it is a switch on a regular bot's Profile page (`docs/plans/chief-of-staff/spec.md`) that adds a prompt section naming `list_bots`, `hand_off` and `create_bot`.
 
-**Guards.** A bot may edit only its own routines (another bot's id answers "no such routine"). A bot may hold at most 20 routines (`create_routine` only; the panel and `/api/routines/create` are not capped). There is no per-routine approval flag: a bot-made routine runs under the bot's own tool policies, so a write left at `ask` parks the run ([ADR-0009](adr/0009-unattended-runs-park-on-durable-human-waits.md)). The routine tools cannot change a tool policy or an integration, and a scheduled run (a routine turn or a headless run) cannot create or change routines. Still open: a cap on the bots one bot may create, and `create_bot` and the Chief of Staff template.
+**Guards.** A bot may edit only its own routines (another bot's id answers "no such routine"). A bot may hold at most 20 routines (`create_routine` only; the panel and `/api/routines/create` are not capped). There is no per-routine approval flag: a bot-made routine runs under the bot's own tool policies, so a write left at `ask` parks the run ([ADR-0009](adr/0009-unattended-runs-park-on-durable-human-waits.md)). The routine tools cannot change a tool policy or an integration, and a scheduled run (a routine turn or a headless run) cannot create or change routines. `create_bot` is capped by the host-wide 20-bot limit and always asks. The Chief of Staff is a switch on a bot, not a template.
 
 **Done when.** The user says "brief me every weekday at 8" in chat and a routine appears in the Routines panel without touching the UI.
 
@@ -120,7 +120,7 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 - A static template list in the web bundle: name, purpose, memory seed, suggested integrations. Start with Inbox Manager, Coding Agent, Researcher.
 - Picking one fills the form; the user can still edit. `/api/bots/new` gains an optional `memory` field written to `botMemoryPath`.
 - Suggested integrations are shown as hints, not granted. Grants stay a user action.
-- Chief of Staff joins once item 3 lands.
+- The Chief of Staff is a switch on a bot, not a template (item 3).
 
 **Done when.** Choosing Inbox Manager creates a bot whose first turn already knows its job and memory seed.
 

@@ -33,6 +33,7 @@ const rows = (query: string, botId: string) => {
 };
 const routinesOf = (botId: string) => rows("SELECT 1 FROM routines WHERE bot_id = ?", botId);
 const activityOf = (botId: string) => rows("SELECT 1 FROM bot_activity WHERE bot_id = ?", botId);
+const originOf = (botId: string) => rows("SELECT 1 FROM chat_origins WHERE bot_id = ?", botId);
 
 async function addRoutine(botId: string) {
   const res = await host.ui("/api/routines/create", {
@@ -52,6 +53,10 @@ test("deleting a bot removes its routines and activity, moves its directory to t
   await addRoutine(keep);
   expect((await host.ui("/api/seen", { botId: gone })).status).toBe(200);
   expect(activityOf(gone)).toHaveLength(1);
+  // The owner wrote to it from the web, which recorded where the conversation is; the row goes with the bot.
+  expect((await host.ui("/api/send", { text: "hello" })).status).toBe(200);
+  await host.until(() => !host.server.isWorking(gone));
+  expect(originOf(gone)).toHaveLength(1);
 
   expect((await host.ui("/api/bots/delete", { botId: gone })).status).toBe(200);
 
@@ -60,6 +65,7 @@ test("deleting a bot removes its routines and activity, moves its directory to t
   expect(routinesOf(gone)).toHaveLength(0);
   expect(routinesOf(keep)).toHaveLength(1);
   expect(activityOf(gone)).toHaveLength(0);
+  expect(originOf(gone)).toHaveLength(0);
   const botsDir = join(host.dataRoot, "bots");
   expect(existsSync(join(botsDir, gone))).toBe(false);
   const trashed = readdirSync(join(botsDir, ".trash"));

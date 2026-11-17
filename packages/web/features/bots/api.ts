@@ -3,8 +3,9 @@ import type { BotAvatar } from "@tomte/contract/avatars";
 
 import { act, errorOf, post, readJson } from "@/host/api.ts";
 
-export const createBot = (bot: { name: string; purpose: string } & BotAvatar) =>
-  post("/api/bots/new", bot);
+export const createBot = (
+  bot: { name: string; purpose: string; chiefOfStaff: boolean } & BotAvatar,
+) => post("/api/bots/new", bot);
 
 export const deleteFile = (path: string) => act("/api/files/delete", { path });
 
@@ -25,5 +26,5 @@ export async function fetchAllowances(botId: string): Promise<ToolAllowances | {
 export const removeAllowance = (botId: string, tool: string) =>
   act("/api/bots/allowances/remove", { botId, tool });
 
-/** Replaces a bot's name, purpose and avatar; a new name or purpose reaches the bot from its next session. */
+/** Replaces a bot's name, purpose, avatar and Chief of Staff switch; a change of the first, second or last reaches the bot from its next session. */
 export const updateProfile = (update: BotProfileUpdate) => post("/api/bots/profile", update);

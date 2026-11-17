@@ -203,12 +203,13 @@ export type EventItemRequest = z.infer<typeof EventItemRequest>;
 export const EventAccess = z.object({ url: z.string(), token: z.string() });
 export type EventAccess = z.infer<typeof EventAccess>;
 
-/** The `/api/bots/profile` request: a bot's name, purpose and avatar, all replaced at once. */
+/** The `/api/bots/profile` request: a bot's name, purpose, avatar and Chief of Staff switch, all replaced at once. */
 export const BotProfileUpdate = z.object({
   botId: z.string().min(1),
   name: z.string().trim().min(1, "name required").max(100),
   purpose: z.string().trim().max(2000),
   ...BotAvatar.shape,
+  chiefOfStaff: z.boolean(),
 });
 export type BotProfileUpdate = z.infer<typeof BotProfileUpdate>;
 

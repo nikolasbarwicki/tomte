@@ -12,6 +12,7 @@ import {
   setBrowserEnabled,
   setBrowserHeaded,
   setChatMode,
+  setChiefOfStaff,
   setProfile,
 } from "../../bots/index.ts";
 import { json } from "../http.ts";
@@ -21,6 +22,7 @@ const BotId = z.object({ botId: z.string() });
 const NewBot = z.object({
   name: z.string().trim().min(1, "name required"),
   purpose: z.string().default(""),
+  chiefOfStaff: z.boolean().default(false),
   ...BotAvatar.shape,
 });
 const BrowserEnabled = BotId.extend({ enabled: z.boolean() });
@@ -66,9 +68,13 @@ export function botRoutes({
       return json(res, { ok: true });
     },
     "/api/bots/new": async ({ res, parse }) => {
-      const { name, purpose, shape, color } = parse(NewBot);
-      const bot = createBot(dataRoot, name, purpose, undefined, { shape, color });
+      const { name, purpose, chiefOfStaff, shape, color } = parse(NewBot);
+      const created = createBot(dataRoot, name, purpose, undefined, { shape, color });
+      const moved = chiefOfStaff ? setChiefOfStaff(dataRoot, created.id, true) : [];
+      const bot = getBot(dataRoot, created.id) ?? created;
       botsChanged();
+      // The bot it was moved from is already open; the new one opens fresh with the section.
+      for (const id of moved) if (id !== bot.id) chats.reconfigure(id, "chief of staff changed");
       await chats.switchTo(bot);
       return json(res, bot);
     },
@@ -105,15 +111,17 @@ export function botRoutes({
       return json(res, { ok: true });
     },
     "/api/bots/profile": async ({ res, parse }) => {
-      const { botId, name, purpose, shape, color } = parse(BotProfileUpdate);
+      const { botId, name, purpose, chiefOfStaff, shape, color } = parse(BotProfileUpdate);
       const before = getBot(dataRoot, botId);
       if (!before) return json(res, { error: "no such bot" }, 404);
-      const bot = setProfile(dataRoot, botId, { name, purpose, avatar: { shape, color } });
-      // The name and purpose are in the system prompt; the avatar is only the page's.
+      setProfile(dataRoot, botId, { name, purpose, avatar: { shape, color } });
+      const moved = setChiefOfStaff(dataRoot, botId, chiefOfStaff);
+      // The name, purpose and Chief of Staff section are in the system prompt; the avatar is only the page's.
       if (name !== before.name || purpose !== before.purpose)
         chats.reconfigure(botId, "profile changed");
+      for (const id of moved) chats.reconfigure(id, "chief of staff changed");
       chats.announceBots();
-      return json(res, bot);
+      return json(res, getBot(dataRoot, botId));
     },
     "/api/bots/chat-mode": async ({ res, parse }) => {
       const { botId, chatMode } = parse(ChatModeChange);

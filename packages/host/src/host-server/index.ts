@@ -6,15 +6,18 @@ import type { IntegrationsEvent, RoutinesEvent } from "@tomte/contract/events";
 import {
   allowsTool,
   allowTool,
+  createBot,
   createUsageMeter,
   getBot,
   listBots,
   botFilesPath,
   currentSession,
   deleteActivity,
+  deleteOrigin,
   deleteAllowances,
   deleteBotUsage,
   reveal,
+  setChatMode,
   sessionsOfBot,
   trashBot,
 } from "../bots/index.ts";
@@ -73,6 +76,7 @@ import { createEventStream } from "./events.ts";
 import { agentRoutes, clientRoutes, createRequestListener } from "./http.ts";
 import { createHostIsolation } from "./isolation.ts";
 import { openListener } from "./listener.ts";
+import { createPhoneChat, forwardToOrigin } from "./phone-chat.ts";
 import { runNotice } from "./run-notices.ts";
 import { createTranscripts } from "./transcript.ts";
 import { filesEvent, memoryEvents } from "./views.ts";
@@ -224,6 +228,16 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       void chats
         .deliver(botId, text)
         .catch((e) => console.error(`[bots] delivery to ${botId} failed: ${(e as Error).message}`)),
+    unattended: (botId) => chats.unattended(botId),
+    // The way the create-bot route does it, but the owner's open chat stays where it is. A new bot has the browser off, and the
+    // tool sets nothing else of it.
+    createBot: (spec) => {
+      const bot = createBot(dataRoot, spec.name, spec.purpose, undefined, undefined, spec.memory);
+      if (spec.chatMode !== "standard") setChatMode(dataRoot, bot.id, spec.chatMode);
+      botsChanged();
+      chats.announceBots();
+      return { id: bot.id, name: bot.name, chatMode: spec.chatMode };
+    },
   });
   const externalEvents = createEvents({
     db,
@@ -261,7 +275,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
    */
   const frontServers: HostServersSource = (botId) =>
     combineLeases([
-      handoffs.endpoint.lease(botId),
+      handoffs.endpoint.lease(botId, { attended: true }),
       routinesEndpoint.lease(botId, { attended: true }),
       isolation(botId),
     ]);
@@ -278,6 +292,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     // After the trash move the bot no longer exists, so messages the browser cleanup sends it (a cancelled takeover) go nowhere.
     trashBot(dataRoot, botId);
     deleteActivity(db, botId);
+    deleteOrigin(db, botId);
     deleteAllowances(db, botId);
     loop.removeBot(botId);
     await externalEvents.removeBot(botId);
@@ -336,6 +351,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     routinesEvent: (botId) => routinesEvent(botId),
     workEvent: (botId) => externalEvents.work(botId),
     broadcast,
+    botSaid: (botId, text) => botSaid(botId, text),
   });
   // Before the routines, adapters included: a run that ends while the host starts (a park that expired during downtime) is reported through it.
   const channels = createChannels({
@@ -352,6 +368,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     ...(o.now !== undefined && { now: o.now }),
     ...(o.notices?.retryMs !== undefined && { noticeRetryMs: o.notices.retryMs }),
   });
+  const botSaid = forwardToOrigin({ dataRoot, db, channels });
   const receive: Channels["receive"] = (kind, inbound) => channels.receive(kind, inbound);
   channels.register(
     createTelegramChannel({ secrets, receive, ...(o.telegram && { options: o.telegram }) }),
@@ -429,9 +446,11 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const serveBuiltUi = serveUi(o.ui ?? { read: async () => undefined });
 
   const devices = createDeviceAuth({ db, ...(o.now !== undefined && { now: o.now }) });
+  const phoneChat = createPhoneChat({ dataRoot, db, chats, now: o.now ?? Date.now });
   const cards = createCards({
     db,
     channels,
+    chat: phoneChat,
     sources: [
       createEventCards({ events: externalEvents, chats }),
       createWaitCards({ waits, chats, botName: (botId) => getBot(dataRoot, botId)?.name }),

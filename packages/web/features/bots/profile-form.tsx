@@ -7,24 +7,30 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { errorOf } from "@/host/api.ts";
+import { useBots } from "@/host/hooks.ts";
 
 import { updateProfile } from "./api.ts";
 import { AvatarPicker } from "./avatar-picker.tsx";
+import { ChiefOfStaffText } from "./chief-of-staff-field.tsx";
 
-/** The profile page: rename the bot, rewrite its purpose, pick another avatar. Saving replaces all three at once. */
+/** The profile page: rename the bot, rewrite its purpose, pick another avatar, make it the Chief of Staff. Saving replaces all of them at once. */
 export function ProfileForm({ bot }: { bot: BotSummary }) {
   const [name, setName] = useState(bot.name);
   const [purpose, setPurpose] = useState(bot.purpose);
   const [avatar, setAvatar] = useState(bot.avatar);
+  const [chiefOfStaff, setChiefOfStaff] = useState(bot.chiefOfStaff);
+  const holder = useBots()?.find((b) => b.chiefOfStaff && b.id !== bot.id)?.name;
   const changed =
     name !== bot.name ||
     purpose !== bot.purpose ||
     avatar.shape !== bot.avatar.shape ||
-    avatar.color !== bot.avatar.color;
+    avatar.color !== bot.avatar.color ||
+    chiefOfStaff !== bot.chiefOfStaff;
   const [error, save, saving] = useActionState(async () => {
-    const r = await updateProfile({ botId: bot.id, name, purpose, ...avatar });
+    const r = await updateProfile({ botId: bot.id, name, purpose, ...avatar, chiefOfStaff });
     if (!r.ok) return errorOf(r);
     toast.success("Profile saved");
     return "";
@@ -58,6 +64,14 @@ export function ProfileForm({ bot }: { bot: BotSummary }) {
           </FieldDescription>
         </Field>
         <AvatarPicker avatar={avatar} onChange={setAvatar} />
+        <Field orientation="horizontal">
+          <ChiefOfStaffText id="profile-chief-of-staff" holder={holder} />
+          <Switch
+            id="profile-chief-of-staff"
+            checked={chiefOfStaff}
+            onCheckedChange={setChiefOfStaff}
+          />
+        </Field>
         {error && <FieldError>{error}</FieldError>}
       </FieldGroup>
       <div className="flex justify-end">

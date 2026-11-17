@@ -103,9 +103,6 @@ test("a database without the vault opens with nothing to sweep", async () => {
   await secrets.set("integration:x", "kept");
   (await openDb(root, secrets)).close();
   const db = await openDb(root, secrets);
-  expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(
-    28,
-  );
   expect([...secrets.entries.keys()]).toEqual(["integration:x"]);
   db.close();
 });

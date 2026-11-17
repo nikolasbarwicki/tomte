@@ -71,6 +71,8 @@ export interface ChatsDeps extends ThreadEnv {
   routinesEvent(botId: string): RoutinesEvent;
   workEvent(botId: string): WorkEvent;
   broadcast: (e: HostEvent) => void;
+  /** A bot said something in its chat: a standard turn's answer, a double-loop front's reply or one of its reports; not a scheduled run's turn. The host sends it on to the channel the owner writes from. */
+  botSaid(botId: string, text: string): void;
 }
 
 /** What happened to a message the user sent, as the web UI and every channel see it. */
@@ -297,6 +299,7 @@ export function createChats(deps: ChatsDeps): Chats {
     emit(chat, e);
     if (e.type !== "report") return;
     recordMessage(db, chat.bot.id, { from: "bot", text: e.text, at: Date.now() });
+    deps.botSaid(chat.bot.id, e.text);
     announceBots();
   }
 
@@ -384,7 +387,10 @@ export function createChats(deps: ChatsDeps): Chats {
     chat.frontText = "";
     if (m.subtype === "success" && !m.is_error) {
       emit(chat, { type: "done" });
-      if (said.trim()) recordMessage(db, chat.bot.id, { from: "bot", text: said, at: Date.now() });
+      if (said.trim()) {
+        recordMessage(db, chat.bot.id, { from: "bot", text: said, at: Date.now() });
+        deps.botSaid(chat.bot.id, said);
+      }
     } else {
       const detail = "errors" in m ? m.errors.join("; ") : m.result;
       emit(chat, { type: "error", message: `turn failed (${m.subtype}): ${detail}` });
@@ -452,8 +458,11 @@ export function createChats(deps: ChatsDeps): Chats {
     try {
       out = await chat.thread.send(text, (m) => showMessage(chat, m));
       emit(chat, { type: "done" });
-      if (out.text.trim())
+      if (out.text.trim()) {
         recordMessage(db, chat.bot.id, { from: "bot", text: out.text, at: Date.now() });
+        // A scheduled run's output is its routine's to report (the result notice), not a message of the conversation.
+        if (chat.routineRun === undefined) deps.botSaid(chat.bot.id, out.text);
+      }
       const usage = await chat.thread
         .contextUsage()
         .catch((e) => console.error(`[host] context usage failed: ${(e as Error).message}`));

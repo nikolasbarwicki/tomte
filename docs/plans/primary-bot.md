@@ -1,5 +1,7 @@
 # Spec: a primary bot that coordinates the others
 
+Superseded on 2026-11-17 by `docs/plans/chief-of-staff/spec.md`: the Chief of Staff is a switch on a regular bot, not a host-wide role. Kept as design history.
+
 Status: ready. Three grilling rounds settled on 2026-11-17 (see Open questions). The UI calls the role "Chief of Staff"; code and this spec say "primary". Roadmap row "A primary bot that coordinates the others" and "After the gate" item 2 in `grok-bot-replacement-roadmap.md`. Related: [ADR-0002](../adr/0002-bot-handoffs-are-async-a2a-tasks-on-a-host-endpoint.md) (handoffs), [ADR-0009](../adr/0009-unattended-runs-park-on-durable-human-waits.md) (parking), [ADR-0010](../adr/0010-channels-deliver-needs-you-items.md) (channels), [ADR-0011](../adr/0011-double-loop-chat-mode.md) (double-loop), `docs/roadmap.md` items 3 and 6b.
 
 ## Problem

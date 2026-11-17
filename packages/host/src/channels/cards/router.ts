@@ -1,7 +1,8 @@
 import type { Inbound, Reply } from "../types.ts";
 import { parseButtonData } from "./compose.ts";
+import { leadingMention } from "./mention.ts";
 import type { CardStore } from "./store.ts";
-import type { Answered, CardItem, CardSource } from "./types.ts";
+import type { Answered, CardChat, CardItem, CardSource } from "./types.ts";
 
 const QUEUED = "queued; the bot is busy";
 const STALE = "that card is out of date";
@@ -33,12 +34,14 @@ const noteOf = (answered: Answered): Reply =>
 export interface RouterDeps {
   store: CardStore;
   sources: CardSource[];
+  chat: CardChat;
 }
 
 /**
- * Routes what the linked account does to the card it concerns, by the card and never by what an item is: a button by its data's prefix,
- * a reply by the message it replies to, and words alone by the one open card (or none). Every answer goes to the item's source, which sends it
- * through the host's answer path. The cards that are open are the ones whose source says the item is.
+ * Routes what the linked account does to what it concerns: a button by its data's prefix to its card, a reply by the message it replies to,
+ * and words by this order: a reply to a card goes to that card; `@` and a bot's full name sends the rest to that bot (the chat, not a card);
+ * otherwise the one open card takes them, several ask for a reply and with none the owner is told how to reach a bot. Every card answer goes
+ * to the item's source, which sends it through the host's answer path. The cards that are open are the ones whose source says the item is.
  */
 export function createRouter(d: RouterDeps) {
   const byPrefix = new Map(d.sources.map((s) => [s.prefix, s]));
@@ -74,11 +77,35 @@ export function createRouter(d: RouterDeps) {
       if (!source || !state?.open) return { send: [{ text: "That card is already handled." }] };
       return noteOf(await source.reply(replied.itemId, inbound.text));
     }
+    const mention = leadingMention(inbound.text, d.chat.bots());
+    if (mention === null) {
+      const names = d.chat.bots().map((b) => b.name);
+      return {
+        send: [
+          {
+            text: names.length
+              ? `No bot has that name. Your bots: ${names.join(", ")}. Start with @ and a bot's full name.`
+              : "No bot has that name, and there are no bots yet.",
+          },
+        ],
+      };
+    }
+    if (mention) {
+      if (mention.rest === "")
+        return { send: [{ text: `Write your message after @${mention.bot.name}.` }] };
+      return noteOf(await d.chat.send(mention.bot.id, mention.rest, channel));
+    }
     const open = openCards(channel);
-    // Words with no card to answer change nothing anywhere: no run, session or chat is given them.
-    if (open.length === 0) return {};
     const [only] = open;
-    if (open.length > 1 || !only) return { send: [{ text: SEVERAL }] };
+    if (!only) {
+      // Newest first, so the example is the bot the owner most likely just made.
+      const [newest] = d.chat.bots();
+      const text = newest
+        ? `To talk to a bot, start with @ and its name, for example @${newest.name}.`
+        : "To talk to a bot, start with @ and its name. You have no bots yet.";
+      return { send: [{ text }] };
+    }
+    if (open.length > 1) return { send: [{ text: SEVERAL }] };
     return noteOf(await only.source.reply(only.item.id, inbound.text));
   }
 

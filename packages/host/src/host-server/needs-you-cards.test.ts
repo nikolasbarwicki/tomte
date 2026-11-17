@@ -488,7 +488,7 @@ describe("words", () => {
     expect(ids.map((id) => t.stateOf(id))).toEqual(["open", "open"]);
   });
 
-  test("a plain message with no open card reaches no bot, run or chat", async () => {
+  test("a plain message with no open card reaches no bot, run or chat, and is told how to reach a bot", async () => {
     const t = await start();
     await t.link();
     const botId = t.host.createBot("Planner");
@@ -498,7 +498,11 @@ describe("words", () => {
 
     await t.say("hello?");
     await t.say("anyone there");
-    expect(t.tg.outgoing()).toHaveLength(outgoing);
+    expect(t.tg.outgoing()).toHaveLength(outgoing + 2);
+    expect(t.tg.texts().slice(-2)).toEqual([
+      "To talk to a bot, start with @ and its name, for example @Planner.",
+      "To talk to a bot, start with @ and its name, for example @Planner.",
+    ]);
     expect(t.host.messagesOf(botId)).toHaveLength(before);
     expect(t.page.events().some((e) => e.type === "user")).toBe(false);
   });

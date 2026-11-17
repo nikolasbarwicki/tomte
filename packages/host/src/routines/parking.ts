@@ -35,5 +35,6 @@ export function parkingDelegate(
         message: `The request to use ${tool} was sent to the owner, who is not watching this run. It was not allowed yet. End your turn now: do not retry and do not work around it. The answer will arrive later as a message in this conversation.`,
       };
     },
+    attended: () => false,
   };
 }

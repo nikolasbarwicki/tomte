@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogClose,
@@ -18,10 +19,12 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { errorOf, readJson } from "@/host/api.ts";
+import { useBots } from "@/host/hooks.ts";
 import { randomAvatar } from "@/lib/avatars.ts";
 
 import { createBot } from "./api.ts";
 import { AvatarPicker } from "./avatar-picker.tsx";
+import { ChiefOfStaffText } from "./chief-of-staff-field.tsx";
 
 export function NewBotDialog({
   open,
@@ -33,13 +36,16 @@ export function NewBotDialog({
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [avatar, setAvatar] = useState(randomAvatar);
+  const [chiefOfStaff, setChiefOfStaff] = useState(false);
+  const holder = useBots()?.find((b) => b.chiefOfStaff)?.name;
   const navigate = useNavigate();
   const [error, submit, busy] = useActionState(async () => {
-    const r = await createBot({ name, purpose, ...avatar });
+    const r = await createBot({ name, purpose, chiefOfStaff, ...avatar });
     if (!r.ok) return errorOf(r);
     setName("");
     setPurpose("");
     setAvatar(randomAvatar());
+    setChiefOfStaff(false);
     onOpenChange(false);
     const { id } = await readJson(r, Bot);
     void navigate({ to: "/bots/$botId", params: { botId: id } });
@@ -83,6 +89,14 @@ export function NewBotDialog({
               </FieldDescription>
             </Field>
             <AvatarPicker avatar={avatar} onChange={setAvatar} />
+            <Field orientation="horizontal">
+              <Checkbox
+                id="bot-chief-of-staff"
+                checked={chiefOfStaff}
+                onCheckedChange={setChiefOfStaff}
+              />
+              <ChiefOfStaffText id="bot-chief-of-staff" holder={holder} />
+            </Field>
             {error && <FieldError>{error}</FieldError>}
           </FieldGroup>
           <DialogFooter>

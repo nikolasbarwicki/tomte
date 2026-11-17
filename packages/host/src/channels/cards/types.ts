@@ -58,3 +58,13 @@ export interface CardChannels {
   ): Promise<{ delivered: true; ref: MessageRef } | { delivered: false }>;
   edit(kind: string, ref: MessageRef, message: ChannelMessage): Promise<void>;
 }
+
+/**
+ * What the router needs of the host's chats to take words that answer no card: it knows no bot, and the composition root supplies it.
+ * `send` gives the words to a bot as the owner's message from `channel` (the host's chat send, with no item, so it never answers a question
+ * or an approval) and says what came of it; `bots` lists every bot, newest first.
+ */
+export interface CardChat {
+  send(botId: string, text: string, channel: string): Promise<Answered>;
+  bots(): { id: string; name: string }[];
+}

@@ -118,10 +118,18 @@ export interface Waits {
   close(): void;
 }
 
-/** The buttons of a tool approval: allow this call, allow the tool for the bot from now on, or deny. The second names the tool, so a rule for Bash says how broad it is. */
+/**
+ * Tools whose every call needs the owner's approval: no "always allow" is offered for them, an answer that names one is refused
+ * like any action the card does not carry, and a rule stored for one would never be read (`createCanUseTool` asks first).
+ */
+export const ALWAYS_ASK_TOOLS: ReadonlySet<string> = new Set(["mcp__bots__create_bot"]);
+
+/** The buttons of a tool approval: allow this call, allow the tool for the bot from now on (never for an `ALWAYS_ASK_TOOLS` tool), or deny. The second names the tool, so a rule for Bash says how broad it is. */
 export const approvalActions = (tool: string): WaitAction[] => [
   { id: "allow", label: "Allow" },
-  { id: "allow_always", label: `Always allow ${tool} for this bot` },
+  ...(ALWAYS_ASK_TOOLS.has(tool)
+    ? []
+    : [{ id: "allow_always", label: `Always allow ${tool} for this bot` }]),
   { id: "deny", label: "Deny" },
 ];
 

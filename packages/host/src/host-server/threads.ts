@@ -37,6 +37,7 @@ export function hostDelegate(hooks: ThreadHooks): HostDelegate {
       if (hooks.unattended()) return hooks.park.approve(tool, input, reason);
       return hooks.askApproval({ tool, input, reason });
     },
+    attended: () => !hooks.unattended(),
   };
 }
 

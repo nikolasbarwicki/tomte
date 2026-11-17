@@ -140,6 +140,14 @@ export function AppSidebar({
                         <span className={cn("truncate", b.status === "unseen" && "font-semibold")}>
                           {b.name}
                         </span>
+                        {b.chiefOfStaff && (
+                          <span
+                            className="bg-muted text-muted-foreground shrink-0 rounded-full px-1.5 text-[11px] font-medium"
+                            data-chief-of-staff
+                          >
+                            Chief of Staff
+                          </span>
+                        )}
                         {b.needsYou > 0 && (
                           <span
                             className="shrink-0 rounded-full bg-amber-500/15 px-1.5 text-[11px] font-medium text-amber-700 tabular-nums dark:text-amber-400"

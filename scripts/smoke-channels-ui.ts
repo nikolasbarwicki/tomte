@@ -5,7 +5,8 @@
 // packages/host/src/testing/fake-telegram.ts on a loopback port, so api.telegram.org is never contacted and no real token exists.
 // Covers: no token yet, a token Telegram rejects, a token it accepts (the page shows the bot running and never the token), the link code
 // with its t.me deep link, linking by sending the code through the fake server, a stranger getting no reply, the linked state, a routine
-// created with "Send the result to my phone" whose run sends its result to the owner's chat, and Unlink.
+// created with "Send the result to my phone" whose run sends its result to the owner's chat, an `@Name` message whose reply comes back
+// to the phone (and a plain message getting the hint), and Unlink.
 // Exits non-zero on the first failed check.
 import { fakeTelegram } from "../packages/host/src/testing/fake-telegram.ts";
 import { startSmoke } from "./smoke-kit.ts";
@@ -149,6 +150,32 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
   await page.goto(`${host.clientUrl}/settings/channels`);
   await status.waitFor();
+
+  console.log("@Name from the phone");
+  await host.until(() => !host.server.isWorking(botId));
+  const before = telegram.texts().length;
+  telegram.message(owner, "@planner what is new?");
+  await host.until(() => telegram.texts().length > before, 10_000);
+  check(
+    telegram.texts().at(-1) === "Planner\n\nok",
+    `the bot's reply reached the phone, named (${telegram.texts().at(-1)})`,
+  );
+  check(
+    telegram.of("sendMessage").at(-1)!.params.chat_id === owner.id,
+    "the reply went to the owner's chat",
+  );
+  check(
+    host.messagesOf(botId).some((m) => m === "what is new?"),
+    "the bot received the message with the name taken off",
+  );
+  const hinted = telegram.texts().length;
+  telegram.message(owner, "hello?");
+  await host.until(() => telegram.texts().length > hinted);
+  check(
+    telegram.texts().at(-1) ===
+      "To talk to a bot, start with @ and its name, for example @Planner.",
+    "a plain message with no open card got the hint",
+  );
 
   console.log("Unlink");
   await page.getByRole("button", { name: "Unlink" }).click();

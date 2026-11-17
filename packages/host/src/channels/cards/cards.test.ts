@@ -5,7 +5,7 @@ import { migrate } from "../../platform/db.ts";
 import { fakeChannel } from "../../testing/fake-channel.ts";
 import { createChannels } from "../index.ts";
 import { createCards } from "./index.ts";
-import type { Answered, CardItem, CardSource, ItemKind } from "./types.ts";
+import type { Answered, CardChat, CardItem, CardSource, ItemKind } from "./types.ts";
 
 const owner = { id: "u1", label: "Owner" };
 const other = { id: "u2", label: "Other" };
@@ -69,10 +69,42 @@ function fakeSource(kind: ItemKind, prefix: string): FakeSource {
   };
 }
 
+interface FakeChat {
+  chat: CardChat;
+  sent: { botId: string; text: string; channel: string }[];
+  answerWith(a: Answered): void;
+}
+
+/** The host's chat as the router sees it: newest bot first. */
+function fakeChat(bots: { id: string; name: string }[]): FakeChat {
+  const sent: FakeChat["sent"] = [];
+  let answer: Answered = { outcome: "sent" };
+  const fake: FakeChat = {
+    sent,
+    answerWith: (a) => void (answer = a),
+    chat: {
+      async send(botId, text, channel) {
+        sent.push({ botId, text, channel });
+        return answer;
+      },
+      bots: () => bots,
+    },
+  };
+  return fake;
+}
+
+const BOTS = [
+  { id: "b3", name: "Newest" },
+  { id: "b2", name: "Job scout" },
+  { id: "b1", name: "Job" },
+];
+
 function setup(
   publicUrl = "https://tomte.example.com",
   sources: FakeSource[] = [fakeSource("event", "a")],
+  bots = BOTS,
 ) {
+  const talk = fakeChat(bots);
   const db = migrate(new Database(":memory:"));
   const fake = fakeChannel();
   const channels = createChannels({
@@ -85,6 +117,7 @@ function setup(
   const cards = createCards({
     db,
     channels,
+    chat: talk.chat,
     sources: sources.map((s) => s.source),
     publicUrl,
     retryMs: 20,
@@ -95,7 +128,7 @@ function setup(
     fake.inject({ from, button: { data, on } });
   const say = (text: string, replyTo?: string, from = owner) =>
     fake.inject({ from, text, ...(replyTo !== undefined && { replyTo }) });
-  return { db, fake, channels, cards, sources, link, press, say };
+  return { db, fake, channels, cards, sources, talk, link, press, say };
 }
 
 describe("sending a card", () => {
@@ -364,16 +397,26 @@ describe("words", () => {
     expect(events.replied).toEqual([]);
   });
 
-  test("plain words with no open card do nothing at all", async () => {
+  test("plain words with no open card get one hint naming the newest bot, and reach nothing", async () => {
     const events = fakeSource("event", "a");
-    const { cards, link, say } = setup(undefined, [events]);
+    const { cards, link, say, talk } = setup(undefined, [events]);
     events.open("e1");
     await link();
     await cards.sync();
     events.close("e1", "Handled");
 
-    expect(await say("hello")).toEqual({});
+    expect(await say("hello")).toEqual({
+      send: [{ text: "To talk to a bot, start with @ and its name, for example @Newest." }],
+    });
     expect(events.replied).toEqual([]);
+    expect(talk.sent).toEqual([]);
+  });
+
+  test("plain words with no open card and no bot at all still get a hint", async () => {
+    const { cards, link, say } = setup(undefined, [fakeSource("event", "a")], []);
+    await link();
+    await cards.sync();
+    expect((await say("hello")).send?.[0]?.text).toContain("You have no bots yet");
   });
 
   test("words that are queued or refused are answered with a message, and ones that closed the card are not", async () => {
@@ -389,5 +432,112 @@ describe("words", () => {
     expect((await say("hello")).send?.[0]?.text).toBe("that item is already handled");
     events.answerWith({ outcome: "answered" });
     expect(await say("hello")).toEqual({});
+  });
+});
+
+describe("@Name", () => {
+  const linked = async (bots = BOTS) => {
+    const events = fakeSource("event", "a");
+    const t = setup(undefined, [events], bots);
+    await t.link();
+    return { ...t, events };
+  };
+
+  test("sends the rest to the bot, from the channel it came in on, and says nothing when it was sent", async () => {
+    const { say, talk } = await linked();
+    expect(await say("@Newest what is new?")).toEqual({});
+    expect(talk.sent).toEqual([{ botId: "b3", text: "what is new?", channel: "fake" }]);
+  });
+
+  test("ignores case and runs of spaces, and takes a colon or a comma after the name", async () => {
+    const { say, talk } = await linked();
+    await say("@job   SCOUT: first");
+    await say("@Job, second");
+    await say("  @JOB third   words ");
+    expect(talk.sent.map((s) => [s.botId, s.text])).toEqual([
+      ["b2", "first"],
+      ["b1", "second"],
+      ["b1", "third   words "],
+    ]);
+  });
+
+  test("the longest matching name wins, and a longer name is not matched by a shorter word", async () => {
+    const { say, talk } = await linked();
+    await say("@Job scout check the board");
+    await say("@Job scouting is not its name");
+    expect(talk.sent.map((s) => [s.botId, s.text])).toEqual([
+      ["b2", "check the board"],
+      ["b1", "scouting is not its name"],
+    ]);
+  });
+
+  test("needs a space, a colon, a comma or the end after the name", async () => {
+    const { say, talk } = await linked();
+    const reply = await say("@Jobs do it");
+    expect(reply.send?.[0]?.text).toContain("No bot has that name");
+    expect(talk.sent).toEqual([]);
+  });
+
+  test("names with regular expression characters match literally", async () => {
+    const { say, talk } = await linked([{ id: "b9", name: "R&D (v2.0)+" }]);
+    await say("@r&d (v2.0)+ hello");
+    expect(await say("@R&D (v2x0)+ hello")).not.toEqual({});
+    expect(talk.sent).toEqual([{ botId: "b9", text: "hello", channel: "fake" }]);
+  });
+
+  test("a name alone has no message to send, and says so", async () => {
+    const { say, talk } = await linked();
+    expect((await say("@Newest")).send?.[0]?.text).toBe("Write your message after @Newest.");
+    expect((await say("@Newest:  ")).send?.[0]?.text).toBe("Write your message after @Newest.");
+    expect(talk.sent).toEqual([]);
+  });
+
+  test("a name that matches no bot lists the bots' names and sends nothing", async () => {
+    const { say, talk } = await linked();
+    const reply = await say("@Nobody hello");
+    expect(reply.send?.[0]?.text).toBe(
+      "No bot has that name. Your bots: Newest, Job scout, Job. Start with @ and a bot's full name.",
+    );
+    expect((await say("@ hello")).send).toHaveLength(1);
+    expect(talk.sent).toEqual([]);
+  });
+
+  test("a lone @ with no bots says there are none", async () => {
+    const { say } = await linked([]);
+    expect((await say("@x")).send?.[0]?.text).toContain("there are no bots yet");
+  });
+
+  test("goes to the bot even when one card is open; the card is not answered", async () => {
+    const { say, talk, events, cards } = await linked();
+    events.open("e1");
+    await cards.sync();
+    await say("@Job hello");
+    expect(talk.sent.map((s) => s.text)).toEqual(["hello"]);
+    expect(events.replied).toEqual([]);
+  });
+
+  test("a reply to a card goes to the card, even when the text starts with @", async () => {
+    const { say, talk, events, cards } = await linked();
+    events.open("e1");
+    await cards.sync();
+    await say("@Job hello", "m1");
+    expect(events.replied).toEqual(["e1:@Job hello"]);
+    expect(talk.sent).toEqual([]);
+  });
+
+  test("what the bot's send came to is told when it was queued or refused, and not when it was sent", async () => {
+    const { say, talk } = await linked();
+    talk.answerWith({ outcome: "queued" });
+    expect((await say("@Job hello")).send?.[0]?.text).toBe("queued; the bot is busy");
+    talk.answerWith({ outcome: "refused", reason: "switching chat mode" });
+    expect((await say("@Job hello")).send?.[0]?.text).toBe("switching chat mode");
+    talk.answerWith({ outcome: "sent" });
+    expect(await say("@Job hello")).toEqual({});
+  });
+
+  test("from an account that is not linked does nothing", async () => {
+    const { say, talk } = await linked();
+    expect(await say("@Job hello", undefined, other)).toEqual({});
+    expect(talk.sent).toEqual([]);
   });
 });

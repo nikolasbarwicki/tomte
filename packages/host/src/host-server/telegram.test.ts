@@ -400,7 +400,9 @@ describe("the update offset", () => {
     expect(
       tg.calls.slice(mark).find((c) => c.method === "getUpdates")!.params.offset,
     ).toBeUndefined();
-    expect(tg.texts()).toHaveLength(1);
+    // The code is plain words from the linked account now, which no card takes: the one new message is the hint, never a second link.
+    expect(tg.texts()).toHaveLength(2);
+    expect(tg.texts()[1]).toContain("To talk to a bot");
     expect((await entry()).link).toMatchObject({ label: "Owner One" });
   });
 });

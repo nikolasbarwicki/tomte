@@ -1,7 +1,7 @@
 import { BotModel, EffortLevel } from "@tomte/contract/events";
 import { z } from "zod";
 
-import { getBot } from "../../bots/index.ts";
+import { getBot, setOrigin } from "../../bots/index.ts";
 import { withMentions, type Mention } from "../../handoffs/index.ts";
 import { json } from "../http.ts";
 import type { ApiContext, OpenChatRoutes } from "./context.ts";
@@ -21,7 +21,7 @@ const Model = z.object({ model: BotModel });
 const Effort = z.object({ effort: EffortLevel });
 
 /** Routes that act on the chat the page shows. */
-export function chatRoutes({ dataRoot, chats, browser, routines }: ApiContext): OpenChatRoutes {
+export function chatRoutes({ dataRoot, db, chats, browser, routines }: ApiContext): OpenChatRoutes {
   return {
     "/api/send": async ({ res, parse }, chat) => {
       const { text, mentions: ids, eventId, answer } = parse(Send);
@@ -42,6 +42,8 @@ export function chatRoutes({ dataRoot, chats, browser, routines }: ApiContext): 
         answer,
       );
       if (sent.outcome === "refused") return json(res, { error: sent.reason }, 409);
+      // The conversation is here now: the bot's replies stop going to the phone.
+      setOrigin(db, chat.bot.id, "web", Date.now());
       if (sent.outcome === "queued")
         return json(res, { ok: true, outcome: "queued", queued: sent.queued });
       json(res, { ok: true, outcome: sent.outcome });

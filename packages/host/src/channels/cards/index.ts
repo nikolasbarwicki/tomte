@@ -4,13 +4,15 @@ import type { Inbound, Reply } from "../types.ts";
 import { createRouter } from "./router.ts";
 import { createCardStore } from "./store.ts";
 import { createTracker, type Tracker } from "./tracker.ts";
-import type { CardChannels, CardSource } from "./types.ts";
+import type { CardChannels, CardChat, CardSource } from "./types.ts";
 
-export type { Answered, CardItem, CardSource } from "./types.ts";
+export type { Answered, CardChat, CardItem, CardSource } from "./types.ts";
 
 export interface CardsDeps {
   db: Database;
   channels: CardChannels;
+  /** What words that answer no card are given to: bots by name, and the host's chat send. */
+  chat: CardChat;
   /** The kinds of item that get cards; each has its own button prefix. */
   sources: CardSource[];
   /** The URL users reach the host at: every card links to the web UI under it. */
@@ -44,6 +46,6 @@ export function createCards(d: CardsDeps): Cards {
   return {
     sync: () => tracker.sync(),
     stop: () => tracker.stop(),
-    receive: createRouter({ store, sources: d.sources }),
+    receive: createRouter({ store, sources: d.sources, chat: d.chat }),
   };
 }

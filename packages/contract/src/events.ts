@@ -271,6 +271,8 @@ export const Bot = z.object({
   /** What the bot's standard turns run on; in double-loop mode, what its background tasks run on (the front's replies always come from a fast model). */
   model: BotModel,
   effort: EffortLevel,
+  /** The owner's Chief of Staff: a prompt section and nothing else. At most one bot has it (`setChiefOfStaff`). */
+  chiefOfStaff: z.boolean(),
   browser: BotBrowserSettings,
 });
 export type Bot = z.infer<typeof Bot>;

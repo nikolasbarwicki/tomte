@@ -181,6 +181,7 @@ export class FrontSession {
         this.o.delegate.askUser(`Task ${task} asks: ${question}`, options, eventId, toolUseId),
       approve: (tool, input, reason) =>
         this.o.delegate.approve(tool, input, `${reason}, for the task ${task}`),
+      attended: () => this.o.delegate.attended?.() ?? true,
     };
   }
 

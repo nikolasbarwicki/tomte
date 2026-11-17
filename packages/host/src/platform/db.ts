@@ -557,6 +557,16 @@ async function sweepVaultSecrets(db: Database, secrets: SecretStore): Promise<vo
     console.error(`[db] deleted ${deleted} of ${ids.length} stored website passwords`);
 }
 
+// Where the owner's latest message to each bot came from (`web` or a channel's kind), so the bot's replies go to the phone while the
+// conversation is there. One row per bot; it is in the database so a restart does not send the conversation back to the web.
+const SCHEMA_V29 = `
+CREATE TABLE IF NOT EXISTS chat_origins (
+  bot_id TEXT PRIMARY KEY,
+  origin TEXT NOT NULL,
+  set_at INTEGER NOT NULL
+);
+`;
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -591,6 +601,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V26,
     SCHEMA_V27,
     SCHEMA_V28,
+    SCHEMA_V29,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

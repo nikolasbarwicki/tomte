@@ -5,6 +5,7 @@ import type { ChannelStatus } from "@tomte/contract/api";
 
 import { NotFound } from "../platform/errors.ts";
 import { noticeMessage, type Notice } from "./notices.ts";
+import { replyMessage, type BotReply } from "./replies.ts";
 import { createChannelStore } from "./store.ts";
 import type {
   Account,
@@ -17,7 +18,7 @@ import type {
 } from "./types.ts";
 
 export { createCards } from "./cards/index.ts";
-export type { Answered, CardItem, CardSource } from "./cards/index.ts";
+export type { Answered, CardChat, CardItem, CardSource } from "./cards/index.ts";
 export { createTelegramChannel, type TelegramOptions } from "./telegram/channel.ts";
 export { Notice } from "./notices.ts";
 export type { Account, Channel, ChannelMessage, Inbound, MessageRef, Reply } from "./types.ts";
@@ -82,6 +83,12 @@ export interface Channels {
    * so a caller that does not wait for it is never held up by a channel that is down. With no linked account nothing is sent.
    */
   notify(notice: Notice): Promise<void>;
+  /**
+   * Sends what a bot said to the linked account of the channel the owner is talking to it from, as plain text that starts with the bot's name
+   * and links to the bot's chat. Retried and logged like a notice, resolves when done and never rejects. Nothing is sent when the channel
+   * is unknown or has no linked account.
+   */
+  say(kind: string, reply: BotReply): Promise<void>;
 }
 
 export interface ChannelsDeps {
@@ -96,8 +103,8 @@ export interface ChannelsDeps {
   noticeRetryMs?: number;
 }
 
-/** How many times a notice that failed is tried again after the first send. */
-const NOTICE_RETRIES = 4;
+/** How many times a message that failed is tried again after the first send. */
+const SEND_RETRIES = 4;
 
 const RUNNING: ChannelStatus = { state: "running", detail: null, username: null };
 
@@ -151,6 +158,26 @@ export function createChannels(deps: ChannelsDeps): Channels {
     const to = accountOf(kind);
     if (!to) return { delivered: false };
     return { delivered: true, ref: await adapter.send(to, message) };
+  };
+
+  /** Sends to the linked account, trying again with a doubling wait when it fails and logging `what` after the last try; never rejects. */
+  const deliver = async (kind: string, message: ChannelMessage, what: string) => {
+    let wait = noticeRetryMs;
+    for (let tried = 0; ; tried++) {
+      try {
+        await send(kind, message);
+        return;
+      } catch (e) {
+        if (stopped || tried >= SEND_RETRIES) {
+          console.error(
+            `[channels] ${what} was not delivered to ${kind}: ${e instanceof Error ? e.message : "unknown error"}`,
+          );
+          return;
+        }
+        await pause(wait);
+        wait *= 2;
+      }
+    }
   };
 
   return {
@@ -235,25 +262,13 @@ export function createChannels(deps: ChannelsDeps): Channels {
       await Promise.all(
         [...registry.keys()]
           .filter((kind) => store.linkOf(kind) !== undefined)
-          .map(async (kind) => {
-            let wait = noticeRetryMs;
-            for (let tried = 0; ; tried++) {
-              try {
-                await send(kind, message);
-                return;
-              } catch (e) {
-                if (stopped || tried >= NOTICE_RETRIES) {
-                  console.error(
-                    `[channels] a ${notice.kind} notice was not delivered to ${kind}: ${e instanceof Error ? e.message : "unknown error"}`,
-                  );
-                  return;
-                }
-                await pause(wait);
-                wait *= 2;
-              }
-            }
-          }),
+          .map((kind) => deliver(kind, message, `a ${notice.kind} notice`)),
       );
+    },
+
+    async say(kind, reply) {
+      if (!registry.has(kind)) return;
+      await deliver(kind, replyMessage(reply, deps.publicUrl), `a reply of bot ${reply.botId}`);
     },
   };
 }

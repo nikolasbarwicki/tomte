@@ -17,6 +17,7 @@
 // - `{ hook: "PreToolUse", input: {...}, tool_use_id?, ifDenied?: Step[] }`: sends a `hook_callback` control request to every callback id the initialize request registered for that event whose `matcher` (a regex against `tool_name`, else `agent_type`; none means all) matches, waits for the replies and appends one `{ hook, input, callback, response }` line per callback to `hook-results.jsonl` (`response` is the hook's output, or `{ error }`; `callback` is null, with a null `response`, when nothing is registered). `ifDenied` runs when a reply denies (`hookSpecificOutput.permissionDecision` "deny" or `decision` "block").
 // - `{ canUseTool: { tool_name, input?, agent_id?, tool_use_id?, ifDenied?: Step[] } }`: sends a `can_use_tool` control request, as the CLI does when a tool call needs the host's permission (`agent_id` is the background agent making the call, as the CLI names it for a subagent's calls), waits for the host's answer and appends `{ tool_name, agent_id, response }` to `permission-results.jsonl` (`response` is the answer, `{ behavior: "allow" | "deny", ... }`, or `{ error }`). `ifDenied` runs when the host denies. The step waits for the answer, which for a user's approval card takes as long as the user does.
 // - `{ mcp: { server, tool, args?, tool_use_id? } }`: calls the in-process SDK MCP server named `server` (initialized once per server and launch; `tool_use_id` goes in the request's `_meta["claudecode/toolUseId"]`, as the CLI names the tool use), waits for the result and appends `{ server, tool, ...<MCP response message> }` to `tool-results.jsonl`.
+// - `{ httpTool: { server, tool, args?, agent_id? } }`: a tool call on a host HTTP MCP server (`bots`, `routines`, `browser`) as the real CLI makes it: first a `can_use_tool` control request for `mcp__<server>__<tool>` (its answer is appended to `permission-results.jsonl`), and only when the host allows it the JSON-RPC call, whose result is appended to `tool-results.jsonl` as `{ server, tool, result }`. A denial makes no call.
 // - `{ result: "text" }`: emits the turn's `result` message; steps may follow (background work that reports after the turn).
 // - `{ sleep: ms }`; `{ waitFor: "<file name>" }` polls until that file exists in the directory (a test sequences steps with it); `{ exit: code }` ends the process, as a crash.
 // With a script run, the process also exits when stdin ends, instead of waiting for steps still running.
@@ -94,6 +95,7 @@ type Step = {
     ifDenied?: Step[];
   };
   mcp?: { server: string; tool: string; args?: Record<string, unknown>; tool_use_id?: string };
+  httpTool?: { server: string; tool: string; args?: Record<string, unknown>; agent_id?: string };
   result?: string;
   sleep?: number;
   waitFor?: string;
@@ -255,11 +257,8 @@ const rpcBody = (text: string) => {
         ?.slice(6);
   return data === undefined ? undefined : (JSON.parse(data) as Record<string, unknown>);
 };
-/** What `call.json` asks for: `tool` on the HTTP MCP server `server` named in the CLI's own MCP config, with that entry's URL and bearer token. Resolves once the result is recorded. */
-const callHttp = async () => {
-  const file = join(dir, "call.json");
-  if (!existsSync(file)) return;
-  const { server, tool, args = {} } = JSON.parse(readFileSync(file, "utf8"));
+/** `tool` on the HTTP MCP server `server` named in the CLI's own MCP config, with that entry's URL and bearer token. Resolves once the result is recorded. */
+const callHttpTool = async (server: string, tool: string, args: Record<string, unknown>) => {
   const failed = (text: string) =>
     record("tool-results.jsonl", {
       server,
@@ -290,6 +289,13 @@ const callHttp = async () => {
   } catch (e) {
     failed(String(e));
   }
+};
+/** What `call.json` asks for. */
+const callHttp = async () => {
+  const file = join(dir, "call.json");
+  if (!existsSync(file)) return;
+  const { server, tool, args = {} } = JSON.parse(readFileSync(file, "utf8"));
+  await callHttpTool(server, tool, args);
 };
 
 const matcherHits = (matcher: string | undefined, subject: string) => {
@@ -359,6 +365,21 @@ const runSteps = async (steps: Step[], vars: Substitutions): Promise<boolean> =>
       record("permission-results.jsonl", { tool_name, agent_id, response });
       if (ifDenied && (response as { behavior?: string } | null)?.behavior === "deny")
         answered = (await runSteps(ifDenied, vars)) || answered;
+    } else if (step.httpTool) {
+      const { server, tool, args = {}, agent_id } = step.httpTool;
+      const tool_name = `mcp__${server}__${tool}`;
+      const reply = await ask({
+        subtype: "can_use_tool",
+        tool_name,
+        input: args,
+        tool_use_id: crypto.randomUUID(),
+        ...(agent_id !== undefined && { agent_id }),
+      });
+      const response =
+        reply.subtype === "error" ? { error: reply.error } : (reply.response ?? null);
+      record("permission-results.jsonl", { tool_name, agent_id, response });
+      if ((response as { behavior?: string } | null)?.behavior === "allow")
+        await callHttpTool(server, tool, args);
     } else if (step.mcp) {
       await callTool(step.mcp.server, step.mcp.tool, step.mcp.args ?? {}, step.mcp.tool_use_id);
     } else if (step.result !== undefined) {

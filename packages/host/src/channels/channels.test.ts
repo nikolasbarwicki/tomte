@@ -346,3 +346,61 @@ describe("notify", () => {
     quiet.mockRestore();
   });
 });
+
+describe("say", () => {
+  const reply = { botId: "b1", botName: "Job scout", text: "Found two roles." };
+
+  test("sends the bot's name first and the message whole, with a link to the bot's chat and no buttons", async () => {
+    const { channels, fake, link } = setup();
+    await link();
+    await channels.say("fake", reply);
+    expect(fake.sent).toMatchObject([
+      {
+        to: owner,
+        message: {
+          text: "Job scout\n\nFound two roles.",
+          link: { url: "https://tomte.example/bots/b1" },
+        },
+      },
+    ]);
+    expect(fake.sent[0]?.message.buttons).toBeUndefined();
+    expect(fake.edited).toEqual([]);
+  });
+
+  test("has no link when the public URL is a loopback http one", async () => {
+    const db = migrate(new Database(":memory:"));
+    const fake = fakeChannel();
+    const channels = createChannels({
+      db,
+      onActivity: () => {},
+      publicUrl: "http://127.0.0.1:5173",
+    });
+    channels.register(fake.channel);
+    fake.adapters((kind, inbound) => channels.receive(kind, inbound));
+    await fake.inject({ from: owner, text: channels.createLinkCode("fake") });
+    await channels.say("fake", reply);
+    expect(fake.sent[0]?.message).toEqual({ text: "Job scout\n\nFound two roles." });
+  });
+
+  test("sends nothing for a channel with no linked account or that does not exist, and does not throw", async () => {
+    const { channels, fake } = setup();
+    await channels.say("fake", reply);
+    await channels.say("nope", reply);
+    expect(fake.sent).toEqual([]);
+  });
+
+  test("tries a send that fails again with the notices' backoff, then logs and gives up", async () => {
+    const { channels, fake, link } = setup();
+    await link();
+    const quiet = spyOn(console, "error").mockImplementation(() => {});
+    let calls = 0;
+    fake.channel.send = async () => {
+      calls++;
+      throw new Error("channel is down");
+    };
+    await channels.say("fake", reply);
+    expect(calls).toBe(5);
+    expect(quiet).toHaveBeenCalledWith(expect.stringContaining("channel is down"));
+    quiet.mockRestore();
+  });
+});

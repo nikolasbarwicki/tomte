@@ -12,6 +12,7 @@ import { z } from "zod";
 
 import { VERSION } from "../harness/index.ts";
 import type { IntegrationsSource } from "../integrations/index.ts";
+import { ALWAYS_ASK_TOOLS } from "../waits/index.ts";
 import { appendMemory, readMemory, writeMemory, type MemoryPaths } from "./memory.ts";
 
 /** Decisions the host (its UI/user) owns. */
@@ -32,6 +33,8 @@ export interface HostDelegate {
     input: Record<string, unknown>,
     reason: string,
   ): Promise<PermissionResult>;
+  /** False while nobody watches the session (a scheduled run). Absent means someone does. */
+  attended?(): boolean;
 }
 
 /** The CLI passes the id of the tool use that called an in-process MCP tool in the call's metadata. */
@@ -99,7 +102,8 @@ const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 /**
  * Tomte's permission rules for one session: host tools run freely, integration tools follow their setting, and files outside the
  * session's roots and shell commands need the user. A tool the owner always allows for the bot (`allows`) skips the question; a
- * tool switched off in Integrations is denied whatever `allows` says.
+ * tool switched off in Integrations is denied whatever `allows` says. A tool in `ALWAYS_ASK_TOOLS` asks on every call, whatever
+ * `allows` and `approveAll` say, and is refused outright where nobody watches (no approval is parked for a scheduled run).
  */
 export function createCanUseTool(o: {
   cwd: string;
@@ -118,6 +122,14 @@ export function createCanUseTool(o: {
     });
   };
   return async (name, input) => {
+    if (ALWAYS_ASK_TOOLS.has(name)) {
+      if (o.delegate.attended?.() === false)
+        return {
+          behavior: "deny",
+          message: "scheduled runs cannot create bots; ask the user in chat",
+        };
+      return o.delegate.approve(name, input, "creates a bot");
+    }
     if (
       name.startsWith("mcp__host__") ||
       name.startsWith("mcp__browser__") ||

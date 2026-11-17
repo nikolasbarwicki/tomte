@@ -23,7 +23,8 @@ import {
 } from "@tomte/contract/events";
 import { z } from "zod";
 
-import { instructionsPath, readMemory, userMemoryPath } from "./memory.ts";
+import { CHIEF_OF_STAFF_INSTRUCTIONS } from "./chief-of-staff.ts";
+import { instructionsPath, readMemory, userMemoryPath, writeMemory } from "./memory.ts";
 import { type HostDelegate } from "./session-kit.ts";
 import { Thread, type ThreadEnv } from "./thread.ts";
 
@@ -53,6 +54,7 @@ export {
   type MemoryPaths,
 } from "./memory.ts";
 export { deleteActivity, getActivity, markSeen, recordMessage } from "./activity-store.ts";
+export { deleteOrigin, getOrigin, setOrigin } from "./origin-store.ts";
 export {
   allowTool,
   allowsTool,
@@ -96,6 +98,7 @@ const StoredBot = Bot.extend({
   sessions: Bot.shape.sessions.min(1).optional(),
   avatar: z.union([BotAvatar, LineAvatar]).optional(),
   chatMode: ChatMode.default("standard"),
+  chiefOfStaff: z.boolean().default(false),
   model: BotModel.default(DEFAULT_MODEL),
   effort: EffortLevel.default(DEFAULT_EFFORT),
   browser: BotBrowserSettings.extend({ headed: z.boolean().default(false) }).default({
@@ -118,6 +121,7 @@ function save(dataRoot: string, bot: Bot) {
     bot.avatar = stored.avatar;
     bot.browser = stored.browser;
     bot.chatMode = stored.chatMode;
+    bot.chiefOfStaff = stored.chiefOfStaff;
     bot.model = stored.model;
     bot.effort = stored.effort;
   }
@@ -147,13 +151,14 @@ export function listBots(dataRoot: string): Bot[] {
     .sort((a, b) => b.lastActive - a.lastActive);
 }
 
-/** The bot's id doubles as its first Claude Code session id. */
+/** The bot's id doubles as its first Claude Code session id. `memory` is the seed written to the bot's own memory file; blank writes nothing. */
 export function createBot(
   dataRoot: string,
   name: string,
   purpose = "",
   id: string = randomUUID(),
   avatar: BotAvatar = defaultAvatar(id),
+  memory = "",
 ): Bot {
   const now = Date.now();
   const bot: Bot = {
@@ -165,11 +170,13 @@ export function createBot(
     lastActive: now,
     sessions: [id],
     chatMode: "standard",
+    chiefOfStaff: false,
     model: DEFAULT_MODEL,
     effort: DEFAULT_EFFORT,
     browser: { enabled: false, headed: false },
   };
   save(dataRoot, bot);
+  if (memory.trim()) writeMemory(botMemoryPath(dataRoot, id), memory);
   return bot;
 }
 
@@ -208,6 +215,30 @@ export function setChatMode(dataRoot: string, id: string, chatMode: ChatMode): B
   bot.chatMode = chatMode;
   write(dataRoot, bot);
   return bot;
+}
+
+/**
+ * Turns the Chief of Staff switch on or off for a bot. Turning it on clears it on every other bot, so at most one holds it.
+ * Returns the ids whose flag changed (none when the bot does not exist or already had the value); the caller reconfigures
+ * each one's open session and announces the bots.
+ */
+export function setChiefOfStaff(dataRoot: string, id: string, on: boolean): string[] {
+  const bot = getBot(dataRoot, id);
+  if (!bot) return [];
+  const changed: string[] = [];
+  if (on)
+    for (const other of listBots(dataRoot))
+      if (other.id !== id && other.chiefOfStaff) {
+        other.chiefOfStaff = false;
+        write(dataRoot, other);
+        changed.push(other.id);
+      }
+  if (bot.chiefOfStaff !== on) {
+    bot.chiefOfStaff = on;
+    write(dataRoot, bot);
+    changed.push(id);
+  }
+  return changed;
 }
 
 /** Replaces the bot's name, purpose and avatar; the caller has validated them. */
@@ -266,6 +297,7 @@ function botIdentity(dataRoot: string, bot: Bot): string[] {
       ? `Your job: ${bot.purpose}`
       : "No job description was given; infer it from the conversation and bot memory.",
     ...(instructions ? ["", INSTRUCTIONS_HEADING, instructions] : []),
+    ...(bot.chiefOfStaff ? ["", CHIEF_OF_STAFF_INSTRUCTIONS] : []),
   ];
 }
 

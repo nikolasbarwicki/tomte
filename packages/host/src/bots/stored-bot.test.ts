@@ -6,7 +6,14 @@ import { join } from "node:path";
 import { defaultAvatar } from "@tomte/contract/avatars";
 import { z } from "zod";
 
-import { createBot, getBot, newSession, setChatMode, setModelSettings } from "./index.ts";
+import {
+  createBot,
+  getBot,
+  newSession,
+  setChatMode,
+  setChiefOfStaff,
+  setModelSettings,
+} from "./index.ts";
 
 let dataRoot: string;
 beforeEach(() => {
@@ -21,7 +28,7 @@ const rewrite = (id: string, edit: (stored: Record<string, unknown>) => void) =>
   writeFileSync(file(id), JSON.stringify(stored));
 };
 
-test("a bot.json from before sessions, browser settings, avatars, chat modes and model settings reads with their defaults", () => {
+test("a bot.json from before sessions, browser settings, avatars, chat modes, model settings and the Chief of Staff switch reads with their defaults", () => {
   const { id } = createBot(dataRoot, "Ada", "tests");
   rewrite(id, (s) => {
     delete s.sessions;
@@ -30,6 +37,7 @@ test("a bot.json from before sessions, browser settings, avatars, chat modes and
     delete s.chatMode;
     delete s.model;
     delete s.effort;
+    delete s.chiefOfStaff;
   });
   expect(getBot(dataRoot, id)).toMatchObject({
     sessions: [id],
@@ -38,6 +46,7 @@ test("a bot.json from before sessions, browser settings, avatars, chat modes and
     chatMode: "standard",
     model: "sonnet",
     effort: "medium",
+    chiefOfStaff: false,
   });
 });
 
@@ -69,6 +78,38 @@ test("the chat mode round-trips through bot.json and survives a stale copy being
   expect(stale.chatMode).toBe("double_loop");
   expect(getBot(dataRoot, stale.id)).toMatchObject({ chatMode: "double_loop" });
   expect(getBot(dataRoot, stale.id)?.sessions).toHaveLength(2);
+});
+
+test("the Chief of Staff flag survives a stale copy being saved", () => {
+  const stale = createBot(dataRoot, "Ada", "tests");
+  expect(setChiefOfStaff(dataRoot, stale.id, true)).toEqual([stale.id]);
+
+  newSession(dataRoot, stale);
+  expect(stale.chiefOfStaff).toBe(true);
+  expect(getBot(dataRoot, stale.id)?.chiefOfStaff).toBe(true);
+});
+
+test("turning the Chief of Staff on clears it on every other bot and returns the ids that changed", () => {
+  const ada = createBot(dataRoot, "Ada");
+  const bea = createBot(dataRoot, "Bea");
+  const cy = createBot(dataRoot, "Cy");
+  expect(setChiefOfStaff(dataRoot, ada.id, true)).toEqual([ada.id]);
+  // A hand edit, or an older host, left it on two bots.
+  rewrite(cy.id, (s) => {
+    s.chiefOfStaff = true;
+  });
+
+  expect(setChiefOfStaff(dataRoot, bea.id, true).sort()).toEqual([ada.id, cy.id, bea.id].sort());
+  expect([ada, bea, cy].map((b) => getBot(dataRoot, b.id)?.chiefOfStaff)).toEqual([
+    false,
+    true,
+    false,
+  ]);
+
+  expect(setChiefOfStaff(dataRoot, bea.id, true)).toEqual([]);
+  expect(setChiefOfStaff(dataRoot, ada.id, false)).toEqual([]);
+  expect(setChiefOfStaff(dataRoot, bea.id, false)).toEqual([bea.id]);
+  expect(setChiefOfStaff(dataRoot, "00000000-0000-4000-8000-000000000000", true)).toEqual([]);
 });
 
 test("a bot.json with an unknown chat mode throws a ZodError", () => {

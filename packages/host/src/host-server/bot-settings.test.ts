@@ -41,6 +41,7 @@ const profile = (botId: string, body: object = {}) =>
     name: "Grace",
     purpose: "Reviews code",
     ...AVATAR,
+    chiefOfStaff: false,
     ...body,
   });
 const promptOf = (n: number) => defined(host.launches()[n], `launch ${n}`).appendSystemPrompt ?? "";
