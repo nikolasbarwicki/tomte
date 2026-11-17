@@ -143,6 +143,8 @@ export interface HandoffHost {
   setSignedIn(signedIn: boolean): void;
   /** The exit code the fake's `auth login` returns from now on. */
   setLoginExit(code: number): void;
+  /** Completes a waiting `auth login` the way the real CLI's local callback does, without a pasted code. */
+  completeLoginCallback(): void;
   /** Whether the host finds the shell sandbox usable from now on; it starts out usable. */
   setSandboxAvailable(available: boolean): void;
   /** While held, a message the fake CLI receives keeps its turn running. */
@@ -350,6 +352,7 @@ export async function startHandoffHost(
         ? rmSync(join(claudeDir, "signed-out"), { force: true })
         : writeFileSync(join(claudeDir, "signed-out"), ""),
     setLoginExit: (code) => writeFileSync(join(claudeDir, "login-exit"), String(code)),
+    completeLoginCallback: () => writeFileSync(join(claudeDir, "login-callback"), ""),
     setSandboxAvailable: (available) => {
       sandboxAvailable = available;
     },

@@ -1,4 +1,7 @@
 import {
+  ClaudeGateway,
+  ClaudeLoginCode,
+  type ClaudeLoginStart,
   Instructions,
   MemoryUpdate,
   type ModelProvider,
@@ -16,6 +19,7 @@ import {
   writeMemory,
 } from "../../bots/index.ts";
 import { remoteLoginCommand, type SignInState } from "../../harness/index.ts";
+import { claudeGatewaySecretName } from "../../platform/secrets.ts";
 import { json } from "../http.ts";
 import type { ApiContext, ApiRoutes } from "./context.ts";
 
@@ -33,6 +37,7 @@ export function settingsRoutes({
   config,
   chats,
   events,
+  secrets,
 }: ApiContext): ApiRoutes {
   return {
     "/api/memory/update": async ({ res, parse }) => {
@@ -64,20 +69,62 @@ export function settingsRoutes({
       return json(res, { ok: true });
     },
     "/api/providers": async ({ res }) => {
+      const state = await claude.checkSignIn();
+      const { account, cliVersion } = claude.report();
+      const gateway = claude.gateway();
       const claudeProvider: ModelProvider = {
         id: "claude",
         name: "Claude",
         vendor: "Anthropic",
-        access: "subscription",
-        status: PROVIDER_STATUS[await claude.checkSignIn()],
+        access: gateway ? "api_key" : "subscription",
+        status: PROVIDER_STATUS[state],
         detail: `${cli.path} (${cli.source})`,
         connect:
           config.mode === "remote"
-            ? `Run \`${remoteLoginCommand(config)}\` in a terminal on the host.`
-            : "Run `claude` in a terminal and sign in with `/login`.",
+            ? `Sign in on this page, or run \`${remoteLoginCommand(config)}\` in a terminal on the host.`
+            : "Sign in on this page, or run `claude` in a terminal and sign in with `/login`.",
         models: [...BotModel.options],
+        account,
+        cliVersion,
+        gateway: gateway ?? null,
+        login: claude.login.pending() ?? null,
       };
       return json(res, { providers: [claudeProvider] } satisfies ModelProviders);
+    },
+    "/api/providers/claude/login": async ({ res }) => {
+      try {
+        return json(res, (await claude.login.start()) satisfies ClaudeLoginStart);
+      } catch (e) {
+        return json(res, { error: (e as Error).message }, 502);
+      }
+    },
+    "/api/providers/claude/login/code": async ({ res, parse }) => {
+      const { code } = parse(ClaudeLoginCode);
+      if (!claude.login.pending())
+        return json(res, { error: "no Claude sign-in is in progress" }, 409);
+      try {
+        await claude.login.submit(code);
+      } catch (e) {
+        return json(res, { error: (e as Error).message }, 400);
+      }
+      return json(res, { ok: true, status: PROVIDER_STATUS[await claude.checkSignIn()] });
+    },
+    "/api/providers/claude/login/cancel": async ({ res }) => {
+      claude.login.cancel();
+      return json(res, { ok: true });
+    },
+    "/api/providers/claude/gateway": async ({ res, parse }) => {
+      const gateway = parse(ClaudeGateway);
+      await secrets.set(claudeGatewaySecretName, JSON.stringify(gateway));
+      claude.setGateway(gateway);
+      chats.reconfigure(undefined, "model provider changed");
+      return json(res, { ok: true });
+    },
+    "/api/providers/claude/gateway/remove": async ({ res }) => {
+      await secrets.delete(claudeGatewaySecretName);
+      claude.setGateway(undefined);
+      chats.reconfigure(undefined, "model provider changed");
+      return json(res, { ok: true });
     },
   };
 }

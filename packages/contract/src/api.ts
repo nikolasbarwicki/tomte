@@ -251,13 +251,36 @@ export type MemoryUpdate = z.infer<typeof MemoryUpdate>;
 export const Instructions = z.object({ text: z.string().max(MAX_TEXT_DOCUMENT) });
 export type Instructions = z.infer<typeof Instructions>;
 
+/** How a custom Claude provider takes its token: `bearer` as `ANTHROPIC_AUTH_TOKEN`, `api_key` as `ANTHROPIC_API_KEY`. */
+export const ClaudeGatewayAuth = z.enum(["bearer", "api_key"]);
+export type ClaudeGatewayAuth = z.infer<typeof ClaudeGatewayAuth>;
+
+/** The `/api/providers/claude/gateway` request: an Anthropic-compatible API the CLI uses instead of the Claude sign-in. */
+export const ClaudeGateway = z.object({
+  baseUrl: z
+    .string()
+    .trim()
+    .pipe(z.url({ protocol: /^https?$/ })),
+  auth: ClaudeGatewayAuth,
+  token: z.string().trim().min(1),
+});
+export type ClaudeGateway = z.infer<typeof ClaudeGateway>;
+
+/** The `/api/providers/claude/login` response: the page where the owner signs in. */
+export const ClaudeLoginStart = z.object({ url: z.string() });
+export type ClaudeLoginStart = z.infer<typeof ClaudeLoginStart>;
+
+/** The `/api/providers/claude/login/code` request: the code that page showed. */
+export const ClaudeLoginCode = z.object({ code: z.string().trim().min(1) });
+export type ClaudeLoginCode = z.infer<typeof ClaudeLoginCode>;
+
 /** Whether the host can reach a model provider: `connected`, `disconnected`, or `unknown` when it could not tell. */
 export const ProviderStatus = z.enum(["connected", "disconnected", "unknown"]);
 export type ProviderStatus = z.infer<typeof ProviderStatus>;
 
 /**
  * A model provider the host runs bots on. Claude is the only one today; the list is how the UI is told about more.
- * `access` is how the host reaches it (`subscription`: a sign-in of the provider's CLI). `connect` is the one step that
+ * `access` is how the host reaches it (`subscription`: a sign-in of the provider's CLI; `api_key`: a custom provider). `connect` is the one step that
  * signs the host in, shown while it is not connected. `models` are the ids a bot may pick.
  */
 export const ModelProvider = z.object({
@@ -269,6 +292,21 @@ export const ModelProvider = z.object({
   detail: z.string(),
   connect: z.string(),
   models: z.array(z.string()),
+  /** The account the CLI is signed in with; null unless signed in. */
+  account: z
+    .object({
+      method: z.string(),
+      email: z.string().nullable(),
+      organization: z.string().nullable(),
+      plan: z.string().nullable(),
+    })
+    .nullable(),
+  /** The CLI's version, null when `--version` failed. */
+  cliVersion: z.string().nullable(),
+  /** The custom provider used instead of the sign-in; never carries the token. */
+  gateway: z.object({ baseUrl: z.string(), auth: ClaudeGatewayAuth }).nullable(),
+  /** A sign-in started from the UI and still waiting for its code. */
+  login: z.object({ url: z.string() }).nullable(),
 });
 export type ModelProvider = z.infer<typeof ModelProvider>;
 

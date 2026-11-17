@@ -235,7 +235,7 @@ describe("providers", () => {
   const providers = async () =>
     ModelProviders.parse(await (await host.ui("/api/providers", {})).json()).providers;
 
-  test("Claude is connected while the CLI is signed in, with where it runs and the models a bot may pick", async () => {
+  test("Claude is connected while the CLI is signed in, with the account, the CLI version, where it runs and the models a bot may pick", async () => {
     const [claude] = await providers();
     expect(claude).toEqual({
       id: "claude",
@@ -246,12 +246,23 @@ describe("providers", () => {
       detail: `${host.cliPath} (CLAUDE_PATH)`,
       connect: expect.stringContaining("/login"),
       models: ["opus", "sonnet", "haiku"],
+      account: {
+        method: "claude.ai",
+        email: "owner@example.test",
+        organization: "Example",
+        plan: "max",
+      },
+      cliVersion: "2.1.0",
+      gateway: null,
+      login: null,
     });
   });
 
-  test("the status follows the sign-in as it is now, without a restart", async () => {
+  test("the status follows the sign-in as it is now, without a restart, and the account only while signed in", async () => {
     host.setSignedIn(false);
-    expect((await providers())[0]?.status).toBe("disconnected");
+    const [signedOut] = await providers();
+    expect(signedOut?.status).toBe("disconnected");
+    expect(signedOut?.account).toBeNull();
     host.setSignedIn(true);
     expect((await providers())[0]?.status).toBe("connected");
   });

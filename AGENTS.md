@@ -88,6 +88,15 @@ A switch on a regular bot, not a role with machinery (spec `docs/plans/chief-of-
 - Web: a muted "Chief of Staff" pill (`data-chief-of-staff`) beside the name in the sidebar row (`app/app-sidebar.tsx`), a switch in `features/bots/profile-form.tsx` and a checkbox in `features/bots/new-bot.tsx`, both with `ChiefOfStaffText` (`features/bots/chief-of-staff-field.tsx`), which says "Turning this on removes it from <name>." when another bot holds it.
 - Tests: `host-server/chief-of-staff.test.ts` (whole host), `bots/stored-bot.test.ts` (default, stale save, `setChiefOfStaff`).
 
+## Claude access
+
+`harness/claude-access.ts` (`ClaudeAccess`) owns every Claude CLI child's environment and sign-in. `checkSignIn()` runs `auth status` and `--version` (cached once answered) and keeps a `report()` (state, account: method, email, organization, plan; CLI version); `/api/providers` returns it with the custom provider (`gateway`, never its token) and a sign-in waiting for its code (`login`).
+
+- Sign-in from the web UI (`harness/claude-login.ts`, `claude.login`): `POST /api/providers/claude/login` spawns `auth login` with piped stdio and answers the URL it prints (502 when none comes within 20 s); `/login/code` `{code}` writes the code to its stdin and answers `{ ok, status }` (409 with no sign-in waiting, 400 with the CLI's `Couldn't log in: …`); `/login/cancel` kills it. The CLI may also complete on its own through its local browser callback; the Models page polls `/api/providers` every 3 s while a sign-in waits. A waiting sign-in is killed after 10 minutes and when the host closes. Works in both modes, beside `host auth-login`.
+- Custom provider: `POST /api/providers/claude/gateway` `ClaudeGateway` (`baseUrl`, `auth` `bearer`→`ANTHROPIC_AUTH_TOKEN` or `api_key`→`ANTHROPIC_API_KEY`, `token`) stores the secret `claude-gateway` (`claudeGatewaySecretName`), applies it to every later CLI child (inherited `ANTHROPIC_*` dropped first) and reconfigures open chats; `/gateway/remove` deletes it. The host reads it at startup; a malformed one is logged and ignored. No response, event or log carries the token. `access` is `api_key` while it is set; a UI sign-in runs without it.
+- Isolation: bots launch with `settingSources: []` (no user or project settings, CLAUDE.md, hooks, plugins or skills of the owner) and `ENABLE_CLAUDEAI_MCP_SERVERS=false` (no claude.ai connectors).
+- Fake CLI: `--version`, `auth status` with an account and env-driven methods, an interactive `auth login` (`bad-code`, `host.completeLoginCallback()`); tests in `host-server/claude-provider.test.ts`.
+
 ## Host binary
 
 `bun run build:host [target…]` builds the web UI, then compiles `packages/host/src/main.ts` with `bun build --compile` into `dist/host/tomte-host-<os>-<arch>[.exe]` (gitignored) for `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64` and `windows-x64`; name targets to build only those. `scripts/build-host.ts` explains the x64 baseline, minify and sourcemap choices. The built web UI is embedded (`ui/assets.ts`); Vite, the Claude CLI and the browser engine are not.

@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { fileURLToPath } from "node:url";
 
+import { ClaudeGateway } from "@tomte/contract/api";
 import type { IntegrationsEvent, RoutinesEvent } from "@tomte/contract/events";
 
 import {
@@ -51,7 +52,7 @@ import { createIntegrations } from "../integrations/index.ts";
 import { createLoopStore } from "../loop/index.ts";
 import { AGENT_ADDRESS, clientOrigin, agentOrigin, type HostConfig } from "../platform/config.ts";
 import { openSecrets } from "../platform/file-secrets.ts";
-import type { SecretStore } from "../platform/secrets.ts";
+import { claudeGatewaySecretName, type SecretStore } from "../platform/secrets.ts";
 import { TokenRegistry } from "../platform/tokens.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
 import { createPresence } from "../presence/index.ts";
@@ -324,6 +325,16 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     loop,
   });
   const claude = createClaudeAccess(o.config, cli);
+  const storedGateway = await secrets.get(claudeGatewaySecretName);
+  if (storedGateway) {
+    try {
+      claude.setGateway(ClaudeGateway.parse(JSON.parse(storedGateway)));
+    } catch {
+      console.error(
+        `[claude] the stored custom provider (${claudeGatewaySecretName}) is malformed; ignored`,
+      );
+    }
+  }
   const chats = createChats({
     cwd,
     dataRoot,
@@ -481,6 +492,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     browser,
     routines,
     integrations,
+    secrets,
     devices,
     channels,
     sessions,
@@ -550,6 +562,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     async close() {
       clientListener.pause();
       agentListener.pause();
+      claude.close();
       chats.close();
       waits.close();
       clearInterval(absenceTimer);

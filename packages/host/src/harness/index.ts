@@ -140,7 +140,7 @@ export const claudeHarness: Harness = {
         systemPrompt: { type: "preset", preset: "claude_code", append: systemPromptAppend },
         permissionMode: "default",
         strictMcpConfig: true,
-        settingSources: ["user"],
+        settingSources: [],
         extraArgs,
         disallowedTools: [
           ...(integrations?.disallowedTools ?? []),

@@ -8,7 +8,8 @@
 // A turn is answered only once every tool it called has its result, as with the real CLI: a pending `ask_user` keeps the turn running.
 // Every tool result the host sends back for those calls is appended to `tool-results.jsonl` as the MCP response message.
 // An optional `call.json` (`{ server, tool, args }`) makes each user message call `tool` on the host's HTTP MCP server named `server` (`routines`, `bots`, `browser`), as the real CLI does: a JSON-RPC `tools/call` POST to the `url` of that server's entry in the --mcp-config file, with that entry's `Authorization` header (the session's bearer token). The host's endpoints answer each request on their own, so there is no initialize handshake. The result is appended to `tool-results.jsonl` as `{ server, tool, result: { content, isError? } }`. A server missing from the config, an HTTP error or an answer that is not JSON-RPC is recorded as an error result whose text says what happened, so a wiring fault shows in `toolResults()` instead of hanging the turn. The turn is answered once the call has its result.
-// `auth status` prints the real CLI's JSON and exits 1 while a `signed-out` file exists, else exits 0. `auth login` exits with the code in the optional `login-exit` file (default 0).
+// `--version` prints `2.1.0 (Claude Code)`. `auth status` prints the real CLI's JSON (with an account: `email`, `orgName`, `subscriptionType`) and exits 1 while a `signed-out` file exists, else exits 0; like the real CLI it reports signed in through `ANTHROPIC_AUTH_TOKEN` (`oauth_token`) or `ANTHROPIC_API_KEY` (`api_key`) whatever that file says.
+// `auth login` exits at once with the code in the optional `login-exit` file when it is not 0. Else it prints what the real CLI prints without a terminal (the sign-in URL `https://claude.example.test/oauth?state=fake`, then the code prompt) and reads stdin lines: `bad-code` fails with `Couldn't log in: Invalid code` on stderr and exit 1, any other line signs in (removes `signed-out`, prints `Login successful.`, exit 0). A `login-callback` file appearing in the directory signs in the same way without a line, as the real CLI's local callback does; stdin ending exits 0.
 // An optional `loop.json` scripts what the fake emits per user message, to drive the host as the double-loop chat mode's long-lived front query does (background tasks, hooks, in-process MCP servers, a crash mid-run). Without it, or when no script is left for a message, the behaviour above is unchanged. Shape: `{ scripts: [{ match?: string, steps: Step[] }] }`.
 // A user message takes the first unused script whose `match` is a substring of its text, else the first unused script without a `match`; the use is recorded in `loop-used.json`, so it holds across relaunches (`--resume`). Steps run in order, off the read loop, so a later user message is answered while an earlier script still runs. A script with no `result` step ends with the default result (`result.txt`, else "ok"). Every string in a step may hold `{session}` (the session id), `{n}` (0-based index of the user message over all launches, the line count of `messages.jsonl` before it) and `{queued}` (the first queue id, `q-` and hex digits, in the user message's text: the task the app asks the front to start).
 // Steps (one key each):
@@ -21,7 +22,7 @@
 // - `{ result: "text" }`: emits the turn's `result` message; steps may follow (background work that reports after the turn).
 // - `{ sleep: ms }`; `{ waitFor: "<file name>" }` polls until that file exists in the directory (a test sequences steps with it); `{ exit: code }` ends the process, as a crash.
 // With a script run, the process also exits when stdin ends, instead of waiting for steps still running.
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
@@ -29,20 +30,56 @@ const envDir = process.env.FAKE_CLAUDE_DIR;
 const dir = envDir ?? process.argv[2];
 if (!dir) process.exit(2);
 const [command, subcommand] = process.argv.slice(envDir ? 2 : 3);
+if (command === "--version") {
+  console.log("2.1.0 (Claude Code)");
+  process.exit(0);
+}
 if (command === "auth") {
-  if (subcommand === "login")
-    process.exit(
-      existsSync(join(dir, "login-exit"))
-        ? Number(readFileSync(join(dir, "login-exit"), "utf8"))
-        : 0,
-    );
-  const signedIn = !existsSync(join(dir, "signed-out"));
+  if (subcommand === "login") {
+    const exit = existsSync(join(dir, "login-exit"))
+      ? Number(readFileSync(join(dir, "login-exit"), "utf8"))
+      : 0;
+    if (exit !== 0) process.exit(exit);
+    const signIn = () => {
+      rmSync(join(dir, "signed-out"), { force: true });
+      rmSync(join(dir, "login-callback"), { force: true });
+      console.log("Login successful.");
+      process.exit(0);
+    };
+    console.log("Opening browser to sign in…");
+    console.log("If the browser didn't open, visit: https://claude.example.test/oauth?state=fake");
+    process.stdout.write("Paste code here if prompted > ");
+    setInterval(() => existsSync(join(dir, "login-callback")) && signIn(), 25);
+    const lines = createInterface({ input: process.stdin });
+    lines.on("line", (line) => {
+      if (line.trim() !== "bad-code") signIn();
+      console.error("Couldn't log in: Invalid code");
+      process.exit(1);
+    });
+    lines.on("close", () => process.exit(0));
+    await new Promise(() => {});
+  }
+  const method = process.env.ANTHROPIC_AUTH_TOKEN
+    ? "oauth_token"
+    : process.env.ANTHROPIC_API_KEY
+      ? "api_key"
+      : undefined;
+  const signedIn = method !== undefined || !existsSync(join(dir, "signed-out"));
   console.log(
-    JSON.stringify({
-      loggedIn: signedIn,
-      authMethod: signedIn ? "claude.ai" : "none",
-      configDirectory: process.env.CLAUDE_CONFIG_DIR,
-    }),
+    JSON.stringify(
+      method
+        ? { loggedIn: true, authMethod: method, configDirectory: process.env.CLAUDE_CONFIG_DIR }
+        : {
+            loggedIn: signedIn,
+            authMethod: signedIn ? "claude.ai" : "none",
+            configDirectory: process.env.CLAUDE_CONFIG_DIR,
+            ...(signedIn && {
+              email: "owner@example.test",
+              orgName: "Example",
+              subscriptionType: "max",
+            }),
+          },
+    ),
   );
   process.exit(signedIn ? 0 : 1);
 }

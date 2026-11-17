@@ -11,6 +11,7 @@ import type { Events as ExternalEvents } from "../../events/index.ts";
 import type { ClaudeAccess, ResolvedCli } from "../../harness/index.ts";
 import type { Integrations } from "../../integrations/index.ts";
 import type { HostConfig } from "../../platform/config.ts";
+import type { SecretStore } from "../../platform/secrets.ts";
 import type { Routines } from "../../routines/index.ts";
 import type { Chats, OpenChat } from "../chats.ts";
 import type { DeviceSessions } from "../device-sessions.ts";
@@ -42,6 +43,8 @@ export interface ApiContext {
   browser: Browser;
   routines: Routines;
   integrations: Integrations;
+  /** The secrets backend: the custom Claude provider is kept there. */
+  secrets: SecretStore;
   devices: DeviceAuth;
   channels: Channels;
   /** Which device each request came from, and the responses still open for it. */

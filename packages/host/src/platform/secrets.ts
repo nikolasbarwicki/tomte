@@ -32,3 +32,6 @@ export const eventTokenSecretName = (botId: string) => `events-token:${botId}`;
 
 /** The bot token of a channel (`telegram`), held like the event tokens: only in the secrets backend. */
 export const channelTokenSecretName = (kind: string) => `channel-token:${kind}`;
+
+/** The custom Claude provider (`ClaudeGateway` as JSON), token included; only in the secrets backend. */
+export const claudeGatewaySecretName = "claude-gateway";
