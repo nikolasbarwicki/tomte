@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 
 import type { WaitAction } from "@tomte/contract/events";
 
-export type WaitKind = "tool_approval" | "question" | "takeover" | "credential";
+export type WaitKind = "tool_approval" | "question" | "takeover";
 type WaitState = "open" | "answered" | "expired" | "cancelled";
 
 /** What each kind stores about its request: enough to show the card, word the bot's message and carry out the effect after a restart. */
@@ -17,7 +17,6 @@ export interface WaitPayloads {
   /** `eventId` is the external event the question is about; a linked question ends with its turn. */
   question: { question: string; options?: string[]; eventId?: string };
   takeover: { reason: string };
-  credential: { entryId: string; label: string; origin: string; botName: string };
 }
 
 interface WaitBase {

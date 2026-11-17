@@ -17,7 +17,7 @@ Settings  /settings/<section>
 ├─ Models         model providers: Claude (status, how to sign in, models); room for more
 ├─ Connections    this host (local or remote, address, version), paired devices and pairing codes
 ├─ Channels       linked phone accounts, Telegram bot token (was /channels)
-├─ Credentials    stored logins (was /credentials)
+├─ Credentials    stored logins (was /credentials; removed with the credential vault, 2026-11-17)
 └─ About          versions, Claude CLI, browser engine, updates (not yet available)
 Bot panel  /bots/<id>?panel=<tab>&section=<page>
 ├─ Work · Tasks (double-loop only) · Files · Browser   live views, one tab each

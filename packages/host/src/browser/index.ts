@@ -2,7 +2,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { Bot } from "@tomte/contract/events";
 
-import type { Credentials } from "../credentials/index.ts";
 import type { HostOrigin } from "../platform/config.ts";
 import type { SecretStore } from "../platform/secrets.ts";
 import type { TokenRegistry } from "../platform/tokens.ts";
@@ -13,41 +12,32 @@ import { createEgressProxy } from "./egress-proxy.ts";
 import { createBrowserEndpoint, type BrowserEndpoint } from "./endpoint.ts";
 import { engineStatus, installManagedEngine, type EngineStatus } from "./engine.ts";
 import { createLiveView, type LiveViewOptions } from "./live-view.ts";
-import { CREDENTIAL_EXCHANGE_PATH, createBrowserLogin } from "./login.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./runtime.ts";
 import { browserIsolation, sandboxStatus, type SandboxStatus } from "./sandbox.ts";
 import { Takeover } from "./takeover.ts";
 import { createBrowserUiRoutes } from "./ui-routes.ts";
 
 export { BROWSER_ENDPOINT_PATH, type BrowserEndpoint } from "./endpoint.ts";
-export { runCredentialPlugin } from "./credential-plugin.ts";
 export { installManagedEngine } from "./engine.ts";
 export { LIVE_VIEW_PATH } from "./live-view.ts";
-export { CREDENTIAL_PLUGIN_COMMAND } from "./login.ts";
 export { BROWSER_UI_PATHS } from "./ui-routes.ts";
 export { browserIsolation, sandboxStatus };
-export {
-  CREDENTIAL_EXCHANGE_PATH,
-  type BrowserRuntimeOptions,
-  type LiveViewOptions,
-  type SandboxStatus,
-};
+export { type BrowserRuntimeOptions, type LiveViewOptions, type SandboxStatus };
 
 /** Looked at three times, so a wall gets about six seconds to clear: well under the 30 s lane wait. */
 const DEFAULT_WALL_PAUSE_MS = 2_000;
 
 export interface BrowserOptions {
-  /** The human waits the takeover and the credential approval raise. */
+  /** The human waits the takeover raises. */
   waits: Waits;
   /** Sends a host message into the bot's session through the normal send path: queued while the bot is busy, reopening a closed session. */
   deliver: (botId: string, text: string) => void;
   /** The data root; the managed engine is installed in it. */
   dataRoot: string;
   secrets: SecretStore;
-  credentials: Credentials;
   /** The host-wide token registry shared with the bots endpoint. */
   tokens: TokenRegistry;
-  /** The agent listener: bots are leased URLs on it, and the browser endpoint and credential exchange check requests against it. */
+  /** The agent listener: bots are leased URLs on it, and the browser endpoint checks requests against it. */
   agent: HostOrigin;
   bot(botId: string): Bot | undefined;
   /** Whether a bot may run headed Chrome. When false, Chrome launches headless whatever a bot's stored setting says. */
@@ -68,8 +58,6 @@ export interface BrowserOptions {
 export interface Browser {
   /** The browser endpoint: the browser tools served to bot sessions. */
   endpoint: BrowserEndpoint;
-  /** Serves `CREDENTIAL_EXCHANGE_PATH`. */
-  handleCredentialExchange(req: IncomingMessage, res: ServerResponse): Promise<void>;
   /** Serves `LIVE_VIEW_PATH`. */
   handleLiveView(req: IncomingMessage, res: ServerResponse): Promise<void>;
   /** Serves the paths in `BROWSER_UI_PATHS`. */
@@ -117,17 +105,9 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
     deliver: o.deliver,
     inactivityMs: o.takeoverInactivityMs,
   });
-  const login = createBrowserLogin({
-    credentials: o.credentials,
-    secrets: o.secrets,
-    waits: o.waits,
-    botName: (botId) => o.bot(botId)?.name ?? "A bot",
-    exchangeUrl: () => `${o.agent.localUrl}${CREDENTIAL_EXCHANGE_PATH}`,
-  });
   const endpoint = createBrowserEndpoint({
     tokens: o.tokens,
     takeover,
-    login,
     wallPauseMs: o.runtime?.wallPauseMs ?? DEFAULT_WALL_PAUSE_MS,
     host: o.agent,
     isEnabled: (botId) => enabled(botId) && sandboxOf().status === "available",
@@ -149,7 +129,6 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
   });
   return {
     endpoint,
-    handleCredentialExchange: (req, res) => login.handle(req, res, o.agent),
     handleLiveView: (req, res) => liveView.handle(req, res),
     handleUi: ui,
     sandbox: sandboxOf,
@@ -162,11 +141,7 @@ export async function createBrowser(o: BrowserOptions): Promise<Browser> {
     cancelTakeover: (botId, reason) => takeover.cancelBot(botId, reason),
     restart: (botId) => runtimes.restart(botId),
     signOut: (botId) => runtimes.signOut(botId),
-    removeBot: (botId) =>
-      removeBotBrowser(
-        { endpoint, runtimes, takeover, credentials: o.credentials, waits: o.waits },
-        botId,
-      ),
+    removeBot: (botId) => removeBotBrowser({ endpoint, runtimes, takeover, waits: o.waits }, botId),
     async close() {
       liveView.close();
       await runtimes.closeAll();

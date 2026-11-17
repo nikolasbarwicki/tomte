@@ -5,7 +5,6 @@ export const SETTINGS_SECTIONS = [
   "models",
   "connections",
   "channels",
-  "credentials",
   "about",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];

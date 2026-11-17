@@ -149,7 +149,7 @@ function prompt(
   const when = scheduledFor === null ? "now" : new Date(scheduledFor).toISOString();
   return [
     `<scheduled-routine name="${r.name.replace(/"/g, "'")}" trigger="${trigger}" scheduled-for="${when}">`,
-    'No human is watching this run, but you can reach the owner: a tool that needs approval, and the ask_user tool, send the request to the owner and park this run until they answer. The answer arrives later as a message in this conversation. After sending such a request, end your turn; do not guess, retry or wait. Otherwise carry out the instruction below on your own. A source you cannot use (a login you have no stored credential for, a page that stays behind bot protection) does not fail the run: skip it and add a line "Unavailable: <source> (<reason>)" to your summary for each one. Save anything you produce in your files folder. End with a short summary (at most 5 lines) of what you did and what the user should know.',
+    'No human is watching this run, but you can reach the owner: a tool that needs approval, and the ask_user tool, send the request to the owner and park this run until they answer. The answer arrives later as a message in this conversation. After sending such a request, end your turn; do not guess, retry or wait. Otherwise carry out the instruction below on your own. A source you cannot use (a page that asks you to sign in, a page that stays behind bot protection) does not fail the run: skip it and add a line "Unavailable: <source> (<reason>)" to your summary for each one. Save anything you produce in your files folder. End with a short summary (at most 5 lines) of what you did and what the user should know.',
     late,
     "",
     r.instruction,

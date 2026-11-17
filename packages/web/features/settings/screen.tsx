@@ -2,7 +2,6 @@ import { Link } from "@tanstack/react-router";
 import {
   CpuIcon,
   InfoIcon,
-  KeyRoundIcon,
   MessageSquareTextIcon,
   MonitorSmartphoneIcon,
   SendIcon,
@@ -50,12 +49,6 @@ const SECTIONS: Record<
       "Where the host reaches you outside this app. Link your account with a one-time code; messages from any other account are ignored.",
     icon: SendIcon,
   },
-  credentials: {
-    label: "Credentials",
-    description:
-      "Website logins your bots can use. Passwords stay in the OS keychain and are never shown again.",
-    icon: KeyRoundIcon,
-  },
   about: {
     label: "About",
     description: "Versions, and what this host runs bots with.",
@@ -71,8 +64,6 @@ type SettingsSlots = {
   devices: ReactNode;
   /** The Channels section's content. */
   channels: ReactNode;
-  /** The Credentials section's content. */
-  credentials: ReactNode;
 };
 
 /** The Settings screen: a title bar, the section list (a side column, or a scrolling row on narrow windows) and the open section. */
@@ -143,8 +134,6 @@ function Content({ section, slots }: { section: SettingsSection; slots: Settings
       return <Connections devices={slots.devices} />;
     case "channels":
       return slots.channels;
-    case "credentials":
-      return slots.credentials;
     case "about":
       return <About />;
   }

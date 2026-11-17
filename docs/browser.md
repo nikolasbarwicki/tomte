@@ -50,7 +50,7 @@ The **⋯** menu next to the browser's status holds:
 
 - **Show window**: runs Chrome with a visible window on your computer, for sites that block headless browsers. Restarts the browser.
 - **Restart browser**: closes the browser and keeps saved logins. Use it to recover a stuck browser. The bot is told it restarted and must take a fresh snapshot.
-- **Sign out of everything**: closes the browser and deletes its saved login state (asks for confirmation). Grants and vault entries are untouched.
+- **Sign out of everything**: closes the browser and deletes its saved login state (asks for confirmation).
 
 A browser nobody used for 10 minutes closes on its own, keeping its logins. All browsers close when tomte shuts down, and leftover engine and Chrome processes from a crash are closed on the next start (and swept every minute).
 
@@ -72,21 +72,9 @@ A takeover with no input from you for **30 minutes** ends on its own and counts 
 
 What you type and click during a takeover is sent straight to the browser. It is never logged, never written to the transcript, and never shown to the bot. A password you type in a takeover stays private, but the page you land on afterwards is visible to the bot in its next snapshot.
 
-## Credential vault and grants
-
-Open **Credentials** to add website logins: a label, a sign-in URL, a username and a password.
-
-- The sign-in URL must be `https` (plain `http` is accepted only for localhost, for testing). The entry is bound to that URL's origin (scheme, host, port).
-- The password is stored **only in the host's secret store** (the OS keychain, or the encrypted secrets file in remote mode). It is not in tomte's database or files, and no screen or API returns it. Editing an entry with an empty password keeps the old one.
-- A bot can list entries by label and site (never secrets) and sign in by naming one with `browser_login`. The password never reaches the model, transcript, tool arguments or tool output.
-- The engine fills the password only on a page matching the entry's origin.
-- **First use needs your approval.** The bot's chat shows an approval card (**Allow** / **Deny**). Allow creates a **grant** for that bot and that entry; the bot is told to call `browser_login` again, and from then on it signs in with that entry without asking you again, in chat and in routines. Deny tells the bot not to ask again and to report what is blocked. The approval is a stored human wait: it stays open across a tomte restart, and an answer given afterwards still reaches the bot as a message. It expires after 24 hours without an answer.
-- **Revoke** a grant per entry or in "Access by bot" in the Credentials screen; the bot asks again next time, a routine's next run included. Deleting an entry removes its password and all its grants.
-- If the vault cannot finish a sign-in (multi-step login, OTP, passkey), the bot is told to request a takeover.
-
 ## Routines (unattended runs)
 
-Scheduled routines of a browser-enabled bot can browse using the bot's existing logins and sign in with the vault. An entry you already granted to the bot signs in with nobody watching, exactly as in chat, and the password never reaches the bot or the run result. A first use, or an entry the bot has no grant for, parks the run for your approval: the run shows "Waiting for you" with the usual **Allow** / **Deny** card. **Allow** grants the entry and the run continues in the same session with the bot told to call `browser_login` again; **Deny** continues it with the bot told not to ask again and to report what is blocked. A login the vault cannot finish (a code, a passkey) tells the bot to request a takeover, which parks the run as below. A login wall the bot has no entry for is a source unavailable: the routine skips it and says so in its run result (see [Page walls](#page-walls)). A routine and the bot's chat never drive the browser at the same time; a second call waits up to 30 seconds, then fails with "previous browser call still running".
+Scheduled routines of a browser-enabled bot can browse using the bot's existing logins. A sign-in page is a source unavailable: the routine does not try to sign in, skips it and says so in its run result (see [Page walls](#page-walls)). To keep a source available, sign in once yourself through a takeover in the bot's chat; its runs then use the saved login until it expires. A routine and the bot's chat never drive the browser at the same time; a second call waits up to 30 seconds, then fails with "previous browser call still running".
 
 A routine can request a takeover, and that parks the run: it shows "Waiting for you", the bot's Chrome stays open on the page it was on, and the bot's browser is held, so another run of the same bot that calls the browser meanwhile is refused with "user has control" and reports it. Open the bot, use the live view (on a phone, the bot panel's sheet), then press **I'm done** or hand the browser back, and the run continues in the same session; **Skip** continues it too, with the bot told you did not handle it. The 30-minute inactivity limit does not run while the takeover waits for you: it starts at your first input and then counts between inputs, and a timeout counts as Skip. Until your first input only the 24-hour limit applies: an unanswered takeover fails the run with "approval expired" and releases the browser. Restarting tomte closes the browser, so an open takeover is cancelled at the next start and the run continues with a message that the browser session is gone, so the bot can ask again.
 
@@ -99,7 +87,7 @@ A double-loop bot's routine runs are the same kind of run: always headless, in a
 Every browser tool that returns a snapshot (`browser_open`, `browser_snapshot`, the actions, `browser_tabs`) checks the page for two kinds of wall. The checks read the snapshot's visible text and, after `browser_open`, the page title, and know vendors and sign-in forms, never sites. A snapshot that carries only interactive elements (the actions return one) has little text to read, so a wall is most reliably caught on `browser_open` and `browser_snapshot`.
 
 - **Bot wall** (Cloudflare, DataDome, PerimeterX or Imperva interstitial). The tool looks at the page again up to three times, about two seconds apart, inside the same call (well under the 30-second lane wait). A page that clears is returned as any other, with no note. A page that stays is returned with a note from the host: it is behind that vendor's bot protection and did not clear; if the page matters the bot should call `browser_request_takeover` and end its turn, otherwise report the source as unavailable. The host never requests the takeover itself, so text on a page cannot start one. In a routine the bot's takeover parks the run (see Routines). A phrase counts only on a nearly empty page or as a whole heading or title, so an article that quotes "Just a moment..." is not a wall.
-- **Login wall** (a page that is a sign-in form: a password field on a small page, or on one headed "Sign in"). The note depends on what the vault holds for the page's exact origin (scheme, host, port) and this bot. A granted entry: call `browser_login` with its label. An entry the bot has no grant for: `browser_login` will ask you to approve it. No entry: "source unavailable", the bot is told not to try to sign in, say so in its report and carry on. Nothing parks and the run does not fail: a routine whose bot reports it still ends `succeeded`, and the report is the run's output.
+- **Login wall** (a page that is a sign-in form: a password field on a small page, or on one headed "Sign in"). Sign-in pages need you. In chat the note tells the bot to call `browser_request_takeover` so you can sign in. In a routine the note says "source unavailable": the bot is told not to try to sign in, say so in its report and carry on. Nothing parks and the run does not fail: a routine whose bot reports it still ends `succeeded`, and the report is the run's output.
 
 The run prompt and the browser instructions ask the bot to put one line per unavailable source in its summary: `Unavailable: <source> (<reason>)`. Walls are never beaten by the host: there is no stealth browser, no CAPTCHA-solving service and no proxy. A wall that needs you is handed over as a takeover.
 
@@ -119,4 +107,4 @@ The run prompt and the browser instructions ask the bot to put one line per unav
 - No file upload or download, no JavaScript evaluation.
 - Chrome for Testing is unpinned (see [Install the engine](#install-the-engine)).
 - Linux depends on `bwrap` and `socat`; without them the browser stays unavailable.
-- Deleting a bot signs it out of everything (saved logins and engine session removed), ends any takeover and removes its credential grants.
+- Deleting a bot signs it out of everything (saved logins and engine session removed) and ends any takeover.

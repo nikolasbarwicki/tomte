@@ -12,6 +12,7 @@ import {
 import { createHostServer, type HostServer } from "./host-server/index.ts";
 import { acquireDataRootLock, DataRootLocked } from "./platform/data-root-lock.ts";
 import { openDb } from "./platform/db.ts";
+import { openSecrets } from "./platform/file-secrets.ts";
 import {
   hostCommand,
   isCompiledHost,
@@ -118,13 +119,17 @@ async function installSidecarCli(): Promise<ResolvedCli> {
 }
 const cli = resolved ?? (await installSidecarCli());
 
-server = await createHostServer({
-  config,
-  cli,
-  db: openDb(config.dataRoot),
-  botId: botArg,
-  ...(ui && { ui }),
-}).catch((e: Error) => {
+server = await (async () => {
+  const secrets = openSecrets(config);
+  return createHostServer({
+    config,
+    cli,
+    db: await openDb(config.dataRoot, secrets),
+    secrets,
+    botId: botArg,
+    ...(ui && { ui }),
+  });
+})().catch((e: Error) => {
   console.error(e.message);
   lock.release();
   process.exit(2);

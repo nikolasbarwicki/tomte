@@ -29,9 +29,6 @@ const ALLOWED_ACTIONS = [
   "back",
   "viewport",
   "stream_status",
-  // `auth login` is checked as `auth_login`, and again for the credential plugin it asks.
-  "auth_login",
-  "plugin:tomte:credential.read",
 ] as const;
 
 /** Spelled out as well, so the intent survives someone widening the allow list. */

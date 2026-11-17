@@ -2,7 +2,6 @@ import type { HostInfo, PublicHostInfo } from "@tomte/contract/api";
 import type {
   BotSummary,
   ContextEvent,
-  CredentialEntry,
   FilesEvent,
   HostEvent as StreamEvent,
   Integration,
@@ -48,7 +47,6 @@ export type HostState = {
   routines: RoutinesEvent | undefined;
   work: WorkEvent | undefined;
   integrations: Integration[];
-  credentials: CredentialEntry[];
 };
 
 export const initialHostState: HostState = {
@@ -62,7 +60,6 @@ export const initialHostState: HostState = {
   routines: undefined,
   work: undefined,
   integrations: [],
-  credentials: [],
 };
 
 /** Folds one event into the state. Slices the event does not touch keep their reference. */
@@ -74,8 +71,6 @@ export function applyEvent(s: HostState, e: HostEvent): HostState {
       return { ...s, publicInfo: e.info };
     case "integrations":
       return { ...s, integrations: e.integrations };
-    case "credentials":
-      return { ...s, credentials: e.credentials };
     case "memory":
       return { ...s, memory: { ...s.memory, [e.scope]: e.text } };
     case "files":

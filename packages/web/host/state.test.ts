@@ -86,7 +86,6 @@ test("snapshot events replace their slice and host-info sets the info", () => {
   const s = play([
     { type: "bots", bots },
     { type: "integrations", integrations: [] },
-    { type: "credentials", credentials: [] },
     { type: "routines", botId: "b", routines: [] },
     { type: "files", dir: "/d", files: [] },
   ]);

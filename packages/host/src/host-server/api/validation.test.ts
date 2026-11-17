@@ -32,7 +32,6 @@ test.each([
   ["/api/bots/new", { name: " ", shape: "ball", color: "ink" }, "name required"],
   ["/api/bots/browser", { botId: "x", enabled: "yes" }, "enabled"],
   ["/api/open", { botId: 7 }, "botId"],
-  ["/api/credentials/add", { label: 7 }, "label"],
   ["/api/integrations/set-enabled", { id: "x", enabled: "yes" }, "enabled"],
   ["/api/routines/create", { botId: 7 }, "botId"],
 ])("%s rejects a field of the wrong shape with 400", async (path, body, field) => {

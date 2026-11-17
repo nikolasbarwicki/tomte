@@ -108,7 +108,7 @@ function Overview({ bot, open }: { bot: BotSummary; open: (section: BotSection) 
     const ok = await confirmAction({
       title: `Delete ${bot.name}?`,
       description:
-        "Its routines and credential grants are removed, its browser logins are signed out and its open handoffs fail. Memory and files are moved to the trash folder in the data root (bots/.trash).",
+        "Its routines are removed, its browser logins are signed out and its open handoffs fail. Memory and files are moved to the trash folder in the data root (bots/.trash).",
       action: "Delete",
       destructive: true,
     });
@@ -183,7 +183,7 @@ function Overview({ bot, open }: { bot: BotSummary; open: (section: BotSection) 
             <p className="text-muted-foreground text-xs">
               {bot.status === "working"
                 ? "Available once the bot finishes its turn."
-                : "Removes the bot, its routines and its grants."}
+                : "Removes the bot and its routines."}
             </p>
           </div>
           <Button

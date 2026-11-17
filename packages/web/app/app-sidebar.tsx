@@ -59,7 +59,7 @@ function BotContextMenu({ bot, children }: { bot: BotSummary; children: ReactNod
     const ok = await confirmAction({
       title: `Delete ${bot.name}?`,
       description:
-        "Its routines and credential grants are removed, its browser logins are signed out and its open handoffs fail. Memory and files are moved to the trash folder in the data root (bots/.trash).",
+        "Its routines are removed, its browser logins are signed out and its open handoffs fail. Memory and files are moved to the trash folder in the data root (bots/.trash).",
       action: "Delete",
       destructive: true,
     });

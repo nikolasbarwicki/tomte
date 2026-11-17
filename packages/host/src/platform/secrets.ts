@@ -28,8 +28,6 @@ export function memorySecrets(): SecretStore & { entries: ReadonlyMap<string, st
 
 export const secretName = (integrationId: string) => `integration:${integrationId}`;
 
-export const credentialSecretName = (entryId: string) => `browser-credential:${entryId}`;
-
 export const eventTokenSecretName = (botId: string) => `events-token:${botId}`;
 
 /** The bot token of a channel (`telegram`), held like the event tokens: only in the secrets backend. */

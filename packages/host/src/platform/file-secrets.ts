@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 
 import { z } from "zod";
 
-import type { SecretStore } from "./secrets.ts";
+import type { HostConfig } from "./config.ts";
+import { keychainSecrets, type SecretStore } from "./secrets.ts";
 
 const KEY_BYTES = 32;
 const IV_BYTES = 12;
@@ -14,6 +15,11 @@ const ALGORITHM = "aes-256-gcm";
 
 /** The secrets file in the data root; one JSON document holding every secret. */
 export const SECRETS_FILE = "secrets.enc";
+
+/** The store `config.secrets` names; throws when the encrypted file cannot be opened with its key. */
+export function openSecrets({ dataRoot, secrets }: HostConfig): SecretStore {
+  return secrets.backend === "file" ? openFileSecrets(dataRoot, secrets.keyFile) : keychainSecrets;
+}
 
 const base64 = (bytes: number) =>
   z

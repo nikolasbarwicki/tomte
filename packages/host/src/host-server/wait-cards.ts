@@ -60,8 +60,6 @@ function headingOf(w: Wait, botName: string | undefined): string {
       return `${who} asks: ${w.payload.question}`;
     case "takeover":
       return `${who} needs you: ${w.payload.reason}`;
-    case "credential":
-      return `${who} · Allow sign-in with "${w.payload.label}"?`;
   }
 }
 
@@ -72,8 +70,6 @@ function bodyOf(w: Wait): string | undefined {
       const shown = tooLong(w) ? `${cut(input, INPUT_BUDGET)}\n\n${TOO_LONG}` : input;
       return `Reason: ${cut(w.payload.reason, REASON_BUDGET)}\n\nInput:\n${shown}\n\nReply to this message to deny with a note.`;
     }
-    case "credential":
-      return `${w.payload.botName} wants to sign in to ${w.payload.origin} with the stored credential "${w.payload.label}". It never sees the password.`;
     case "takeover":
     case "question":
       return undefined;
@@ -91,7 +87,7 @@ function buttonsOf(w: Wait): CardItem["buttons"] {
 }
 
 /**
- * Human waits as card items (`wait`): a tool approval, an `ask_user` question, a takeover and a credential approval. The items are the
+ * Human waits as card items (`wait`): a tool approval, an `ask_user` question and a takeover. The items are the
  * rows of `human_waits`, so a wait that opened while the host or a channel was down is sent when it is back, and one that closes any way
  * (answered here or on the web, cancelled, expired) has its card edited. An answer goes through the same function the web UI's routes use:
  * the host, not the channel, resumes a parked run.
@@ -171,7 +167,6 @@ export function createWaitCards(d: {
         case "question":
           return answer(w, text);
         case "takeover":
-        case "credential":
           return refused(USE_BUTTONS);
       }
     },

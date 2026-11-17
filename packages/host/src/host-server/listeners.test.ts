@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { BROWSER_ENDPOINT_PATH, CREDENTIAL_EXCHANGE_PATH } from "../browser/index.ts";
+import { BROWSER_ENDPOINT_PATH } from "../browser/index.ts";
 import { BOTS_ENDPOINT_PATH } from "../handoffs/index.ts";
 import { ROUTINES_ENDPOINT_PATH } from "../routines/index.ts";
 import { defined } from "../testing/defined.ts";
@@ -52,21 +52,6 @@ describe("the two listeners", () => {
         404,
       );
     lease.release();
-  });
-
-  test("the credential exchange answers on the agent listener only", async () => {
-    const exchange = (base: string) =>
-      fetch(`${base}${CREDENTIAL_EXCHANGE_PATH}`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          // The client listener's boundary check lets a paired same-origin device through to find no route.
-          ...(base === host.clientUrl && { origin: base, ...host.authHeaders }),
-        },
-        body: JSON.stringify({ nonce: "unknown", url: "https://example.com/login" }),
-      });
-    expect((await exchange(host.agentUrl)).status).toBe(403);
-    expect((await exchange(host.clientUrl)).status).toBe(404);
   });
 
   test("the web API and the OAuth callback answer on the client listener only", async () => {

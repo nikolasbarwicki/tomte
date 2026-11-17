@@ -7,7 +7,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import type { CredentialEntry } from "@tomte/contract/events";
 
 import { defined } from "../testing/defined.ts";
 import { parse, startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
@@ -290,45 +289,6 @@ describe("questions", () => {
 });
 
 describe("browser waits", () => {
-  const ENTRY = {
-    label: "GH",
-    signInUrl: "http://localhost:3999/login",
-    username: "me",
-    password: "pw-pw-pw-pw",
-  };
-
-  const grantsOf = async (botId: string) => {
-    const entries = (await (
-      await host.ui("/api/credentials/list", {})
-    ).json()) as CredentialEntry[];
-    return entries.flatMap((e) => e.grants).filter((g) => g.botId === botId);
-  };
-
-  test("a sign-in approval answered after a restart creates the grant and tells the bot; a second request meanwhile is told it is not answered yet", async () => {
-    const botId = await openBot();
-    expect((await host.ui("/api/credentials/add", ENTRY)).status).toBe(200);
-    const call = await browserAs(botId);
-
-    const waiting = parse<{ status: string; id: string }>(
-      await call("browser_login", { entry: "GH" }),
-    );
-    expect(waiting.status).toBe("waiting_for_user");
-    const again = await call("browser_login", { entry: "GH" });
-    expect(again.isError).toBe(true);
-    expect(again.text).toContain("has not answered");
-
-    await host.restart();
-    const page = await watch();
-    await host.until(() => page.waits().some((w) => w.id === waiting.id));
-    expect(await grantsOf(botId)).toEqual([]);
-
-    expect((await waitAnswer(waiting.id, "allow")).status).toBe(200);
-    await host.until(() => sent(botId, waiting.id).length === 1);
-    expect(sent(botId, waiting.id)[0]).toContain('Call browser_login("GH") again');
-    expect(await grantsOf(botId)).toHaveLength(1);
-    expect(page.events()).toContainEqual({ type: "wait_resolved", id: waiting.id, label: "Allow" });
-  });
-
   test("a takeover wait is cancelled by a restart and the bot is told its browser session is gone", async () => {
     const botId = await openBot();
     const call = await browserAs(botId);

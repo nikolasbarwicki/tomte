@@ -29,7 +29,6 @@ const KIND_LABEL: Record<WaitKind, string> = {
   tool_approval: "Approval",
   question: "Question",
   takeover: "Takeover",
-  credential: "Approval",
 };
 
 /**

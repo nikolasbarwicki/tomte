@@ -1,5 +1,7 @@
 # 08: Gate check: a 03:00 routine meets an expired login, parks, and finishes after a takeover from the phone
 
+Superseded in part: vault removed (`.scratch/remove-credential-vault/`, 2026-11-17). The vault set-up, the `browser_login` step of the headline and "The vault" item no longer apply; a routine on a sign-in page now reports it as unavailable. Rework this check before running it.
+
 **What to build:** Run the check that closes step 1 of the cancel gate on my VPS, and record the result here. A routine that runs at 03:00 meets an expired login, parks, and finishes after I take over the browser from my phone. Also walk the smaller parking cases once. See `docs/plans/grok-bot-replacement-roadmap.md`, "The cancel gate", step 1.
 
 **Blocked by:** 02, 03, 04, 05, 06, 07, 09

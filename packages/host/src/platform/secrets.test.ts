@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -70,7 +71,7 @@ describe.each(stores)("%s store", (_name, open) => {
 
 describe("file store", () => {
   const VALUE = "synthetic-password-9f3a1c";
-  const NAME = "browser-credential:abc";
+  const NAME = "integration:abc";
 
   test("a store reopened with the same key reads the old values and sees deletions", async () => {
     const first = openFileSecrets(root, keyFile);
@@ -109,6 +110,13 @@ describe("file store", () => {
     await store.set("a", "1");
     await store.set("b", "2");
     if (process.platform !== "win32") expect(statSync(secretsFile()).mode & 0o777).toBe(0o600);
+    expect(readdirSync(root).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+  });
+
+  test("a write that cannot replace the file rejects and leaves no temporary file behind", async () => {
+    const store = openFileSecrets(root, keyFile);
+    mkdirSync(join(secretsFile(), "blocker"), { recursive: true });
+    await expect(store.set("a", "1")).rejects.toThrow();
     expect(readdirSync(root).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 

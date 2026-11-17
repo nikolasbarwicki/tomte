@@ -300,7 +300,7 @@ export function clientOrigin(config: HostConfig, port: number): HostOrigin {
   return listenerOrigin(config.bind.address, port, config.publicUrl);
 }
 
-/** The agent listener: always `127.0.0.1`, on a free port, reached only by bots and the credential plugin on this machine. */
+/** The agent listener: always `127.0.0.1`, on a free port, reached only by bots on this machine. */
 export function agentOrigin(port: number): HostOrigin {
   return listenerOrigin(AGENT_ADDRESS, port, undefined);
 }

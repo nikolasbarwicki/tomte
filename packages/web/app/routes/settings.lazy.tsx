@@ -1,17 +1,9 @@
 import { createLazyRoute, Navigate, useParams } from "@tanstack/react-router";
 
 import { Channels } from "@/features/channels/index.ts";
-import { Credentials } from "@/features/credentials/index.ts";
 import { Devices } from "@/features/devices/index.ts";
 import { MemoryEditor } from "@/features/memory/index.ts";
 import { SETTINGS_SECTIONS, SettingsScreen } from "@/features/settings/index.ts";
-import { useBots, useCredentials } from "@/host/hooks.ts";
-
-function CredentialsSection() {
-  const credentials = useCredentials();
-  const bots = useBots();
-  return <Credentials credentials={credentials} bots={bots ?? []} />;
-}
 
 const slots = {
   aboutYou: (
@@ -24,7 +16,6 @@ const slots = {
   ),
   devices: <Devices />,
   channels: <Channels />,
-  credentials: <CredentialsSection />,
 };
 
 export const Route = createLazyRoute("/settings/$section")({

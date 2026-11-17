@@ -20,29 +20,8 @@ const WALL_RECHECKS = 3;
 const botWallNote = (vendor: BotWallVendor) =>
   `Note from the host: this page is behind ${VENDOR_NAMES[vendor]} bot protection and did not clear; if the page matters, call browser_request_takeover with a one-sentence reason, then end your turn; otherwise report this source as unavailable ("Unavailable: <source> (${VENDOR_NAMES[vendor]} bot protection)") and continue.`;
 
-/** The origin of a page as the engine reports it (a URL, or already an origin); undefined when it reports none. */
-function originOf(origin: string | undefined): string | undefined {
-  try {
-    return origin === undefined ? undefined : new URL(origin).origin;
-  } catch {
-    return undefined;
-  }
-}
-
-/** What the bot should do about a sign-in form, by what the vault holds for the page's exact origin. */
-function loginWallNote(ctx: BrowserToolContext, origin: string | undefined): string | undefined {
-  const exact = originOf(origin);
-  if (!exact) return undefined;
-  const coverage = ctx.login.coverage(ctx.botId, exact);
-  switch (coverage.status) {
-    case "granted":
-      return `Note from the host: this is a sign-in page and you have a stored credential for it: call browser_login with entry "${coverage.label}".`;
-    case "ungranted":
-      return `Note from the host: this is a sign-in page. A stored credential "${coverage.label}" exists for it but you have not been granted it: browser_login with entry "${coverage.label}" will ask the owner to approve it, then you end your turn.`;
-    case "none":
-      return 'Note from the host: source unavailable: this page asks you to sign in and you have no stored credential for it. Do not try to sign in; say so in your report ("Unavailable: <source> (login required)") and continue with the rest of your task.';
-  }
-}
+const LOGIN_WALL_NOTE =
+  'Note from the host: this is a sign-in page, and signing in needs the user. In a chat with the user, call browser_request_takeover with a one-sentence reason, then end your turn. In an unattended run, the source is unavailable: do not try to sign in; say so in your report ("Unavailable: <source> (login required)") and continue with the rest of your task.';
 
 /** The title of the active tab, to judge a wall that the first call recognised by its title. */
 async function activeTitle(ctx: BrowserToolContext): Promise<string | undefined> {
@@ -60,7 +39,7 @@ async function activeTitle(ctx: BrowserToolContext): Promise<string | undefined>
 /**
  * Takes a snapshot of the active tab, numbers its refs, and returns it as untrusted page content. A bot wall
  * (Cloudflare and the like) is looked at again a few times with a pause, inside this call; a page that clears
- * is returned as any other, one that stays comes with a note. A sign-in form comes with a note by vault coverage.
+ * is returned as any other, one that stays comes with a note. A sign-in form comes with a note too.
  * The notes are the host's own words, outside the page-content markers.
  */
 export async function snapshotOutcome(
@@ -84,7 +63,7 @@ export async function snapshotOutcome(
   const note = vendor
     ? botWallNote(vendor)
     : detectLoginWall(raw, shownTitle)
-      ? loginWallNote(ctx, data.origin)
+      ? LOGIN_WALL_NOTE
       : undefined;
   const body = `${shownTitle ? `Title: ${shownTitle}\n` : ""}${ctx.page.numberSnapshot(raw)}`;
   return {

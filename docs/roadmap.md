@@ -6,7 +6,7 @@ Out of scope here: computer use (see [`research/cua-research.md`](research/cua-r
 
 ## Where tomte stands
 
-Ahead of every competitor on safety: per-bot credential grants in a keychain-backed vault, an egress proxy and shell sandbox for the browser, per-tool `off/ask/auto` policies on integrations, takeover and human waits, and untrusted-content wrapping. OpenBot runs `danger-full-access` with `approvalPolicy: never` per its README.
+Ahead of every competitor on safety: an egress proxy and shell sandbox for the browser, per-tool `off/ask/auto` policies on integrations, takeover and human waits, and untrusted-content wrapping. OpenBot runs `danger-full-access` with `approvalPolicy: never` per its README.
 
 Behind on everything around the bot: unattended approvals, event triggers, reach beyond one localhost tab, model providers, and bot authoring.
 
@@ -29,7 +29,7 @@ Items 1 and 2 come first because they extend the safety advantage into unattende
 
 **Shipped (parked runs).** A routine run that meets an `ask`-policy tool or an `ask_user` question no longer denies it. The tool call is refused for now, the bot is told the request went to the owner and to end its turn, and the run becomes `waiting` ("Waiting for you" in the Routines panel). The owner answers on the same cards as in a chat. When the last open request of a park is answered the run resumes in the same session, as one message holding every answer (a denial carries the owner's note), so earlier steps do not run again; an answer that comes in while the bot is still finishing its turn never parks. A park survives a restart, expires after 24 hours (the run fails with "approval expired" and the bot is told nothing was approved), and an occurrence that comes due during a park is recorded as skipped. A new session, or deleting the routine or the bot, cancels the park. A double-loop bot's routine turns are unchanged: they answer like an attended turn and never park.
 
-ADR-0009 records what this replaced: the original plan had Allow and Block lists per tool, a 30-minute expiry and a resume through `deliver()`. There are no lists, a park lasts 24 hours, and the run resumes through the routine executor so its status and output stay the run's. What is still open from the spec ([`plans/unattended-parking/spec.md`](plans/unattended-parking/spec.md)): takeover and `browser_login` in unattended runs (still refused), the unattended-approvals summary, and the cost guards.
+ADR-0009 records what this replaced: the original plan had Allow and Block lists per tool, a 30-minute expiry and a resume through `deliver()`. There are no lists, a park lasts 24 hours, and the run resumes through the routine executor so its status and output stay the run's. What is still open from the spec ([`plans/unattended-parking/spec.md`](plans/unattended-parking/spec.md)): the unattended-approvals summary and the cost guards.
 
 **Competitors.** Rerun: coworkers stop before consequential actions, any teammate can answer, the run resumes where it stopped, and rules can answer on the user's behalf. Rakazo: Never ask / Auto / Ask modes with Allow and Block lists that grow from approval cards; a blocked action is refused without a card.
 
@@ -64,7 +64,7 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 - Add `create_bot` (name, purpose, initial memory). Pair it with the unfinished bot delete flow (item 6) so created bots can be cleaned up.
 - Ship a Chief of Staff template that combines these with `hand_off`. Handoffs and the routine tools have landed, so this waits only on `create_bot`.
 
-**Guards.** A bot may edit only its own routines (another bot's id answers "no such routine"). A bot may hold at most 20 routines (`create_routine` only; the panel and `/api/routines/create` are not capped). There is no per-routine approval flag: a bot-made routine runs under the bot's own tool policies, so a write left at `ask` parks the run ([ADR-0009](adr/0009-unattended-runs-park-on-durable-human-waits.md)). The routine tools cannot change a tool policy, a vault grant or an integration, and a scheduled run (a routine turn or a headless run) cannot create or change routines. Still open: a cap on the bots one bot may create, and `create_bot` and the Chief of Staff template.
+**Guards.** A bot may edit only its own routines (another bot's id answers "no such routine"). A bot may hold at most 20 routines (`create_routine` only; the panel and `/api/routines/create` are not capped). There is no per-routine approval flag: a bot-made routine runs under the bot's own tool policies, so a write left at `ask` parks the run ([ADR-0009](adr/0009-unattended-runs-park-on-durable-human-waits.md)). The routine tools cannot change a tool policy or an integration, and a scheduled run (a routine turn or a headless run) cannot create or change routines. Still open: a cap on the bots one bot may create, and `create_bot` and the Chief of Staff template.
 
 **Done when.** The user says "brief me every weekday at 8" in chat and a routine appears in the Routines panel without touching the UI.
 
@@ -92,7 +92,7 @@ Research and plan: [`research/webhook-research.md`](research/webhook-research.md
 2. One chat channel (Slack, Telegram or Discord) that posts bot messages and approval cards, and routes replies into `deliver()`. Telegram and Discord are channels only, not catalog integrations.
 3. A service wrapper (launchd, systemd) or Docker image so the host stays up. Update docs.
 
-**Constraint.** Never expose the browser, bots or credential endpoints without the existing token, Host and Origin checks.
+**Constraint.** Never expose the browser or bots endpoints without the existing token, Host and Origin checks.
 
 ## 6. Small items
 
@@ -126,7 +126,7 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 
 ### 6c. Bot edit and delete
 
-**Problem.** No edit route or UI. Delete is built: `/api/bots/delete` (bot header, trash icon) calls `HostServer.removeBot`, which fails the bot's open handoffs, removes its routines, activity row, browser state and credential grants, closes its chat and moves its directory to `bots/.trash/<id>-<timestamp>/`. It refuses with 409 while the bot is working. Restoring is manual (move the folder back). Claude session files for the bot stay in the workspace's session history.
+**Problem.** No edit route or UI. Delete is built: `/api/bots/delete` (bot header, trash icon) calls `HostServer.removeBot`, which fails the bot's open handoffs, removes its routines, activity row and browser state, closes its chat and moves its directory to `bots/.trash/<id>-<timestamp>/`. It refuses with 409 while the bot is working. Restoring is manual (move the folder back). Claude session files for the bot stay in the workspace's session history.
 
 **Plan.**
 
@@ -134,7 +134,7 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 - UI: edit in the bot header.
 - Optional: a trash view to restore or purge deleted bots, and purging `bots/.trash` automatically.
 
-**Done when.** Deleting a bot with an open handoff, a credential grant and a routine leaves none of them behind, and the other bot is told the handoff failed.
+**Done when.** Deleting a bot with an open handoff and a routine leaves none of them behind, and the other bot is told the handoff failed.
 
 ### 6d. Usage and cost
 

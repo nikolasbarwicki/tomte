@@ -8,7 +8,6 @@ import { botRoutes } from "./bots.ts";
 import { channelApi } from "./channels.ts";
 import { chatRoutes } from "./chat.ts";
 import type { ApiContext, ApiRequest } from "./context.ts";
-import { credentialApi } from "./credentials.ts";
 import { deviceApi } from "./devices.ts";
 import { eventSourceRoutes, eventTokenRoutes, needsYouRoutes } from "./external-events.ts";
 import { fileRoutes } from "./files.ts";
@@ -39,10 +38,6 @@ export function createApi(ctx: ApiContext): Handler {
     if (path.startsWith("/api/channels/")) return channelApi(ctx, res, path, b);
     if (path.startsWith("/api/routines/")) return routineApi(ctx, res, path, b);
     if (path.startsWith("/api/integrations/")) return integrationApi(ctx, res, path, b);
-    if (path.startsWith("/api/credentials/")) {
-      const r = await credentialApi(ctx.credentials, path, b);
-      return r ? json(res, r.body, r.status) : void res.writeHead(404).end();
-    }
     const r: ApiRequest = { res, path, query, parse: (schema) => schema.parse(b) };
     const botRoute = Object.hasOwn(anyBot, path) ? anyBot[path] : undefined;
     if (botRoute) return botRoute(r);

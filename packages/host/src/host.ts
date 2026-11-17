@@ -33,6 +33,7 @@ import {
   type ResolvedCli,
 } from "./harness/index.ts";
 import { openDb } from "./platform/db.ts";
+import { openSecrets } from "./platform/file-secrets.ts";
 import { hostCommand, parseStartupConfig } from "./platform/launch.ts";
 import { ensureWorkspace } from "./platform/workspace.ts";
 
@@ -259,7 +260,11 @@ try {
       break;
     case "pair":
       // Database only: no data root lock, so it runs next to a running host.
-      console.log(createDeviceAuth({ db: openDb(config.dataRoot) }).createPairingCode());
+      console.log(
+        createDeviceAuth({
+          db: await openDb(config.dataRoot, openSecrets(config)),
+        }).createPairingCode(),
+      );
       break;
     case "browser-smoke":
       await (await import("./browser/smoke.ts")).runBrowserSmoke(config);

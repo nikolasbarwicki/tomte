@@ -1,6 +1,5 @@
 import { Database } from "bun:sqlite";
 import { spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,12 +9,11 @@ import { HostEvent, type ServerEvent } from "@tomte/contract/events";
 import type { Server } from "bun";
 
 import { createBot } from "../bots/index.ts";
-import { createCredentials } from "../credentials/index.ts";
 import { resolveCli } from "../harness/index.ts";
 import { createHostServer, type HostServer } from "../host-server/index.ts";
 import type { HostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
-import { memorySecrets, type SecretStore } from "../platform/secrets.ts";
+import { memorySecrets } from "../platform/secrets.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
 import { engineStatus } from "./engine.ts";
 
@@ -42,12 +40,11 @@ function lanIp(): string | undefined {
   return undefined;
 }
 
-/** Plain-http test site: a form, a login page and a page that needs a human. Records what it receives; never prints the password. */
+/** Plain-http test site: a form and a page that needs a human. Records what it receives. */
 interface Site {
   server: Server<undefined>;
-  seen: { formName: string | undefined; loginOk: number; loginBad: number; captchaViews: number };
+  seen: { formName: string | undefined; captchaViews: number };
   base: string;
-  password: string;
 }
 
 function processes(): Set<string> {
@@ -76,7 +73,6 @@ export async function runBrowserSmoke(config: HostConfig) {
     return;
   }
 
-  const password = `pw-${randomBytes(12).toString("hex")}`;
   const before = processes();
   const root = realpathSync(mkdtempSync(join(tmpdir(), "tomte-browser-smoke-")));
   const dataRoot = join(root, ".host");
@@ -85,7 +81,7 @@ export async function runBrowserSmoke(config: HostConfig) {
     `[smoke] data root=${dataRoot} workspace=${workspace} engine=${status.path} site=http://${ip}`,
   );
 
-  const site = startSite(ip, password);
+  const site = startSite(ip);
   const secrets = memorySecrets();
   const db = migrate(new Database(":memory:"));
   const bot = createBot(dataRoot, "smoke", "Browser smoke test");
@@ -100,7 +96,7 @@ export async function runBrowserSmoke(config: HostConfig) {
   });
 
   try {
-    await scenarios(server, site, bot.id, db, secrets, workspace);
+    await scenarios(server, site, bot.id, workspace);
   } finally {
     await site.server.stop(true);
     await server.close();
@@ -117,11 +113,9 @@ export async function runBrowserSmoke(config: HostConfig) {
   console.log("\nbrowser-smoke: ok");
 }
 
-function startSite(host: string, password: string): Site {
+function startSite(host: string): Site {
   const seen = {
     formName: undefined as string | undefined,
-    loginOk: 0,
-    loginBad: 0,
     captchaViews: 0,
   };
   const page = (title: string, body: string) =>
@@ -143,20 +137,6 @@ function startSite(host: string, password: string): Site {
           "Contact form",
           `<form method="post" action="/form"><label>Your name <input name="who" type="text"></label><button type="submit">Send message</button></form>`,
         );
-      if (pathname === "/login" && req.method === "POST") {
-        const f = await req.formData();
-        if (f.get("user") === "alice" && f.get("pass") === password) {
-          seen.loginOk++;
-          return page("Dashboard", `<p>Signed in as alice</p>`);
-        }
-        seen.loginBad++;
-        return page("Smoke sign in", `<p>Wrong username or password.</p>`);
-      }
-      if (pathname === "/login")
-        return page(
-          "Smoke sign in",
-          `<form method="post" action="/login"><label>Username <input name="user" type="text"></label><label>Password <input name="pass" type="password"></label><button type="submit">Sign in</button></form>`,
-        );
       if (pathname === "/captcha") {
         seen.captchaViews++;
         return page("Verify you are human", `<p>This step needs a person to solve a puzzle.</p>`);
@@ -164,17 +144,10 @@ function startSite(host: string, password: string): Site {
       return new Response("not found", { status: 404 });
     },
   });
-  return { server, seen, base: `http://${host}:${server.port}`, password };
+  return { server, seen, base: `http://${host}:${server.port}` };
 }
 
-async function scenarios(
-  server: HostServer,
-  site: Site,
-  botId: string,
-  db: Database,
-  secrets: SecretStore,
-  workspace: string,
-) {
+async function scenarios(server: HostServer, site: Site, botId: string, workspace: string) {
   const paired =
     server.devices.pair(server.devices.createPairingCode(), "browser smoke") ??
     fail("could not pair a device with the smoke host");
@@ -250,38 +223,7 @@ async function scenarios(
     `the server received the submitted form (who=${JSON.stringify(site.seen.formName)})`,
   );
 
-  step("(b) browser_login with a vault entry");
-  // The vault only accepts https (or localhost) sign-in URLs and the site is on a LAN IP, so this entry goes through an http-allowing vault on the same DB and secret store.
-  await createCredentials({ db, secrets, allowHttp: true }).add({
-    label: "Smoke Login",
-    signInUrl: `${site.base}/login`,
-    username: "alice",
-    password: site.password,
-  });
-  const cards0 = received.filter((e) => e.type === "wait").length;
-  const toolsB1 = await turn(
-    `Sign in to the test site with the stored credential "Smoke Login": call browser_credentials, then browser_login with that label. Do not open the login page yourself.`,
-  );
-  console.log(`  tools: ${toolsB1.join(", ")}`);
-  const card = received.filter((e) => e.type === "wait").slice(cards0)[0] as
-    | Extract<ServerEvent, { type: "wait" }>
-    | undefined;
-  check(!!card && card.kind === "approval", `first use shows an approval card (${card?.title})`);
-  check(card!.actions.map((a) => a.label).join("/") === "Allow/Deny", "card offers Allow/Deny");
-  check(site.seen.loginOk === 0, "no sign-in happened before approval");
-  const n = doneCount();
-  check(
-    (await ui("/api/waits/answer", { id: card!.id, action: "allow" })).status === 200,
-    "answered Allow through /api/waits/answer",
-  );
-  await until("the resumed turn to finish", () => doneCount() > n);
-  check(
-    site.seen.loginOk === 1,
-    "the resumed turn signed in (the site accepted the stored password)",
-  );
-  check(site.seen.loginBad === 0, "no failed sign-in attempts");
-
-  step("(c) browser_request_takeover");
+  step("(b) browser_request_takeover");
   const cards1 = received.filter((e) => e.type === "wait").length;
   const toolsC = await turn(
     `Open ${site.base}/captcha. That page needs a human, so call browser_request_takeover with a one-sentence reason and end your turn. When the user answers, tell me what they said.`,

@@ -1,5 +1,7 @@
 # Spec: unattended runs that park
 
+Superseded in part: vault removed (`.scratch/remove-credential-vault/`, 2026-11-17). The "Vault" section, the `credential` wait kind, grants and stories 20-22 no longer apply; a login wall is "source unavailable" in a routine and a takeover in chat.
+
 Status: ready-for-agent
 
 Depends on nothing open. This is step 1 of the cancel gate in `docs/plans/grok-bot-replacement-roadmap.md`: Decisions 3, 4 and 5. Decisions are settled in [ADR-0009](../../docs/adr/0009-unattended-runs-park-on-durable-human-waits.md), which supersedes parts of roadmap item 1 in `docs/roadmap.md`. The Telegram channel (`.scratch/11-telegram-channel/`) and cost guards (`.scratch/13-cost-guards/`) build on the `human_waits` table and the `waiting` status that tickets 01 and 02 put in place. The `untrusted` flag is out of scope: it belongs to the triggers milestone.

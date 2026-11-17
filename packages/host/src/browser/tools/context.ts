@@ -1,5 +1,4 @@
 import type { EgressProxy } from "../egress-proxy.ts";
-import type { BrowserLogin } from "../login.ts";
 import type { PageState } from "../page-state.ts";
 import type { BotBrowser } from "../runtime.ts";
 import type { Takeover } from "../takeover.ts";
@@ -16,8 +15,6 @@ export interface BrowserToolContext {
   egress: Pick<EgressProxy, "blockedSince">;
   /** Asks the user to take over the bot's browser. */
   takeover: Pick<Takeover, "request">;
-  /** Stored credentials and sign-in. */
-  login: Pick<BrowserLogin, "list" | "login" | "coverage">;
   /** The pause between the snapshots that wait out a bot wall; the whole wait stays far below the lane wait. */
   wallPauseMs: number;
 }

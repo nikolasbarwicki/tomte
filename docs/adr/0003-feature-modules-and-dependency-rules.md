@@ -2,6 +2,8 @@
 
 Status: accepted
 
+Amended 2026-11-17: the credential vault was removed (`.scratch/remove-credential-vault/`), so the `credentials/` feature folder and `browser/credential-plugin.ts` below no longer exist.
+
 ## Context
 
 The backend grew as a flat `src/` folder plus a 955-line `host-server.ts` that wired about 31 modules, routed HTTP and served every `/api/*` handler, with the same error-handling block repeated five times. Shared types lived in the UI folder (`web/events.ts`, `web/avatars.ts`), so 15+ backend modules imported `web/`, and `web/avatars.ts` pulled in React. Two import cycles existed (integrations ↔ routines through the error classes, and the browser tools' context type). `host-server.ts` reached into private files of the handoffs and browser features. One `tsconfig.json` type-checked server code against DOM types. Nothing stopped any of this from coming back.

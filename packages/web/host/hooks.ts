@@ -18,6 +18,5 @@ export const useFiles = () => useHost((s) => s.files);
 export const useRoutines = () => useHost((s) => s.routines);
 export const useWork = () => useHost((s) => s.work);
 export const useIntegrations = () => useHost((s) => s.integrations);
-export const useCredentials = () => useHost((s) => s.credentials);
 
 export const useSession = () => useSyncExternalStore(sessionStore.subscribe, sessionStore.get);

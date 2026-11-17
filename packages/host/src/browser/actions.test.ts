@@ -220,7 +220,6 @@ describe("tools", () => {
         "action",
         "tab",
         "reason",
-        "entry",
       ]),
     );
     await closeAll();

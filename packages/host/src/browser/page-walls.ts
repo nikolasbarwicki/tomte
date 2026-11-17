@@ -1,4 +1,6 @@
-import { FIELD, PASSWORD_FIELD } from "./login.ts";
+/** A form field in an accessibility snapshot, with its accessible name. */
+const FIELD = /^\s*- (?:textbox|searchbox|combobox|spinbutton)\s+"([^"]*)"/;
+const PASSWORD_FIELD = /pass/i;
 
 /** The bot-protection products whose interstitial pages are recognised. Vendors only: no site is named anywhere. */
 export type BotWallVendor = "cloudflare" | "datadome" | "perimeterx" | "imperva";

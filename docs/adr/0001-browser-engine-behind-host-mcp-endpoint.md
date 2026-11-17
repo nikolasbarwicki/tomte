@@ -2,6 +2,8 @@
 
 Status: accepted
 
+Amended 2026-11-17: the credential vault was removed (`.scratch/remove-credential-vault/`). Vault passwords, credential approval, credential isolation, the login nonce and the credential exchange below are history; a sign-in page now needs a takeover.
+
 ## Context
 
 Bots can drive a real Chrome through the `agent-browser` engine. Tomte runs bots on Claude Code today, and Codex and OpenCode are planned. The bot is untrusted for secrets: a prompt-injected page or bot must not be able to read saved logins, steal vault passwords, reach tomte's own server through the browser, or drive the engine around tomte's rules (policy, takeover lock, one call at a time, output limits, credential approval).

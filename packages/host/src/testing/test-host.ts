@@ -224,10 +224,10 @@ export async function startHandoffHost(
     throw e;
   }
   const cwd = ensureWorkspace(config.dataRoot);
-  const db = hostFlags.includes("--data-root")
-    ? openDb(config.dataRoot)
-    : migrate(new Database(":memory:"));
   const secrets = memorySecrets();
+  const db = hostFlags.includes("--data-root")
+    ? await openDb(config.dataRoot, secrets)
+    : migrate(new Database(":memory:"));
   let clock = Date.now();
   let sandboxAvailable = true;
   const startServer = () =>

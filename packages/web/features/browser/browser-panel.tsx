@@ -212,8 +212,7 @@ export function BrowserPanel({
   const signOut = async () => {
     const ok = await confirmAction({
       title: `Sign ${botName} out of everything?`,
-      description:
-        "The browser closes and its saved logins are deleted. Stored credentials and grants are kept.",
+      description: "The browser closes and its saved logins are deleted.",
       action: "Sign out",
       destructive: true,
     });

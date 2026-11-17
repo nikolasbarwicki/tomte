@@ -79,12 +79,11 @@ async function run(
   args: string[],
   env: Record<string, string | undefined>,
   cwd: string,
-  stdin?: string,
 ) {
   const child = Bun.spawn([binary, ...args], {
     cwd,
     env,
-    stdin: stdin === undefined ? "ignore" : new Response(stdin),
+    stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -270,7 +269,7 @@ async function main(): Promise<number> {
         (await fetch(`${base}/api/events`)).status === 401,
         "/api/events without a token answers 401",
       );
-      for (const path of ["/mcp/browser", "/mcp/bots", "/api/browser/credential-exchange"]) {
+      for (const path of ["/mcp/browser", "/mcp/bots"]) {
         const res = await fetch(`${base}${path}`, {
           method: "POST",
           headers: { ...auth, accept: "application/json, text/event-stream" },
@@ -281,19 +280,6 @@ async function main(): Promise<number> {
           `the agent listener path ${path} answers 404 on the client listener`,
         );
       }
-
-      console.log("the credential plugin subcommand");
-      const plugin = await run(
-        binary,
-        ["credential-plugin", "http://127.0.0.1:9"],
-        env,
-        root,
-        JSON.stringify({ protocol: "agent-browser.plugin.v1", type: "plugin.manifest" }),
-      );
-      check(
-        plugin.stdout.includes('"name":"tomte"') && plugin.code === 0,
-        "answers the plugin manifest request",
-      );
 
       console.log("the dev flag");
       const vite = await run(binary, [...flags, "--vite"], env, root);

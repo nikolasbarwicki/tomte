@@ -5,7 +5,6 @@ import { serveMcpRequest } from "../host-mcp/index.ts";
 import type { HostOrigin } from "../platform/config.ts";
 import { TokenRegistry } from "../platform/tokens.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
-import type { BrowserLogin } from "./login.ts";
 import { PageState } from "./page-state.ts";
 import type { BrowserRuntimes } from "./runtime.ts";
 import { browserIsolation } from "./sandbox.ts";
@@ -24,7 +23,6 @@ export interface BrowserEndpointDeps {
   filesDir: (botId: string) => string;
   egress: EgressProxy;
   takeover: Takeover;
-  login: BrowserLogin;
   /** The pause between looks at a page behind a bot wall. */
   wallPauseMs: number;
   /** The host-wide token registry shared with the other host endpoints; a private one when omitted. */
@@ -64,7 +62,6 @@ export function createBrowserEndpoint(deps: BrowserEndpointDeps): BrowserEndpoin
             page: pageOf(botId),
             filesDir: deps.filesDir(botId),
             takeover: deps.takeover,
-            login: deps.login,
             wallPauseMs: deps.wallPauseMs,
           }),
       }),

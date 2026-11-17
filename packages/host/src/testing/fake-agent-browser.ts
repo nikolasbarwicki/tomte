@@ -3,10 +3,9 @@
 // Like the real engine it enforces `--action-policy`, so a host command missing from the allow list fails here too.
 //
 // FAKE_AGENT_BROWSER_DIR holds everything the fake reads and writes:
-//   script.json  (optional) { pages: { [url]: { title?, snapshot, text?, selectors?: { [css]: snapshot }, later?: { snapshot, title? }[] } }, onAction?: { ["click @e1"]: nextUrl }, fail?: { [command]: message }, delayMs?: { [command]: number },
-//                logins?: { [signInUrl]: { username, password, next: nextUrl, error?: message } } }
+//   script.json  (optional) { pages: { [url]: { title?, snapshot, text?, selectors?: { [css]: snapshot }, later?: { snapshot, title? }[] } }, onAction?: { ["click @e1"]: nextUrl }, fail?: { [command]: message }, delayMs?: { [command]: number } }
 //                A page's `later` lists what each `snapshot` call after the first returns (the last entry repeats): a page whose snapshot differs on each call, such as a bot wall that clears while it is waited out. Opening the page or navigating to it starts the count again; `tab list` reports the title of the view the latest `snapshot` returned.
-//   calls.jsonl  one line per invocation: { argv, env: { AGENT_BROWSER_ENCRYPTION_KEY, AGENT_BROWSER_PLUGINS } }
+//   calls.jsonl  one line per invocation: { argv, env: { AGENT_BROWSER_ENCRYPTION_KEY } }
 //   state.json   the current page per session; a session listed here has an open browser
 //   views.json   how many `snapshot` calls a session's current page has answered, for pages with `later`
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -32,8 +31,6 @@ interface Script {
   streamPort?: number;
   /** `open` of a URL that lands on another one, like a server redirect. */
   redirects?: Record<string, string>;
-  /** What `auth login` does on a sign-in page: with the right credential the session moves to `next`; with another the page stays. `error` makes the engine fail after filling. */
-  logins?: Record<string, { username: string; password: string; next: string; error?: string }>;
 }
 
 const envDir = process.env.FAKE_AGENT_BROWSER_DIR;
@@ -54,7 +51,6 @@ if (!argv.includes("list"))
       argv,
       env: {
         AGENT_BROWSER_ENCRYPTION_KEY: process.env.AGENT_BROWSER_ENCRYPTION_KEY,
-        AGENT_BROWSER_PLUGINS: process.env.AGENT_BROWSER_PLUGINS,
       },
     }) + "\n",
   );
@@ -67,9 +63,6 @@ const flagsWithValue = new Set([
   "--action-policy",
   "--proxy",
   "--args",
-  "--credential-provider",
-  "--item",
-  "--url",
 ]);
 const flags: Record<string, string> = {};
 const rest: string[] = [];
@@ -78,7 +71,7 @@ for (let i = 0; i < argv.length; i++) {
   if (flagsWithValue.has(a)) {
     const value = argv[++i];
     if (value !== undefined) flags[a] = value;
-  } else if (a === "--json" || a === "--headed" || a === "--no-navigate") flags[a] = "true";
+  } else if (a === "--json" || a === "--headed") flags[a] = "true";
   else rest.push(a);
 }
 const [command = "", ...args] = rest;
@@ -111,8 +104,6 @@ function engineAction(): string | undefined {
       return ["list", "new", "close"].includes(args[0] ?? "") ? `tab_${args[0]}` : "tab_switch";
     case "stream":
       return `stream_${args[0]}`;
-    case "auth":
-      return `auth_${args[0]}`;
     case "session":
       // The engine answers `session list` itself, without the policy (it succeeds even when explicitly denied).
       return undefined;
@@ -135,58 +126,6 @@ function checkPolicy(action: string | undefined) {
     fail(`Action '${action}' denied by policy: Action '${action}' is not in the allow list`);
 }
 checkPolicy(engineAction());
-
-/** `auth login` as the real engine does it: asks the credential plugin, refuses a page whose origin differs from the credential's with --no-navigate, fills, and reports success even when the site then shows another form. */
-async function authLogin() {
-  const [, name] = args;
-  const provider = flags["--credential-provider"];
-  const url = flags["--url"];
-  const plugin = (
-    JSON.parse(process.env.AGENT_BROWSER_PLUGINS ?? "[]") as {
-      name: string;
-      command: string;
-      args?: string[];
-    }[]
-  ).find((p) => p.name === provider);
-  if (!plugin || !url) fail("unknown credential provider");
-  if (flags["--no-navigate"]) {
-    const current = state[session];
-    const here = current ? new URL(current).origin : "about:blank";
-    if (here !== new URL(url).origin)
-      fail(`Current page origin ${here} does not match credential origin ${new URL(url).origin}`);
-  }
-  checkPolicy(`plugin:${provider}:credential.read`);
-  const child = Bun.spawn([plugin.command, ...(plugin.args ?? [])], {
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  await child.stdin.write(
-    JSON.stringify({
-      protocol: "agent-browser.plugin.v1",
-      type: "credential.resolve",
-      capability: "credential.read",
-      request: { profileName: name, itemRef: flags["--item"], url },
-    }),
-  );
-  await child.stdin.end();
-  const answer = JSON.parse((await new Response(child.stdout).text()) || "{}") as {
-    success?: boolean;
-    credential?: { username: string; password: string };
-  };
-  if (!answer.success || !answer.credential) fail("credential provider failed");
-  const expected = script.logins?.[url];
-  if (expected?.error) fail(expected.error);
-  if (
-    expected &&
-    answer.credential.username === expected.username &&
-    answer.credential.password === expected.password
-  ) {
-    state[session] = expected.next;
-    writeFileSync(join(dir, "state.json"), JSON.stringify(state));
-  }
-  reply({ loggedIn: true, name });
-}
 
 const views = () => read<Record<string, number>>("views.json", {});
 const setViews = (v: Record<string, number>) =>
@@ -287,10 +226,6 @@ switch (command) {
     reply({ done: command });
     break;
   }
-  case "auth":
-    if (args[0] !== "login") fail("Unknown auth command");
-    await authLogin();
-    break;
   case "set":
     if (args[0] !== "viewport") fail("Unknown set command");
     reply({ viewport: { width: Number(args[1]), height: Number(args[2]) } });

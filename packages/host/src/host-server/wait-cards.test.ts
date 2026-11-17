@@ -474,39 +474,6 @@ describe("a takeover card", () => {
   });
 });
 
-describe("a sign-in approval card", () => {
-  test("shows its title and detail with Allow and Deny, and Allow creates the grant", async () => {
-    const t = await start();
-    await t.link();
-    const botId = await t.openBot();
-    expect(
-      (
-        await t.host.ui("/api/credentials/add", {
-          label: "GH",
-          signInUrl: "http://localhost:3999/login",
-          username: "me",
-          password: "pw-pw-pw-pw",
-        })
-      ).status,
-    ).toBe(200);
-    const call = await t.browserAs(botId);
-    await call("browser_login", { entry: "GH" });
-    const c = await t.card(0);
-
-    expect(t.text(c)).toContain('Planner · Allow sign-in with "GH"?');
-    expect(t.text(c)).toContain("It never sees the password.");
-    expect(t.labels(c)).toEqual(["Allow", "Deny"]);
-    await t.say("sure", c);
-    await t.host.until(() => t.tg.texts().includes("use the buttons"));
-
-    expect(await t.press(c, "Allow")).toBe("Answered");
-    expect(await t.edited(c)).toEndWith("Answered: Allow");
-    await t.host.until(() =>
-      t.host.messagesOf(botId).some((m) => m.includes('Call browser_login("GH") again')),
-    );
-  });
-});
-
 describe("which waits get a card", () => {
   test("one that is open when the account links is sent; one already closed never is", async () => {
     const t = await start();

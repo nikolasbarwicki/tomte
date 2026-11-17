@@ -2,6 +2,8 @@
 
 Status: accepted. Supersedes parts of roadmap item 1 in `docs/roadmap.md` (see Consequences). Relies on [ADR-0002](0002-bot-handoffs-are-async-a2a-tasks-on-a-host-endpoint.md): tools return at once and events arrive as messages.
 
+Amended 2026-11-17: the credential vault was removed (`.scratch/remove-credential-vault/`). The credential approval wait kind, `browser_login` and "Vault use unattended" below no longer exist. A sign-in page in an unattended run is always "source unavailable"; in chat the bot requests a takeover.
+
 ## Context
 
 A routine runs while nobody watches. Three things can need the owner in the middle of a run: a tool approval (`ask` is the default policy), a takeover (an expired login, a CAPTCHA) and an `ask_user` question.

@@ -4,6 +4,8 @@ Status: draft
 
 Statuses updated 2026-11-17 against master `3956f49`. The code for every Stage 1 gate step is on master and the host runs on my VPS. What is left are my own live checks, listed under [The cancel gate](#the-cancel-gate).
 
+Amended 2026-11-17: the credential vault was removed (`.scratch/remove-credential-vault/`). Where this plan says a routine signs in with a granted vault entry (the parity row "Sign in once", gate step 1, Decisions 4 and 5), that no longer holds: logins come from takeovers only, and a routine on a sign-in page reports the source as unavailable.
+
 Tomte is a side project and a portfolio piece. It grows in three stages, and each stage is useful on its own:
 
 1. **My Grok Bot replacement.** Every Grok Bot feature my routines use works for me, including routines that run while my laptop is off. It runs on the VPS I already rent, so it costs nothing on top of the Claude plan I already pay for.

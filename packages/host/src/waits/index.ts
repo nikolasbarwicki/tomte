@@ -76,12 +76,12 @@ export interface WaitsOptions {
 }
 
 /**
- * Every human wait a bot raises: a tool approval, an `ask_user` question, a takeover and a credential approval. Each is a row in
+ * Every human wait a bot raises: a tool approval, an `ask_user` question and a takeover. Each is a row in
  * `human_waits`, so an open wait survives a restart; the card shows in the bot's chat and closes with its answer, and the bot hears
  * the outcome either through the tool call still waiting for it or as a `<human-wait-result>` message.
  */
 export interface Waits {
-  /** Says what a kind shows and does; the browser registers `takeover` and `credential`, the module itself `tool_approval` and `question`. */
+  /** Says what a kind shows and does; the browser registers `takeover`, the module itself `tool_approval` and `question`. */
   register<K extends WaitKind>(kind: K, handler: WaitHandler<NoInfer<K>>): void;
   /** Stores the wait, shows its card and returns at once. */
   open<K extends WaitKind>(botId: string, spec: WaitSpec<K>): WaitingForUser;
@@ -161,8 +161,6 @@ export function waitTitle(w: Wait): string {
       return `question ${quote(w.payload.question)}`;
     case "takeover":
       return "browser takeover";
-    case "credential":
-      return `sign-in with "${w.payload.label}"`;
   }
 }
 

@@ -562,25 +562,6 @@ export const IntegrationsEvent = z.object({
 });
 export type IntegrationsEvent = z.infer<typeof IntegrationsEvent>;
 
-/** A stored website login; the password lives only in the OS keychain and is never part of any event. */
-export const CredentialEntry = z.object({
-  id: z.string(),
-  label: z.string(),
-  signInUrl: z.string(),
-  origin: z.string(),
-  username: z.string(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-  grants: z.array(z.object({ botId: z.string(), grantedAt: z.number() })),
-});
-export type CredentialEntry = z.infer<typeof CredentialEntry>;
-/** Every credential entry with its grants for the Credentials screen; global, lives outside chat history. */
-export const CredentialsEvent = z.object({
-  type: z.literal("credentials"),
-  credentials: z.array(CredentialEntry),
-});
-export type CredentialsEvent = z.infer<typeof CredentialsEvent>;
-
 /** One message on the page's `/api/events` stream. */
 export const HostEvent = z.union([
   ServerEvent,
@@ -590,7 +571,6 @@ export const HostEvent = z.union([
   WorkEvent,
   BotsEvent,
   IntegrationsEvent,
-  CredentialsEvent,
 ]);
 export type HostEvent = z.infer<typeof HostEvent>;
 

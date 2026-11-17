@@ -45,12 +45,10 @@ export function createBrowserUiRoutes(o: BrowserUiRoutesOptions) {
 
     if (path === WAIT_ANSWER_PATH) {
       const answer = WaitAnswer.safeParse(body);
-      // Takeover and sign-in cards only: questions and approvals are answered through /api/answer.
+      // Takeover cards only: questions and approvals are answered through /api/answer.
       const kind = answer.success ? o.waits.find(answer.data.id)?.kind : undefined;
       const answered =
-        answer.success &&
-        (kind === "takeover" || kind === "credential") &&
-        o.waits.answer(answer.data.id, answer.data.action);
+        answer.success && kind === "takeover" && o.waits.answer(answer.data.id, answer.data.action);
       return answered ? ok(res) : rejectRequest(res, 404, "no such pending request");
     }
     const ref = BotRef.safeParse(body);

@@ -3,7 +3,6 @@ import type { IncomingMessage, RequestListener, ServerResponse } from "node:http
 import {
   BROWSER_ENDPOINT_PATH,
   BROWSER_UI_PATHS,
-  CREDENTIAL_EXCHANGE_PATH,
   LIVE_VIEW_PATH,
   type Browser,
 } from "../browser/index.ts";
@@ -31,7 +30,7 @@ function safe(handler: Handler, label: string): Handler {
     });
 }
 
-/** What the agent listener serves: the browser endpoint, the bots endpoint, the routines endpoint and the credential exchange. */
+/** What the agent listener serves: the browser endpoint, the bots endpoint and the routines endpoint. */
 export function agentRoutes(o: {
   browser: Browser;
   handoffs: Handoffs;
@@ -53,11 +52,6 @@ export function agentRoutes(o: {
       match: (p) => p === ROUTINES_ENDPOINT_PATH,
       handler: (req, res) => routines.handle(req, res),
       label: "[routines] endpoint failed:",
-    },
-    {
-      match: (p) => p === CREDENTIAL_EXCHANGE_PATH,
-      handler: (req, res) => browser.handleCredentialExchange(req, res),
-      label: "[browser] credential exchange failed:",
     },
   ];
 }
@@ -97,11 +91,6 @@ export function clientRoutes(o: {
       match: (p) => BROWSER_UI_PATHS.has(p),
       handler: (req, res, url) => browser.handleUi(req, res, url.pathname),
       label: "[browser] ui route failed:",
-    },
-    {
-      // Under /api/, so the generic API would answer it; the exchange belongs to the agent listener alone.
-      match: (p) => p === CREDENTIAL_EXCHANGE_PATH,
-      handler: async (_req, res) => void res.writeHead(404).end(),
     },
     { match: (p) => p.startsWith("/api/"), handler: o.api },
   ];

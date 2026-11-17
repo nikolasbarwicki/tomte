@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { fileURLToPath } from "node:url";
 
-import type { CredentialsEvent, IntegrationsEvent, RoutinesEvent } from "@tomte/contract/events";
+import type { IntegrationsEvent, RoutinesEvent } from "@tomte/contract/events";
 
 import {
   allowsTool,
@@ -34,7 +34,6 @@ import {
   type Channels,
   type TelegramOptions,
 } from "../channels/index.ts";
-import { createCredentials } from "../credentials/index.ts";
 import { createDeviceAuth, type DeviceAuth } from "../device-auth/index.ts";
 import { createEvents, eventsPath } from "../events/index.ts";
 import { createHandoffs, type BotsEndpoint } from "../handoffs/index.ts";
@@ -48,8 +47,8 @@ import {
 import { createIntegrations } from "../integrations/index.ts";
 import { createLoopStore } from "../loop/index.ts";
 import { AGENT_ADDRESS, clientOrigin, agentOrigin, type HostConfig } from "../platform/config.ts";
-import { openFileSecrets } from "../platform/file-secrets.ts";
-import { keychainSecrets, type SecretStore } from "../platform/secrets.ts";
+import { openSecrets } from "../platform/file-secrets.ts";
+import type { SecretStore } from "../platform/secrets.ts";
 import { TokenRegistry } from "../platform/tokens.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
 import { createPresence } from "../presence/index.ts";
@@ -122,7 +121,7 @@ export interface HostServerOptions {
 export interface HostServer {
   /** The client listener's loopback URL: the web UI, `/api/*`, live view and `/oauth/callback`. */
   clientUrl: string;
-  /** The agent listener's loopback URL: the browser endpoint, the bots endpoint, the routines endpoint and the credential exchange. */
+  /** The agent listener's loopback URL: the browser endpoint, the bots endpoint and the routines endpoint. */
   agentUrl: string;
   /** The origin users and OAuth providers reach. */
   publicUrl: string;
@@ -143,13 +142,8 @@ export interface HostServer {
   signInState: () => SignInState;
   /** Closes every thread and browser, then stops listening. */
   close(): Promise<void>;
-  /** Everything the host holds for a bot being deleted: its open handoffs fail, its routines, browser and credential grants go, its chat closes, and its directory moves to the trash (`bots/.trash/`). */
+  /** Everything the host holds for a bot being deleted: its open handoffs fail, its routines and browser go, its chat closes, and its directory moves to the trash (`bots/.trash/`). */
   removeBot(botId: string): Promise<void>;
-}
-
-/** The store `config.secrets` names; throws when the encrypted file cannot be opened with its key. */
-function openSecrets({ dataRoot, secrets }: HostConfig): SecretStore {
-  return secrets.backend === "file" ? openFileSecrets(dataRoot, secrets.keyFile) : keychainSecrets;
 }
 
 /** How often the absence check runs unless a test says otherwise. */
@@ -177,11 +171,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
   const sandbox = o.sandbox ?? (() => sandboxStatus());
   const events = createEventStream();
   const { broadcast } = events;
-  const credentials = createCredentials({
-    db,
-    secrets,
-    onChange: () => broadcast(credentialsEvent()),
-  });
   const tokens = new TokenRegistry();
   const waits = createWaits({
     db,
@@ -206,7 +195,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     secrets,
     headedAllowed: o.config.headedBrowser,
     autoInstall: o.config.sidecar,
-    credentials,
     tokens,
     agent: agentAt,
     bot: (botId) => getBot(dataRoot, botId),
@@ -413,10 +401,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     type: "integrations",
     integrations: integrations.list(),
   });
-  const credentialsEvent = (): CredentialsEvent => ({
-    type: "credentials",
-    credentials: credentials.list(),
-  });
   const routinesEvent = (botId: string): RoutinesEvent => ({
     type: "routines",
     botId,
@@ -478,7 +462,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     browser,
     routines,
     integrations,
-    credentials,
     devices,
     channels,
     sessions,
@@ -490,7 +473,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       return [
         chats.botsEvent(),
         integrationsEvent(),
-        credentialsEvent(),
         ...memoryEvents(dataRoot, botId),
         filesEvent(dataRoot, botId),
         ...chats.replayOpen(),

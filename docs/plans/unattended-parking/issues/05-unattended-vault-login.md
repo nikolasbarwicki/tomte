@@ -1,5 +1,7 @@
 # 05: Routines sign in with granted vault entries
 
+Superseded: vault removed (`.scratch/remove-credential-vault/`, 2026-11-17).
+
 **What to build:** `browser_login` works in an unattended run. A routine signs in with a vault entry I already granted to that bot, with nobody watching. A first use, or an entry the bot has no grant for, parks for my approval. Today the tool refuses every unattended run, granted or not. See the spec section "Vault".
 
 **Blocked by:** 02

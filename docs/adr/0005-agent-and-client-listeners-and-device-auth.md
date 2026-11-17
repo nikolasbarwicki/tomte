@@ -2,6 +2,8 @@
 
 Status: accepted
 
+Amended 2026-11-17: the credential vault was removed (`.scratch/remove-credential-vault/`), so the agent listener no longer serves the credential exchange.
+
 ## Context
 
 The host served bots and people on one loopback port and trusted every request that reached it. The browser endpoint checked a bot's bearer token (ADR-0001), but the UI API checked no Host, no Origin and no token. Any web page the user opened could call it. A cross-origin `text/plain` POST created a bot, and a page that rebound its hostname to `127.0.0.1` read the event stream. Only the browser UI routes behind `guardUiRequest` were protected.

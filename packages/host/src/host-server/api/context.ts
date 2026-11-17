@@ -6,7 +6,6 @@ import type { z } from "zod";
 
 import type { Browser } from "../../browser/index.ts";
 import type { Channels } from "../../channels/index.ts";
-import type { Credentials } from "../../credentials/index.ts";
 import type { DeviceAuth } from "../../device-auth/index.ts";
 import type { Events as ExternalEvents } from "../../events/index.ts";
 import type { ClaudeAccess, ResolvedCli } from "../../harness/index.ts";
@@ -43,7 +42,6 @@ export interface ApiContext {
   browser: Browser;
   routines: Routines;
   integrations: Integrations;
-  credentials: Credentials;
   devices: DeviceAuth;
   channels: Channels;
   /** Which device each request came from, and the responses still open for it. */

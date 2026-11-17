@@ -2,6 +2,8 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
+import type { SecretStore } from "./secrets.ts";
+
 const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS routines (
   id TEXT PRIMARY KEY,
@@ -252,7 +254,7 @@ const SCHEMA_V15 = (db: Database) => {
     db.run("ALTER TABLE loop_tasks ADD COLUMN after_task TEXT");
 };
 
-// Human waits (ADR-0009): every tool approval, question, takeover and credential approval a bot raises, kept so an open wait survives
+// Human waits (ADR-0009): every tool approval, question and takeover a bot raises, kept so an open wait survives
 // a restart. `payload` and `actions` are JSON, shaped by `kind`. `run_id` is null for an attended wait; it has no foreign key to
 // `routine_runs`, whose rebuild would otherwise cascade into this table. `outcome` is the action or answer picked, or `timeout`,
 // `expired` or `cancelled`; `note` is the owner's note, or why the host cancelled the wait. `consumed_at` marks an `allow` that the
@@ -261,7 +263,7 @@ const SCHEMA_V16 = `
 CREATE TABLE IF NOT EXISTS human_waits (
   id TEXT PRIMARY KEY,
   bot_id TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('tool_approval','question','takeover','credential')),
+  kind TEXT NOT NULL CHECK (kind IN ('tool_approval','question','takeover','credential')), -- 'credential' is retired (V28)
   run_id TEXT,
   session_id TEXT,
   payload TEXT NOT NULL,
@@ -496,6 +498,65 @@ const SCHEMA_V27 = (db: Database) => {
     db.run("ALTER TABLE routines ADD COLUMN failures_from INTEGER");
 };
 
+const VAULT_REMOVED = "the credential vault was removed";
+
+// The credential vault is gone. Its open waits are cancelled and already delivered (no handler is left to tell a bot), and a run
+// parked on one fails, its other open waits cancelled with it: nothing would ever resume it. Then its tables go. Its passwords
+// are deleted from the secret store before this step, by `sweepVaultSecrets`. The 'credential' kind stays in the CHECK above.
+const SCHEMA_V28 = (db: Database) => {
+  const t = Date.now();
+  const tables = new Set(
+    db
+      .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all()
+      .map((r) => r.name),
+  );
+  if (tables.has("human_waits")) {
+    if (tables.has("routine_runs")) {
+      const runs = `SELECT run_id FROM human_waits WHERE kind = 'credential' AND state = 'open' AND run_id IS NOT NULL`;
+      db.query(
+        `UPDATE routine_runs SET status = 'failed', error = ?, finished_at = ?,
+           parked_ms = parked_ms + COALESCE(MAX(? - parked_at, 0), 0), parked_at = NULL
+         WHERE status = 'waiting' AND id IN (${runs})`,
+      ).run(VAULT_REMOVED, t, t);
+      db.query(
+        `UPDATE human_waits SET state = 'cancelled', outcome = 'cancelled', note = ?, resolved_at = ?, delivered_at = ?
+         WHERE state = 'open' AND kind <> 'credential' AND run_id IN (${runs})`,
+      ).run(VAULT_REMOVED, t, t);
+    }
+    db.query(
+      `UPDATE human_waits SET state = 'cancelled', outcome = 'cancelled', note = ?, resolved_at = ?, delivered_at = ?
+       WHERE kind = 'credential' AND state = 'open'`,
+    ).run(VAULT_REMOVED, t, t);
+  }
+  db.run("DROP TABLE IF EXISTS credential_grants");
+  db.run("DROP TABLE IF EXISTS credential_entries");
+};
+
+/**
+ * Deletes the vault's passwords (`browser-credential:<entry id>`) from the secret store while `credential_entries` still names
+ * them; V28 then drops the table. A no-op once it is gone. A secret that cannot be deleted is logged and left. Logs go to stderr:
+ * in sidecar mode stdout carries the ready line only.
+ */
+async function sweepVaultSecrets(db: Database, secrets: SecretStore): Promise<void> {
+  const present = db
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'credential_entries'")
+    .get();
+  if (!present) return;
+  const ids = db.query<{ id: string }, []>("SELECT id FROM credential_entries").all();
+  let deleted = 0;
+  for (const { id } of ids) {
+    try {
+      await secrets.delete(`browser-credential:${id}`);
+      deleted++;
+    } catch (e) {
+      console.error(`[db] deleting a stored website password failed: ${(e as Error).message}`);
+    }
+  }
+  if (ids.length > 0)
+    console.error(`[db] deleted ${deleted} of ${ids.length} stored website passwords`);
+}
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -529,6 +590,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V25,
     SCHEMA_V26,
     SCHEMA_V27,
+    SCHEMA_V28,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;
@@ -543,10 +605,12 @@ export function migrate(db: Database): Database {
 
 const DB_FILE = "tomte.db";
 
-/** Opens the database in the data root, creating the directory and the file on first run. */
-export function openDb(dataRoot: string): Database {
+/** Opens the database in the data root, creating the directory and the file on first run; the vault's passwords are swept from `secrets` before the migrations drop it. */
+export async function openDb(dataRoot: string, secrets: SecretStore): Promise<Database> {
   mkdirSync(dataRoot, { recursive: true });
-  return migrate(new Database(join(dataRoot, DB_FILE), { create: true }));
+  const db = new Database(join(dataRoot, DB_FILE), { create: true });
+  await sweepVaultSecrets(db, secrets);
+  return migrate(db);
 }
 
 /** The database file in the data root, and the write-ahead log and shared-memory files SQLite keeps beside it in WAL mode. */

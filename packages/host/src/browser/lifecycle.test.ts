@@ -17,7 +17,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import { createBot, getBot } from "../bots/index.ts";
-import { createCredentials } from "../credentials/index.ts";
 import { createHostServer, type HostServer } from "../host-server/index.ts";
 import { agentOrigin, parseHostConfig } from "../platform/config.ts";
 import { migrate } from "../platform/db.ts";
@@ -29,7 +28,6 @@ import { removeBotBrowser } from "./cleanup.ts";
 import type { EgressProxy } from "./egress-proxy.ts";
 import { createBrowserEndpoint } from "./endpoint.ts";
 import { sessionName } from "./engine-cli.ts";
-import { createBrowserLogin } from "./login.ts";
 import { isAlive } from "./process.ts";
 import { createBrowserRuntimes, type BrowserRuntimeOptions } from "./runtime.ts";
 import { Takeover } from "./takeover.ts";
@@ -355,19 +353,8 @@ describe("sign out and bot deletion", () => {
     expect(calls()).toEqual([]);
   });
 
-  test("deleting a bot revokes its tokens, closes its browser, deletes saved logins and grants", async () => {
+  test("deleting a bot revokes its tokens, closes its browser and deletes saved logins", async () => {
     const rt = runtimes();
-    const credentials = createCredentials({
-      db: migrate(new Database(":memory:")),
-      secrets: memorySecrets(),
-    });
-    const entry = await credentials.add({
-      label: "GH",
-      signInUrl: "https://github.com/login",
-      username: "me",
-      password: "pw-pw-pw",
-    });
-    credentials.grant(BOT, entry.id);
     const waits = createWaits({
       db: migrate(new Database(":memory:")),
       emit() {},
@@ -386,32 +373,21 @@ describe("sign out and bot deletion", () => {
       filesDir: () => root,
       egress: stubEgress(),
       takeover,
-      login: createBrowserLogin({
-        credentials,
-        secrets: memorySecrets(),
-        waits,
-        botName: () => "bot",
-        exchangeUrl: () => "http://127.0.0.1:1/x",
-      }),
       wallPauseMs: 0,
     });
     const token = defined(endpoint.lease(BOT).servers[0], "server").token;
-    const rejected = () => fetch(`http://127.0.0.1:1/x`).catch(() => undefined);
     await rt.forBot(BOT).call(["open", "https://a.test"]);
     saveState();
-    expect(credentials.hasGrant(BOT, entry.id)).toBe(true);
 
     takeover.request(BOT, "solve the CAPTCHA");
-    await removeBotBrowser({ endpoint, runtimes: rt, takeover, credentials, waits }, BOT);
+    await removeBotBrowser({ endpoint, runtimes: rt, takeover, waits }, BOT);
     expect(delivered.join("\n")).toContain("cancelled");
     expect(waits.list(BOT)).toEqual([]);
     expect(rt.forBot(BOT).controlHeld()).toBe(false);
 
     expect(closedSessions()).toEqual([sessionName(BOT)]);
     expect(existsSync(statePath())).toBe(false);
-    expect(credentials.hasGrant(BOT, entry.id)).toBe(false);
     expect(defined(endpoint.lease(BOT).servers[0], "server").token).not.toBe(token);
-    expect(await rejected()).toBeUndefined();
   });
 });
 

@@ -1,5 +1,7 @@
 # 04: Human-wait cards: approvals, questions, takeovers
 
+Superseded in part: vault removed (`.scratch/remove-credential-vault/`, 2026-11-17), so there is no login approval card.
+
 **What to build:** Every open human wait (a tool approval, an `ask_user` question, a takeover, a login approval) reaches the linked Telegram account as a card, and a button or reply answers it through the answer path, so a parked routine run resumes. A card shows the exact input an approval covers; long input is cut with a link, and a cut approval cannot be approved from the phone. See the spec sections "Cards" and "Answering from a channel".
 
 Today these waits are memory-only: `chat.pending` in `host-server/chats.ts` (asks and approvals, shown as `ask` and `approve` events) and `HumanWaits` in `browser/human-waits.ts` (takeover and credential approval, shown as `wait` and `wait_resolved` events with `kind`, `title`, `detail` and `actions: WaitAction[]`). `docs/plans/unattended-parking/issues/01-durable-human-waits.md` moves all of them onto the `human_waits` table and `02-parked-runs.md` makes an unattended approval park the run. This ticket reads open rows and answers them through the `waits` module's interface from 01 (`packages/host/src/waits/`): `list(botId?)` for open waits, `subscribe` for opens and closes, `cards(botId)` for the card events, and `answer(id, value, note?)` to answer one. If a needed operation is missing, add it to that interface here rather than reaching into the table.

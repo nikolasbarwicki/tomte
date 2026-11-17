@@ -1,5 +1,7 @@
 # 06: Login walls are "source unavailable"; bot walls are waited out and handed off
 
+Superseded in part: vault removed (`.scratch/remove-credential-vault/`, 2026-11-17). A login wall no longer depends on vault coverage: in chat the note asks for a takeover, in a routine it is always "source unavailable".
+
 **What to build:** The browser tools recognise two kinds of page wall and tell the bot what to do, with no site named in the code. A login wall on an origin where the bot has no granted vault entry is "source unavailable": the run skips the source, says so in its report and goes on, without parking. A bot wall (Cloudflare, DataDome, PerimeterX, Imperva) is waited out for a few seconds, and if it stays, handed to me as a takeover, which parks in a routine. See the spec section "Walls" and Decision 5 in `docs/plans/grok-bot-replacement-roadmap.md`.
 
 **Blocked by:** 04
