@@ -359,8 +359,8 @@ async function main(): Promise<void> {
       const created = await post("/api/bots/new", {
         name: "smoke",
         purpose: "",
-        face: "tuft",
-        stroke: "ink",
+        shape: "ball",
+        color: "ink",
       });
       const bot = created.ok ? ((await created.json()) as { id: string }) : undefined;
       const enabled = bot
@@ -446,8 +446,8 @@ async function main(): Promise<void> {
       const bot = await post("/api/bots/new", {
         name: "ticker",
         purpose: "",
-        face: "tuft",
-        stroke: "ink",
+        shape: "ball",
+        color: "ink",
       });
       const routine = await post("/api/routines/create", {
         botId: bot.id,
@@ -566,8 +566,8 @@ async function main(): Promise<void> {
     const builder = await pagePost<{ id: string }>(bg.page, "/api/bots/new", {
       name: "builder",
       purpose: "",
-      face: "tuft",
-      stroke: "ink",
+      shape: "ball",
+      color: "ink",
     });
     const tokens = new Map<string, string>();
     for (const id of [setup.botId, builder.id])

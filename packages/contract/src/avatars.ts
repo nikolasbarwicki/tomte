@@ -1,23 +1,20 @@
 import { z } from "zod";
 
-export const FACE_NAMES = [
-  "tuft",
-  "ears",
-  "antenna",
-  "glasses",
-  "bun",
-  "posh",
-  "beard",
-  "cyclops",
-  "mustache",
-  "beanie",
-  "crown",
-  "sleepy",
-  "horns",
-  "bolts",
-  "eyepatch",
+export const SHAPE_NAMES = [
+  "ball",
+  "block",
+  "gem",
+  "hex",
+  "drop",
+  "pill",
+  "cloud",
+  "flower",
+  "heart",
+  "cone",
+  "star",
+  "arch",
 ] as const;
-export const STROKE_NAMES = [
+export const COLOR_NAMES = [
   "ink",
   "coral",
   "amber",
@@ -28,10 +25,10 @@ export const STROKE_NAMES = [
   "pink",
 ] as const;
 
-export type Face = (typeof FACE_NAMES)[number];
-export type Stroke = (typeof STROKE_NAMES)[number];
+export type Shape = (typeof SHAPE_NAMES)[number];
+export type Color = (typeof COLOR_NAMES)[number];
 
-export const BotAvatar = z.object({ face: z.literal(FACE_NAMES), stroke: z.literal(STROKE_NAMES) });
+export const BotAvatar = z.object({ shape: z.literal(SHAPE_NAMES), color: z.literal(COLOR_NAMES) });
 export type BotAvatar = z.infer<typeof BotAvatar>;
 
 /** The name at `i` wrapped into range; the name lists are non-empty constants, so a miss is a programming error. */
@@ -46,7 +43,7 @@ export function defaultAvatar(id: string): BotAvatar {
   let h = 0;
   for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return {
-    face: nameAt(FACE_NAMES, h),
-    stroke: nameAt(STROKE_NAMES, h >>> 8),
+    shape: nameAt(SHAPE_NAMES, h),
+    color: nameAt(COLOR_NAMES, h >>> 8),
   };
 }

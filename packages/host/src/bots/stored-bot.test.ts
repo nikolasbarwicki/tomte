@@ -41,6 +41,14 @@ test("a bot.json from before sessions, browser settings, avatars, chat modes and
   });
 });
 
+test("a bot.json with a line-drawing avatar keeps its color and gets a shape derived from the id", () => {
+  const { id } = createBot(dataRoot, "Ada", "tests");
+  rewrite(id, (s) => {
+    s.avatar = { face: "crown", stroke: "teal" };
+  });
+  expect(getBot(dataRoot, id)?.avatar).toEqual({ shape: defaultAvatar(id).shape, color: "teal" });
+});
+
 test("the model and effort round-trip through bot.json and survive a stale copy being saved", () => {
   const stale = createBot(dataRoot, "Ada", "tests");
   setModelSettings(dataRoot, stale.id, { model: "opus" });
@@ -74,7 +82,7 @@ test("a bot.json with an unknown chat mode throws a ZodError", () => {
 test("a bot.json with a field of the wrong type throws a ZodError", () => {
   const { id } = createBot(dataRoot, "Ada", "tests");
   rewrite(id, (s) => {
-    s.avatar = { face: "nope", stroke: "ink" };
+    s.avatar = { shape: "nope", color: "ink" };
   });
   expect(() => getBot(dataRoot, id)).toThrow(z.ZodError);
 });

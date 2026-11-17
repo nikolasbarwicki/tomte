@@ -1,9 +1,9 @@
 import { type BotAvatar as Avatar } from "@tomte/contract/avatars";
 
-import { FACES, STROKES } from "@/lib/avatars.ts";
+import { COLORS, onColor, SHAPES } from "@/lib/avatars.ts";
 import { cn } from "@/lib/utils";
 
-/** A bot's one-line face. While `working`, the line keeps drawing and erasing itself. */
+/** A bot's solid body with two eyes. While `working`, the body breathes and the eyes look around and blink. */
 export function BotAvatar({
   avatar,
   working = false,
@@ -13,21 +13,33 @@ export function BotAvatar({
   working?: boolean;
   className?: string;
 }) {
+  const { d, eyes, tilt } = SHAPES[avatar.shape];
+  const [x, y] = eyes;
+  const fill = COLORS[avatar.color];
   return (
     <svg
-      viewBox="16 16 128 128"
+      viewBox="0 0 100 100"
       aria-hidden
       className={cn("size-8 shrink-0", working && "bot-avatar-working", className)}
     >
-      <path
-        d={FACES[avatar.face]}
-        pathLength={1}
-        fill="none"
-        stroke={STROKES[avatar.stroke]}
-        strokeWidth={7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <g className="bot-avatar-body">
+        <path
+          d={d}
+          transform={tilt ? `rotate(${tilt} 50 50)` : undefined}
+          fill={fill}
+          stroke={fill}
+          strokeWidth={14}
+          strokeLinejoin="round"
+        />
+        <g className="bot-avatar-eyes">
+          <path
+            d={`M${x - 11} ${y - 8}l5 16M${x + 5} ${y - 8}l5 16`}
+            stroke={onColor(avatar.color)}
+            strokeWidth={10}
+            strokeLinecap="round"
+          />
+        </g>
+      </g>
     </svg>
   );
 }

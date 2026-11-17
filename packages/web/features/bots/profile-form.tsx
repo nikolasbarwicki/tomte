@@ -13,7 +13,7 @@ import { errorOf } from "@/host/api.ts";
 import { updateProfile } from "./api.ts";
 import { AvatarPicker } from "./avatar-picker.tsx";
 
-/** The profile page: rename the bot, rewrite its purpose, pick another face. Saving replaces all three at once. */
+/** The profile page: rename the bot, rewrite its purpose, pick another avatar. Saving replaces all three at once. */
 export function ProfileForm({ bot }: { bot: BotSummary }) {
   const [name, setName] = useState(bot.name);
   const [purpose, setPurpose] = useState(bot.purpose);
@@ -21,8 +21,8 @@ export function ProfileForm({ bot }: { bot: BotSummary }) {
   const changed =
     name !== bot.name ||
     purpose !== bot.purpose ||
-    avatar.face !== bot.avatar.face ||
-    avatar.stroke !== bot.avatar.stroke;
+    avatar.shape !== bot.avatar.shape ||
+    avatar.color !== bot.avatar.color;
   const [error, save, saving] = useActionState(async () => {
     const r = await updateProfile({ botId: bot.id, name, purpose, ...avatar });
     if (!r.ok) return errorOf(r);

@@ -132,7 +132,7 @@ export function AppSidebar({
                     render={<Link to="/bots/$botId" params={{ botId: b.id }} />}
                     onClick={reveal}
                     title={b.purpose || undefined}
-                    className="h-auto items-start gap-2.5 py-2"
+                    className="h-auto items-center gap-2.5 py-2"
                   >
                     <StatusAvatar bot={b} />
                     <span className="grid min-w-0 flex-1 gap-0.5">

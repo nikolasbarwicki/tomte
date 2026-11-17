@@ -117,8 +117,8 @@ describe("remote mode shell isolation", () => {
     const created = await h.ui("/api/bots/new", {
       name: "Grace",
       purpose: "",
-      face: "tuft",
-      stroke: "ink",
+      shape: "ball",
+      color: "ink",
     });
     expect(created.status).toBe(200);
     const grace = z.object({ id: z.string() }).parse(await created.json()).id;

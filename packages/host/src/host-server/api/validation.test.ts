@@ -28,8 +28,8 @@ test("a JSON body that is not an object answers 400", async () => {
 });
 
 test.each([
-  ["/api/bots/new", { name: "Ada", purpose: "", face: "nope", stroke: "ink" }, "face"],
-  ["/api/bots/new", { name: " ", face: "tuft", stroke: "ink" }, "name required"],
+  ["/api/bots/new", { name: "Ada", purpose: "", shape: "nope", color: "ink" }, "shape"],
+  ["/api/bots/new", { name: " ", shape: "ball", color: "ink" }, "name required"],
   ["/api/bots/browser", { botId: "x", enabled: "yes" }, "enabled"],
   ["/api/open", { botId: 7 }, "botId"],
   ["/api/credentials/add", { label: 7 }, "label"],

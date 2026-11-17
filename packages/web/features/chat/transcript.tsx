@@ -316,7 +316,7 @@ function UserMessage({
                   key={i}
                   to="/bots/$botId"
                   params={{ botId: target.id }}
-                  style={botTheme(target.avatar.stroke)}
+                  style={botTheme(target.avatar.color)}
                   className="bot-theme bg-background text-primary hover:bg-secondary inline-flex items-baseline gap-1 rounded-full px-1.5 font-semibold transition-colors"
                 >
                   <BotAvatar avatar={target.avatar} className="size-[1.1em] self-center" />
@@ -661,7 +661,7 @@ function HandoffCard({
   const received = item.direction === "received";
   return (
     <div
-      style={other && botTheme(other.avatar.stroke)}
+      style={other && botTheme(other.avatar.color)}
       className={cn(
         "grid gap-2 rounded-xl border bg-card p-4 text-sm shadow-[0_0_24px_1px_rgb(0_0_0/0.06)] dark:shadow-[0_0_24px_1px_rgb(0_0_0/0.4)]",
         other && "bot-theme",

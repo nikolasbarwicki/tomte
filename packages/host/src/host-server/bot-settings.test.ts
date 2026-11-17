@@ -34,7 +34,7 @@ afterEach(async () => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-const AVATAR = { face: "crown", stroke: "teal" } as const;
+const AVATAR = { shape: "cone", color: "teal" } as const;
 const profile = (botId: string, body: object = {}) =>
   host.ui("/api/bots/profile", {
     botId,
@@ -99,9 +99,9 @@ describe("bot profile", () => {
   test("an avatar-only change leaves the running session open", async () => {
     const id = host.createBot("Ada", "Writes docs");
     await chatWith(id, "hello", 1);
-    const res = await profile(id, { name: "Ada", purpose: "Writes docs", stroke: "pink" });
+    const res = await profile(id, { name: "Ada", purpose: "Writes docs", color: "pink" });
     expect(res.status).toBe(200);
-    expect(getBot(host.dataRoot, id)?.avatar).toEqual({ face: "crown", stroke: "pink" });
+    expect(getBot(host.dataRoot, id)?.avatar).toEqual({ shape: "cone", color: "pink" });
     expect((await host.ui("/api/send", { text: "again" })).status).toBe(200);
     await host.until(() => host.messagesOf(id).length === 2);
     expect(host.launches()).toHaveLength(1);

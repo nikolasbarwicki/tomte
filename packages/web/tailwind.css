@@ -180,35 +180,72 @@
   background: var(--background);
 }
 
-/* A working bot's face draws itself, holds, then erases along the same line. Offsets stop just past the ends so the round caps never leave a dot. */
-@keyframes bot-avatar-draw {
-  0% {
-    stroke-dashoffset: 1.02;
-  }
-  45%,
-  60% {
-    stroke-dashoffset: 0;
-  }
-  100% {
-    stroke-dashoffset: -1.02;
-  }
-}
-
+/* A working bot breathes from its base while its eyes look left, then right, blinking on the way. `translate` and `scale` are separate properties, so look and blink compose; inside the SVG a px is one canvas unit. */
 @keyframes bot-avatar-breathe {
   50% {
-    opacity: 0.35;
+    scale: 1.05 0.95;
   }
 }
 
-.bot-avatar-working path {
-  stroke-dasharray: 1 1.04;
-  animation: bot-avatar-draw 2.4s ease-in-out infinite;
+@keyframes bot-avatar-look {
+  0%,
+  12%,
+  84%,
+  100% {
+    translate: 0 0;
+  }
+  24%,
+  42% {
+    translate: -7px 1px;
+  }
+  56%,
+  72% {
+    translate: 6px -2px;
+  }
+}
+
+@keyframes bot-avatar-blink {
+  0%,
+  45%,
+  51%,
+  88%,
+  94%,
+  100% {
+    scale: 1;
+  }
+  48%,
+  91% {
+    scale: 1 0.1;
+  }
+}
+
+@keyframes bot-avatar-fade {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.bot-avatar-working .bot-avatar-body {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: bot-avatar-breathe 1.2s ease-in-out infinite;
+}
+
+.bot-avatar-working .bot-avatar-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation:
+    bot-avatar-look 2.4s ease-in-out infinite,
+    bot-avatar-blink 2.4s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bot-avatar-working path {
-    stroke-dasharray: none;
-    animation: bot-avatar-breathe 2s ease-in-out infinite;
+  .bot-avatar-working .bot-avatar-body {
+    animation: bot-avatar-fade 2s ease-in-out infinite;
+  }
+
+  .bot-avatar-working .bot-avatar-eyes {
+    animation: none;
   }
 }
 

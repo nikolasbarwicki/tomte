@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-import { BotAvatar, defaultAvatar } from "@tomte/contract/avatars";
+import { BotAvatar, COLOR_NAMES, defaultAvatar } from "@tomte/contract/avatars";
 import {
   Bot,
   BotBrowserSettings,
@@ -88,10 +88,13 @@ export function otherBotDirs(dataRoot: string, botId: string): string[] {
 /** Subfolder of the files area holding browser screenshots and oversized pages; scratch for the current session, hidden from the Files panel. */
 export const BROWSER_FILES_DIR = "browser";
 
+/** The line-drawing avatar earlier builds wrote; its stroke color carries over, its face has no counterpart. */
+const LineAvatar = z.object({ face: z.string(), stroke: z.literal(COLOR_NAMES) });
+
 /** `bot.json` as any release wrote it; files from before a field existed lack it. */
 const StoredBot = Bot.extend({
   sessions: Bot.shape.sessions.min(1).optional(),
-  avatar: BotAvatar.optional(),
+  avatar: z.union([BotAvatar, LineAvatar]).optional(),
   chatMode: ChatMode.default("standard"),
   model: BotModel.default(DEFAULT_MODEL),
   effort: EffortLevel.default(DEFAULT_EFFORT),
@@ -126,7 +129,13 @@ export function getBot(dataRoot: string, id: string): Bot | undefined {
   const file = join(botDir(dataRoot, id), "bot.json");
   if (!existsSync(file)) return undefined;
   const { sessions, avatar, ...bot } = StoredBot.parse(JSON.parse(readFileSync(file, "utf8")));
-  return { ...bot, sessions: sessions ?? [bot.id], avatar: avatar ?? defaultAvatar(bot.id) };
+  return { ...bot, sessions: sessions ?? [bot.id], avatar: avatarOf(bot.id, avatar) };
+}
+
+function avatarOf(id: string, stored: z.infer<typeof StoredBot>["avatar"]): BotAvatar {
+  if (!stored) return defaultAvatar(id);
+  if ("shape" in stored) return stored;
+  return { shape: defaultAvatar(id).shape, color: stored.stroke };
 }
 
 /** Most recently active first. */

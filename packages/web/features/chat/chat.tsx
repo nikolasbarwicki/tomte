@@ -86,7 +86,7 @@ export function ChatView({
 
   return (
     <div className="flex h-full min-h-0">
-      <div className="bot-theme flex min-w-0 flex-1 flex-col" style={botTheme(bot.avatar.stroke)}>
+      <div className="bot-theme flex min-w-0 flex-1 flex-col" style={botTheme(bot.avatar.color)}>
         <AppBar>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-medium">{bot.name}</h1>

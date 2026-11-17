@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { FACE_NAMES, STROKE_NAMES } from "@tomte/contract/avatars";
+import { COLOR_NAMES, SHAPE_NAMES } from "@tomte/contract/avatars";
 
 import { getBot } from "../bots/index.ts";
 import { parse, startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
@@ -76,8 +76,8 @@ test("deleting the only bot leaves no open bot, and a new bot can still be made"
   expect(host.server.currentBotId()).toBeUndefined();
   const created = await host.ui("/api/bots/new", {
     name: "Next",
-    face: FACE_NAMES[0],
-    stroke: STROKE_NAMES[0],
+    shape: SHAPE_NAMES[0],
+    color: COLOR_NAMES[0],
   });
   expect(created.status).toBe(200);
 });

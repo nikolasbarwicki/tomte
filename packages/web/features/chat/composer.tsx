@@ -183,7 +183,7 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
                   return (
                     <span
                       key={i}
-                      style={target && botTheme(target.avatar.stroke)}
+                      style={target && botTheme(target.avatar.color)}
                       className="bot-theme text-primary [-webkit-text-stroke:0.5px_currentColor]"
                     >
                       {/* The icon sits on the `@` glyph, which keeps its width so the text stays in line with the textarea's; it is a

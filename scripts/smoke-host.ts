@@ -256,7 +256,7 @@ async function main(): Promise<number> {
       const created = await fetch(`${base}/api/bots/new`, {
         method: "POST",
         headers: auth,
-        body: JSON.stringify({ name: "Smoke", purpose: "", face: "tuft", stroke: "ink" }),
+        body: JSON.stringify({ name: "Smoke", purpose: "", shape: "ball", color: "ink" }),
       });
       const bot = (await created.json()) as { id?: string; name?: string };
       check(created.status === 200 && bot.name === "Smoke", `a bot is created (${bot.id})`);

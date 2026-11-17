@@ -13,7 +13,7 @@ import { join } from "node:path";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { FACE_NAMES, STROKE_NAMES } from "@tomte/contract/avatars";
+import { COLOR_NAMES, SHAPE_NAMES } from "@tomte/contract/avatars";
 
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 
@@ -75,8 +75,8 @@ test("a host started on a data root keeps its database, bots, memory and plugins
   const bot = await post<{ id: string }>("/api/bots/new", {
     name: "Ada",
     purpose: "tests",
-    face: FACE_NAMES[0],
-    stroke: STROKE_NAMES[0],
+    shape: SHAPE_NAMES[0],
+    color: COLOR_NAMES[0],
   });
   host.rememberOnMessage("user", "Prefers tea over coffee.");
   expect((await host.ui("/api/send", { text: "hello" })).status).toBe(200);

@@ -221,7 +221,7 @@ describe("a host started with --sidecar", () => {
     const { stateDir } = fakeCli();
     writeFileSync(join(stateDir, "hold"), "");
 
-    const newBot = { name: "Ada", face: "tuft", stroke: "ink" };
+    const newBot = { name: "Ada", shape: "ball", color: "ink" };
     expect((await post(clientUrl, "/api/bots/new", bearer(token), newBot)).status).toBe(200);
     expect((await post(clientUrl, "/api/send", bearer(token), { text: "hello" })).status).toBe(200);
     const deadline = Date.now() + 15_000;

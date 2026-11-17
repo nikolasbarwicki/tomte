@@ -66,8 +66,8 @@ export function botRoutes({
       return json(res, { ok: true });
     },
     "/api/bots/new": async ({ res, parse }) => {
-      const { name, purpose, face, stroke } = parse(NewBot);
-      const bot = createBot(dataRoot, name, purpose, undefined, { face, stroke });
+      const { name, purpose, shape, color } = parse(NewBot);
+      const bot = createBot(dataRoot, name, purpose, undefined, { shape, color });
       botsChanged();
       await chats.switchTo(bot);
       return json(res, bot);
@@ -105,10 +105,10 @@ export function botRoutes({
       return json(res, { ok: true });
     },
     "/api/bots/profile": async ({ res, parse }) => {
-      const { botId, name, purpose, face, stroke } = parse(BotProfileUpdate);
+      const { botId, name, purpose, shape, color } = parse(BotProfileUpdate);
       const before = getBot(dataRoot, botId);
       if (!before) return json(res, { error: "no such bot" }, 404);
-      const bot = setProfile(dataRoot, botId, { name, purpose, avatar: { face, stroke } });
+      const bot = setProfile(dataRoot, botId, { name, purpose, avatar: { shape, color } });
       // The name and purpose are in the system prompt; the avatar is only the page's.
       if (name !== before.name || purpose !== before.purpose)
         chats.reconfigure(botId, "profile changed");
