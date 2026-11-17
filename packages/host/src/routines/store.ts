@@ -326,17 +326,27 @@ export function lastRun(db: Database, routineId: string, now: number): RoutineRu
   return r ? toRun(r, now) : null;
 }
 
-/** The outcome of the routine's last `limit` runs that succeeded or failed, newest first; a skipped, interrupted or waiting run is not one. */
+/**
+ * The outcome of the routine's last `limit` runs that succeeded or failed, newest first; a skipped, interrupted or waiting run is
+ * not one, and neither is a run that started before the routine was last switched back on (`failures_from`).
+ */
 export function lastOutcomes(
   db: Database,
   routineId: string,
   limit: number,
 ): { status: "succeeded" | "failed"; error: string | null }[] {
   return db
-    .query<{ status: "succeeded" | "failed"; error: string | null }, [string, number]>(
-      "SELECT status, error FROM routine_runs WHERE routine_id = ? AND status IN ('succeeded', 'failed') ORDER BY started_at DESC, rowid DESC LIMIT ?",
+    .query<{ status: "succeeded" | "failed"; error: string | null }, [string, string, number]>(
+      `SELECT status, error FROM routine_runs WHERE routine_id = ? AND status IN ('succeeded', 'failed')
+         AND started_at >= COALESCE((SELECT failures_from FROM routines WHERE id = ?), 0)
+       ORDER BY started_at DESC, rowid DESC LIMIT ?`,
     )
-    .all(routineId, limit);
+    .all(routineId, routineId, limit);
+}
+
+/** A routine switched back on starts its count of failed runs again from `t`. */
+export function restartFailureCount(db: Database, id: string, t: number) {
+  db.query("UPDATE routines SET failures_from = ? WHERE id = ?").run(t, id);
 }
 
 /** Newest first; `before` pages by `started_at`. A waiting run's `parkedMs` counts up to `now`. */

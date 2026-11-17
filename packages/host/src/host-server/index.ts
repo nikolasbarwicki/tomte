@@ -17,7 +17,9 @@ import {
   currentSession,
   deleteActivity,
   deleteAllowances,
+  deleteBotUsage,
   reveal,
+  sessionsOfBot,
   trashBot,
 } from "../bots/index.ts";
 import {
@@ -284,6 +286,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     if (o.config.isolateAllBots) chats.reconfigure(undefined, "bots changed");
   };
   const removeBot = async (botId: string) => {
+    // The sessions the database and bot.json name, read before they go: the routines' rows cascade away and the bot's directory is trashed.
+    const sessions = [...(getBot(dataRoot, botId)?.sessions ?? []), ...sessionsOfBot(db, botId)];
     // Handoffs first: failing them names the bot, which needs its settings still in place.
     handoffs.removeBot(botId);
     await routines.removeBot(botId);
@@ -295,6 +299,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     await externalEvents.removeBot(botId);
     void cards.sync();
     await chats.drop(botId);
+    // Last of the session data, once no thread of the bot is left to write a mark again.
+    deleteBotUsage(db, botId, sessions);
     await browser.removeBot(botId);
     // Its waits are gone with it, and so are their cards.
     void cards.sync();

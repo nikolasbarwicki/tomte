@@ -83,6 +83,8 @@ export interface ThreadOptions {
   onMemory?: (scope: MemoryScope, text: string) => void;
   /** Sees every result this thread's turns end in; without it a turn's usage is unknown (null). */
   meter?: UsageMeter;
+  /** The bot this thread belongs to, saved with the usage mark of its session. */
+  botId?: string;
 }
 
 const HOST_INSTRUCTIONS = `${ASK_INSTRUCTIONS}\n\n${MEMORY_INSTRUCTIONS}`;
@@ -236,7 +238,8 @@ export class Thread {
           }
         }
         if (m.type === "result") {
-          const usage = this.o.meter?.record(this.sessionId, m, !!this.o.resume) ?? null;
+          const usage =
+            this.o.meter?.record(this.sessionId, m, !!this.o.resume, this.o.botId) ?? null;
           if (m.subtype !== "success" || m.is_error) {
             const detail = "errors" in m ? m.errors.join("; ") : m.result;
             throw new TurnError(`turn failed (${m.subtype}): ${detail}`, usage);

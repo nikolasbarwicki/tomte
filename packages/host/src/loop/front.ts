@@ -7,6 +7,7 @@ import {
   type McpSdkServerConfigWithInstance,
   type Query,
   type SDKMessage,
+  type SDKResultMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { MemoryScope } from "@claudebot/contract/events";
 
@@ -18,6 +19,7 @@ import {
   memorySections,
   type HostDelegate,
   type MemoryPaths,
+  type UsageMeter,
 } from "../bots/index.ts";
 import {
   claudeHarness,
@@ -100,6 +102,10 @@ export interface FrontOptions {
   integrations: IntegrationsSource;
   /** The bot's model and effort, which its background agents run on. */
   agentSettings: AgentSettings;
+  /** Sees every `result` of the session, so its running totals in `session_usage_marks` stay current for any later reader of the session. */
+  meter?: UsageMeter;
+  /** The bot the session belongs to, kept with its usage mark so deleting the bot removes it. */
+  botId?: string;
   now?: () => number;
 }
 
@@ -335,9 +341,19 @@ export class FrontSession {
 
   private observe(m: SDKMessage) {
     if (m.type === "result") {
+      this.record(m);
       this.turn = false;
       this.armIdle();
     } else if (m.type === "stream_event" || m.type === "assistant") this.turn = true;
+  }
+
+  /** A failed write of the session's totals is logged: it must not end the session, whose next result writes them again. */
+  private record(result: SDKResultMessage) {
+    try {
+      this.o.meter?.record(this.o.sessionId, result, this.o.resume, this.o.botId);
+    } catch (e) {
+      this.log(`[host] metering the front's turn failed: ${(e as Error).message}`);
+    }
   }
 
   private armIdle() {

@@ -465,6 +465,37 @@ CREATE TABLE IF NOT EXISTS presence (
 );
 `;
 
+// Whose session a usage mark is, so deleting a bot can remove its marks. A mark is backfilled from the routine runs and double-loop
+// rows that name its session; a chat session's mark stays null and is found through the bot's own session list when the bot is deleted.
+const SCHEMA_V26 = (db: Database) => {
+  const have = db.query<{ name: string }, []>("PRAGMA table_info(session_usage_marks)").all();
+  if (!have.some((c) => c.name === "bot_id"))
+    db.run("ALTER TABLE session_usage_marks ADD COLUMN bot_id TEXT");
+  db.run("CREATE INDEX IF NOT EXISTS session_usage_marks_bot ON session_usage_marks(bot_id)");
+  // A database that skipped the early steps has no run history to backfill from.
+  const sources = db
+    .query<{ n: number }, []>(
+      "SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN ('routines', 'routine_runs', 'loop_tasks', 'loop_events')",
+    )
+    .get()!.n;
+  if (sources < 4) return;
+  db.run(`
+UPDATE session_usage_marks SET bot_id = COALESCE(
+  (SELECT r.bot_id FROM routine_runs rr JOIN routines r ON r.id = rr.routine_id
+     WHERE rr.session_id = session_usage_marks.session_id LIMIT 1),
+  (SELECT bot_id FROM loop_tasks WHERE session_id = session_usage_marks.session_id LIMIT 1),
+  (SELECT bot_id FROM loop_events WHERE session_id = session_usage_marks.session_id LIMIT 1)
+) WHERE bot_id IS NULL;`);
+};
+
+// When a routine was last switched back on: only runs that started since count toward its pause after failed runs, so a resume
+// means "try again". Null, as for every routine before this step, counts all its runs.
+const SCHEMA_V27 = (db: Database) => {
+  const have = db.query<{ name: string }, []>("PRAGMA table_info(routines)").all();
+  if (have.length > 0 && !have.some((c) => c.name === "failures_from"))
+    db.run("ALTER TABLE routines ADD COLUMN failures_from INTEGER");
+};
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -496,6 +527,8 @@ export function migrate(db: Database): Database {
     SCHEMA_V23,
     SCHEMA_V24,
     SCHEMA_V25,
+    SCHEMA_V26,
+    SCHEMA_V27,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;

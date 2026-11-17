@@ -11,9 +11,17 @@ export interface TurnUsage {
   costUsd: number;
 }
 
-/** Sees every result message of every thread; returns the turn's usage, or null when the turn's own share cannot be known. */
+/**
+ * Sees every result message of every thread; returns the turn's usage, or null when the turn's own share cannot be known. `botId` is
+ * who owns the session, kept with the mark so deleting a bot can find every session it ran, whichever thread ran it.
+ */
 export interface UsageMeter {
-  record(sessionId: string, result: SDKResultMessage, resumed: boolean): TurnUsage | null;
+  record(
+    sessionId: string,
+    result: SDKResultMessage,
+    resumed: boolean,
+    botId?: string,
+  ): TurnUsage | null;
 }
 
 /** A failed turn still cost something; the run that ran it keeps that. */
@@ -47,18 +55,19 @@ export function createUsageMeter(db: Database, now: () => number = Date.now): Us
   );
   const write = db.query(
     `INSERT INTO session_usage_marks
-       (session_id, cost_usd, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+       (session_id, cost_usd, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, updated_at, bot_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(session_id) DO UPDATE SET
        cost_usd = excluded.cost_usd,
        input_tokens = excluded.input_tokens,
        output_tokens = excluded.output_tokens,
        cache_read_tokens = excluded.cache_read_tokens,
        cache_creation_tokens = excluded.cache_creation_tokens,
-       updated_at = excluded.updated_at`,
+       updated_at = excluded.updated_at,
+       bot_id = COALESCE(excluded.bot_id, bot_id)`,
   );
   return {
-    record(sessionId, result, resumed) {
+    record(sessionId, result, resumed, botId) {
       const models = Object.values(result.modelUsage ?? {});
       const sum = (pick: (m: (typeof models)[number]) => number | undefined) =>
         models.reduce((n, m) => n + (pick(m) ?? 0), 0);
@@ -78,6 +87,7 @@ export function createUsageMeter(db: Database, now: () => number = Date.now): Us
         total.cacheReadTokens,
         total.cacheCreationTokens,
         now(),
+        botId ?? null,
       );
       // A session the host has never seen: new, so it started from zero, or resumed, so its earlier cost is unknown.
       if (!mark) return resumed ? null : total;
@@ -98,4 +108,32 @@ export function createUsageMeter(db: Database, now: () => number = Date.now): Us
       };
     },
   };
+}
+
+/**
+ * Forgets the marks of a deleted bot's sessions, in one transaction: those saved with its id, and those of `sessionIds` saved without
+ * one (written before the host kept it; see `sessionsOfBot`). Another bot's marks are never touched.
+ */
+export function deleteBotUsage(db: Database, botId: string, sessionIds: readonly string[]): void {
+  const byBot = db.query("DELETE FROM session_usage_marks WHERE bot_id = ?");
+  const bySession = db.query(
+    "DELETE FROM session_usage_marks WHERE session_id = ? AND bot_id IS NULL",
+  );
+  db.transaction(() => {
+    byBot.run(botId);
+    for (const id of sessionIds) bySession.run(id);
+  })();
+}
+
+/** The sessions the database ties to a bot besides its chat sessions: those of its routine runs and its double-loop tasks and reports. */
+export function sessionsOfBot(db: Database, botId: string): string[] {
+  return db
+    .query<{ session_id: string }, [string, string, string]>(
+      `SELECT rr.session_id FROM routine_runs rr JOIN routines r ON r.id = rr.routine_id
+         WHERE r.bot_id = ? AND rr.session_id IS NOT NULL
+       UNION SELECT session_id FROM loop_tasks WHERE bot_id = ?
+       UNION SELECT session_id FROM loop_events WHERE bot_id = ?`,
+    )
+    .all(botId, botId, botId)
+    .map((r) => r.session_id);
 }

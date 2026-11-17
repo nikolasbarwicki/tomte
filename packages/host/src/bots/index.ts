@@ -28,7 +28,14 @@ import { type HostDelegate } from "./session-kit.ts";
 import { Thread, type ThreadEnv } from "./thread.ts";
 
 export { Thread, type ThreadEnv, type TurnResult } from "./thread.ts";
-export { TurnError, createUsageMeter, type TurnUsage } from "./usage.ts";
+export {
+  TurnError,
+  createUsageMeter,
+  deleteBotUsage,
+  sessionsOfBot,
+  type TurnUsage,
+  type UsageMeter,
+} from "./usage.ts";
 export {
   Inbox,
   MEMORY_INSTRUCTIONS,
@@ -337,6 +344,7 @@ export function openThread(
     hostServers: () => hostServers(bot.id),
     env: () => botEnv(bot.id),
     meter,
+    botId: bot.id,
     ...opts,
   });
 }

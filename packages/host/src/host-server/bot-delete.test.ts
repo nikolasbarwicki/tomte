@@ -114,3 +114,53 @@ test("a deleted bot's open handoffs fail, the other bot is told, and it no longe
   const bots = parse<{ id: string }[]>(await alice.call("list_bots"));
   expect(bots.map((x) => x.id)).not.toContain(b);
 });
+
+test("deleting a bot removes the usage marks of all its sessions and no other bot's", async () => {
+  const keep = host.createBot("Keep");
+  const gone = host.createBot("Gone");
+  const marks = () => {
+    const db = new Database(join(host.dataRoot, "claudebot.db"), { readonly: true });
+    try {
+      return db
+        .query<{ session_id: string; bot_id: string | null }, []>(
+          "SELECT session_id, bot_id FROM session_usage_marks ORDER BY session_id",
+        )
+        .all();
+    } finally {
+      db.close();
+    }
+  };
+  /** One chat turn of the open bot; the meter marks it under the bot's current session, and `marked` is how many marks exist after it. */
+  const chat = async (botId: string, cost: number, marked: number) => {
+    expect((await host.ui("/api/open", { botId })).status).toBe(200);
+    host.setUsage({ cost });
+    expect((await host.ui("/api/send", { text: "hello" })).status).toBe(200);
+    await host.until(() => marks().length === marked);
+    await host.until(() => !host.server.isWorking(botId));
+  };
+
+  await chat(keep, 0.1, 1);
+  await chat(gone, 0.2, 2);
+  // A second session of the deleted bot: /new keeps the first one's mark.
+  expect((await host.ui("/api/session/new", {})).status).toBe(200);
+  await chat(gone, 0.3, 3);
+  const sessionsOf = (botId: string) => getBot(host.dataRoot, botId)!.sessions;
+  expect(sessionsOf(gone)).toHaveLength(2);
+  expect(marks().map((m) => m.bot_id)).toEqual(
+    expect.arrayContaining([keep, gone, gone]) as (string | null)[],
+  );
+
+  // A mark from before the host kept the bot id: its session is found through the bot's own session list.
+  const legacy = new Database(join(host.dataRoot, "claudebot.db"));
+  legacy
+    .query("UPDATE session_usage_marks SET bot_id = NULL WHERE session_id = ?")
+    .run(sessionsOf(gone)[0]!);
+  legacy.close();
+  const kept = marks().filter((m) => m.bot_id === keep);
+  expect(kept).toHaveLength(1);
+
+  await host.until(() => !host.server.isWorking(gone));
+  expect((await host.ui("/api/bots/delete", { botId: gone })).status).toBe(200);
+
+  expect(marks()).toEqual(kept);
+});

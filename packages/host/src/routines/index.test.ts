@@ -15,6 +15,7 @@ import { createWaits, type Wait, type Waits } from "../waits/index.ts";
 import {
   Conflict,
   createRoutines,
+  type Routines,
   type Executor,
   type RoutineTurnResult,
   type RunEnd,
@@ -1054,4 +1055,122 @@ test("a park that expires adds its time to the failed run, and the failure count
     parkedMs: DAY,
   });
   expect(routines.get(r.id)).toMatchObject({ active: false, pausedReason: "failures" });
+});
+
+/**
+ * A routine host whose cron jobs are driven by the test: `tick(iso)` moves the clock and runs every job that is still armed, which is
+ * what Bun.cron does at an occurrence (it cannot be driven from a test: its shortest wait is the next minute). `live` is the armed jobs.
+ */
+function driven() {
+  const live = new Set<{ expr: string; tick(): void; stop(): void }>();
+  const host = createRoutines({
+    db,
+    dataRoot: cwd,
+    now: () => clock,
+    execute,
+    waits,
+    cron: (expr, _tz, tick) => {
+      const job = { expr, tick, stop: () => void live.delete(job) };
+      live.add(job);
+      return job;
+    },
+    notice: async () => {},
+    deliver: async () => {},
+    onChange: () => {},
+    events,
+    onRunEnded: () => {},
+  });
+  onTestEnd.push(() => host.stop());
+  return {
+    host,
+    live,
+    tick: (iso: string) => {
+      clock = at(iso);
+      for (const job of live) job.tick();
+    },
+    failManual: async (id: string) => {
+      host.testRun(id);
+      defined(jobs.at(-1), "job").reject(new Error("the CLI crashed"));
+      await until(() => !host.get(id).running);
+    },
+  };
+}
+
+const scheduledRuns = (host: Routines, id: string) =>
+  host.runs(id).filter((run) => run.trigger === "schedule");
+
+test("a routine resumed after its failures pause is armed again and fires on schedule in the same process, and is not armed while paused", async () => {
+  const { host, live, tick, failManual } = driven();
+  const r = host.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  expect(live.size).toBe(1);
+  for (let i = 0; i < 5; i++) await failManual(r.id);
+  expect(host.get(r.id)).toMatchObject({ active: false, pausedReason: "failures" });
+  expect(live.size).toBe(0);
+
+  const before = jobs.length;
+  tick("2026-01-01T11:00:05Z");
+  await Bun.sleep(20);
+  expect(jobs).toHaveLength(before);
+  expect(scheduledRuns(host, r.id)).toEqual([]);
+
+  clock = at("2026-01-01T12:10:00Z");
+  host.update(r.id, { active: true });
+  expect(live.size).toBe(1);
+  tick("2026-01-01T13:00:05Z");
+  await until(() => jobs.length === before + 1);
+  expect(scheduledRuns(host, r.id)).toMatchObject([
+    { trigger: "schedule", scheduledFor: at("2026-01-01T13:00:00Z"), status: "running" },
+  ]);
+  expect(defined(jobs.at(-1), "job").prompt).toContain('trigger="schedule"');
+  defined(jobs.at(-1), "job").resolve("fine");
+  await until(() => host.get(r.id).lastRun?.status === "succeeded");
+});
+
+test("routines the absence pause stopped are armed again by the owner's return and fire on schedule, and are not armed meanwhile", async () => {
+  const { host, live, tick } = driven();
+  const r = host.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  expect(host.pauseAll("absence")).toEqual([{ botId, name: "h" }]);
+  expect(host.get(r.id)).toMatchObject({ active: false, pausedReason: "absence" });
+  expect(live.size).toBe(0);
+
+  tick("2026-01-01T11:00:05Z");
+  await Bun.sleep(20);
+  expect(jobs).toEqual([]);
+
+  clock = at("2026-01-01T12:10:00Z");
+  expect(host.resumeByReason("absence")).toEqual([botId]);
+  expect(host.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  expect(live.size).toBe(1);
+  tick("2026-01-01T13:00:05Z");
+  await until(() => jobs.length === 1);
+  expect(scheduledRuns(host, r.id)).toMatchObject([
+    { scheduledFor: at("2026-01-01T13:00:00Z"), status: "running" },
+  ]);
+  defined(jobs[0], "job").resolve("fine");
+  await until(() => host.get(r.id).lastRun?.status === "succeeded");
+});
+
+test("a resume restarts the failure count: one failed run after it keeps the routine on, five pause it again with a new notice", async () => {
+  const { host, tick, failManual } = driven();
+  const r = host.create(botId, { name: "digest", instruction: "i", schedule: hourly });
+  for (let i = 0; i < 5; i++) await failManual(r.id);
+  expect(raised).toHaveLength(1);
+
+  clock = at("2026-01-01T12:10:00Z");
+  host.update(r.id, { active: true });
+  expect(host.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  tick("2026-01-01T13:00:05Z");
+  await until(() => jobs.length === 6);
+  defined(jobs[5], "job").reject(new Error("still broken"));
+  await until(() => host.get(r.id).lastRun?.status === "failed");
+  expect(host.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  expect(raised).toHaveLength(1);
+
+  for (let i = 0; i < 3; i++) await failManual(r.id);
+  expect(host.get(r.id)).toMatchObject({ active: true, pausedReason: null });
+  await failManual(r.id);
+  expect(host.get(r.id)).toMatchObject({ active: false, pausedReason: "failures" });
+  expect(raised).toHaveLength(2);
+  expect(raised[1]).toMatchObject({ title: "digest paused after 5 failed runs" });
+  expect(raised[1]?.key).not.toBe(raised[0]?.key);
 });

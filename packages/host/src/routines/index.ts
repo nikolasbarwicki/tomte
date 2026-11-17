@@ -161,6 +161,8 @@ export function createRoutines(deps: {
   db: Database;
   dataRoot: string;
   now?: () => number;
+  /** Starts a cron job that calls `tick` at every occurrence of `expr` in `tz`; Bun's, unless a test drives the ticks itself. */
+  cron?: (expr: string, tz: string, tick: () => void) => { stop(): void };
   execute: Executor;
   /** How long a run may work before it fails; time parked at a human wait does not count. */
   runCapMs?: number;
@@ -182,6 +184,7 @@ export function createRoutines(deps: {
 }) {
   const { db, dataRoot, onChange, execute, waits } = deps;
   const now = deps.now ?? Date.now;
+  const cron = deps.cron ?? ((expr, tz, tick) => Bun.cron(expr, tick, { tz }));
   const jobs = new Map<string, { stop: () => void }>();
   const running = new Map<string, LiveRun>();
   let stopping = false;
@@ -203,7 +206,7 @@ export function createRoutines(deps: {
     if (!r.active || !getBot(dataRoot, r.botId)) return;
     const s = r.schedule;
     if (s.kind === "cron") {
-      const job = Bun.cron(s.expr, () => fire(r.id), { tz: s.tz });
+      const job = cron(s.expr, s.tz, () => void fire(r.id));
       jobs.set(r.id, { stop: () => job.stop() });
       return;
     }
@@ -632,6 +635,8 @@ export function createRoutines(deps: {
       else if (r.active && !old.active && r.schedule.kind === "cron")
         r.lastScheduledFor = Math.max(old.lastScheduledFor ?? 0, t);
       store.saveRoutine(db, r);
+      // Switching a routine back on means "try again": failures before it no longer count toward a pause.
+      if (r.active && !old.active) store.restartFailureCount(db, r.id, t);
       if (old.pausedReason === "failures" && r.active)
         deps.events.resolveNotices(r.botId, `${PAUSE_NOTICE}${r.id}:`);
       arm(r);
