@@ -268,10 +268,12 @@ host.loopScript(
 // The page.
 const box = page.getByRole("textbox", { name: "Message Loop", exact: true });
 const sendButton = page.getByRole("button", { name: "Send", exact: true });
-const settingsTab = page.getByRole("tab", { name: "Settings" });
-const chatRow = page.getByRole("button", { name: /^Chat & model/ });
-const modeSwitch = page.getByRole("switch", { name: "Double-loop chat" });
-const tasksTab = page.getByRole("tab", { name: "Tasks" });
+const rail = page.getByRole("navigation", { name: /panel$/ });
+const modelChip = page.getByRole("button", { name: "Model and chat" });
+const doubleLoopMode = page.getByRole("radio", { name: /^Double loop/ });
+const oneThreadMode = page.getByRole("radio", { name: /^One thread/ });
+const needsDoubleLoop = page.getByTestId("tasks-need-double-loop");
+const noTasksYet = page.getByText("No tasks yet", { exact: true });
 const limits = page.getByTestId("rate-limits");
 const presenceLine = (text: string) => page.getByRole("status").filter({ hasText: text });
 const task = (id: string) => page.locator(`[data-task="${id}"]`);
@@ -286,24 +288,28 @@ const say = async (text: string) => {
   await host.until(() => sends.length > before);
   return sends.at(-1)!;
 };
-/** Opens the "Chat & model" page of the Settings tab (the panel remembers the page across tab switches). */
-const openChatSettings = async () => {
-  await settingsTab.click();
-  await modeSwitch.or(chatRow).first().waitFor();
-  if (await chatRow.isVisible()) await chatRow.click();
-  await modeSwitch.waitFor();
+/** Opens a section of the panel from the rail; its icon closes the panel while that section is open, so one already open stays. */
+const openSection = async (name: string) => {
+  const icon = rail.getByRole("button", { name, exact: true });
+  if ((await icon.getAttribute("aria-pressed")) !== "true") await icon.click();
+  await page.locator(`[data-panel-section="${name.toLowerCase()}"]`).waitFor();
 };
-/** Waits until the chat settings can switch the mode again: nothing runs and the bot is not replying. Leaves the page open. */
+/** Opens the model chip's popover: the chat mode, the model and the effort. */
+const openModelChip = async () => {
+  await modelChip.click();
+  await doubleLoopMode.waitFor();
+};
+/** Waits until the chat mode can switch again: nothing runs and the bot is not replying. Leaves the popover open. */
 const waitIdle = async () => {
-  await openChatSettings();
+  await openModelChip();
   await page.waitForFunction(
     () => {
-      const el = document.getElementById("double-loop");
+      const radios = [...document.querySelectorAll('[role="radio"]')];
       return (
-        el !== null &&
-        !el.hasAttribute("disabled") &&
-        !el.hasAttribute("data-disabled") &&
-        el.getAttribute("aria-disabled") !== "true"
+        radios.length === 2 &&
+        radios.every(
+          (r) => !r.hasAttribute("data-disabled") && r.getAttribute("aria-disabled") !== "true",
+        )
       );
     },
     undefined,
@@ -314,34 +320,48 @@ const waitIdle = async () => {
 const shown = (text: string) => said(text).count();
 
 try {
-  console.log("a standard bot shows no rate limit and has no Tasks tab");
+  console.log(
+    "a standard bot shows no rate limit and its Tasks section says it needs double-loop chat",
+  );
   await page.goto(`${host.clientUrl}/bots/${botId}`);
   await box.waitFor();
   check((await limits.count()) === 0, "no rate-limit indicator for a standard bot");
-  check((await tasksTab.count()) === 0, "no Tasks tab for a standard bot");
+  await openSection("Tasks");
+  await needsDoubleLoop.waitFor();
+  check(true, "the Tasks section of a standard bot says background tasks need double-loop chat");
+  check(
+    (await modelChip.innerText()).includes("Sonnet") &&
+      (await modelChip.locator("svg").count()) === 1,
+    "the chip names the model and has no split arrow",
+  );
 
-  console.log("the toggle, on the Chat & model page of the Settings tab");
-  await openChatSettings();
+  console.log("the toggle, in the model chip's popover");
+  await openModelChip();
   check(
     await page.getByText("Model", { exact: true }).first().isVisible(),
-    "a standard bot's settings name its model",
+    "a standard bot's popover names its model",
   );
-  await modeSwitch.click();
+  check(await oneThreadMode.isChecked(), "One thread is the chosen chat mode");
+  await doubleLoopMode.click();
   await page.getByRole("alertdialog").getByText("Switch to double-loop chat for Loop?").waitFor();
   await smoke.shot("confirm-switch");
   await page.getByRole("button", { name: "Switch and start new" }).click();
-  await tasksTab.waitFor();
-  check(true, "the confirm dialog switches the bot, and the Tasks tab appears");
+  await noTasksYet.waitFor();
+  check(true, "the confirm dialog switches the bot, and its Tasks section is the task list");
   const sessionId = currentSession(getBot(host.dataRoot, botId)!)!;
   check(sessionId !== botId, "switching started a new session");
-  await page.getByText("Background tasks", { exact: true }).waitFor();
+  await openModelChip();
+  await page.getByText("Background tasks run on", { exact: true }).waitFor();
   check(true, "in double-loop mode the model and effort are the background tasks'");
   const modelChoice = page.getByRole("group", { name: "Model" });
   await modelChoice.getByRole("button", { name: "Opus" }).click();
   await host.until(() => getBot(host.dataRoot, botId)?.model === "opus");
   await modelChoice.getByRole("button", { name: "Opus", pressed: true }).waitFor();
-  check(true, "picking a model saves it with the bot, and the settings show it");
-  await smoke.shot("settings");
+  check(true, "picking a model saves it with the bot, and the popover shows it");
+  check((await modelChip.innerText()).includes("Opus"), "the chip follows the model");
+  await smoke.shot("model-popover");
+  await page.keyboard.press("Escape");
+  await doubleLoopMode.waitFor({ state: "detached" });
 
   console.log("two messages a second apart");
   const first = await say("first message");
@@ -384,12 +404,12 @@ try {
   await page.mouse.move(700, 450);
 
   console.log("a research task");
-  await tasksTab.click();
+  await openSection("Tasks");
   await say("research Zebra");
   await said(REPLIES["research Zebra"]).waitFor();
   await task("agent-1").getByText("research Zebra").waitFor();
   await task("agent-1").getByText("Searching zebra sources").waitFor();
-  check(true, "the Tasks tab shows the task running with its status line");
+  check(true, "the Tasks section shows the task running with its status line");
   await task("agent-1").getByLabel("Findings").getByText(FINDING.finding).waitFor();
   check(true, "the finding is listed under the task");
   check(
@@ -407,9 +427,13 @@ try {
     (await transcript.getByText("Agent", { exact: true }).count()) === 0,
     "the front's tool calls are not shown",
   );
-  await openChatSettings();
-  check((await modeSwitch.isDisabled()) === true, "the mode switch is locked while a task runs");
-  await tasksTab.click();
+  await openModelChip();
+  check(
+    (await doubleLoopMode.isDisabled()) && (await oneThreadMode.isDisabled()),
+    "the chat mode is locked while a task runs",
+  );
+  await page.keyboard.press("Escape");
+  await openSection("Tasks");
 
   console.log("a second task, a steer and a cancel");
   await say("research Quagga");
@@ -575,7 +599,7 @@ try {
       !(await page.locator("body").innerText()).includes("Start queued task"),
     "the app's own messages are not shown",
   );
-  await tasksTab.click();
+  await openSection("Tasks");
   for (const [id, state] of [
     ["agent-1", "done"],
     ["agent-2", "cancelled"],
@@ -585,20 +609,22 @@ try {
     await task(id)
       .and(page.locator(`[data-state="${state}"]`))
       .waitFor();
-  check(true, "the Tasks tab lists the four tasks as they ended");
+  check(true, "the Tasks section lists the four tasks as they ended");
   await limits.waitFor();
   check(true, "the rate limit is still shown after the chat was rebuilt");
   await smoke.shot("rebuilt");
 
   console.log("leaving double-loop mode once nothing runs");
   await waitIdle();
-  await modeSwitch.click();
+  await oneThreadMode.click();
   await page.getByRole("alertdialog").getByText("Leave double-loop chat for Loop?").waitFor();
   await page.getByRole("button", { name: "Switch and start new" }).click();
-  await tasksTab.waitFor({ state: "detached" });
+  await page.keyboard.press("Escape");
+  await openSection("Tasks");
+  await needsDoubleLoop.waitFor();
   check(
     (await limits.count()) === 0,
-    "the Tasks tab and the rate-limit indicator are gone in standard mode",
+    "the Tasks section asks for double-loop chat and the rate-limit indicator is gone in standard mode",
   );
 
   check(pageErrors.length === 0, `no page errors (${pageErrors.join("; ")})`);

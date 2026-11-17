@@ -441,7 +441,7 @@ export function createChats(deps: ChatsDeps): Chats {
 
   /**
    * What a double-loop chat shows of its front: each reply whole, once written, while the presence line says the bot is typing.
-   * Its tool calls start, steer and stop tasks, which the Tasks tab follows, so the conversation holds only what was said.
+   * Its tool calls start, steer and stop tasks, which the Tasks section of the bot panel follows, so the conversation holds only what was said.
    */
   function showFrontMessage(chat: Chat, m: SDKMessage) {
     showCompaction(chat, m);

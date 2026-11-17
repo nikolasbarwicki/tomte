@@ -128,7 +128,7 @@ describe("a failures notice on the channel", () => {
     expect(card.message.buttons?.map((row) => row.map((b) => b.label))).toEqual([["Dismiss"]]);
     expect(card.message.link).toEqual({
       label: "Open in Tomte",
-      url: `https://tomte.example.com/bots/${botId}?panel=settings&section=routines`,
+      url: `https://tomte.example.com/bots/${botId}?panel=routines`,
     });
     // Once, however long the host runs.
     await Bun.sleep(100);
@@ -226,9 +226,7 @@ describe("the absence pause on the channel", () => {
     await host.until(() => routineState("nightly")?.paused_reason === "absence");
     await host.until(() => cardsSent().length === 2);
     expect(cardsSent()[1]!.message.text).toContain("Routines paused: no activity for 14 days");
-    expect(cardsSent()[1]!.message.link?.url).toEndWith(
-      `/bots/${botId}?panel=settings&section=routines`,
-    );
+    expect(cardsSent()[1]!.message.link?.url).toEndWith(`/bots/${botId}?panel=routines`);
     await Bun.sleep(150);
     expect(cardsSent()).toHaveLength(2);
   });

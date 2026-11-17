@@ -81,7 +81,7 @@ function BotContextMenu({ bot, children }: { bot: BotSummary; children: ReactNod
             void navigate({
               to: "/bots/$botId",
               params: { botId: bot.id },
-              search: { panel: "settings", section: "profile" },
+              search: { panel: "profile" },
             })
           }
         >

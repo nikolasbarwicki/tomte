@@ -1,2 +1,2 @@
 export { ChatView } from "./chat.tsx";
-export { ChatSettings } from "./settings.tsx";
+export type { PanelControls } from "./use-panel.ts";

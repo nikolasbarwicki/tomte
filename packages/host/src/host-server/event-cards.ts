@@ -32,8 +32,8 @@ function cardOf(item: EventItem): CardItem {
       { label: "Dismiss", arg: "d" },
     ],
     reply: actions.some((a) => "draft" in a),
-    // A notice reports a paused routine, so its link opens the routines page of the bot's settings; any other item opens the work panel.
-    ...(item.kind === "notice" ? { panel: "settings", section: "routines" } : { panel: "work" }),
+    // A notice reports a paused routine, so its link opens the Routines section of the bot panel; any other item opens Work.
+    ...(item.kind === "notice" ? { panel: "routines" } : { panel: "work" }),
   };
 }
 

@@ -1,6 +1,7 @@
 import { BriefcaseIcon } from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
@@ -12,7 +13,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { useWork } from "@/host/hooks.ts";
 
 import { SourceDetail } from "./detail.tsx";
-import { EventsEndpoint } from "./endpoint.tsx";
 import { sortSources } from "./model.ts";
 import { SourceCard } from "./source-card.tsx";
 
@@ -26,8 +26,8 @@ function useNow(everyMs: number) {
   return now;
 }
 
-/** The Work tab: one card per event source of the bot, most urgent first, and how to connect a script. */
-export function Work({ botId }: { botId: string }) {
+/** The Work section: one card per event source of the bot, most urgent first. `onConnect` opens the Events endpoint section, where a script is connected. */
+export function Work({ botId, onConnect }: { botId: string; onConnect: () => void }) {
   const work = useWork();
   const now = useNow(15_000);
   const sources = work?.botId === botId ? work.sources : undefined;
@@ -37,7 +37,17 @@ export function Work({ botId }: { botId: string }) {
   // A source that is archived, here or on another device, closes its detail for good: if it posts again, it shows as a card.
   if (openId !== undefined && sources && !opened) setOpenId(undefined);
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3">
+      {!opened && (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-muted-foreground text-xs">
+            Scripts and coding agents reporting to this bot.
+          </p>
+          <Button variant="outline" size="xs" onClick={onConnect}>
+            Connect one
+          </Button>
+        </div>
+      )}
       {opened ? (
         <SourceDetail botId={botId} source={opened} now={now} onBack={() => setOpenId(undefined)} />
       ) : !sorted ? (
@@ -63,7 +73,6 @@ export function Work({ botId }: { botId: string }) {
           ))}
         </ul>
       )}
-      <EventsEndpoint key={botId} botId={botId} />
     </div>
   );
 }

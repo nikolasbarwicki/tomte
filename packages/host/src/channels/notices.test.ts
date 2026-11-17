@@ -37,7 +37,7 @@ test("an expired park says what it waited for and that the run failed", () => {
 test("the link goes to the routines panel, and a loopback http public URL has none", () => {
   const n = { ...failed, interrupted: false };
   expect(noticeMessage(n, "https://c.example/").link?.url).toBe(
-    "https://c.example/bots/b1?panel=settings&section=routines",
+    "https://c.example/bots/b1?panel=routines",
   );
   expect(noticeMessage(n, "http://127.0.0.1:5173").link).toBeUndefined();
 });

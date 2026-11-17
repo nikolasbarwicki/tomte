@@ -40,7 +40,7 @@ export type Notice = z.output<typeof Notice>;
 
 /** The notice as one plain message, with a link to the bot's Routines panel unless the public URL is a loopback `http` one. */
 export function noticeMessage(notice: Notice, publicUrl: string): ChannelMessage {
-  const link = linkTo(publicUrl, { botId: notice.botId, panel: "settings", section: "routines" });
+  const link = linkTo(publicUrl, { botId: notice.botId, panel: "routines" });
   const text = (() => {
     switch (notice.kind) {
       case "run_failed":

@@ -51,7 +51,7 @@ One host-wide pointer names the primary bot. Being primary changes four things: 
 
 ### C. Primary as an orchestrator whose background agents are bots
 
-Extend the double-loop front so its tasks are bots instead of `researcher` and `worker`: "start a task on Job scout" opens a handoff, the Tasks tab shows handoffs, a handoff result is a report. Each handoff runs in its own session on the assignee, headless and parkable, like a double-loop routine run.
+Extend the double-loop front so its tasks are bots instead of `researcher` and `worker`: "start a task on Job scout" opens a handoff, the Tasks section shows handoffs, a handoff result is a report. Each handoff runs in its own session on the assignee, headless and parkable, like a double-loop routine run.
 
 - Pros:
   - The best experience: parallel, steerable, cancellable delegation in one chat, with reports instead of handoff cards.

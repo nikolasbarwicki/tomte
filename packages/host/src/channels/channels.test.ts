@@ -292,7 +292,7 @@ describe("notify", () => {
         to: owner,
         message: {
           text: "Routine Digest failed: boom",
-          link: { url: "https://tomte.example/bots/b1?panel=settings&section=routines" },
+          link: { url: "https://tomte.example/bots/b1?panel=routines" },
         },
       },
     ]);

@@ -1,5 +1,7 @@
 # Settings screen and bot panel navigation
 
+> The bot panel half of this plan is superseded by the activity rail: one section at a time, opened from a rail of icons on the desk, `?panel=<section>`, Profile from the chat's top bar and the model chip in the message box (see "Bot panel" in AGENTS.md and ADR-0004). The Settings screen half stands. The panel text below describes the tabbed design it replaced.
+
 The app had grown one sidebar entry per admin page (Integrations, Credentials, Devices) plus a theme toggle and the
 workspace path squeezed into the sidebar footer, and a bot panel with seven tabs in a 400px column (Work, Tasks, Memory,
 Files, Routines, Browser, Settings) where settings, memory and permissions sat in different places and a bot could not be

@@ -124,7 +124,7 @@ export function Transcript({
       </Empty>
     );
   }
-  // A double-loop chat shows only the conversation: its tasks live in the Tasks tab, and their results arrive as messages.
+  // A double-loop chat shows only the conversation: its tasks live in the bot panel's Tasks section, and their results arrive as messages.
   const doubleLoop = bot.chatMode === "double_loop";
   const rows = toRows(doubleLoop ? items.filter((i) => i.kind !== "task") : items);
   const tasksRunning = doubleLoop

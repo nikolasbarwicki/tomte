@@ -21,9 +21,8 @@ export type CardItem = {
   buttons: CardButton[];
   /** Whether the card tells the owner that a reply to it answers. Set when some action needs words and so has no button. */
   reply: boolean;
-  /** The web UI panel the card's link opens, `work` for an external event; `section` is a page under the panel's Settings tab. */
+  /** The web UI panel the card's link opens, `work` for an external event, `routines` for a notice; a section of the bot panel. */
   panel?: string;
-  section?: string;
 };
 
 /** Where an item stands: open with its card, or closed with the outcome the card is edited to (and the heading it keeps). */

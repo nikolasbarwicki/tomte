@@ -112,6 +112,10 @@ try {
   console.log("a routine that sends its result to the phone");
   const botId = host.createBot("Planner");
   await page.goto(`${host.clientUrl}/bots/${botId}?panel=settings&section=routines`);
+  await page.locator('[data-panel-section="routines"]').waitFor();
+  check(true, "a link made with the old Settings tab opens the Routines section");
+  await page.goto(`${host.clientUrl}/bots/${botId}?panel=routines`);
+  await page.locator('[data-panel-section="routines"]').waitFor();
   await page.getByRole("button", { name: "New routine" }).first().click();
   const form = page.getByRole("dialog");
   await form.getByLabel("Name").fill("Digest");

@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { attach } from "./api.ts";
 import { draftsFromInput, draftsFromTransfer, type DraftAttachment } from "./attachments.ts";
 import { bindMentions, type MentionTarget } from "./mentions.ts";
+import { ModelChip } from "./model-chip.tsx";
 import { needsYouItems } from "./model.ts";
 
 const botRoute = getRouteApi("/bots/$botId");
@@ -359,6 +360,7 @@ export function Composer({ bot, bots }: { bot: BotSummary; bots: BotSummary[] })
               />
             </div>
             <InputGroupAddon align="block-end">
+              <ModelChip bot={bot} />
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={

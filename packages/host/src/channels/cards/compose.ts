@@ -37,7 +37,7 @@ export function parseButtonData(
  */
 export function linkTo(
   publicUrl: string,
-  item: Pick<CardItem, "botId" | "panel" | "section">,
+  item: Pick<CardItem, "botId" | "panel">,
 ): ChannelMessage["link"] {
   let url: URL;
   try {
@@ -54,7 +54,6 @@ export function linkTo(
   const path = `/bots/${encodeURIComponent(item.botId)}`;
   const search = new URLSearchParams({
     ...(item.panel && { panel: item.panel }),
-    ...(item.section && { section: item.section }),
   }).toString();
   return { label: "Open in Tomte", url: `${url.origin}${path}${search ? `?${search}` : ""}` };
 }

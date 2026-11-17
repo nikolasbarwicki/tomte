@@ -48,8 +48,7 @@ test("a kind the web UI has no actions for still gets a Dismiss button, and noth
       heading: "auth-sso · Which database?",
       buttons: [{ label: "Dismiss", arg: "d" }],
       reply: false,
-      panel: "settings",
-      section: "routines",
+      panel: "routines",
     },
   ]);
 });

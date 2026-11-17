@@ -5,12 +5,13 @@ import { toast } from "sonner";
 import { confirmAction } from "@/components/confirm.tsx";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { copyText } from "@/lib/clipboard.ts";
 
 import { eventAccess, rotateEventToken } from "./api.ts";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** The bot's events URL with the actions to copy it, copy the event token and replace the token. The token is never kept on the page: each action asks the host for it. */
+/** The Events endpoint section: the bot's events URL with the actions to copy it, copy the event token and replace the token. The token is never kept on the page: each action asks the host for it. */
 export function EventsEndpoint({ botId }: { botId: string }) {
   const [url, setUrl] = useState<string>();
   const [busy, run] = useTransition();
@@ -25,14 +26,6 @@ export function EventsEndpoint({ botId }: { botId: string }) {
     };
   }, [botId]);
 
-  const copy = async (text: string, what: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success(`${what} copied`);
-    } catch (e) {
-      toast.error(message(e));
-    }
-  };
   const attempt = (f: () => Promise<void>) =>
     run(async () => {
       try {
@@ -51,18 +44,16 @@ export function EventsEndpoint({ botId }: { botId: string }) {
     });
     if (ok)
       attempt(async () => {
-        await copy((await rotateEventToken(botId)).token, "New event token");
+        await copyText((await rotateEventToken(botId)).token, "New event token");
       });
   };
 
   return (
-    <section className="grid gap-2 border-t pt-3">
-      <div>
-        <h3 className="text-sm font-medium">Events endpoint</h3>
-        <p className="text-muted-foreground text-xs">
-          A script posts events here with this bot&apos;s event token as a bearer token.
-        </p>
-      </div>
+    <section className="grid gap-2">
+      <p className="text-muted-foreground text-xs">
+        A script posts events here with this bot&apos;s event token as a bearer token. Each source
+        that does shows up under Work.
+      </p>
       <code className="bg-muted/50 rounded-lg px-2 py-1.5 text-xs break-all">
         {url ?? "Loading…"}
       </code>
@@ -71,7 +62,7 @@ export function EventsEndpoint({ botId }: { botId: string }) {
           variant="outline"
           size="sm"
           disabled={!url}
-          onClick={() => url && void copy(url, "URL")}
+          onClick={() => url && void copyText(url, "URL")}
         >
           <CopyIcon /> Copy URL
         </Button>
@@ -81,7 +72,7 @@ export function EventsEndpoint({ botId }: { botId: string }) {
           disabled={busy}
           onClick={() =>
             attempt(async () => {
-              await copy((await eventAccess(botId)).token, "Event token");
+              await copyText((await eventAccess(botId)).token, "Event token");
             })
           }
         >
