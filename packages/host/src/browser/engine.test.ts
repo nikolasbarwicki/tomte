@@ -80,6 +80,7 @@ describe("engine resolution", () => {
 
     process.env.AGENT_BROWSER_PATH = exe("fake-engine");
     expect(resolveEngine(dataRoot)?.source).toBe("AGENT_BROWSER_PATH");
+    process.env.AGENT_BROWSER_EXECUTABLE_PATH = exe("my-chrome");
     expect(engineStatus(dataRoot).status).toBe("available");
   });
 
