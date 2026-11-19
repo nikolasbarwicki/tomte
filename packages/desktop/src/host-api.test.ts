@@ -1,14 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { API_VERSION } from "@tomte/contract/api";
-
 import { ConnectionError } from "./connection-error.ts";
-import { createHostClient, type HostFetch } from "./host-api.ts";
+import { createHostClient, shellCompat, type HostFetch } from "./host-api.ts";
 
 const ORIGIN = "https://host.example.com";
 const INFO = {
   version: "1.2.3",
-  apiVersion: API_VERSION,
+  shellApi: { min: 1, max: 1 },
   mode: "remote",
   capabilities: { reveal: false, headedBrowser: false, browserSandbox: true },
 };
@@ -47,18 +45,17 @@ describe("checkHost", () => {
     expect(calls[0]!.init.method).toBe("GET");
   });
 
-  test("tells the user to update the desktop app when the host's API is newer", async () => {
-    const { client } = clientAnswering(json({ ...INFO, apiVersion: API_VERSION + 1 }));
-    expect(await refusal(client.checkHost(ORIGIN))).toBe(
-      `The host at ${ORIGIN} runs API version ${API_VERSION + 1}; this app needs ${API_VERSION}. Update the desktop app.`,
-    );
+  test("an older host without shellApi, whatever its apiVersion, is read as shell API 1 and is compatible", async () => {
+    const { shellApi: _, ...older } = INFO;
+    const { client } = clientAnswering(json({ ...older, apiVersion: 7 }));
+    const info = await client.checkHost(ORIGIN);
+    expect(info.shellApi).toEqual({ min: 1, max: 1 });
+    expect(shellCompat(info)).toBe("ok");
   });
 
-  test("tells the user to update the host when its API is older", async () => {
-    const { client } = clientAnswering(json({ ...INFO, apiVersion: API_VERSION - 1 }));
-    expect(await refusal(client.checkHost(ORIGIN))).toBe(
-      `The host at ${ORIGIN} runs API version ${API_VERSION - 1}; this app needs ${API_VERSION}. Update the host.`,
-    );
+  test("a range that does not overlap is returned for shellCompat to judge, not refused", async () => {
+    const { client } = clientAnswering(json({ ...INFO, shellApi: { min: 2, max: 3 } }));
+    expect(shellCompat(await client.checkHost(ORIGIN))).toBe("update-app");
   });
 
   test("rejects a server that is not a Tomte host", async () => {
@@ -142,5 +139,26 @@ describe("revoke", () => {
     expect(await refusal(broken.client.revoke(ORIGIN, "tok", "d1"))).toContain("boom");
     const down = clientAnswering(new TypeError("net::ERR_CONNECTION_REFUSED"));
     expect(await refusal(down.client.revoke(ORIGIN, "tok", "d1"))).toContain("Could not reach");
+  });
+});
+
+describe("shellCompat", () => {
+  const at = (min: number, max: number) =>
+    shellCompat({ ...INFO, mode: "remote", shellApi: { min, max } });
+
+  test("any overlap with this app's range is ok, however wide the host's", () => {
+    expect(at(1, 1)).toBe("ok");
+    expect(at(0, 5)).toBe("ok");
+    expect(at(1, 4)).toBe("ok");
+    expect(at(0, 1)).toBe("ok");
+  });
+
+  test("a host whose newest version is below the app's oldest needs the host updated", () => {
+    expect(at(0, 0)).toBe("update-host");
+  });
+
+  test("a host whose oldest version is above the app's newest needs the app updated", () => {
+    expect(at(2, 2)).toBe("update-app");
+    expect(at(2, 9)).toBe("update-app");
   });
 });

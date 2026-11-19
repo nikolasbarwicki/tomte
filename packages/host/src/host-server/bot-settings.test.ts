@@ -254,11 +254,15 @@ describe("providers", () => {
       },
       cliVersion: "2.1.0",
       gateway: null,
+      longLivedToken: false,
+      sshCommand: null,
       login: null,
     });
   });
 
   test("the status follows the sign-in as it is now, without a restart, and the account only while signed in", async () => {
+    // A request joins a check already running, so the host's own start-up check must be answered before the change.
+    await providers();
     host.setSignedIn(false);
     const [signedOut] = await providers();
     expect(signedOut?.status).toBe("disconnected");

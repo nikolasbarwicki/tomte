@@ -109,10 +109,14 @@ describe("a custom provider", () => {
     expect(provider.access).toBe("api_key");
     expect(provider.account?.method).toBe("oauth_token");
 
-    const env = (await launch("Ada")).env;
-    expect(env.ANTHROPIC_BASE_URL).toBe("https://gateway.example.test");
-    expect(env.ANTHROPIC_AUTH_TOKEN).toBe(TOKEN);
-    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    const first = await launch("Ada");
+    expect(first.env.ANTHROPIC_BASE_URL).toBe("https://gateway.example.test");
+    expect(first.env.CLAUDE_CODE_USE_GATEWAY).toBe("1");
+    expect(first.credential).toEqual({
+      variable: "CLAUDE_CODE_GATEWAY_TOKEN_FILE_DESCRIPTOR",
+      token: TOKEN,
+    });
+    expect(Object.values(first.env)).not.toContain(TOKEN);
 
     await host.restart();
     expect((await claude()).gateway).toEqual({
@@ -123,17 +127,19 @@ describe("a custom provider", () => {
     expect((await host.ui("/api/providers/claude/gateway/remove", {})).status).toBe(200);
     expect(host.secretNames()).not.toContain("claude-gateway");
     expect((await claude()).gateway).toBeNull();
-    const after = (await launch("Bea")).env;
-    expect(after.ANTHROPIC_BASE_URL).toBeUndefined();
-    expect(after.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    const after = await launch("Bea");
+    expect(after.env.ANTHROPIC_BASE_URL).toBeUndefined();
+    expect(after.env.CLAUDE_CODE_USE_GATEWAY).toBeUndefined();
+    expect(after.credential).toBeUndefined();
   });
 
-  test("with an API key puts the token in ANTHROPIC_API_KEY only", async () => {
+  test("with an API key hands the token over as the API key, on a descriptor", async () => {
     await setGateway("api_key");
     expect((await claude()).account?.method).toBe("api_key");
-    const env = (await launch("Ada")).env;
-    expect(env.ANTHROPIC_API_KEY).toBe(TOKEN);
-    expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+    const { env, credential } = await launch("Ada");
+    expect(credential).toEqual({ variable: "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR", token: TOKEN });
+    expect(env.CLAUDE_CODE_USE_GATEWAY).toBeUndefined();
+    expect(Object.values(env)).not.toContain(TOKEN);
   });
 
   test("refuses a base URL that is not http(s)", async () => {

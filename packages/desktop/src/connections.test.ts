@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { PublicHostInfo } from "@tomte/contract/api";
+
 import { ConnectionError } from "./connection-error.ts";
 import { createConnections, type Connections, type ProfileView } from "./connections.ts";
 import type { HostClient } from "./host-api.ts";
@@ -17,6 +19,13 @@ const running = (clientUrl = LOCAL.clientUrl, token = LOCAL.token): HostState =>
 const WORK = "https://work.example.com";
 const HOME = "https://home.example.com";
 
+const compatibleInfo: PublicHostInfo = {
+  version: "1",
+  shellApi: { min: 1, max: 1 },
+  mode: "remote",
+  capabilities: { reveal: false, headedBrowser: false, browserSandbox: false },
+};
+
 interface World {
   connections: Connections;
   store: ProfileStore;
@@ -25,7 +34,11 @@ interface World {
   /** Origins the fake host client answers for; others are unreachable. */
   hosts: Map<
     string,
-    { apiVersionError?: string; revoke?: "revoked" | "already-revoked" | "down"; pair?: string }
+    {
+      shellApi?: { min: number; max: number };
+      revoke?: "revoked" | "already-revoked" | "down";
+      pair?: string;
+    }
   >;
   vaultAvailable: { value: boolean };
   /** The local host state, which the controller reads at every use. */
@@ -54,14 +67,8 @@ function world(): World {
     async checkHost(origin) {
       const entry = hosts.get(origin);
       if (!entry) throw new ConnectionError(`Could not reach the host at ${origin}: down`);
-      if (entry.apiVersionError) throw new ConnectionError(entry.apiVersionError);
       log.push(`check ${origin}`);
-      return {
-        version: "1",
-        apiVersion: 1,
-        mode: "remote",
-        capabilities: { reveal: false, headedBrowser: false, browserSandbox: false },
-      };
+      return { ...compatibleInfo, shellApi: entry.shellApi ?? compatibleInfo.shellApi };
     },
     async pair(origin, code) {
       const entry = hosts.get(origin);
@@ -131,10 +138,13 @@ describe("add", () => {
     expect((await w.store.read()).profiles).toEqual([]);
   });
 
-  test("stores nothing and pairs nothing on a version mismatch", async () => {
-    w.hosts.set(WORK, { apiVersionError: "Update the host." });
+  test("stores nothing and pairs nothing when the host's shell API is out of range, saying which side to update", async () => {
+    w.hosts.set(WORK, { shellApi: { min: 0, max: 0 } });
     await expect(add()).rejects.toThrow("Update the host.");
+    w.hosts.set(WORK, { shellApi: { min: 2, max: 2 } });
+    await expect(add()).rejects.toThrow("Update the desktop app.");
     expect((await w.store.read()).profiles).toEqual([]);
+    expect(w.log).toEqual([`check ${WORK}`, `check ${WORK}`]);
   });
 
   test("refuses before pairing when tokens cannot be stored safely", async () => {
@@ -171,14 +181,21 @@ describe("connect", () => {
     expect((await w.store.read()).active).toBe(LOCAL_ID);
   });
 
-  test("a version mismatch changes nothing: no sign-in, no load, same active profile", async () => {
+  test("a host out of range still connects, and the list says which side to update", async () => {
     const { id } = await add();
-    await w.connections.connect(LOCAL_ID);
-    w.hosts.set(WORK, { apiVersionError: "Update the desktop app." });
+    w.hosts.set(WORK, { shellApi: { min: 2, max: 3 } });
     w.log.length = 0;
-    await expect(w.connections.connect(id)).rejects.toThrow("Update the desktop app.");
-    expect(w.log).toEqual([`signIn ${LOCAL.clientUrl} local-token`, `load ${LOCAL.clientUrl}`]);
-    expect(names(await w.connections.list())).toEqual(["This computer*", "Work"]);
+    await w.connections.connect(id);
+    expect(w.log).toEqual([`check ${WORK}`, `signIn ${WORK} token-1`, `load ${WORK}`]);
+    expect((await w.connections.list()).map((p) => p.update)).toEqual([undefined, "update-app"]);
+
+    w.hosts.set(WORK, { shellApi: { min: 0, max: 0 } });
+    await w.connections.connect(id);
+    expect((await w.connections.list())[1]!.update).toBe("update-host");
+
+    w.hosts.set(WORK, { shellApi: { min: 0, max: 4 } });
+    await w.connections.connect(id);
+    expect((await w.connections.list())[1]!.update).toBeUndefined();
   });
 
   test("puts the window back when loading fails halfway", async () => {
@@ -186,7 +203,7 @@ describe("connect", () => {
     const failing = createConnections({
       store: w.store,
       host: {
-        checkHost: async () => ({}) as never,
+        checkHost: async () => compatibleInfo,
         pair: async () => ({}) as never,
         revoke: async () => "revoked",
       },
@@ -277,6 +294,16 @@ describe("start", () => {
     expect(names(await next.list())).toEqual(["This computer", "Work*"]);
   });
 
+  test("savedActive names what start is about to show, without showing it", async () => {
+    expect(await w.connections.savedActive()).toBe(LOCAL_ID);
+    const { id } = await add();
+    await w.connections.connect(id);
+    const next = createConnections({ ...restart(), store: w.store });
+    w.log.length = 0;
+    expect(await next.savedActive()).toBe(id);
+    expect(w.log).toEqual([]);
+  });
+
   test("falls back to this computer with a message, keeping the saved choice", async () => {
     const { id } = await add();
     await w.connections.connect(id);
@@ -294,7 +321,7 @@ describe("start", () => {
         checkHost: async (origin: string) => {
           if (!w.hosts.has(origin))
             throw new ConnectionError(`Could not reach the host at ${origin}: down.`);
-          return {} as never;
+          return compatibleInfo;
         },
         pair: async () => ({}) as never,
         revoke: async () => "revoked" as const,
@@ -309,6 +336,53 @@ describe("start", () => {
   }
 });
 
+describe("followTargets", () => {
+  const ids = async () => (await w.connections.followTargets()).map((t) => `${t.id} ${t.name}`);
+
+  test("lists the running local host first, then every profile, whichever the window shows", async () => {
+    const work = await add();
+    const home = await add(HOME, "x", "Home");
+    await w.connections.connect(home.id);
+    expect(await w.connections.followTargets()).toEqual([
+      {
+        id: LOCAL_ID,
+        name: "This computer",
+        origin: "http://127.0.0.1:4100",
+        token: "local-token",
+      },
+      { id: work.id, name: "Work", origin: WORK, token: "token-1" },
+      { id: home.id, name: "Home", origin: HOME, token: "token-2" },
+    ]);
+  });
+
+  test("leaves the local host out while it is starting or stopped, and a profile whose token cannot be read", async () => {
+    const work = await add();
+    w.local.state = { status: "starting" };
+    expect(await ids()).toEqual([`${work.id} Work`]);
+    w.local.state = { status: "stopped", reason: "boom" };
+    expect(await ids()).toEqual([`${work.id} Work`]);
+    w.store.token = async () => {
+      throw new ConnectionError("no credential store");
+    };
+    expect(await ids()).toEqual([]);
+  });
+});
+
+describe("connect with a path", () => {
+  test("loads that path of a remote host and of the local one", async () => {
+    const { id } = await add();
+    w.log.length = 0;
+    await w.connections.connect(id, "/bots/b1");
+    expect(w.log).toEqual([`check ${WORK}`, `signIn ${WORK} token-1`, `load ${WORK}/bots/b1`]);
+    w.log.length = 0;
+    await w.connections.connect(LOCAL_ID, "/bots/b2");
+    expect(w.log).toEqual([
+      `signIn ${LOCAL.clientUrl} local-token`,
+      "load http://127.0.0.1:4100/bots/b2",
+    ]);
+  });
+});
+
 describe("the local host changes", () => {
   const restarted = running("http://127.0.0.1:4200/", "new-token");
 
@@ -320,6 +394,15 @@ describe("the local host changes", () => {
       "signIn http://127.0.0.1:4200/ new-token",
       "load http://127.0.0.1:4200/",
     ]);
+  });
+
+  test("shown while paused: the window shows that and the list has no origin", async () => {
+    w.local.state = { status: "paused" };
+    w.log.length = 0;
+    await w.connections.localChanged();
+    expect(w.log).toEqual(["notRunning paused"]);
+    expect((await w.connections.list())[0]).toMatchObject({ id: LOCAL_ID, origin: "" });
+    expect(await w.connections.followTargets()).toEqual([]);
   });
 
   test("shown while stopped or starting: the window shows that, and the list has no origin", async () => {

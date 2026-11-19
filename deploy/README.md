@@ -6,17 +6,18 @@ Remote mode is Linux-only ([ADR-0006](../docs/adr/0006-remote-mode-is-linux-only
 
 ## What the kit sets up
 
-| Part             | Where                                                                                                                                                                                                                                           |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| System user      | `tomte` (user and group), home `/var/lib/tomte`, shell `/usr/sbin/nologin`                                                                                                                                                                      |
-| Data root        | `/var/lib/tomte`, owner `tomte:tomte`, mode `0700`                                                                                                                                                                                              |
-| Binary           | `/usr/local/bin/tomte-host`, `root:root`, mode `0755`                                                                                                                                                                                           |
-| Settings         | `/etc/tomte/tomte.env`, `root:root`, mode `0644`. Non-secret only: `TOMTE_HOST`, `TOMTE_PORT`, `TOMTE_PUBLIC_URL`, `TOMTE_ALLOW_PLAIN_HTTP`, and, if you add it, `TOMTE_PAUSE_AFTER_ABSENCE_DAYS` ([below](#pause-routines-when-you-are-away)). |
-| Secrets key      | A systemd credential named `secrets-key`: 32 random bytes in `/etc/credstore.encrypted/tomte.secrets-key`, encrypted with `systemd-creds`                                                                                                       |
-| Unit             | `/etc/systemd/system/tomte.service`, enabled, `Restart=always`                                                                                                                                                                                  |
-| Claude CLI       | Installed by `tomte-host install-cli` into the data root                                                                                                                                                                                        |
-| Browser engine   | Installed by `tomte-host install-browser` into the data root (x86_64 only, see below)                                                                                                                                                           |
-| Sandbox packages | `bubblewrap` and `socat`, installed with `apt-get` or `dnf` when missing                                                                                                                                                                        |
+| Part             | Where                                                                                                                                                                                                                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| System user      | `tomte` (user and group), home `/var/lib/tomte`, shell `/usr/sbin/nologin`                                                                                                                                                                                                                               |
+| Data root        | `/var/lib/tomte`, owner `tomte:tomte`, mode `0700`                                                                                                                                                                                                                                                       |
+| Binary           | `/usr/local/bin/tomte-host`, `root:root`, mode `0755`                                                                                                                                                                                                                                                    |
+| Settings         | `/etc/tomte/tomte.env`, `root:root`, mode `0644`. Non-secret only: `TOMTE_HOST`, `TOMTE_PORT`, `TOMTE_PUBLIC_URL`, `TOMTE_ALLOW_PLAIN_HTTP`, and, if you add it, `TOMTE_PAUSE_AFTER_ABSENCE_DAYS` ([below](#pause-routines-when-you-are-away)) and `TOMTE_MAX_UPLOAD_MIB` ([below](#upload-size-limit)). |
+| Secrets key      | A systemd credential named `secrets-key`: 32 random bytes in `/etc/credstore.encrypted/tomte.secrets-key`, encrypted with `systemd-creds`                                                                                                                                                                |
+| Unit             | `/etc/systemd/system/tomte.service`, enabled, `Restart=always`                                                                                                                                                                                                                                           |
+| Update helper    | `/etc/tomte/update.conf` (`root:root`, mode `0644`) and the units `tomte-update.path` and `tomte-update.service`, enabled when the install came from a release ([below](#updating-from-the-web-ui))                                                                                                      |
+| Claude CLI       | Installed by `tomte-host install-cli` into the data root                                                                                                                                                                                                                                                 |
+| Browser engine   | Installed by `tomte-host install-browser` into the data root (x86_64 only, see below)                                                                                                                                                                                                                    |
+| Sandbox packages | `bubblewrap` and `socat`, installed with `apt-get` or `dnf` when missing                                                                                                                                                                                                                                 |
 
 The unit starts the host as `tomte` with fixed flags: `--mode remote --data-root /var/lib/tomte --secrets-key-file %d/secrets-key`. `%d` is the credentials directory systemd creates for the service, `/run/credentials/tomte.service`. The host reads the key from that file only. It never reads the key from the environment.
 
@@ -25,7 +26,7 @@ Supported targets are systemd Linux on x86_64 and aarch64. The kit was run on Ub
 ## Prerequisites
 
 - A server with systemd, root access over SSH, and outbound internet access (the installer downloads the Claude CLI and the browser engine, and the host talks to Anthropic and to your integrations' providers).
-- `curl`, `sha256sum`, `systemctl`, `systemd-run`, `journalctl`, `runuser`, `useradd`, `getent`, `install`, `mktemp` and `head`. The installer stops before it changes anything when one is missing.
+- `curl`, `sha256sum`, `systemctl`, `systemd-run`, `journalctl`, `runuser`, `useradd`, `getent`, `install`, `mktemp` and `head`, plus `openssl` (3.0 or newer) and `base64` for a release install, which verifies the release signature. The installer stops before it changes anything when one is missing.
 - A host binary for the server: either a [GitHub Release](#install-from-a-github-release) of this project (the default, the installer downloads and verifies it), or a `tomte-host-linux-x64` / `tomte-host-linux-arm64` that you built with `bun run build:host linux-x64` (or `linux-arm64`, output in `dist/host/`) and host yourself ([Install your own binary](#install-your-own-binary)).
 - For HTTPS with Caddy: a domain name you control. For the Tailscale option: a tailnet.
 
@@ -71,16 +72,16 @@ This is weaker. Every program on the server regains unprivileged user namespaces
 
 ### Install from a GitHub Release
 
-A release publishes the five host binaries, `SHA256SUMS` (the checksum of every other file), `install.sh` and `tomte.service`. The `install.sh` attached to a release already knows its repository. Download it on the server, read it, and run it as root:
+A release publishes the five host binaries, `SHA256SUMS` (the checksum of every other file, `release.json` included), `SHA256SUMS.sig` (its Ed25519 signature), `release.json` (the version, shell API range and database schema version), `install.sh` and `tomte.service`. The `install.sh` attached to a release already knows its repository. Download it on the server, read it, and run it as root:
 
 ```sh
 curl -fsSLO https://github.com/<owner>/<repo>/releases/latest/download/install.sh
 sudo bash install.sh --public-url https://tomte.example.com
 ```
 
-Without `--url`, the installer picks the binary for the server's CPU (`x86_64` becomes `linux-x64`, `aarch64` becomes `linux-arm64`, anything else is refused), downloads it and `SHA256SUMS` from the release over HTTPS (a redirect to plain HTTP is refused), and compares the binary's SHA-256 with the entry for its file name. It aborts before it changes anything when the checksum differs, the entry is missing or the download fails. A script that sits alone, as above, also downloads `tomte.service` from the same release and checks it against `SHA256SUMS`. A script run from a checkout of this repository uses the `tomte.service` next to it.
+Without `--url`, the installer picks the binary for the server's CPU (`x86_64` becomes `linux-x64`, `aarch64` becomes `linux-arm64`, anything else is refused) and downloads `SHA256SUMS`, its Ed25519 signature `SHA256SUMS.sig`, `release.json` and the binary from the release over HTTPS (a redirect to plain HTTP is refused). It verifies the signature against the release public key pinned in the script itself (`RELEASE_PUBLIC_KEY`, with `openssl`, so OpenSSL 3 or newer is required), then checks `release.json` and the binary against the signed `SHA256SUMS`. It aborts before it changes anything when the signature is invalid, a checksum differs, an entry is missing or the download fails. A script that sits alone, as above, also downloads `tomte.service` from the same release and checks it the same way. A script run from a checkout of this repository uses the `tomte.service` next to it.
 
-`SHA256SUMS` comes from the same place as the binary, so it catches a corrupted or truncated download, not a compromised release. To check a release against something you trust, compare `SHA256SUMS` with a value published elsewhere, or build the binary yourself and use `--url`.
+The key is part of the script you read and run, not something the download supplies, so a compromised download channel cannot pass off its own `SHA256SUMS`. The copy of `install.sh` in the source tree has no key pinned yet and refuses to install from a release until the owner generates the key pair and pins the public key (`docs/release/signing.md`, "One-time setup"). A signature does not say which release is newest: pin the one you want with `--version`.
 
 | Flag                  | Meaning                                                                                                                                                                                                            |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -137,6 +138,16 @@ After the unit is active, the installer runs `bwrap --unshare-all --die-with-par
 If the check fails, the installer prints a warning that says bot shell commands and browser bots are unavailable, shows the check's output, and finishes anyway. On Ubuntu with the sysctl set to 1, the warning points at [Ubuntu user namespaces](#ubuntu-user-namespaces). A failed check does not stop the host. The host and its web UI run, but no bot runs a shell command.
 
 `GET /api/host-info` reports `browserSandbox: true` whenever `bwrap` and `socat` are on the `PATH`, even when user namespaces are blocked. The installer's check is the real test, so trust it over the capability flag.
+
+## Updating from the web UI
+
+A host installed from a release can replace its own binary without the service user ever being able to write it ([ADR-0014](../docs/adr/0014-root-update-helper.md)). The host asks for an update by writing `/var/lib/tomte/updates/request.json`, a version number or "rollback" and nothing else. `tomte-update.path` sees the file and starts `tomte-update.service`, which runs `tomte-host apply-update` as root. It reads the repository and the release public key from `/etc/tomte/update.conf` (written by the installer from its own pinned key, root-owned, never from a download or from the request), downloads and verifies the release, keeps one previous binary as `/usr/local/bin/tomte-host.prev`, swaps the new one in, restarts `tomte` and requires 7 stable seconds of `is-active` plus `/api/host-info` reporting the new version. If that fails it puts the previous binary back, and the database snapshot taken before the update when there is one, and writes `/var/lib/tomte/updates/result.json` with the reason.
+
+In the web UI, Settings, About, Updates offers **Update when idle** (new messages are refused with "Updating, back in a minute" and scheduled routines wait until running work has finished; after 30 minutes it keeps waiting and offers **Update now**), **Update now** (running work is interrupted and not run again) and **Cancel**. The host copies its database to `updates/pre-<version>.db` before it writes the request. A failed update shows a banner ("Update to 0.4.2 failed, rolled back to 0.4.1") on every page and sends one Telegram message. "Update automatically when idle" is off unless you turn it on.
+
+After an update, Updates also offers **Roll back to <version>** (the one previous binary, kept as `/usr/local/bin/tomte-host.prev`) while that version can open the current database. If the update migrated the database, the previous version cannot, and the button is **Restore <version> and its database…** instead: it shows when `updates/pre-<version>.db` was taken, says that everything changed since is lost, and restores that copy only after you confirm. Rolling back drains like an update. The release you rolled back from is then skipped: it is not offered as an update and automatic updates do not install it (the setting itself is unchanged; the skip is the `skipped` version in `updates/upkeep.json`) until the feed names a newer release. Updates says so, and **Install <version> anyway** installs it explicitly. A failed rollback shows a banner ("Rollback to 0.4.1 failed") until dismissed.
+
+Follow a run with `journalctl -u tomte-update.service`. A binary installed with `--url` has no release to update from, so the installer writes none of this and the host's updates are "unmanaged". `tomte-update.path` is level-triggered: if the helper fails before it consumes a request more than five times in ten seconds, systemd stops the path unit; `sudo systemctl reset-failed tomte-update.path tomte-update.service && sudo systemctl restart tomte-update.path` starts it again.
 
 ## HTTPS with Caddy
 
@@ -243,7 +254,11 @@ The installer prints the same command with `sudo -u tomte -H` instead of `runuse
 
 ## Sign in the Claude CLI
 
-Bots and routines run the Claude CLI on the server, so the CLI must be signed in once. Sign in over SSH with a terminal (an SSH session with a TTY), never through the service:
+Bots and routines run the Claude CLI on the server, so the CLI must be signed in once.
+
+The first way is the web UI. Pair a device, open Settings, Models, and use Sign in under Claude. The page shows a sign-in link to open in your own browser and a field for the code it gives you. The sign-in lands in the same config directory as the SSH one below, and the page shows it as soon as it completes.
+
+The fallback is SSH. Sign in over SSH with a terminal (an SSH session with a TTY), never through the service:
 
 ```sh
 sudo -u tomte -H /usr/local/bin/tomte-host auth-login \
@@ -253,7 +268,7 @@ sudo -u tomte -H /usr/local/bin/tomte-host auth-login \
 
 With no `sudo`, use `runuser -u tomte -- env HOME=/var/lib/tomte /usr/local/bin/tomte-host auth-login …` with the same flags. Follow the CLI's prompts, which print a URL to open in your own browser. After the CLI finishes, the host runs `auth status` once more and exits non-zero if the sign-in is not visible to it.
 
-The SSH login and the unit share one config directory, `/var/lib/tomte/claude`. Both run as `tomte`, and the host sets `CLAUDE_CONFIG_DIR` for every Claude CLI child itself. The sign-in lands in `claude/.credentials.json` in that directory. Every bot's sandbox denies that directory, so a bot cannot read the sign-in ([ADR-0006](../docs/adr/0006-remote-mode-is-linux-only.md)). The unit's `StandardInput=null` means `auth-login` can never run through the service.
+The web sign-in and the SSH login share one config directory, `/var/lib/tomte/claude`. Both run as `tomte`, and the host sets `CLAUDE_CONFIG_DIR` for every Claude CLI child itself. The sign-in lands in `claude/.credentials.json` in that directory. Every bot's sandbox denies that directory, so a bot cannot read the sign-in ([ADR-0006](../docs/adr/0006-remote-mode-is-linux-only.md)). The unit's `StandardInput=null` means `auth-login` can never run through the service.
 
 Check the sign-in with the same flags:
 
@@ -264,6 +279,8 @@ sudo -u tomte -H /usr/local/bin/tomte-host auth-status \
 ```
 
 Anthropic's terms for your Claude subscription apply to unattended and remote use. Read the [Consumer Terms of Service](https://www.anthropic.com/legal/consumer-terms) and the [Usage Policy](https://www.anthropic.com/legal/aup) and decide whether they cover how you run tomte. The consumer terms, as published on the day this guide was written, restrict access through automated or non-human means (a bot or a script) unless Anthropic permits it. Whether tomte's use of the CLI falls under that is your decision, not the kit's.
+
+Tomte ignores `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` and `CLAUDE_CODE_OAUTH_TOKEN` in the service's environment, in remote and local mode alike, so a variable left in `/etc/tomte/tomte.env` or the unit never bills a bot by accident. Settings, Models names each one it ignored and shows each sign-in method's billing line and terms-risk line. To bill by API on purpose, set the custom provider on that page; it passes its own base URL and token to the CLI, and nothing else does.
 
 ## OAuth integrations
 
@@ -342,6 +359,16 @@ The default is `0`: the pause is off. A negative or non-integer value stops the 
 - **The pause.** After that many days without you, every active routine is paused with the reason "no activity for N days", and each affected bot gets a needs-you item naming them. A routine that failed five runs in a row, or that you switched off, is left as it is. A run already working finishes.
 - **Your return.** Your first request after a pause resumes the routines the absence stopped, without catching up on the occurrences you missed, and closes the two items. Routines paused for failures or by you stay paused.
 
+## Upload size limit
+
+A bot's Files section and the chat's attach button upload files to the bot's files folder on the server, streamed to disk. One file may be at most 1 GiB by default. On a small disk, lower it: set `TOMTE_MAX_UPLOAD_MIB` in `/etc/tomte/tomte.env` (`--max-upload-mib` on the command line wins) to a whole number of MiB, at least 1, then run `sudo systemctl restart tomte`:
+
+```sh
+TOMTE_MAX_UPLOAD_MIB=200
+```
+
+The limit is per file, not per folder or per day, so it does not stop a disk from filling. A file over it is refused with the limit named, and a folder's other files still go up. A reverse proxy in front of the host must allow bodies that large and not buffer them: in the `Caddyfile` kit's `reverse_proxy` this is the default; with nginx set `client_max_body_size` to the limit or higher and `proxy_request_buffering off`.
+
 ## Operate the service
 
 ```sh
@@ -357,12 +384,12 @@ After you edit `/etc/tomte/tomte.env`, restart the unit. `Restart=always` brings
 **Uninstall.** The installer has no uninstall mode. Remove the parts by hand. This keeps the data root:
 
 ```sh
-sudo systemctl disable --now tomte
-sudo rm -f /etc/systemd/system/tomte.service
+sudo systemctl disable --now tomte tomte-update.path
+sudo rm -f /etc/systemd/system/tomte.service /etc/systemd/system/tomte-update.service /etc/systemd/system/tomte-update.path
 sudo rm -rf /etc/systemd/system/tomte.service.d
 sudo systemctl daemon-reload
-sudo rm -f /usr/local/bin/tomte-host
-sudo rm -rf /etc/tomte
+sudo rm -f /usr/local/bin/tomte-host /usr/local/bin/tomte-host.prev
+sudo rm -rf /etc/tomte /var/lib/tomte-update
 ```
 
 The key stays in `/etc/credstore.encrypted/tomte.secrets-key` (or `/etc/credstore/tomte.secrets-key`) so a later install still opens `secrets.enc`. To delete everything, including every bot, secret and the Claude sign-in, also run `sudo rm -f /etc/credstore.encrypted/tomte.secrets-key /etc/credstore/tomte.secrets-key`, `sudo rm -rf /var/lib/tomte` and `sudo userdel tomte`. This cannot be undone.

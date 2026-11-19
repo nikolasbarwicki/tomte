@@ -4,7 +4,8 @@ name: Release
 #
 # verify   the tag is vMAJOR.MINOR.PATCH[-prerelease] and names the host's VERSION (scripts/release.ts tag)
 # host     per target, on a native runner: build the host binary, smoke-run it, upload it as `release-host-<target>`
-# publish  merges every `release-*` artifact into one folder, writes SHA256SUMS over it, creates the Release
+# publish  merges every `release-*` artifact into one folder, writes release.json and SHA256SUMS over it, signs SHA256SUMS
+#          with the RELEASE_SIGNING_KEY secret, checks the folder, creates the Release
 #
 # desktop  per OS, on a native runner: package the installers around the host job's own binary (no rebuild), signed and
 #          (macOS) notarized when that OS's signing secrets exist, check that the host in every app is that binary, upload
@@ -74,6 +75,13 @@ jobs:
           WINDOWS_CERTIFICATE_PFX: ${{ secrets.WINDOWS_CERTIFICATE_PFX != '' && 'set' || '' }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD != '' && 'set' || '' }}
         run: bun scripts/signing.ts plan
+
+      # Fails before anything is built unless the release public key is pinned in deploy/install.sh and the
+      # RELEASE_SIGNING_KEY secret exists (only whether it is set reaches the step). The `publish` job signs.
+      - name: Release signing key
+        env:
+          RELEASE_SIGNING_KEY_SET: ${{ secrets.RELEASE_SIGNING_KEY != '' && 'set' || '' }}
+        run: bun scripts/release.ts signing-ready
 
   host:
     name: host ${{ matrix.target }}
@@ -265,6 +273,9 @@ jobs:
         with:
           bun-version-file: .bun-version
 
+      # release.ts imports the contract (zod) and, for `manifest`, the host's schema version.
+      - run: bun install --frozen-lockfile
+
       - uses: actions/download-artifact@v8
         with:
           pattern: release-*
@@ -281,10 +292,27 @@ jobs:
           grep -qxF "DEFAULT_REPO=\"$GITHUB_REPOSITORY\"" release/install.sh
           cp deploy/tomte.service release/tomte.service
 
-      # Fails unless all five host binaries and every supported OS's installers and update metadata are there; covers every
-      # file in release/, SHA256SUMS excluded.
+      # What this release says about itself (version, shell API range, schema version), written before the checksums so
+      # the signature covers it.
+      - name: Manifest
+        run: bun scripts/release.ts manifest release "$VERSION"
+
+      # Fails unless all five host binaries, release.json and every supported OS's installers and update metadata are
+      # there; covers every file in release/, SHA256SUMS excluded.
       - name: Checksums
         run: bun scripts/release.ts checksums release "$VERSION"
+
+      # Signs SHA256SUMS with the Ed25519 key in the RELEASE_SIGNING_KEY secret (the only step that sees it) and fails
+      # unless that key is the pair of the public key pinned in deploy/install.sh: a release never ships unsigned or
+      # wrongly signed sums. docs/release/signing.md has the one-time setup.
+      - name: Sign
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: bun scripts/release.ts sign release
+
+      # The folder as it will be published: complete, SHA256SUMS exact, signature valid under the pinned key.
+      - name: Verify release
+        run: bun scripts/release.ts verify-release release "$VERSION"
 
       # A draft until every asset is uploaded, so nobody sees a half-filled Release. A rerun of a failed publish
       # replaces the assets of the Release that already exists.

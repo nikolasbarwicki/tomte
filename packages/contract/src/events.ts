@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { BotAvatar } from "./avatars.ts";
+import { HostStatusEvent } from "./host-status.ts";
 
 const Mentions = z.array(z.object({ id: z.string(), name: z.string() }));
 
@@ -609,6 +610,7 @@ export const HostEvent = z.union([
   BotsEvent,
   ChatEvent,
   IntegrationsEvent,
+  HostStatusEvent,
 ]);
 export type HostEvent = z.infer<typeof HostEvent>;
 

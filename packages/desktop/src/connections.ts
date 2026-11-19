@@ -1,10 +1,17 @@
 import { ConnectionError } from "./connection-error.ts";
-import type { HostClient } from "./host-api.ts";
+import { shellCompat, type HostClient } from "./host-api.ts";
 import { LOCAL_ID, type ProfileStore } from "./profile-store.ts";
 import { parseProfileUrl } from "./profile-url.ts";
 import type { HostState } from "./supervisor.ts";
 
 const LOCAL_NAME = "This computer";
+
+/** What to tell the user when a host's range does not overlap the app's. */
+function updateAdvice(origin: string, update: "update-host" | "update-app"): string {
+  return update === "update-host"
+    ? `The host at ${origin} is too old for this app's connection features. Update the host.`
+    : `The host at ${origin} is newer than this app's connection features understand. Update the desktop app.`;
+}
 
 /** What the Connections page, the application menu and the tray show for one profile. Never carries a token. */
 export interface ProfileView {
@@ -12,6 +19,8 @@ export interface ProfileView {
   name: string;
   origin: string;
   active: boolean;
+  /** Which side to update when the host's shell API range does not overlap this app's, as last seen; absent when it does, or when it has not been read. */
+  update?: "update-host" | "update-app";
 }
 
 export interface ConnectionsDeps {
@@ -33,8 +42,11 @@ export interface ConnectionsDeps {
 
 type ForgetResult = "forgotten" | { unreachable: string };
 
-/** What a connection's host accepts from this app: its client origin and this device's token. Never log the token. */
-export interface HostCredentials {
+/** A host the app follows on its event stream: its client origin and this device's token. Never log the token. */
+export interface FollowTarget {
+  /** `local` for this computer's host, otherwise the profile's id. */
+  id: string;
+  name: string;
   origin: string;
   token: string;
 }
@@ -43,16 +55,18 @@ export interface Connections {
   /** `This computer` first, then the stored profiles in the order they were added. */
   list(): Promise<ProfileView[]>;
   add(input: { name: string; url: string; code: string }): Promise<ProfileView>;
-  /** Version check, sign-in, load, then the choice is saved as the one to open at the next start. */
-  connect(id: string): Promise<void>;
+  /** Reads the host's version range, signs in, loads the window (on `path` of the host when given), then the choice is saved as the one to open at the next start. */
+  connect(id: string, path?: string): Promise<void>;
   /** Revokes this app's device on the host, then forgets the profile. With `withoutRevoking` the host is not asked. */
   forget(id: string, options?: { withoutRevoking?: boolean }): Promise<ForgetResult>;
+  /** The profile saved as active, `local` when none is or the store cannot be read: what `start` is about to show. */
+  savedActive(): Promise<string>;
   /** Connects to the profile saved as active. Returns a message when that failed and this computer is shown instead. */
   start(): Promise<string | undefined>;
   /** The local host's state changed (it started, stopped or restarted): when `local` is shown, shows it again as it now is. */
   localChanged(): Promise<void>;
-  /** The credentials of the connection the window shows; undefined while that is this computer and its host is not running. */
-  credentials(): Promise<HostCredentials | undefined>;
+  /** Every host to follow: this computer's while it runs, then every profile, whichever one the window shows. A profile whose token cannot be read is left out. */
+  followTargets(): Promise<FollowTarget[]>;
   /** Calls `listener` after every change to the list or the active profile. */
   onChange(listener: () => void): void;
 }
@@ -62,6 +76,8 @@ export function createConnections(deps: ConnectionsDeps): Connections {
   const { store, host } = deps;
   const listeners: (() => void)[] = [];
   let current = LOCAL_ID;
+  /** The last verdict `shellCompat` gave each remote profile, by id. A profile read nothing from stays out. */
+  const outOfRange = new Map<string, "update-host" | "update-app">();
   let queue: Promise<unknown> = Promise.resolve();
 
   const serial = <T>(task: () => Promise<T>): Promise<T> => {
@@ -71,24 +87,26 @@ export function createConnections(deps: ConnectionsDeps): Connections {
   };
   const changed = () => listeners.forEach((listener) => listener());
 
-  async function show(clientUrl: string, token: string): Promise<void> {
+  async function show(clientUrl: string, token: string, path?: string): Promise<void> {
     await deps.signIn(clientUrl, token);
-    await deps.load(clientUrl);
+    await deps.load(path === undefined ? clientUrl : new URL(path, clientUrl).href);
   }
 
-  async function showLocal(): Promise<void> {
+  async function showLocal(path?: string): Promise<void> {
     const state = deps.local();
-    if (state.status === "running") await show(state.sidecar.clientUrl, state.sidecar.token);
+    if (state.status === "running") await show(state.sidecar.clientUrl, state.sidecar.token, path);
     else await deps.showNotRunning(state);
     current = LOCAL_ID;
   }
 
-  async function showProfile(id: string): Promise<void> {
-    if (id === LOCAL_ID) return showLocal();
+  async function showProfile(id: string, path?: string): Promise<void> {
+    if (id === LOCAL_ID) return showLocal(path);
     const profile = (await store.read()).profiles.find((p) => p.id === id);
     if (!profile) throw new ConnectionError("That connection no longer exists.");
-    await host.checkHost(profile.origin);
-    await show(profile.origin, await store.token(id));
+    const compat = shellCompat(await host.checkHost(profile.origin));
+    if (compat === "ok") outOfRange.delete(id);
+    else outOfRange.set(id, compat);
+    await show(profile.origin, await store.token(id), path);
     current = id;
   }
 
@@ -97,10 +115,10 @@ export function createConnections(deps: ConnectionsDeps): Connections {
     await showProfile(previous).catch(() => showLocal().catch(() => {}));
   }
 
-  async function connectNow(id: string): Promise<void> {
+  async function connectNow(id: string, path?: string): Promise<void> {
     const previous = current;
     try {
-      await showProfile(id);
+      await showProfile(id, path);
     } catch (error) {
       if (current !== id) await restore(previous);
       throw error;
@@ -112,7 +130,16 @@ export function createConnections(deps: ConnectionsDeps): Connections {
   async function view(): Promise<ProfileView[]> {
     const { profiles } = await store.read();
     return [{ id: LOCAL_ID, name: LOCAL_NAME, origin: localOrigin() ?? "" }, ...profiles].map(
-      (p) => ({ id: p.id, name: p.name, origin: p.origin, active: p.id === current }),
+      (p) => {
+        const update = outOfRange.get(p.id);
+        return {
+          id: p.id,
+          name: p.name,
+          origin: p.origin,
+          active: p.id === current,
+          ...(update && { update }),
+        };
+      },
     );
   }
 
@@ -147,6 +174,7 @@ export function createConnections(deps: ConnectionsDeps): Connections {
       }
     }
     await store.remove(id);
+    outOfRange.delete(id);
     await deps.clearOrigin(profile.origin);
     if (current === id) {
       await showLocal();
@@ -174,7 +202,8 @@ export function createConnections(deps: ConnectionsDeps): Connections {
         if (existing)
           throw new ConnectionError(`${origin} is already added as "${existing.name}".`);
         await store.assertCanStore();
-        await host.checkHost(origin);
+        const compat = shellCompat(await host.checkHost(origin));
+        if (compat !== "ok") throw new ConnectionError(updateAdvice(origin, compat));
         const paired = await host.pair(origin, input.code.trim(), deps.deviceName);
         let stored;
         try {
@@ -193,9 +222,11 @@ export function createConnections(deps: ConnectionsDeps): Connections {
         return { id: stored.id, name, origin, active: false };
       }),
 
-    connect: (id) => serial(() => connectNow(id)),
+    connect: (id, path) => serial(() => connectNow(id, path)),
 
     forget: (id, options) => serial(() => forgetNow(id, options?.withoutRevoking ?? false)),
+
+    savedActive: async () => (await store.read().catch(() => undefined))?.active ?? LOCAL_ID,
 
     start: () =>
       serial(async () => {
@@ -229,15 +260,21 @@ export function createConnections(deps: ConnectionsDeps): Connections {
         changed();
       }),
 
-    async credentials() {
-      if (current === LOCAL_ID) {
-        const state = deps.local();
-        return state.status === "running"
-          ? { origin: new URL(state.sidecar.clientUrl).origin, token: state.sidecar.token }
-          : undefined;
+    async followTargets() {
+      const targets: FollowTarget[] = [];
+      const state = deps.local();
+      if (state.status === "running")
+        targets.push({
+          id: LOCAL_ID,
+          name: LOCAL_NAME,
+          origin: new URL(state.sidecar.clientUrl).origin,
+          token: state.sidecar.token,
+        });
+      for (const { id, name, origin } of (await store.read()).profiles) {
+        const token = await store.token(id).catch(() => undefined);
+        if (token !== undefined) targets.push({ id, name, origin, token });
       }
-      const profile = (await store.read()).profiles.find((p) => p.id === current);
-      return profile && { origin: profile.origin, token: await store.token(profile.id) };
+      return targets;
     },
 
     onChange: (listener) => void listeners.push(listener),

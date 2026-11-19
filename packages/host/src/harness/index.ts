@@ -5,23 +5,20 @@ import { join } from "node:path";
 
 import type { McpServerConfig, Options, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
 
+import { GATEWAY_TOKEN_ENV } from "./claude-access.ts";
+
 export {
+  BILLING_ENV,
   VERSION,
   adoptClaudeConfigDir,
   claudeConfigDir,
   createClaudeAccess,
+  isAuthFailure,
   remoteLoginCommand,
   type ClaudeAccess,
-  type SignInState,
 } from "./claude-access.ts";
-export {
-  authCommand,
-  cmdExeSpawner,
-  installManagedCli,
-  isMusl,
-  resolveCli,
-  type ResolvedCli,
-} from "./cli.ts";
+export { authCommand, installManagedCli, isMusl, resolveCli, type ResolvedCli } from "./cli.ts";
+export { spawnOptions } from "./spawn.ts";
 
 /** An HTTP MCP server owned by the host; the token travels as a bearer header, never in argv. */
 interface HostMcpServer {
@@ -157,6 +154,10 @@ export const claudeHarness: Harness = {
                 allowUnsandboxedCommands: false,
                 network: { allowedDomains: ["*"] },
                 filesystem: { denyRead: isolation.denyRead },
+                // The CLI keeps the custom provider's token for its own API calls; its shell commands run without it.
+                credentials: {
+                  envVars: GATEWAY_TOKEN_ENV.map((name) => ({ name, mode: "deny" as const })),
+                },
               },
             }
           : {}),

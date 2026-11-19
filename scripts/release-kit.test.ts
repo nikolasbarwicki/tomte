@@ -1,15 +1,23 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { generateKeyPairSync } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
   CHECKSUM_FILE,
+  checkSignature,
   formatChecksums,
+  MANIFEST_FILE,
+  parsePinnedKey,
   parseTag,
   releaseForTag,
+  SIGNATURE_FILE,
+  signChecksums,
   writeChecksums,
+  writeManifest,
 } from "./release-kit.ts";
+import { generateTestKey } from "./release-test-kit.ts";
 
 describe("parseTag", () => {
   test("a plain version is a release, a suffix makes it a pre-release", () => {
@@ -85,5 +93,94 @@ describe("writeChecksums", () => {
     await expect(writeChecksums(dir, ["a.bin", "b.bin"])).rejects.toThrow("missing from");
     await mkdir(join(dir, "nested"));
     await expect(writeChecksums(dir, [])).rejects.toThrow("is not a file");
+  });
+});
+
+describe("the release signature", () => {
+  const key = generateTestKey();
+  let dir = "";
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "release-sign-"));
+    await writeFile(join(dir, "a.bin"), "hello");
+    await writeChecksums(dir, ["a.bin"]);
+  });
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
+  test("signs SHA256SUMS with a raw 64-byte signature that the pinned key verifies, and a rerun's sums never list it", async () => {
+    await signChecksums(dir, key.privateKeyPem, key.publicKey);
+    const signature = await readFile(join(dir, SIGNATURE_FILE));
+    const sums = await readFile(join(dir, CHECKSUM_FILE));
+    expect(signature.length).toBe(64);
+    expect(checkSignature(sums, signature, key.publicKey)).toBe(true);
+    expect(await writeChecksums(dir, ["a.bin"])).not.toContain(SIGNATURE_FILE);
+  });
+
+  test("a tampered SHA256SUMS or a signature by another key does not verify", async () => {
+    await signChecksums(dir, key.privateKeyPem, key.publicKey);
+    const signature = await readFile(join(dir, SIGNATURE_FILE));
+    const sums = await readFile(join(dir, CHECKSUM_FILE));
+    const tampered = Buffer.concat([sums, Buffer.from("x")]);
+    expect(checkSignature(tampered, signature, key.publicKey)).toBe(false);
+    expect(checkSignature(sums, signature, generateTestKey().publicKey)).toBe(false);
+    expect(checkSignature(sums, signature.subarray(1), key.publicKey)).toBe(false);
+  });
+
+  test("refuses to sign without a key, with a key that is not the pinned one's pair, or with a non-Ed25519 key", async () => {
+    await expect(signChecksums(dir, "  \n", key.publicKey)).rejects.toThrow("is not set");
+    await expect(
+      signChecksums(dir, key.privateKeyPem, generateTestKey().publicKey),
+    ).rejects.toThrow("does not belong to the public key pinned");
+    const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 })
+      .privateKey.export({ type: "pkcs8", format: "pem" })
+      .toString();
+    await expect(signChecksums(dir, rsa, key.publicKey)).rejects.toThrow("not Ed25519");
+    expect(await Bun.file(join(dir, SIGNATURE_FILE)).exists()).toBe(false);
+  });
+});
+
+describe("parsePinnedKey", () => {
+  const key = generateTestKey().publicKey;
+
+  test("reads the pinned key", () => {
+    expect(parsePinnedKey(`set -e\nRELEASE_PUBLIC_KEY="${key}"\n`)).toBe(key);
+  });
+
+  test("an empty pin is the placeholder and refuses", () => {
+    expect(() => parsePinnedKey('RELEASE_PUBLIC_KEY=""\n')).toThrow(
+      "no release public key is pinned",
+    );
+  });
+
+  test("a missing line or a malformed key refuses", () => {
+    expect(() => parsePinnedKey("set -e\n")).toThrow("no RELEASE_PUBLIC_KEY line");
+    expect(() => parsePinnedKey('RELEASE_PUBLIC_KEY="not a key"\n')).toThrow("not the base64");
+  });
+});
+
+describe("writeManifest", () => {
+  let dir = "";
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "release-manifest-"));
+  });
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
+  test("writes release.json with one key per line, version first", async () => {
+    await writeManifest(dir, { version: "0.2.0", shellApi: { min: 1, max: 2 }, schemaVersion: 31 });
+    const text = await readFile(join(dir, MANIFEST_FILE), "utf8");
+    expect(text.split("\n")[1]).toBe('  "version": "0.2.0",');
+    expect(JSON.parse(text)).toEqual({
+      version: "0.2.0",
+      shellApi: { min: 1, max: 2 },
+      schemaVersion: 31,
+    });
+  });
+
+  test("refuses an empty shell API range or a schema version that is not a count", async () => {
+    await expect(
+      writeManifest(dir, { version: "0.2.0", shellApi: { min: 3, max: 2 }, schemaVersion: 1 }),
+    ).rejects.toThrow("is empty");
+    await expect(
+      writeManifest(dir, { version: "0.2.0", shellApi: { min: 1, max: 1 }, schemaVersion: 0 }),
+    ).rejects.toThrow();
   });
 });

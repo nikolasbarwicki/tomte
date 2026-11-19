@@ -19,8 +19,10 @@
     "smoke:loop-ui": "bun scripts/smoke-loop-ui.ts",
     "smoke:scroll-ui": "bun scripts/smoke-scroll-ui.ts",
     "smoke:channels-ui": "bun scripts/smoke-channels-ui.ts",
+    "smoke:files-ui": "bun scripts/smoke-files-ui.ts",
     "smoke:ui": "bun scripts/smoke-ui.ts",
     "eval:loop-routing": "bun scripts/eval-loop-routing.ts",
+    "probe:credential-fd": "bun scripts/probe-credential-fd.ts",
     "typecheck": "bun --filter '*' typecheck && tsc -p scripts",
     "test": "bun test && bun scripts/check-coverage.ts",
     "depcheck": "depcruise packages",
@@ -40,6 +42,7 @@
     "smoke:desktop:update": "bun scripts/smoke-desktop-update.ts"
   },
   "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.318",
     "@commitlint/cli": "^21.2.4",
     "@commitlint/config-conventional": "^21.2.4",
     "@swc/core": "^1.16.22",
@@ -54,7 +57,8 @@
     "oxlint": "1.92.0",
     "oxlint-tsgolint": "7.0.2006",
     "playwright-core": "^1.65.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "zod": "^4.6.7"
   },
   "engines": {
     "bun": ">=1.4.2"

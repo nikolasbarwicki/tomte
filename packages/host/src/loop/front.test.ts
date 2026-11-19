@@ -68,14 +68,19 @@ function openFront({
   session = new FrontSession({
     cli: { path: host.cliPath, source: "CLAUDE_PATH", needsShell: false },
     claude: {
-      env: () => ({}),
-      signInState: () => "unknown",
-      checkSignIn: async () => "unknown",
+      spawnSpec: () => ({ env: {} }),
+      startGate: (start) => start(),
+      status: () => ({ state: "unknown", ignoredEnv: [], checkedAt: 0 }),
+      onChange: () => () => {},
+      recheck: async () => ({ state: "unknown", ignoredEnv: [], checkedAt: 0 }),
+      start: () => {},
       requireSignIn: async () => {},
       usage: async () => ({ available: false, windows: [], checkedAt: 0 }),
       report: () => ({ state: "unknown", account: null, cliVersion: null }),
       gateway: () => undefined,
       setGateway: () => {},
+      hasLongLivedToken: () => false,
+      setLongLivedToken: () => {},
       login: {
         start: async () => ({ url: "" }),
         submit: async () => {},

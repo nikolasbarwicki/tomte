@@ -19,6 +19,9 @@ const Settings = z.object({
       allowUnsandboxedCommands: z.boolean(),
       network: z.record(z.string(), z.unknown()),
       filesystem: z.object({ denyRead: z.array(z.string()) }),
+      credentials: z
+        .object({ envVars: z.array(z.object({ name: z.string(), mode: z.string() })) })
+        .optional(),
     })
     .optional(),
 });
@@ -94,6 +97,33 @@ describe("remote mode shell isolation", () => {
     }
     expect(readDenied(disallowed).sort()).toEqual([...denied].sort());
     expect(disallowed).not.toContain("Bash");
+  });
+
+  test("the custom provider's token is on a descriptor for the CLI, in no environment, and still denied to sandboxed commands", async () => {
+    const h = await start(REMOTE);
+    const TOKEN = "sk-gateway-synthetic-token";
+    for (const auth of ["bearer", "api_key"] as const) {
+      // A bot of its own each time: `launchOf` reads the newest launch once the bot has said something.
+      const ada = h.createBot(`Ada ${auth}`);
+      expect(
+        (
+          await h.ui("/api/providers/claude/gateway", {
+            baseUrl: "https://gateway.example.test",
+            auth,
+            token: TOKEN,
+          })
+        ).status,
+      ).toBe(200);
+      const { sandbox } = await launchOf(h, ada);
+      const launch = h.launches().at(-1)!;
+
+      expect(Object.values(launch.env)).not.toContain(TOKEN);
+      expect(launch.credential?.token).toBe(TOKEN);
+      expect(sandbox!.credentials?.envVars).toEqual([
+        { name: "ANTHROPIC_AUTH_TOKEN", mode: "deny" },
+        { name: "ANTHROPIC_API_KEY", mode: "deny" },
+      ]);
+    }
   });
 
   test("a bot's own directory and files stay readable, every other bot's directory is denied", async () => {

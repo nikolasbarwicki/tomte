@@ -302,6 +302,16 @@ export function waitingRunsOfBot(db: Database, botId: string, now: number): Rout
     .map((r) => toRun(r, now));
 }
 
+/** Every parked run, oldest first. */
+export function waitingRuns(db: Database, now: number): RoutineRun[] {
+  return db
+    .query<RunRow, []>(
+      "SELECT * FROM routine_runs WHERE status = 'waiting' ORDER BY started_at, rowid",
+    )
+    .all()
+    .map((r) => toRun(r, now));
+}
+
 /** Ids of the routine's runs that have not ended: running or waiting. */
 export function unfinishedRunIds(db: Database, routineId: string): string[] {
   return db

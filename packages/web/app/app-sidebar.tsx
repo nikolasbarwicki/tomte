@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/sidebar";
 import { SettingsNav } from "@/features/settings/index.ts";
 import { deleteBot } from "@/host/api.ts";
-import { usePublicHostInfo } from "@/host/hooks.ts";
+import { useHostStatus } from "@/host/hooks.ts";
 import { shortTime } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
 
@@ -140,8 +140,8 @@ export function AppSidebar({
   const shown = isMobile ? "full" : stop;
   const rail = shown === "rail";
   const matchRoute = useMatchRoute();
-  // A remote host whose Claude CLI is signed out cannot run any bot; Settings points at Models, where it says how to sign in.
-  const claudeSignedOut = usePublicHostInfo()?.claude === "signed-out";
+  // A host whose Claude CLI is signed out cannot run any bot; Settings points at Models, where it says how to sign in.
+  const claudeSignedOut = useHostStatus()?.claude.state === "signed-out";
   // On phones the sidebar is a sheet; picking a destination should reveal it.
   const reveal = () => {
     if (isMobile) setOpenMobile(false);

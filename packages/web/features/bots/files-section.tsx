@@ -35,6 +35,7 @@ import { dateTime, fileSize } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
 
 import { deleteFile, revealFile } from "./api.ts";
+import { useFilesUpload } from "./files-upload.tsx";
 
 /** Whether the host can reveal a folder in a file manager; false until the host says so. */
 const useCanReveal = () => usePublicHostInfo()?.capabilities.reveal === true;
@@ -45,13 +46,24 @@ export function Files({ botName }: { botName: string }) {
   const [query, setQuery] = useState("");
   const [opening, startOpening] = useTransition();
   const canReveal = useCanReveal();
+  const upload = useFilesUpload();
   const needle = query.trim().toLowerCase();
   const shown = needle
     ? files.files.filter((f) => f.path.toLowerCase().includes(needle))
     : files.files;
   return (
-    <div className="grid grid-cols-1 gap-3">
-      <p className="text-muted-foreground text-xs">Everything {botName} produced.</p>
+    <div
+      {...upload.dropHandlers}
+      data-dragging={upload.dragging || undefined}
+      className={cn(
+        "grid grid-cols-1 gap-3 rounded-lg transition-shadow",
+        "data-dragging:ring-foreground/30 data-dragging:ring-2 data-dragging:ring-offset-4",
+      )}
+    >
+      <p className="text-muted-foreground text-xs">
+        Everything {botName} produced. Drop files or folders here to add yours.
+      </p>
+      {upload.buttons}
       {files.dir && (
         <div className="bg-muted/60 flex items-center gap-1 rounded-lg py-1 pr-1 pl-2.5">
           <code className="min-w-0 flex-1 truncate text-xs" title={files.dir}>
@@ -66,6 +78,18 @@ export function Files({ botName }: { botName: string }) {
           >
             <CopyIcon />
           </Button>
+          {files.files.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Download as zip"
+              title="Download as zip"
+              nativeButton={false}
+              render={<a href={downloadUrl("")} download />}
+            >
+              <DownloadSimpleIcon />
+            </Button>
+          )}
           {canReveal && (
             <Button
               variant="ghost"
@@ -126,6 +150,7 @@ export function Files({ botName }: { botName: string }) {
 function FileRow({ file: f }: { file: BotFile }) {
   const [pending, startTransition] = useTransition();
   const canReveal = useCanReveal();
+  const folder = f.path.includes("/") ? f.path.slice(0, f.path.lastIndexOf("/")) : undefined;
   const reveal = () =>
     startTransition(async () => {
       await revealFile(f.path);
@@ -180,6 +205,11 @@ function FileRow({ file: f }: { file: BotFile }) {
           <DropdownMenuItem render={<a href={downloadUrl(f.path)} download />}>
             <DownloadSimpleIcon /> Download
           </DropdownMenuItem>
+          {folder && (
+            <DropdownMenuItem render={<a href={downloadUrl(folder)} download />}>
+              <DownloadSimpleIcon /> Folder as zip
+            </DropdownMenuItem>
+          )}
           {canReveal && (
             <DropdownMenuItem onClick={reveal}>
               <FolderOpenIcon /> Show in Finder

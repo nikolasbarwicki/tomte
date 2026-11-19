@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import { getSessionInfo } from "@anthropic-ai/claude-agent-sdk";
 import type { Bot, Routine, RoutineRun, RunTrigger, Schedule } from "@tomte/contract/events";
+import { UPDATING } from "@tomte/contract/update";
 
 import {
   currentSession,
@@ -181,6 +182,8 @@ export function createRoutines(deps: {
   onRunEnded(end: RunEnd): void;
   /** The host's own needs-you items: a paused routine tells its owner through one, and resuming it closes it. */
   events: Pick<Events, "notice" | "resolveNotices">;
+  /** While it is closed (the host is draining for an update) no scheduled run starts and a manual run is refused; open by default. `catchUp()` follows when it reopens. */
+  gate?: { closed(): boolean };
 }) {
   const { db, dataRoot, onChange, execute, waits } = deps;
   const now = deps.now ?? Date.now;
@@ -250,6 +253,8 @@ export function createRoutines(deps: {
     try {
       const r = store.getRoutine(db, id);
       if (!r?.active) return;
+      // The occurrence stays unclaimed, so after the restart (or `catchUp()`) it follows the routine's `catchUp` setting.
+      if (deps.gate?.closed()) return;
       const t = latestOccurrence(r.schedule, r.lastScheduledFor ?? r.createdAt, now());
       if (t === null) {
         if (r.schedule.kind === "once") arm(r);
@@ -471,13 +476,29 @@ export function createRoutines(deps: {
     // A run still in its turn collects the answer when the turn ends; an ended or deleted run has nobody to tell.
     if (row?.status !== "waiting") return;
     if (w.state === "expired") return expire(row.id);
-    const pending = waits.ofRun(row.id);
+    resumeIfAnswered(row.id);
+  }
+
+  /**
+   * Resumes a parked run whose requests are all answered, with every answer of the park in one message. While the gate is closed
+   * nothing starts: the answers stay stored and undelivered, and `resumeAnswered` picks the run up when the gate reopens or the
+   * host starts again.
+   */
+  function resumeIfAnswered(runId: string) {
+    if (deps.gate?.closed()) return;
+    const pending = waits.ofRun(runId);
     if (pending.some((p) => p.state === "open")) return;
     const message = waits.resultText(pending);
     waits.delivered(pending);
-    resume(row.id, message).catch((e: Error) =>
-      console.error(`[routines] resume ${row.id} failed: ${e.message}`),
+    resume(runId, message).catch((e: Error) =>
+      console.error(`[routines] resume ${runId} failed: ${e.message}`),
     );
+  }
+
+  /** Parked runs that were answered while nothing could start (an update draining or applying) go on now. */
+  function resumeAnswered() {
+    for (const run of store.waitingRuns(db, now()))
+      if (waits.ofRun(run.id).some((w) => w.state === "answered")) resumeIfAnswered(run.id);
   }
 
   /**
@@ -514,6 +535,13 @@ export function createRoutines(deps: {
       waits.cancelRun(run.id, "the app stopped during the run");
       ended(run);
     }
+    catchUpDue();
+    resumeAnswered();
+  }
+
+  /** Occurrences that came due while nothing ran (the host was down, or draining for an update): each is fired or recorded as missed, by its routine's `catchUp` setting. */
+  function catchUpDue() {
+    const n = now();
     for (const r of store.listActiveRoutines(db)) {
       const last = r.lastScheduledFor ?? r.createdAt;
       const inWindow = latestOccurrence(r.schedule, Math.max(last, n - WINDOW_MS), n);
@@ -565,6 +593,12 @@ export function createRoutines(deps: {
     start() {
       reconcile();
       for (const r of store.listActiveRoutines(db)) arm(r);
+    },
+
+    /** The gate reopened: what came due while it was closed is fired or recorded as missed, as after a restart. */
+    catchUp() {
+      catchUpDue();
+      resumeAnswered();
     },
 
     /** Shutdown: stop all jobs and close running threads; their rows are reconciled on next start. */
@@ -653,6 +687,7 @@ export function createRoutines(deps: {
 
     testRun(id: string): RoutineRun {
       const r = require(id);
+      if (deps.gate?.closed()) throw new Conflict(UPDATING);
       if (running.has(id)) throw new Conflict("routine is already running");
       if (store.waitingRun(db, id, now())) throw new Conflict("routine is waiting for you");
       return run(r, "manual", null).row;

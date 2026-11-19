@@ -1,4 +1,5 @@
 import type { Routine } from "@tomte/contract/events";
+import type { HostStatus } from "@tomte/contract/host-status";
 
 import type { HandoffHost } from "./test-host.ts";
 
@@ -25,6 +26,8 @@ export interface EventsWatch {
   needsYou(botId: string): number | undefined;
   /** The routines of the latest `routines` event of the bot: what its Routines panel shows now; undefined before the first. */
   routines(botId: string): Routine[] | undefined;
+  /** The status of the latest `host-status` event: what the page shows of the host now; undefined before the first. */
+  hostStatus(): HostStatus | undefined;
 }
 
 /** One page's `/api/events` stream from now on, read as the events it was sent. `stop()` ends it. */
@@ -79,5 +82,8 @@ export async function watchEvents(
         | undefined;
       return event?.routines;
     },
+    hostStatus: () =>
+      (seen.filter((e) => e.type === "host-status").at(-1) as { status: HostStatus } | undefined)
+        ?.status,
   };
 }

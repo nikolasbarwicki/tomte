@@ -1,8 +1,9 @@
-import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query, type Query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { UsageWindow } from "@tomte/contract/api";
 import { z } from "zod";
 
-import { cmdExeSpawner, type ResolvedCli } from "./cli.ts";
+import type { ResolvedCli } from "./cli.ts";
+import { spawnOptions } from "./spawn.ts";
 
 /** How long the CLI may take to start and answer before the check fails. */
 const USAGE_TIMEOUT_MS = 20_000;
@@ -72,23 +73,35 @@ export async function readClaudeUsage(
   cli: ResolvedCli,
   env: Record<string, string | undefined>,
   cwd: string,
+  startGate: <T>(start: () => Promise<T>) => Promise<T>,
 ): Promise<{ available: boolean; windows: UsageWindow[] }> {
   const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), USAGE_TIMEOUT_MS);
-  const q = query({
-    prompt: silent,
-    options: {
-      pathToClaudeCodeExecutable: cli.path,
-      ...(cli.needsShell ? { spawnClaudeCodeProcess: cmdExeSpawner } : {}),
-      cwd,
-      env,
-      settingSources: [],
-      persistSession: false,
-      abortController: abort,
-    },
-  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let q: Query | undefined;
   try {
-    await q.initializationResult();
+    // The timeout runs from the CLI's start, not from the wait for the gate.
+    q = await startGate(async () => {
+      timer = setTimeout(() => abort.abort(), USAGE_TIMEOUT_MS);
+      const started = query({
+        prompt: silent,
+        options: {
+          pathToClaudeCodeExecutable: cli.path,
+          ...spawnOptions(cli, { env }),
+          cwd,
+          env,
+          settingSources: [],
+          persistSession: false,
+          abortController: abort,
+        },
+      });
+      try {
+        await started.initializationResult();
+      } catch (e) {
+        started.close();
+        throw e;
+      }
+      return started;
+    });
     return usageWindows(
       await q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true }),
     );
@@ -97,6 +110,6 @@ export async function readClaudeUsage(
     throw e;
   } finally {
     clearTimeout(timer);
-    q.close();
+    q?.close();
   }
 }

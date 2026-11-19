@@ -9,7 +9,9 @@
 // A turn is answered only once every tool it called has its result, as with the real CLI: a pending `ask_user` keeps the turn running.
 // Every tool result the host sends back for those calls is appended to `tool-results.jsonl` as the MCP response message.
 // An optional `call.json` (`{ server, tool, args }`) makes each user message call `tool` on the host's HTTP MCP server named `server` (`routines`, `bots`, `browser`), as the real CLI does: a JSON-RPC `tools/call` POST to the `url` of that server's entry in the --mcp-config file, with that entry's `Authorization` header (the session's bearer token). The host's endpoints answer each request on their own, so there is no initialize handshake. The result is appended to `tool-results.jsonl` as `{ server, tool, result: { content, isError? } }`. A server missing from the config, an HTTP error or an answer that is not JSON-RPC is recorded as an error result whose text says what happened, so a wiring fault shows in `toolResults()` instead of hanging the turn. The turn is answered once the call has its result.
-// `--version` prints `2.1.0 (Claude Code)`. `auth status` prints the real CLI's JSON (with an account: `email`, `orgName`, `subscriptionType`) and exits 1 while a `signed-out` file exists, else exits 0; like the real CLI it reports signed in through `ANTHROPIC_AUTH_TOKEN` (`oauth_token`) or `ANTHROPIC_API_KEY` (`api_key`) whatever that file says.
+// `--version` prints `2.1.0 (Claude Code)`. `auth status` prints the real CLI's JSON (with an account: `email`, `orgName`, `subscriptionType`) and exits 1 while a `signed-out` file exists, else exits 0; like the real CLI it reports signed in, whatever that file says, when a credential arrives on a descriptor (below), as `oauth_token` or, for an API key, `api_key`.
+// A credential arrives the way the host hands one over: a descriptor number in `CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR`, `CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR` or (with `CLAUDE_CODE_USE_GATEWAY=1`) `CLAUDE_CODE_GATEWAY_TOKEN_FILE_DESCRIPTOR`. The fake reads that descriptor to the end at start-up, as the real CLI does. `launches.jsonl` records it as `credential: { variable, token }` (or `{ variable, error }` when the descriptor could not be read), apart from `env`, which therefore never holds a token.
+// An optional `invalid-token` file holds one token the fake's pretend API refuses: a user message received by a launch that holds that credential is answered with an error result `API Error: 401 … Invalid bearer token` (`auth status` still reports signed in, as the real CLI does for any string on the descriptor).
 // `auth login` exits at once with the code in the optional `login-exit` file when it is not 0. Else it prints what the real CLI prints without a terminal (the sign-in URL `https://claude.example.test/oauth?state=fake`, then the code prompt) and reads stdin lines: `bad-code` fails with `Couldn't log in: Invalid code` on stderr and exit 1, any other line signs in (removes `signed-out`, prints `Login successful.`, exit 0). A `login-callback` file appearing in the directory signs in the same way without a line, as the real CLI's local callback does; stdin ending exits 0.
 // An optional `loop.json` scripts what the fake emits per user message, to drive the host as the double-loop chat mode's long-lived front query does (background tasks, hooks, in-process MCP servers, a crash mid-run). Without it, or when no script is left for a message, the behaviour above is unchanged. Shape: `{ scripts: [{ match?: string, steps: Step[] }] }`.
 // A user message takes the first unused script whose `match` is a substring of its text, else the first unused script without a `match`; the use is recorded in `loop-used.json`, so it holds across relaunches (`--resume`). Steps run in order, off the read loop, so a later user message is answered while an earlier script still runs. A script with no `result` step ends with the default result (`result.txt`, else "ok"). Every string in a step may hold `{session}` (the session id), `{n}` (0-based index of the user message over all launches, the line count of `messages.jsonl` before it) and `{queued}` (the first queue id, `q-` and hex digits, in the user message's text: the task the app asks the front to start).
@@ -23,10 +25,30 @@
 // - `{ result: "text" }`: emits the turn's `result` message; steps may follow (background work that reports after the turn).
 // - `{ sleep: ms }`; `{ waitFor: "<file name>" }` polls until that file exists in the directory (a test sequences steps with it); `{ exit: code }` ends the process, as a crash.
 // Like the real CLI, the process exits when stdin ends, instead of waiting for a turn or steps still running: its host is gone.
+// An optional `oauth.json` (`{ refreshMs? }`) turns on a simulation of the subscription sign-in's token refresh, with the assumptions below (the real CLI's behaviour is not observed). The credentials file `oauth-credentials.json` (`{ refresh, epoch }`) is what the CLI reads once, at launch, and keeps in memory; the access token it holds is good while its `epoch` equals the number in `oauth-epoch`, so a test sets that file to 2 to expire every token at once. An expired token is refreshed (after `refreshMs`, default 150, the network round trip) by presenting the refresh token to a fake server, which accepts each refresh token once (an exclusive `oauth-used-<token>` file), as a server that rotates them does; the new credentials go to `oauth-credentials.json` with no lock. A refresh the server rejects is a CLI that cannot sign in: at start-up (the initialize request) it exits 1, in a turn it answers an `authentication_error` result. Every refresh is appended to `oauth-log.jsonl` as `{ at: "start" | "turn", outcome: "refreshed" | "rejected" }`. With `CLAUDE_CODE_OAUTH_TOKEN` in its environment (a long-lived token) the simulation does nothing, as such a token never refreshes.
 import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
+/** The descriptor variables of a credential, and how `auth status` reports each. */
+const FD_METHODS: Record<string, string> = {
+  CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR: "oauth_token",
+  CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR: "api_key",
+  CLAUDE_CODE_GATEWAY_TOKEN_FILE_DESCRIPTOR: "oauth_token",
+};
+const credential = (() => {
+  for (const [variable, method] of Object.entries(FD_METHODS)) {
+    const fd = process.env[variable];
+    if (!fd) continue;
+    if (variable.includes("GATEWAY") && process.env.CLAUDE_CODE_USE_GATEWAY !== "1") continue;
+    try {
+      return { variable, method, token: readFileSync(Number(fd), "utf8") };
+    } catch (e) {
+      return { variable, method, error: String((e as NodeJS.ErrnoException).code ?? e) };
+    }
+  }
+  return undefined;
+})();
 const envDir = process.env.FAKE_CLAUDE_DIR;
 const dir = envDir ?? process.argv[2];
 if (!dir) process.exit(2);
@@ -60,11 +82,7 @@ if (command === "auth") {
     lines.on("close", () => process.exit(0));
     await new Promise(() => {});
   }
-  const method = process.env.ANTHROPIC_AUTH_TOKEN
-    ? "oauth_token"
-    : process.env.ANTHROPIC_API_KEY
-      ? "api_key"
-      : undefined;
+  const method = credential && "token" in credential ? credential.method : undefined;
   const signedIn = method !== undefined || !existsSync(join(dir, "signed-out"));
   console.log(
     JSON.stringify(
@@ -459,6 +477,34 @@ const takeScript = (text: string): Script | undefined => {
   return scripts[index];
 };
 
+/** The simulated sign-in (see `oauth.json` above): the credentials this launch read, and the refresh of an expired access token; false when the server rejects the refresh token. */
+const oauth = existsSync(join(dir, "oauth.json")) && !process.env.CLAUDE_CODE_OAUTH_TOKEN;
+const oauthSettings: { refreshMs?: number } = oauth
+  ? JSON.parse(readFileSync(join(dir, "oauth.json"), "utf8"))
+  : {};
+let held: { refresh: string; epoch: number } = oauth
+  ? JSON.parse(readFileSync(join(dir, "oauth-credentials.json"), "utf8"))
+  : { refresh: "", epoch: 0 };
+const refreshIfExpired = async (at: "start" | "turn"): Promise<boolean> => {
+  if (!oauth) return true;
+  const epoch = Number(readFileSync(join(dir, "oauth-epoch"), "utf8"));
+  if (held.epoch === epoch) return true;
+  await Bun.sleep(oauthSettings.refreshMs ?? 150);
+  try {
+    writeFileSync(join(dir, `oauth-used-${held.refresh}`), "", { flag: "wx" });
+  } catch {
+    appendFileSync(
+      join(dir, "oauth-log.jsonl"),
+      JSON.stringify({ at, outcome: "rejected" }) + "\n",
+    );
+    return false;
+  }
+  held = { refresh: crypto.randomUUID(), epoch };
+  writeFileSync(join(dir, "oauth-credentials.json"), JSON.stringify(held));
+  appendFileSync(join(dir, "oauth-log.jsonl"), JSON.stringify({ at, outcome: "refreshed" }) + "\n");
+  return true;
+};
+
 /** Tool results received so far, over every turn. */
 let results = 0;
 for await (const line of createInterface({ input: process.stdin })) {
@@ -475,9 +521,17 @@ for await (const line of createInterface({ input: process.stdin })) {
           agents: m.request.agents,
           mcpServers,
           env: process.env,
+          credential: credential && {
+            variable: credential.variable,
+            ...("token" in credential ? { token: credential.token } : { error: credential.error }),
+          },
           argv: process.argv.slice(envDir ? 2 : 3),
         }) + "\n",
       );
+      if (!(await refreshIfExpired("start"))) {
+        console.error("OAuth token has expired and could not be refreshed");
+        process.exit(1);
+      }
     }
     if (["set_model", "apply_flag_settings", "interrupt", "stop_task"].includes(m.request?.subtype))
       appendFileSync(join(dir, "controls.jsonl"), JSON.stringify(m.request) + "\n");
@@ -531,6 +585,29 @@ for await (const line of createInterface({ input: process.stdin })) {
           ...(m.origin !== undefined && { origin: m.origin }),
         }) + "\n",
       );
+      if (!(await refreshIfExpired("turn"))) {
+        out({
+          ...resultMessage(""),
+          subtype: "error_during_execution",
+          is_error: true,
+          errors: ["authentication_error: OAuth token has expired and could not be refreshed"],
+        });
+        return;
+      }
+      const refused = existsSync(join(dir, "invalid-token"))
+        ? readFileSync(join(dir, "invalid-token"), "utf8").trim()
+        : undefined;
+      if (credential && "token" in credential && credential.token.trim() === refused) {
+        out({
+          ...resultMessage(""),
+          subtype: "error_during_execution",
+          is_error: true,
+          errors: [
+            'API Error: 401 {"error":{"type":"authentication_error","message":"Invalid bearer token"}}',
+          ],
+        });
+        return;
+      }
       const script = takeScript(text);
       if (script) {
         const queued = /q-[0-9a-f]+/.exec(text)?.[0] ?? "";

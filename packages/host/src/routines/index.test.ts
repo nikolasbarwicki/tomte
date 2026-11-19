@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Schedule } from "@tomte/contract/events";
+import { UPDATING } from "@tomte/contract/update";
 import { z } from "zod";
 
 import { createBot, TurnError, type TurnUsage } from "../bots/index.ts";
@@ -332,6 +333,35 @@ test("an answer resumes the run in the same session with the owner's message, an
   expect(runsOf(r.id)[0]).toMatchObject({ output: "sent it" });
   // The answer reached the run, not the bot's session as a message of its own.
   expect(told).toEqual([]);
+});
+
+test("an answer that comes in while an update closes the gate resumes the run when the gate reopens, or when the host starts", async () => {
+  let closed = false;
+  const { host } = driven({ closed: () => closed });
+  waitClosed = (w) => host.waitClosed(w);
+  const r = host.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  host.testRun(r.id);
+  const job = defined(jobs.at(-1), "job");
+  const wait = askApproval(job.runId);
+  job.resolve("I asked the owner");
+  await until(() => host.get(r.id).lastRun?.status === "waiting");
+
+  closed = true;
+  const before = jobs.length;
+  expect(waits.answer(wait, "allow")).toBe(true);
+  await Bun.sleep(30);
+  expect(jobs).toHaveLength(before);
+  expect(host.get(r.id).lastRun?.status).toBe("waiting");
+
+  closed = false;
+  host.catchUp();
+  await until(() => jobs.length === before + 1);
+  expect(defined(jobs.at(-1)).prompt).toContain(`<human-wait-result id="${wait}">`);
+
+  // A process that starts after the answer was stored finds it too, once, and a run already resumed is not resumed again.
+  host.start();
+  await Bun.sleep(30);
+  expect(jobs).toHaveLength(before + 1);
 });
 
 test("a denial's note is in the resume message", async () => {
@@ -1061,9 +1091,10 @@ test("a park that expires adds its time to the failed run, and the failure count
  * A routine host whose cron jobs are driven by the test: `tick(iso)` moves the clock and runs every job that is still armed, which is
  * what Bun.cron does at an occurrence (it cannot be driven from a test: its shortest wait is the next minute). `live` is the armed jobs.
  */
-function driven() {
+function driven(gate?: { closed(): boolean }) {
   const live = new Set<{ expr: string; tick(): void; stop(): void }>();
   const host = createRoutines({
+    ...(gate && { gate }),
     db,
     dataRoot: cwd,
     now: () => clock,
@@ -1173,4 +1204,56 @@ test("a resume restarts the failure count: one failed run after it keeps the rou
   expect(raised).toHaveLength(2);
   expect(raised[1]).toMatchObject({ title: "digest paused after 5 failed runs" });
   expect(raised[1]?.key).not.toBe(raised[0]?.key);
+});
+
+test("while the host drains for an update an occurrence is not fired, and once reopened it follows the routine's catch-up setting", async () => {
+  let closed = true;
+  const { host, tick } = driven({ closed: () => closed });
+  const follows = host.create(botId, { name: "follows", instruction: "i", schedule: hourly });
+  const skips = host.create(botId, {
+    name: "skips",
+    instruction: "i",
+    schedule: hourly,
+    catchUp: false,
+  });
+
+  tick("2026-01-01T11:00:05Z");
+  await Bun.sleep(20);
+  expect(jobs).toEqual([]);
+  expect(host.runs(follows.id)).toEqual([]);
+  expect(() => host.testRun(follows.id)).toThrow(new Conflict(UPDATING));
+
+  closed = false;
+  host.catchUp();
+  await until(() => jobs.length === 1);
+  expect(scheduledRuns(host, follows.id)).toMatchObject([
+    { status: "running", scheduledFor: at("2026-01-01T11:00:00Z") },
+  ]);
+  expect(defined(jobs[0], "job").prompt).toContain("late");
+  expect(scheduledRuns(host, skips.id)).toMatchObject([
+    { status: "skipped", error: "missed while offline", scheduledFor: at("2026-01-01T11:00:00Z") },
+  ]);
+
+  // Asking again claims nothing twice.
+  host.catchUp();
+  await Bun.sleep(20);
+  expect(jobs).toHaveLength(1);
+  expect(scheduledRuns(host, skips.id)).toHaveLength(1);
+  expect(() => host.testRun(skips.id)).not.toThrow();
+});
+
+test("a host that starts with the gate closed (an update in flight) leaves what came due unfired until it opens", async () => {
+  routines.create(botId, { name: "h", instruction: "i", schedule: hourly });
+  routines.stop();
+  clock = at("2026-01-01T12:30:00Z");
+  let closed = true;
+  const { host } = driven({ closed: () => closed });
+  host.start();
+  await Bun.sleep(20);
+  expect(jobs).toEqual([]);
+
+  closed = false;
+  host.catchUp();
+  await until(() => jobs.length === 1);
+  expect(defined(jobs[0], "job").prompt).toContain("30 minutes late");
 });

@@ -11,7 +11,8 @@ Unit and host-seam tests passed while the real answer workflows were broken, so 
 | `bun run smoke:loop-ui`      | The double-loop chat mode on the fake CLI's `loop.json` (below): toggle, never-blocking sends, tasks, report, approval, rate limits.                                                                                                                                                  |
 | `bun run smoke:scroll-ui`    | The transcript following streamed replies (below): wheel turns at the end, scrolling up, the scroll-to-end button, a send while scrolled up, a reload.                                                                                                                                |
 | `bun run smoke:channels-ui`  | The Channels page against a fake Telegram Bot API (below): token rejected and accepted, the link code and `t.me` link, linking through the fake server, a stranger ignored, the linked state, a routine's result sent to the phone, an `@Name` message answered on the phone, Unlink. |
-| `bun run smoke:ui`           | The seven above in that order, with one web build. It stops at the first failing smoke and exits with that smoke's status; nothing after a failure runs and nothing is reported as passed.                                                                                            |
+| `bun run smoke:files-ui`     | File uploads (below): picked files and folders in the Files section, a taken name renamed and said so, an over-cap file refused naming the cap, and the composer's attachments delivered to the bot.                                                                                  |
+| `bun run smoke:ui`           | The eight above in that order, with one web build. It stops at the first failing smoke and exits with that smoke's status; nothing after a failure runs and nothing is reported as passed.                                                                                            |
 
 ## Prerequisites
 
@@ -82,6 +83,20 @@ The host's Telegram adapter is pointed at `packages/host/src/testing/fake-telegr
 | 7. `@Name` from the phone     | A message `@planner what is new?` from the owner reaches the bot with the name taken off, the bot's reply arrives in the owner's chat as "Planner\n\nok" (name first), and a plain message with no open card gets the hint naming the newest bot.                |
 | 8. Linked, then Unlink        | The page shows Linked with the account's name; Unlink (with its confirm dialog) clears it, the bot token stays and the bot keeps running.                                                                                                                        |
 
+## The update helper (`scripts/smoke-update-helper.sh`)
+
+Not a browser smoke, and not part of `smoke:ui`. It is the VM check of the root update helper (ADR-0014): run as root on a disposable systemd Linux machine with a compiled host (`bun run build:host linux-x64`, or `linux-arm64`), optionally a second build with another `VERSION`:
+
+```sh
+sudo bash scripts/smoke-update-helper.sh ./tomte-host-linux-x64 [./tomte-host-other-version]
+```
+
+It signs a release folder with a throwaway key pinned into a copy of `install.sh`, installs the host from it through `file://`, and checks: the units and the root-owned `update.conf` are in place; the service user cannot write the binary; a request written as the service user starts the helper through `tomte-update.path` and `result.json` comes back (`unchanged` for the installed version, `refused` for an unpublished one); with a second binary, a real update, the kept previous binary, and a rollback. The helper's logic (bad signature, health gate, snapshot restore, crashes after every journal step) is covered by `packages/host/src/update-helper/*.test.ts` in temp roots with fakes; the script is what runs it under real systemd.
+
+The rollback paths of the script (an invalid `restoreSnapshot`, a confirmed restore refused when the previous binary opens the database, and, when the two builds differ in schema, an unconfirmed rollback refused and a confirmed one restoring `updates/pre-<version>.db`) were added with ticket 14 of the client/host split. Both branches passed on 2026-11-19 in two fresh OrbStack Debian 12 machines with the drop-in below (the directory `/run/credentials/tomte.service` it creates must be owned by `tomte`, or `pair` cannot read the key): the same-schema branch with `0.1.0` and `0.1.1-smoke.1` (both schema 29), the schema-change branch with `0.1.0` and a throwaway `0.1.2-smoke.2` build carrying one extra empty migration (schema 30, never committed). In the schema-change run the snapshot is the script's own copy of `tomte.db` (the host takes one only for an update started from the UI); after the confirmed restore `0.1.0` ran on a schema 29 database without the extra table.
+
+It passed on 2026-11-19 in an OrbStack Debian 12 machine (aarch64, systemd 252) with two `linux-arm64` builds, `0.1.0` and `0.1.1-smoke.1`. OrbStack machines are LXC containers in which systemd does not populate `CREDENTIALS_DIRECTORY` (neither `LoadCredential` nor `LoadCredentialEncrypted`), so `tomte.service` and `pair` cannot read the secrets key there. That run added a drop-in, on the machine only, before the script: `/etc/systemd/system/tomte.service.d/90-orbstack-smoke.conf` with `LoadCredentialEncrypted=` emptied, an `ExecStartPre=+` that creates a key file under the data root and copies it to `/run/credentials/tomte.service/secrets-key`, and `ExecStart` pointing `--secrets-key-file` at that file. On a full VM or a real server none of this is needed. The managed Claude CLI install fetches the real CLI over the network; the browser engine install fails on arm64 (no Chrome for Testing build), which the script tolerates.
+
 ## Failures and artifacts
 
 A failed check throws, the smoke exits non-zero (and `smoke:ui` exits with the same status), and the **run directory is kept**; its path is the last line printed. It holds `checks.log` (every step and check), `page-console.log` (console, page errors and failed requests of every page), `host.log` (what the host wrote to stderr), `failure-page<N>.png` for every open page, `shots/` (screenshots taken at key steps), `error.txt`, and the smoke's own files: for `smoke:answers`, `herdr-argv.jsonl`, `relay.json` and the fake. A passing smoke removes its run directory and nothing else: it never touches a process or a file it did not start or create. `SMOKE_KEEP=1` keeps the directory of a passing run too, with the same logs.
@@ -95,3 +110,14 @@ The harness shared by the smokes is `scripts/smoke-kit.ts`; add a new browser sm
 - Remote mode and the Origin/token boundaries are covered by the host tests, not here. Timeouts and a host that dies mid-relay (delivery unknown) are covered by `packages/host/src/events/relay*.test.ts`.
 - The sender is run as a Bun subprocess by path with the route in its environment. Its config-file and project-routing modes are covered by `packages/notify` tests.
 - Only desktop Chrome at 1400×900; no mobile layout.
+
+## File uploads (`smoke:files-ui`)
+
+The host runs with `--max-upload-mib 1` (`startSmoke("files-ui", { hostFlags })`), so a refusal needs a 2 MiB file, not a gigabyte. The page streams every picked file to `POST /api/files/upload` (`packages/web/host/upload.ts`); the smoke checks the files folder on disk after each step. Dropping a file or folder needs the operating system's drag and drop and is not driven: the inputs behind the Upload buttons and the composer's attach menu take the same files through the same code (`lib/picked-files.ts`).
+
+| Flow                          | Proven in the browser and on disk                                                                                                                                                                    |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Upload files               | A picked file lands in the bot's files folder with its bytes and shows in the list; picking it again saves `report 2.txt` and the toast says "report.txt was taken; saved as report 2.txt".          |
+| 2. Upload folder              | A picked folder keeps its tree (`tree/a.md`, `tree/sub/b.md`) and the toast counts its files.                                                                                                        |
+| 3. A file over the cap        | The page refuses it with the cap named before anything is sent, and nothing of it is on disk.                                                                                                        |
+| 4. The composer's attachments | A file and a folder are uploaded when the message is sent, under `attachments/`; the bot's message ends with their absolute paths; the same folder again goes into a new one (`attachments/tree 2`). |

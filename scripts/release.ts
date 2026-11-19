@@ -5,26 +5,41 @@
 //                                                    checks a `package:desktop` run for this OS against the release (the
 //                                                    host in every app is the binary in <hostDir>, the metadata names
 //                                                    <version>) and copies its installers and metadata into <outDir>
-//   bun scripts/release.ts checksums <dir> <version> checks <dir> holds all five host binaries and every supported OS's
-//                                                    installers and metadata, then writes SHA256SUMS over every file in it
+//   bun scripts/release.ts signing-ready             fails unless the release public key is pinned in deploy/install.sh and the
+//                                                    private key secret is set ($RELEASE_SIGNING_KEY_SET is `set`); run first
+//   bun scripts/release.ts manifest <dir> <version>  writes release.json (version, SHELL_API, SCHEMA_VERSION) into <dir>
+//   bun scripts/release.ts checksums <dir> <version> checks <dir> holds all five host binaries, release.json and every
+//                                                    supported OS's installers and metadata, then writes SHA256SUMS over every
+//                                                    file in it
+//   bun scripts/release.ts sign <dir>                signs <dir>/SHA256SUMS with the PEM Ed25519 key in $RELEASE_SIGNING_KEY and
+//                                                    writes SHA256SUMS.sig; fails when the key is unset or is not the pinned key's pair
 //   bun scripts/release.ts verify-release <dir> <version>
 //                                                    checks a downloaded Release folder (`gh release download <tag> -D <dir>`):
-//                                                    every asset present, SHA256SUMS exact and matching, install.sh's
-//                                                    DEFAULT_REPO set, every latest*.yml naming <version> with the real sha512/size
-// Exits non-zero, with the reason on stderr, when a check fails.
+//                                                    every asset present, SHA256SUMS exact and matching and signed by the pinned
+//                                                    key, release.json naming <version>, install.sh's DEFAULT_REPO set and its
+//                                                    pinned key this checkout's, every latest*.yml naming <version> with the real
+//                                                    sha512/size
 import { appendFileSync } from "node:fs";
 
+import { SHELL_API } from "../packages/contract/src/api.ts";
 import {
   collectDesktopRelease,
   type DesktopPlatform,
   isDesktopArch,
   releaseAssets,
 } from "./desktop-kit.ts";
-import { releaseForTag, writeChecksums } from "./release-kit.ts";
+import {
+  MANIFEST_FILE,
+  pinnedPublicKey,
+  releaseForTag,
+  signChecksums,
+  writeChecksums,
+  writeManifest,
+} from "./release-kit.ts";
 import { verifyRelease } from "./release-verify.ts";
 
 const USAGE =
-  "usage: bun scripts/release.ts tag <tag> | desktop <bundleDir> <hostDir> <outDir> <version> <arch>... | checksums <dir> <version> | verify-release <dir> <version>";
+  "usage: bun scripts/release.ts tag <tag> | signing-ready | manifest <dir> <version> | desktop <bundleDir> <hostDir> <outDir> <version> <arch>... | checksums <dir> <version> | sign <dir> | verify-release <dir> <version>";
 
 const isDesktopPlatform = (name: string): name is DesktopPlatform =>
   name === "darwin" || name === "win32" || name === "linux";
@@ -65,13 +80,41 @@ async function main(): Promise<number> {
     process.stdout.write(`${collected.join("\n")}\n`);
     return 0;
   }
+  if (command === "signing-ready" && args.length === 0) {
+    await pinnedPublicKey();
+    if (process.env.RELEASE_SIGNING_KEY_SET !== "set") {
+      throw new Error(
+        'the repository secret RELEASE_SIGNING_KEY is not set: a release is never published with unsigned checksums (docs/release/signing.md, "One-time setup")',
+      );
+    }
+    return 0;
+  }
+  if (command === "manifest" && args.length === 2) {
+    // Dynamic, like `tag`: only this command needs the host's dependencies (bun:sqlite) installed.
+    const { SCHEMA_VERSION } = await import("../packages/host/src/platform/db.ts");
+    await writeManifest(args[0] as string, {
+      version: args[1] as string,
+      shellApi: SHELL_API,
+      schemaVersion: SCHEMA_VERSION,
+    });
+    return 0;
+  }
   if (command === "checksums" && args.length === 2) {
-    process.stdout.write(await writeChecksums(args[0] as string, releaseAssets(args[1] as string)));
+    const required = [...releaseAssets(args[1] as string), MANIFEST_FILE];
+    process.stdout.write(await writeChecksums(args[0] as string, required));
+    return 0;
+  }
+  if (command === "sign" && args.length === 1) {
+    await signChecksums(
+      args[0] as string,
+      process.env.RELEASE_SIGNING_KEY ?? "",
+      await pinnedPublicKey(),
+    );
     return 0;
   }
   if (command === "verify-release" && args.length === 2) {
     const [dir, version] = args as [string, string];
-    const problems = await verifyRelease(dir, version);
+    const problems = await verifyRelease(dir, version, await pinnedPublicKey());
     if (problems.length > 0) {
       console.error(
         `${dir} is not a complete release ${version}:\n${problems.map((p) => `  ${p}`).join("\n")}`,

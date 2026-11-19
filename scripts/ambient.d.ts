@@ -13,3 +13,8 @@ declare namespace Electron {
     getLastWebPreferences(): WebPreferences | undefined;
   }
 }
+
+declare module "*.sh" {
+  const text: string;
+  export default text;
+}

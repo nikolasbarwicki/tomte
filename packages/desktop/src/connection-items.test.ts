@@ -18,6 +18,20 @@ describe("connection menu items", () => {
     ]);
   });
 
+  test("a profile out of range says which side to update in its label", () => {
+    const items = connectionItems(
+      [
+        { ...profiles[1]!, update: "update-host" },
+        { ...profiles[0]!, update: "update-app" },
+      ],
+      { connect: () => {}, manage: () => {} },
+    );
+    expect(items.slice(0, 2).map((i) => i.label)).toEqual([
+      "Work (update host)",
+      "This computer (update app)",
+    ]);
+  });
+
   test("a radio connects its own profile and Manage opens the manager", () => {
     const calls: string[] = [];
     const items = connectionItems(profiles, {

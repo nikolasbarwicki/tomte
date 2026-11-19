@@ -1,28 +1,38 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Sidecar } from "./sidecar.ts";
-import type { HostState } from "./supervisor.ts";
-import { hostStatusText, trayMenu, type TrayActions } from "./tray-menu.ts";
+import type { HostLine } from "./host-lines.ts";
+import type { DesktopSettings } from "./settings.ts";
+import { trayMenu, trayTooltip, type TrayActions } from "./tray-menu.ts";
 
-const running: HostState = { status: "running", sidecar: {} as Sidecar };
-const stopped: HostState = { status: "stopped", reason: "exited" };
+const running: HostLine[] = [{ id: "local", name: "This computer", state: "running", needsYou: 0 }];
+const starting: HostLine[] = [
+  { id: "local", name: "This computer", state: "starting", needsYou: 0 },
+];
+const stopped: HostLine[] = [{ id: "local", name: "This computer", state: "stopped", needsYou: 0 }];
+const paused: HostLine[] = [{ id: "local", name: "This computer", state: "paused", needsYou: 0 }];
 const profiles = [
   { id: "local", name: "This computer", origin: "http://127.0.0.1:1", active: false },
   { id: "p1", name: "Work", origin: "https://work.example.com", active: true },
 ];
 
-function setup(state: HostState, startAtLogin = true, readyUpdate?: string) {
+function setup(
+  hosts: readonly HostLine[],
+  startAtLogin = true,
+  readyUpdate?: string,
+  localHost?: DesktopSettings["localHost"],
+) {
   const calls: string[] = [];
   const actions: TrayActions = {
     open: () => void calls.push("open"),
     setStartAtLogin: (on) => void calls.push(`login ${on}`),
+    setLocalHost: (setting) => void calls.push(`local host ${setting}`),
     restartHost: () => void calls.push("restart"),
     quit: () => void calls.push("quit"),
     connect: (id) => void calls.push(`connect ${id}`),
     manageConnections: () => void calls.push("manage"),
     restartToUpdate: () => void calls.push("update"),
   };
-  const items = trayMenu(state, startAtLogin, profiles, readyUpdate, actions);
+  const items = trayMenu(hosts, { startAtLogin, localHost }, profiles, readyUpdate, actions);
   const item = (label: string) => items.find((i) => i.label === label);
   const click = (label: string) => {
     const click = item(label)?.click as (() => void) | undefined;
@@ -33,23 +43,79 @@ function setup(state: HostState, startAtLogin = true, readyUpdate?: string) {
 }
 
 describe("the tray menu", () => {
-  test("leads with the host state as a disabled item, which is also the tooltip text", () => {
-    for (const [state, text] of [
-      [{ status: "starting" }, "Tomte: host starting"],
-      [running, "Tomte: host running"],
-      [stopped, "Tomte: host stopped"],
+  test("leads with a disabled line per host, which is also the tooltip text", () => {
+    for (const [hosts, text] of [
+      [starting, "This computer: starting"],
+      [running, "This computer: running"],
+      [stopped, "This computer: stopped"],
+      [paused, "This computer: paused"],
     ] as const) {
-      expect(hostStatusText(state)).toBe(text);
-      expect(setup(state).items[0]).toEqual({ label: text, enabled: false });
+      expect(trayTooltip(hosts)).toBe(text);
+      expect(setup(hosts).items[0]).toEqual({ label: text, enabled: false });
     }
+  });
+
+  test("renders two hosts with their counts and a problem", () => {
+    const hosts: HostLine[] = [
+      { id: "local", name: "This computer", state: "running", needsYou: 1 },
+      {
+        id: "p1",
+        name: "my-vps",
+        state: "connected",
+        needsYou: 1,
+        problem: { kind: "claude-signed-out" },
+      },
+    ];
+    const menu = setup(hosts);
+    expect(menu.items.slice(0, 2)).toEqual([
+      { label: "This computer: running · 1 needs you", enabled: false },
+      { label: "my-vps: connected · 1 needs you · Claude signed out", enabled: false },
+    ]);
+    expect(trayTooltip(hosts)).toBe(
+      "This computer: running · 1 needs you\nmy-vps: connected · 1 needs you · Claude signed out",
+    );
+    expect(menu.item("Restart host")).toBeUndefined();
   });
 
   test("offers Restart host only while the host is stopped", () => {
     expect(setup(running).item("Restart host")).toBeUndefined();
-    expect(setup({ status: "starting" }).item("Restart host")).toBeUndefined();
+    expect(setup(starting).item("Restart host")).toBeUndefined();
     const stoppedMenu = setup(stopped);
     stoppedMenu.click("Restart host");
     expect(stoppedMenu.calls).toEqual(["restart"]);
+  });
+
+  test("a paused host reads paused with no count, and has no Restart host: it starts when This computer is shown", () => {
+    const hosts: HostLine[] = [
+      { id: "local", name: "This computer", state: "paused", needsYou: 0 },
+      { id: "p1", name: "my-vps", state: "connected", needsYou: 2 },
+    ];
+    const menu = setup(hosts, true, undefined, "while-shown");
+    expect(menu.items.slice(0, 2)).toEqual([
+      { label: "This computer: paused", enabled: false },
+      { label: "my-vps: connected · 2 need you", enabled: false },
+    ]);
+    expect(menu.item("Restart host")).toBeUndefined();
+  });
+
+  test("Run this Mac's host is checked until the host is set to run only while This computer is shown, and a click asks for the other", () => {
+    const unanswered = setup(running);
+    expect(unanswered.item("Run this Mac's host")).toMatchObject({
+      type: "checkbox",
+      checked: true,
+    });
+    unanswered.click("Run this Mac's host");
+    const always = setup(running, true, undefined, "always");
+    expect(always.item("Run this Mac's host")).toMatchObject({ checked: true });
+    always.click("Run this Mac's host");
+    const whileShown = setup(paused, true, undefined, "while-shown");
+    expect(whileShown.item("Run this Mac's host")).toMatchObject({ checked: false });
+    whileShown.click("Run this Mac's host");
+    expect([...unanswered.calls, ...always.calls, ...whileShown.calls]).toEqual([
+      "local host while-shown",
+      "local host while-shown",
+      "local host always",
+    ]);
   });
 
   test("Open and Quit call their actions", () => {
@@ -73,7 +139,7 @@ describe("the tray menu", () => {
     const menu = setup(running);
     const labels = menu.items.map((i) => i.label ?? "-");
     expect(labels).toEqual([
-      "Tomte: host running",
+      "This computer: running",
       "-",
       "This computer",
       "Work",
@@ -82,6 +148,7 @@ describe("the tray menu", () => {
       "-",
       "Open Tomte",
       "Start at login",
+      "Run this Mac's host",
       "-",
       "Quit Tomte",
     ]);

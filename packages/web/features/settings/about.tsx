@@ -1,23 +1,15 @@
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { useHostInfo, usePublicHostInfo } from "@/host/hooks.ts";
+import { Card, CardContent } from "@/components/ui/card";
+import { useHostInfo, useHostStatus, usePublicHostInfo } from "@/host/hooks.ts";
 
 import { Group, Row } from "./parts.tsx";
+import { UpdatesCard } from "./updates.tsx";
 
-/** About: versions, the Claude CLI and browser engine this host uses, and the Updates card (not yet wired). */
+/** About: versions, the Claude CLI and browser engine this host uses, and the Updates card. */
 export function About() {
   const publicInfo = usePublicHostInfo();
   const info = useHostInfo();
   const version = publicInfo?.version;
+  const hostStatus = useHostStatus();
   return (
     <div className="flex flex-col gap-8">
       <Group title="Versions">
@@ -27,8 +19,15 @@ export function About() {
               <Row label="Version" mono>
                 {version ?? "…"}
               </Row>
-              <Row label="API version" mono>
-                {publicInfo?.apiVersion ?? "…"}
+              <Row label="Release channel">
+                {version === undefined ? "…" : version.includes("-") ? "Pre-release" : "Stable"}
+              </Row>
+              <Row label="Shell API" mono>
+                {publicInfo
+                  ? publicInfo.shellApi.min === publicInfo.shellApi.max
+                    ? publicInfo.shellApi.max
+                    : `${publicInfo.shellApi.min} to ${publicInfo.shellApi.max}`
+                  : "…"}
               </Row>
               <Row label="Claude CLI" mono>
                 {info?.cli ?? "…"}
@@ -45,31 +44,7 @@ export function About() {
         </Card>
       </Group>
       <Group title="Updates">
-        <Card>
-          <CardHeader>
-            <CardTitle>Release channel</CardTitle>
-            <CardDescription>
-              {version === undefined ? "…" : version.includes("-") ? "Pre-release" : "Stable"}
-            </CardDescription>
-            <CardAction>
-              <Badge variant="secondary">Coming soon</Badge>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <p className="text-muted-foreground text-sm">
-              The desktop app updates itself today; this page cannot check or install updates yet.
-            </p>
-            <div className="flex items-center justify-between gap-3">
-              <label htmlFor="auto-update" className="text-sm">
-                Download updates automatically
-              </label>
-              <Switch id="auto-update" disabled />
-            </div>
-            <Button variant="outline" size="sm" className="self-start" disabled>
-              Check for updates
-            </Button>
-          </CardContent>
-        </Card>
+        <UpdatesCard status={hostStatus} />
       </Group>
     </div>
   );

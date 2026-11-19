@@ -91,6 +91,7 @@ describe("flags and environment", () => {
       TOMTE_DATA_ROOT: "/srv/tomte",
       TOMTE_RELAY_CONFIG: "/etc/tomte/relay.json",
       TOMTE_PAUSE_AFTER_ABSENCE_DAYS: "14",
+      TOMTE_MAX_UPLOAD_MIB: "200",
     });
     expect(config).toEqual({
       mode: "remote",
@@ -103,6 +104,7 @@ describe("flags and environment", () => {
       isolateAllBots: true,
       sidecar: false,
       pauseAfterAbsenceDays: 14,
+      maxUploadBytes: 200 * 2 ** 20,
       vite: true,
       askApproval: true,
       dataRoot: "/srv/tomte",
@@ -143,6 +145,22 @@ describe("flags and environment", () => {
     expect(() => parse(["--pause-after-absence-days", days])).toThrow(InvalidConfig);
     expect(() => parse([], { TOMTE_PAUSE_AFTER_ABSENCE_DAYS: days })).toThrow(InvalidConfig);
   });
+
+  test("the per-file upload cap is 1 GiB unless a flag or the environment sets whole MiB, and a flag wins", () => {
+    expect(parse().config.maxUploadBytes).toBe(2 ** 30);
+    expect(parse([], { TOMTE_MAX_UPLOAD_MIB: "200" }).config.maxUploadBytes).toBe(200 * 2 ** 20);
+    expect(
+      parse(["--max-upload-mib", "5"], { TOMTE_MAX_UPLOAD_MIB: "200" }).config.maxUploadBytes,
+    ).toBe(5 * 2 ** 20);
+  });
+
+  test.each([["0"], ["-1"], ["1.5"], ["big"], ["1e3"], ["9007199254740991"]])(
+    "rejects %s MiB as an upload cap",
+    (mib) => {
+      expect(() => parse(["--max-upload-mib", mib])).toThrow(InvalidConfig);
+      expect(() => parse([], { TOMTE_MAX_UPLOAD_MIB: mib })).toThrow(InvalidConfig);
+    },
+  );
 
   test("the relay configuration is relay.json in the data root unless a flag or the environment names another", () => {
     expect(parse(["--data-root", "/srv/c"]).config.relayConfig).toBe("/srv/c/relay.json");

@@ -1,22 +1,31 @@
 // What a person checks first on a published Release (ticket 07, box 1): download every asset into a folder and run
 // `bun scripts/release.ts verify-release <folder> <version>`. Everything here is offline and read-only: the folder holds
-// exactly the files the release workflow publishes, `SHA256SUMS` lists exactly those and every hash matches, the
-// installer's `DEFAULT_REPO` was filled in, and every `latest*.yml` names the version and the real sha512 and size of
-// the files it points at (what electron-updater verifies before it installs).
+// exactly the files the release workflow publishes, `SHA256SUMS` lists exactly those and every hash matches, its
+// Ed25519 signature `SHA256SUMS.sig` verifies against the public key pinned in this checkout's `deploy/install.sh`,
+// `release.json` is a manifest of this version, the installer's `DEFAULT_REPO` was filled in and pins that same key,
+// and every `latest*.yml` names the version and the real sha512 and size of the files it points at (what
+// electron-updater verifies before it installs).
 import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
+import { ReleaseManifest } from "../packages/contract/src/api.ts";
 import {
   type DesktopPlatform,
   desktopAssets,
   releaseAssets,
   SUPPORTED_DESKTOP,
 } from "./desktop-kit.ts";
-import { CHECKSUM_FILE, sha256 } from "./release-kit.ts";
+import {
+  CHECKSUM_FILE,
+  checkSignature,
+  INSTALLER_FILE,
+  MANIFEST_FILE,
+  SIGNATURE_FILE,
+  sha256,
+} from "./release-kit.ts";
 
-/** Release assets that are not built per target: the self-hoster's installer and its unit (`release.yml`, `publish`). */
-const INSTALLER = "install.sh";
+/** The unit that ships beside the installer (`release.yml`, `publish`). */
 const SERVICE_UNIT = "tomte.service";
 
 interface UpdateFile {
@@ -130,9 +139,11 @@ export function expectedFiles(version: string): { required: string[]; optional: 
     required: [
       ...releaseAssets(version),
       ...installers.filter(hasBlockmap).map((n) => `${n}.blockmap`),
-      INSTALLER,
+      INSTALLER_FILE,
       SERVICE_UNIT,
       CHECKSUM_FILE,
+      SIGNATURE_FILE,
+      MANIFEST_FILE,
     ],
     optional: installers.filter((n) => !hasBlockmap(n)).map((n) => `${n}.blockmap`),
   };
@@ -183,11 +194,32 @@ async function checkMetadata(dir: string, name: string, version: string): Promis
   return problems;
 }
 
+async function checkManifest(dir: string, version: string): Promise<string[]> {
+  let parsed: ReleaseManifest;
+  try {
+    parsed = ReleaseManifest.parse(JSON.parse(await readFile(join(dir, MANIFEST_FILE), "utf8")));
+  } catch (e) {
+    return [`${MANIFEST_FILE} is not a release manifest: ${(e as Error).message}`];
+  }
+  const problems: string[] = [];
+  if (parsed.version !== version) {
+    problems.push(`${MANIFEST_FILE} names version ${parsed.version}, the release is ${version}`);
+  }
+  if (parsed.shellApi.min > parsed.shellApi.max) {
+    problems.push(`${MANIFEST_FILE} has an empty shellApi range`);
+  }
+  return problems;
+}
+
 /**
  * Checks a downloaded Release folder against `version` and returns every problem found (empty: the folder is a
  * complete, consistent release). Never writes; a folder that cannot be read throws.
  */
-export async function verifyRelease(dir: string, version: string): Promise<string[]> {
+export async function verifyRelease(
+  dir: string,
+  version: string,
+  publicKey: string,
+): Promise<string[]> {
   const problems: string[] = [];
   const names = await readdir(dir);
   const files: string[] = [];
@@ -209,7 +241,7 @@ export async function verifyRelease(dir: string, version: string): Promise<strin
       await readFile(join(dir, CHECKSUM_FILE), "utf8"),
     );
     problems.push(...bad);
-    const covered = files.filter((n) => n !== CHECKSUM_FILE);
+    const covered = files.filter((n) => n !== CHECKSUM_FILE && n !== SIGNATURE_FILE);
     for (const name of covered) {
       const expected = entries.get(name);
       if (expected === undefined) problems.push(`${CHECKSUM_FILE} has no entry for ${name}`);
@@ -223,13 +255,28 @@ export async function verifyRelease(dir: string, version: string): Promise<strin
     }
   }
 
-  if (files.includes(INSTALLER)) {
-    const repo = /^DEFAULT_REPO="([^"]*)"$/m.exec(
-      await readFile(join(dir, INSTALLER), "utf8"),
-    )?.[1];
-    if (repo === undefined) problems.push(`${INSTALLER} has no DEFAULT_REPO line`);
+  if (files.includes(CHECKSUM_FILE) && files.includes(SIGNATURE_FILE)) {
+    const sums = await readFile(join(dir, CHECKSUM_FILE));
+    const signature = await readFile(join(dir, SIGNATURE_FILE));
+    if (!checkSignature(sums, signature, publicKey)) {
+      problems.push(
+        `${SIGNATURE_FILE} is not a valid signature of ${CHECKSUM_FILE} by the pinned release key`,
+      );
+    }
+  }
+
+  if (files.includes(MANIFEST_FILE)) problems.push(...(await checkManifest(dir, version)));
+
+  if (files.includes(INSTALLER_FILE)) {
+    const text = await readFile(join(dir, INSTALLER_FILE), "utf8");
+    const repo = /^DEFAULT_REPO="([^"]*)"$/m.exec(text)?.[1];
+    if (repo === undefined) problems.push(`${INSTALLER_FILE} has no DEFAULT_REPO line`);
     else if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-      problems.push(`${INSTALLER} has DEFAULT_REPO="${repo}", expected OWNER/REPO`);
+      problems.push(`${INSTALLER_FILE} has DEFAULT_REPO="${repo}", expected OWNER/REPO`);
+    }
+    const pinned = /^RELEASE_PUBLIC_KEY="([^"]*)"$/m.exec(text)?.[1];
+    if (pinned !== publicKey) {
+      problems.push(`${INSTALLER_FILE} does not pin the release public key of this checkout`);
     }
   }
 

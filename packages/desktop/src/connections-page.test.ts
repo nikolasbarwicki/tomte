@@ -69,6 +69,20 @@ describe("the list page", () => {
     expect(html).toContain('action="/add"');
   });
 
+  test("a profile out of range says which side to update", async () => {
+    const pages = createConnectionsPages(
+      fakeConnections({
+        list: async () => [
+          { id: "p1", name: "Work", origin: "https://w", active: false, update: "update-host" },
+          { id: "p2", name: "Home", origin: "https://h", active: false, update: "update-app" },
+        ],
+      }),
+    );
+    const html = await (await pages.handle(get())).text();
+    expect(html).toContain("update host: ");
+    expect(html).toContain("update app: ");
+  });
+
   test("an unknown message id shows no message", async () => {
     const html = await (
       await createConnectionsPages(fakeConnections()).handle(get("/?m=nope"))
@@ -128,6 +142,18 @@ describe("form posts", () => {
     expect((await posted(pages, post("/connect", { id: "p1" }))).html).toContain(
       "Something went wrong: disk on fire",
     );
+  });
+
+  test("connecting to a profile out of range says so instead of a plain Connected", async () => {
+    const pages = createConnectionsPages(
+      fakeConnections({
+        list: async () => [
+          { id: "p1", name: "Work", origin: "https://w", active: true, update: "update-host" },
+        ],
+      }),
+    );
+    const { html } = await posted(pages, post("/connect", { id: "p1" }));
+    expect(html).toContain("Connected, but update host");
   });
 
   test("connect passes the id", async () => {

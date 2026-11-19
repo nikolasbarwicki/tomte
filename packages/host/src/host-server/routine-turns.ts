@@ -36,6 +36,8 @@ export interface RoutineTurns {
   execute: Executor;
   /** The routine a headless run is writing the bot's current session for; that bot's chat must not start its own turn meanwhile. A run in a session of its own never blocks the chat. */
   headless(botId: string): string | undefined;
+  /** Routine turns that have started headless or wait for their bot: work an update waits for. */
+  pending(): number;
   /** The bot's headless run, in the bot's session or in one of its own (`sessionId` is then its own). */
   headlessRun(botId: string): { runId: string; sessionId: string | undefined } | undefined;
   /** Starts every queued routine whose bot is free: in the bot's chat when it has one, headless otherwise or when the run has a session of its own. */
@@ -97,6 +99,7 @@ export function createRoutineTurns(deps: RoutineTurnsDeps): RoutineTurns {
       const run = headlessRuns.get(botId);
       return run?.ownSession === undefined ? run?.routine : undefined;
     },
+    pending: () => headlessRuns.size + routineQueue.length,
     headlessRun(botId) {
       const run = headlessRuns.get(botId);
       return run && { runId: run.runId, sessionId: run.ownSession };

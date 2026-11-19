@@ -4,7 +4,7 @@ import { net, type BrowserWindow } from "electron";
 
 import { createConnectionsPages } from "./connections-page.ts";
 import { createConnectionsWindow } from "./connections-window.ts";
-import { createConnections, type HostCredentials, type ProfileView } from "./connections.ts";
+import { createConnections, type FollowTarget, type ProfileView } from "./connections.ts";
 import { createHostClient } from "./host-api.ts";
 import type { Navigation } from "./navigation.ts";
 import { createProfileStore } from "./profile-store.ts";
@@ -16,15 +16,17 @@ import { showHostStopped, showStarting, signIn } from "./window.ts";
 /** What the application menu and the tray use: the profiles, switching, and the manager window. */
 export interface DesktopConnections {
   list(): Promise<ProfileView[]>;
-  /** Connects like the Connections page does; a failure opens that window with the error instead of rejecting. */
-  connect(id: string): Promise<void>;
+  /** Connects like the Connections page does, loading `path` of the host when given; a failure opens that window with the error instead of rejecting. */
+  connect(id: string, path?: string): Promise<void>;
   openConnections(): void;
+  /** The profile saved as active, `local` when none is or the store cannot be read: what `start` is about to show. */
+  savedActive(): Promise<string>;
   /** Connects to the saved active profile; when that fails, shows this computer and opens the Connections window with the reason. */
   start(): Promise<void>;
   /** The local host started, stopped or restarted: when `local` is the connection shown, shows it again as it now is. */
   localChanged(): Promise<void>;
-  /** What the event stream of the connection shown needs; see `Connections.credentials`. */
-  credentials(): Promise<HostCredentials | undefined>;
+  /** The hosts whose event streams the app follows; see `Connections.followTargets`. */
+  followTargets(): Promise<FollowTarget[]>;
   onChange(listener: () => void): void;
 }
 
@@ -44,7 +46,8 @@ export function setupConnections(options: {
     host: createHostClient((url, init) => net.fetch(url, init)),
     local: options.local,
     async showNotRunning(state) {
-      if (state.status === "starting") return showStarting(window);
+      // A paused host is about to start when it is the one shown.
+      if (state.status === "starting" || state.status === "paused") return showStarting(window);
       const tail = logTail(options.logFile);
       await showHostStopped(window, tail ? `${state.reason}\n\n${tail}` : state.reason);
     },
@@ -62,12 +65,13 @@ export function setupConnections(options: {
   return {
     list: () => connections.list(),
     openConnections: () => manager.open(),
+    savedActive: () => connections.savedActive(),
     localChanged: () => connections.localChanged(),
-    credentials: () => connections.credentials(),
+    followTargets: () => connections.followTargets(),
     onChange: (listener) => connections.onChange(listener),
-    async connect(id) {
+    async connect(id, path) {
       try {
-        await connections.connect(id);
+        await connections.connect(id, path);
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
         manager.open(pages.notice("error", reason));

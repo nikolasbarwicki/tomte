@@ -13,7 +13,8 @@ import { DEFAULT_EFFORT, DEFAULT_MODEL, type MemoryScope } from "@tomte/contract
 
 import {
   claudeHarness,
-  cmdExeSpawner,
+  isAuthFailure,
+  spawnOptions,
   type ClaudeAccess,
   type HostServerLease,
   type HostServersSource,
@@ -65,7 +66,7 @@ export interface ThreadOptions {
   integrations?: IntegrationsSource;
   /** Leases the host servers (such as the browser endpoint) for each live query; released when that query closes. */
   hostServers?: () => HostServerLease;
-  /** Extra environment variables for the CLI, added to `claude.env()`; read whenever a live query opens. */
+  /** Extra environment variables for the CLI, added to `claude.spawnSpec().env`; read whenever a live query opens. */
   env?: () => Promise<Record<string, string>>;
   model?: string;
   effort?: EffortLevel;
@@ -154,40 +155,45 @@ export class Thread {
       isolation: lease?.isolation,
     });
     try {
-      const q = query({
-        prompt: inbox,
-        options: {
-          pathToClaudeCodeExecutable: this.o.cli.path,
-          ...(this.o.cli.needsShell ? { spawnClaudeCodeProcess: cmdExeSpawner } : {}),
-          cwd: this.o.cwd,
-          ...(this.o.additionalDirectories !== undefined && {
-            additionalDirectories: this.o.additionalDirectories,
-          }),
-          ...(this.started ? { resume: this.sessionId } : { sessionId: this.sessionId }),
-          persistSession: true,
-          includePartialMessages: true,
-          canUseTool: this.canUseTool,
-          mcpServers: {
-            ...session?.builtinServers,
-            host: createHostMcpServer({
-              delegate: this.o.delegate,
-              memory: this.o.memory,
-              onMemory: this.o.onMemory,
-              log: this.log,
+      const q = await this.o.claude.startGate(async () => {
+        // Taken inside the gate, so the credential handed over is the one set when this start begins.
+        const spec = this.o.claude.spawnSpec();
+        const started = query({
+          prompt: inbox,
+          options: {
+            pathToClaudeCodeExecutable: this.o.cli.path,
+            ...spawnOptions(this.o.cli, spec, (d) => this.log(`[cli stderr] ${d.trimEnd()}`)),
+            cwd: this.o.cwd,
+            ...(this.o.additionalDirectories !== undefined && {
+              additionalDirectories: this.o.additionalDirectories,
             }),
+            ...(this.started ? { resume: this.sessionId } : { sessionId: this.sessionId }),
+            persistSession: true,
+            includePartialMessages: true,
+            canUseTool: this.canUseTool,
+            mcpServers: {
+              ...session?.builtinServers,
+              host: createHostMcpServer({
+                delegate: this.o.delegate,
+                memory: this.o.memory,
+                onMemory: this.o.onMemory,
+                log: this.log,
+              }),
+            },
+            ...launch.options,
+            model: this.model,
+            env: { ...spec.env, ...(await this.o.env?.()) },
+            stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
           },
-          ...launch.options,
-          model: this.model,
-          env: { ...this.o.claude.env(), ...(await this.o.env?.()) },
-          stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
-        },
+        });
+        try {
+          await started.initializationResult();
+        } catch (e) {
+          started.close();
+          throw e;
+        }
+        return started;
       });
-      try {
-        await q.initializationResult();
-      } catch (e) {
-        q.close();
-        throw e;
-      }
       await q.applyFlagSettings({ effortLevel: this.effort });
       this.started = true;
       this.live = { q, inbox, it: q[Symbol.asyncIterator](), expiresAt: session?.expiresAt, lease };
@@ -252,6 +258,7 @@ export class Thread {
         }
       }
     } catch (e) {
+      if (isAuthFailure(e)) void this.o.claude.recheck("turn-auth-failure");
       this.close();
       throw e;
     } finally {

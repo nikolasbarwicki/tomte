@@ -9,6 +9,12 @@ DATA_ROOT=/var/lib/tomte
 BIN=/usr/local/bin/tomte-host
 ETC_DIR=/etc/tomte
 ENV_FILE=$ETC_DIR/tomte.env
+# The root update helper (ADR-0014): its root-owned configuration and the two units that start it when the service user
+# writes a request into its own state directory.
+UPDATE_CONF=$ETC_DIR/update.conf
+UPDATE_SERVICE=$SERVICE-update.service
+UPDATE_PATH=$SERVICE-update.path
+UPDATE_DIR=/etc/systemd/system
 UNIT_DEST=/etc/systemd/system/$SERVICE.service
 DROPIN_DIR=/etc/systemd/system/$SERVICE.service.d
 ENC_CREDENTIAL=/etc/credstore.encrypted/$SERVICE.secrets-key
@@ -39,8 +45,10 @@ Installs the tomte host as a systemd service running as the unprivileged
 "tomte" user. Run as root on a systemd Linux server (x86_64 or aarch64).
 
 By default the script downloads the host binary for this server's CPU from a GitHub
-Release, together with the release's SHA256SUMS, and aborts before installing anything
-when the checksum does not match or has no entry for the binary.
+Release, together with the release's SHA256SUMS, its Ed25519 signature SHA256SUMS.sig
+and release.json. It checks the signature against the release public key pinned in this
+script (RELEASE_PUBLIC_KEY; needs OpenSSL 3 or newer) and the binary against the signed
+checksums, and aborts before installing anything when either does not match.
 
 Download source (the default):
   --repo <OWNER/REPO>  GitHub repository that publishes the releases. Also read from
@@ -75,6 +83,166 @@ die() {
   printf 'error: %s\n' "$*" >&2
   exit 1
 }
+
+# --- Verified download: the one way release bytes enter this script -------------------------------
+# Sourcing this file (`source install.sh`) defines these functions and runs nothing else, so the root update helper
+# and the tests call download_verified_release directly. It needs curl, sha256sum, openssl >= 3 and base64.
+
+# A redirect may only lead to https (a downgrade could swap the checksum file and the binary together); download
+# routines narrow this, and only --url, the user's own file, keeps the permissive default.
+redirect_protocols='=https,http,file'
+fetch() { # <url> <destination>
+  curl --fail --location --silent --show-error --proto '=https,http,file' --proto-redir "$redirect_protocols" \
+    --output "$2" -- "$1" || die "download failed: $1"
+}
+
+verify() { # <file> <expected sha256> <what>
+  local actual
+  actual=$(sha256sum "$1" | cut -d' ' -f1)
+  if [[ $actual != "$2" ]]; then
+    printf 'error: SHA-256 mismatch for %s; nothing was installed\n  expected: %s\n  actual:   %s\n' "$3" "$2" "$actual" >&2
+    exit 1
+  fi
+}
+
+# Sets $listed to the checksum SHA256SUMS lists for <name>; a missing or repeated entry aborts.
+listed=""
+lookup_checksum() { # <SHA256SUMS file> <name>
+  local sum name matches=0
+  listed=""
+  while read -r sum name || [[ -n $sum ]]; do
+    if [[ ${name#\*} == "$2" ]]; then
+      matches=$((matches + 1))
+      listed=$(printf '%s' "$sum" | tr 'A-F' 'a-f')
+    fi
+  done <"$1"
+  ((matches > 0)) || die "SHA256SUMS has no entry for $2; nothing was installed"
+  ((matches == 1)) || die "SHA256SUMS lists $2 $matches times; nothing was installed"
+  [[ $listed =~ ^[0-9a-f]{64}$ ]] || die "SHA256SUMS has a malformed checksum for $2; nothing was installed"
+}
+
+# The release public key, pinned here on purpose: base64 of the 32 raw bytes of the Ed25519 public key whose private
+# half signs every release's SHA256SUMS (a GitHub repository secret). There is no trust-on-first-use: nothing a download
+# or a config file says can replace it. Empty until the owner pins it (docs/release/signing.md, "One-time setup"); the
+# release workflow, `verify-release` and this script all refuse while it is empty.
+RELEASE_PUBLIC_KEY=""
+
+require_pinned_key() {
+  [[ $RELEASE_PUBLIC_KEY =~ ^[A-Za-z0-9+/]{43}=$ ]] ||
+    die "this installer pins no release public key, so it cannot verify a release (RELEASE_PUBLIC_KEY is unset); use --url and --sha256 for a binary you vouch for"
+}
+
+openssl_has_ed25519() {
+  [[ $(openssl version 2>/dev/null) =~ ^OpenSSL\ ([0-9]+)\. ]] && ((BASH_REMATCH[1] >= 3))
+}
+
+# <file> <signature file> <scratch dir>: dies unless the signature is the pinned key's Ed25519 signature of the file.
+verify_signature() {
+  local key_der=$3/release-public-key.der
+  require_pinned_key
+  openssl_has_ed25519 || die "OpenSSL 3.0 or newer is required to verify the release signature"
+  (($(wc -c <"$2") == 64)) || die "the release signature is not 64 bytes; nothing was installed"
+  # An Ed25519 SubjectPublicKeyInfo: the fixed 12-byte DER prefix, then the 32 raw key bytes.
+  { printf '\x30\x2a\x30\x05\x06\x03\x2b\x65\x70\x03\x21\x00' && printf '%s' "$RELEASE_PUBLIC_KEY" | base64 -d; } >"$key_der" ||
+    die "RELEASE_PUBLIC_KEY is not valid base64"
+  openssl pkeyutl -verify -pubin -inkey "$key_der" -keyform DER -rawin -in "$1" -sigfile "$2" >/dev/null 2>&1 ||
+    die "the signature of $(basename -- "$1") does not verify against the pinned release key; nothing was installed"
+}
+
+# <release url> <dest dir> <asset>...: downloads SHA256SUMS, SHA256SUMS.sig, release.json and each asset (a file name
+# SHA256SUMS lists) into <dest dir>, dies unless the signature is valid and every file matches the signed sums, and sets
+# $release_version to the version release.json names. Nothing in <dest dir> is trustworthy if this dies.
+release_version=""
+download_verified_release() {
+  local release_url=$1 dest=$2 name
+  shift 2
+  local redirect_protocols='=https'
+  if [[ $release_url != https://* ]]; then redirect_protocols='=https,http,file'; fi # the test seam only
+  require_pinned_key
+  fetch "$release_url/SHA256SUMS" "$dest/SHA256SUMS"
+  fetch "$release_url/SHA256SUMS.sig" "$dest/SHA256SUMS.sig"
+  verify_signature "$dest/SHA256SUMS" "$dest/SHA256SUMS.sig" "$dest"
+  for name in release.json "$@"; do
+    fetch "$release_url/$name" "$dest/$name"
+    lookup_checksum "$dest/SHA256SUMS" "$name"
+    verify "$dest/$name" "$listed" "$name"
+  done
+  release_version=$(sed -n 's/^ *"version": *"\([^"]*\)",\{0,1\}$/\1/p' "$dest/release.json")
+  [[ $release_version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] ||
+    die "release.json has no valid version; nothing was installed"
+}
+
+# --- Root update helper: configuration and units ---------------------------------------------------
+# Both are written from this script's own constants, never from a download: the repository comes from the flag, and the
+# public key is the one pinned above. Sourced, a test calls them with its own destinations.
+
+# <destination file> <OWNER/REPO>: update.conf, one KEY=value per line, read by `tomte-host apply-update` as root.
+write_update_conf() {
+  require_pinned_key
+  {
+    echo "# Written by install.sh; a re-run rewrites it. Root-owned: the service user can change none of it."
+    echo "REPO=$2"
+    echo "PUBLIC_KEY=$RELEASE_PUBLIC_KEY"
+    echo "DATA_ROOT=$DATA_ROOT"
+    echo "SERVICE=$SERVICE"
+    echo "SERVICE_USER=$SERVICE_USER"
+    echo "BIN=$BIN"
+    echo "ENV_FILE=$ENV_FILE"
+    echo "RELEASE_BASE_URL=${RELEASE_BASE_URL%/}"
+  } >"$1"
+}
+
+# <directory>: writes tomte-update.service (runs `apply-update` as root, once per start) and tomte-update.path (starts it
+# whenever the service user's request file exists). The main unit is not touched, and the binary stays root-owned.
+write_update_units() {
+  cat >"$1/$UPDATE_SERVICE" <<EOF
+[Unit]
+Description=tomte host update helper (root)
+
+[Service]
+Type=oneshot
+ExecStart=$BIN apply-update
+TimeoutStartSec=30min
+StateDirectory=$SERVICE-update
+StateDirectoryMode=0700
+UMask=0077
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+
+# It runs as root, so it gets the least that still lets it swap the binary, restart the unit and hand files back to the
+# service user: the binary's directory and the data root are the only writable places.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=$(dirname "$BIN") $DATA_ROOT
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+EOF
+  cat >"$1/$UPDATE_PATH" <<EOF
+[Unit]
+Description=Watch for a tomte host update request
+
+[Path]
+# Level-triggered on purpose: a request written while the helper was busy, or before a reboot, still starts it.
+PathExists=$DATA_ROOT/updates/request.json
+Unit=$UPDATE_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+# Sourced, the script stops here.
+if [[ -n ${BASH_SOURCE[0]:-} && ${BASH_SOURCE[0]} != "$0" ]]; then return 0; fi
 
 url=""
 sha256=""
@@ -127,6 +295,7 @@ else
   repo=${repo:-${TOMTE_REPO:-$DEFAULT_REPO}}
   [[ -n $repo ]] || die "no GitHub repository to download from: pass --repo OWNER/REPO (or set TOMTE_REPO), or pass --url and --sha256"
   [[ $repo =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || die "--repo must look like OWNER/REPO"
+  require_pinned_key
   if [[ -n $version ]]; then
     version=${version#v}
     [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "--version must look like 1.2.0 or v1.2.0-rc.1"
@@ -153,6 +322,12 @@ fi
 for tool in curl sha256sum systemctl systemd-run journalctl runuser useradd getent install mktemp head; do
   command -v "$tool" >/dev/null 2>&1 || die "$tool is required but not installed"
 done
+if [[ -z $url ]]; then
+  for tool in openssl base64; do
+    command -v "$tool" >/dev/null 2>&1 || die "$tool is required to verify the release signature but not installed"
+  done
+  openssl_has_ed25519 || die "OpenSSL 3.0 or newer is required to verify the release signature (this server has: $(openssl version))"
+fi
 
 case $(uname -m) in
   x86_64 | amd64) target=linux-x64 ;;
@@ -183,45 +358,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# A redirect may only lead to https, so a downgrade cannot swap the checksum file and the binary together.
-redirect_protocols='=https,http,file'
-fetch() { # <url> <destination>
-  curl --fail --location --silent --show-error --proto '=https,http,file' --proto-redir "$redirect_protocols" \
-    --output "$2" -- "$1" || die "download failed: $1"
-}
-
-verify() { # <file> <expected sha256> <what>
-  local actual
-  actual=$(sha256sum "$1" | cut -d' ' -f1)
-  if [[ $actual != "$2" ]]; then
-    printf 'error: SHA-256 mismatch for %s; nothing was installed\n  expected: %s\n  actual:   %s\n' "$3" "$2" "$actual" >&2
-    exit 1
-  fi
-}
-
-# Sets $listed to the checksum SHA256SUMS lists for <name>; a missing or repeated entry aborts.
-listed=""
-lookup_checksum() { # <SHA256SUMS file> <name>
-  local sum name matches=0
-  listed=""
-  while read -r sum name || [[ -n $sum ]]; do
-    if [[ ${name#\*} == "$2" ]]; then
-      matches=$((matches + 1))
-      listed=$(printf '%s' "$sum" | tr 'A-F' 'a-f')
-    fi
-  done <"$1"
-  ((matches > 0)) || die "SHA256SUMS has no entry for $2; nothing was installed"
-  ((matches == 1)) || die "SHA256SUMS lists $2 $matches times; nothing was installed"
-  [[ $listed =~ ^[0-9a-f]{64}$ ]] || die "SHA256SUMS has a malformed checksum for $2; nothing was installed"
-}
-
 if [[ -n $url ]]; then
   say "Downloading the host binary ($target)"
   fetch "$url" "$tmp/tomte-host"
   verify "$tmp/tomte-host" "$(printf '%s' "$sha256" | tr 'A-F' 'a-f')" "$target host binary"
+  say "Checksum verified"
 else
-  redirect_protocols='=https'
-  if [[ $RELEASE_BASE_URL != https://* ]]; then redirect_protocols='=https,http,file'; fi
   if [[ -n $version ]]; then
     release_url=$RELEASE_BASE_URL/$repo/releases/download/v$version
     say "Installing tomte $version from $repo"
@@ -230,20 +372,16 @@ else
     say "Installing the latest tomte release of $repo (a pre-release needs --version)"
   fi
   asset=tomte-host-$target
-  say "Downloading SHA256SUMS and the host binary ($target)"
-  fetch "$release_url/SHA256SUMS" "$tmp/SHA256SUMS"
-  fetch "$release_url/$asset" "$tmp/tomte-host"
-  lookup_checksum "$tmp/SHA256SUMS" "$asset"
-  verify "$tmp/tomte-host" "$listed" "$asset"
-  if [[ -n $unit_from_release ]]; then
-    say "Downloading tomte.service"
-    fetch "$release_url/tomte.service" "$tmp/tomte.service"
-    lookup_checksum "$tmp/SHA256SUMS" tomte.service
-    verify "$tmp/tomte.service" "$listed" tomte.service
-    unit=$tmp/tomte.service
-  fi
+  release_assets=("$asset")
+  if [[ -n $unit_from_release ]]; then release_assets+=(tomte.service); fi
+  say "Downloading the release and checking its signature ($target)"
+  download_verified_release "$release_url" "$tmp" "${release_assets[@]}"
+  [[ -z $version || $release_version == "$version" ]] ||
+    die "the release says it is $release_version, not $version; nothing was installed"
+  mv -f -- "$tmp/$asset" "$tmp/tomte-host"
+  if [[ -n $unit_from_release ]]; then unit=$tmp/tomte.service; fi
+  say "Signature and checksums verified (tomte $release_version)"
 fi
-say "Checksum verified"
 
 # --- 3. Sandbox dependencies -----------------------------------------------------------------
 
@@ -374,6 +512,29 @@ if ((stable < STABLE_SECONDS)); then
 fi
 say "$SERVICE.service is active"
 
+# --- 9b. Root update helper ------------------------------------------------------------------
+
+# A binary from --url has no release to update from, so the host reports its updates as unmanaged.
+if [[ -n $repo ]]; then
+  say "Installing the update helper ($UPDATE_PATH)"
+  install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0700 "$DATA_ROOT/updates"
+  write_update_conf "$tmp/update.conf" "$repo"
+  install -d -m 0755 "$ETC_DIR"
+  install -o root -g root -m 0644 "$tmp/update.conf" "$UPDATE_CONF"
+  write_update_units "$tmp"
+  install -o root -g root -m 0644 "$tmp/$UPDATE_SERVICE" "$UPDATE_DIR/$UPDATE_SERVICE"
+  install -o root -g root -m 0644 "$tmp/$UPDATE_PATH" "$UPDATE_DIR/$UPDATE_PATH"
+  systemctl daemon-reload
+  if "$BIN" version >/dev/null 2>&1; then
+    systemctl enable "$UPDATE_PATH"
+    systemctl restart "$UPDATE_PATH"
+  else
+    warn "$BIN has no \`version\` command (this release predates the update helper), so updating from the web UI stays off; install a newer release to turn it on"
+  fi
+else
+  say "Skipping the update helper: a binary from --url has no release to update from"
+fi
+
 # --- 10. Browser sandbox check under the unit's hardening ------------------------------------
 
 properties=()
@@ -446,12 +607,20 @@ fi
 
 cat <<EOF
 
-2. Sign in the Claude CLI once, in an SSH session with a TTY (not through the service):
+2. Sign in the Claude CLI once. The easiest way is in the web UI: after pairing, open
+   Settings, Models, and use "Sign in" under Claude: it shows a page to open in your
+   browser and takes the code it gives you.
+
+   Or, in an SSH session with a TTY (not through the service), run:
 
      $sign_in_command
 
    No sudo on this server? Replace "sudo -u $SERVICE_USER -H" with
    "runuser -u $SERVICE_USER -- env HOME=$DATA_ROOT".
+
+   Tomte ignores ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL and
+   CLAUDE_CODE_OAUTH_TOKEN in the service's environment. To bill by API, use the
+   custom provider in Settings, Models.
 
    Anthropic's terms for your Claude subscription apply to unattended and remote use of
    the CLI; check that they cover how you run tomte.

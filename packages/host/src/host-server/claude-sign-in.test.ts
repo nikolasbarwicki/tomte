@@ -3,6 +3,7 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { BILLING_ENV } from "../harness/index.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
 import { eventsOf } from "../testing/watch-events.ts";
 
@@ -35,9 +36,12 @@ const ALLOWED = [
   "SHLVL",
 ];
 
-/** Host process variables the CLI must never see. */
+/** Host process variables the CLI must never see; the first four are the billing variables. */
 const HOST_SECRETS = {
   ANTHROPIC_API_KEY: "sk-ant-synthetic-test-key",
+  ANTHROPIC_AUTH_TOKEN: "synthetic-auth-token",
+  ANTHROPIC_BASE_URL: "https://synthetic-gateway.example.test",
+  CLAUDE_CODE_OAUTH_TOKEN: "synthetic-oauth-token",
   CREDENTIALS_DIRECTORY: "/run/credentials/tomte.service",
   JUNK_FOR_TEST: "junk-value",
 };
@@ -129,7 +133,7 @@ describe("remote mode", () => {
     expect(Object.keys(env).filter((k) => !ALLOWED.includes(k))).toEqual([]);
     expect(env.CLAUDE_CONFIG_DIR).toBe(join(h.dataRoot, "claude"));
     expect(env.PATH).toBeTruthy();
-    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    for (const k of BILLING_ENV) expect(env[k]).toBeUndefined();
     expect(Object.values(env).some((v) => v.includes(KEY_FILE))).toBe(false);
   });
 
@@ -155,7 +159,7 @@ describe("remote mode", () => {
 });
 
 describe("local mode", () => {
-  test("the CLI still gets the host's whole environment and the host never checks the sign-in", async () => {
+  test("the CLI gets the host's environment minus the billing variables, and the host checks the sign-in as in remote mode", async () => {
     const h = await start([], { ...HOST_SECRETS, SENTINEL_FOR_TEST: "reaches-the-cli" });
     h.setSignedIn(false);
     await h.restart();
@@ -166,7 +170,8 @@ describe("local mode", () => {
     expect(env.SENTINEL_FOR_TEST).toBe("reaches-the-cli");
     expect(env.JUNK_FOR_TEST).toBe("junk-value");
     expect(env.CLAUDE_CONFIG_DIR).toBe(process.env.CLAUDE_CONFIG_DIR!);
-    expect(h.server.signInState()).toBe("unknown");
+    for (const k of BILLING_ENV) expect(env[k]).toBeUndefined();
+    await h.until(() => h.server.signInState() === "signed-out");
   });
 });
 

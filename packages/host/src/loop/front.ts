@@ -23,7 +23,8 @@ import {
 } from "../bots/index.ts";
 import {
   claudeHarness,
-  cmdExeSpawner,
+  isAuthFailure,
+  spawnOptions,
   type ClaudeAccess,
   type HostServerLease,
   type ResolvedCli,
@@ -69,7 +70,7 @@ export interface FrontOptions {
   resume: boolean;
   /** Leases the host servers the front may use; released when the query closes. */
   hostServers: () => HostServerLease;
-  /** Extra environment variables for the CLI, added to `claude.env()`; read whenever a query opens. */
+  /** Extra environment variables for the CLI, added to `claude.spawnSpec().env`; read whenever a query opens. */
   env?: () => Promise<Record<string, string>>;
   idleMs?: number;
   approveAll?: boolean;
@@ -223,61 +224,66 @@ export class FrontSession {
     });
     let live: Live;
     try {
-      const q = query({
-        prompt: input,
-        options: {
-          pathToClaudeCodeExecutable: this.o.cli.path,
-          ...(this.o.cli.needsShell ? { spawnClaudeCodeProcess: cmdExeSpawner } : {}),
-          cwd: this.o.cwd,
-          ...(this.started ? { resume: this.o.sessionId } : { sessionId: this.o.sessionId }),
-          persistSession: true,
-          includePartialMessages: true,
-          canUseTool: this.canUseTool,
-          // Only the worker asks the user: the front never blocks on a question, and its own tool set (`frontAgent`) leaves ask_user out.
-          mcpServers: {
-            ...Object.fromEntries(builtinServers),
-            host: createHostMcpServer({
-              delegate: {
-                askUser: (question, options, eventId, toolUseId) =>
-                  this.delegateFor(this.observer.callerOf(toolUseId)).askUser(
-                    question,
-                    options,
-                    eventId,
-                    toolUseId,
-                  ),
-                approve: (tool, input, reason) => this.o.delegate.approve(tool, input, reason),
-              },
-              memory: this.o.memory,
-              onMemory: this.o.onMemory,
-              log: this.log,
-            }),
-            [LOOP_SERVER]: this.o.loopServer,
+      const q = await this.o.claude.startGate(async () => {
+        // Taken inside the gate, so the credential handed over is the one set when this start begins.
+        const spec = this.o.claude.spawnSpec();
+        const started = query({
+          prompt: input,
+          options: {
+            pathToClaudeCodeExecutable: this.o.cli.path,
+            ...spawnOptions(this.o.cli, spec, (d) => this.log(`[cli stderr] ${d.trimEnd()}`)),
+            cwd: this.o.cwd,
+            ...(this.started ? { resume: this.o.sessionId } : { sessionId: this.o.sessionId }),
+            persistSession: true,
+            includePartialMessages: true,
+            canUseTool: this.canUseTool,
+            // Only the worker asks the user: the front never blocks on a question, and its own tool set (`frontAgent`) leaves ask_user out.
+            mcpServers: {
+              ...Object.fromEntries(builtinServers),
+              host: createHostMcpServer({
+                delegate: {
+                  askUser: (question, options, eventId, toolUseId) =>
+                    this.delegateFor(this.observer.callerOf(toolUseId)).askUser(
+                      question,
+                      options,
+                      eventId,
+                      toolUseId,
+                    ),
+                  approve: (tool, input, reason) => this.o.delegate.approve(tool, input, reason),
+                },
+                memory: this.o.memory,
+                onMemory: this.o.onMemory,
+                log: this.log,
+              }),
+              [LOOP_SERVER]: this.o.loopServer,
+            },
+            ...launch.options,
+            // The session's tools hold every agent's tools, because subagents only see what the session has; the main thread runs as
+            // the `front` agent, which is denied all of them.
+            tools: sessionTools(agents),
+            agent: "front",
+            agents: { ...agents, front: frontAgent(agents) },
+            agentProgressSummaries: true,
+            hooks: this.observer.hooks,
+            model: FRONT_MODEL,
+            thinking: { type: "disabled" },
+            env: {
+              ...spec.env,
+              ...(await this.o.env?.()),
+              CLAUDE_CODE_RESUME_INTERRUPTED_TURN: "1",
+              CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: String(MAX_PARALLEL),
+            },
+            stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
           },
-          ...launch.options,
-          // The session's tools hold every agent's tools, because subagents only see what the session has; the main thread runs as
-          // the `front` agent, which is denied all of them.
-          tools: sessionTools(agents),
-          agent: "front",
-          agents: { ...agents, front: frontAgent(agents) },
-          agentProgressSummaries: true,
-          hooks: this.observer.hooks,
-          model: FRONT_MODEL,
-          thinking: { type: "disabled" },
-          env: {
-            ...this.o.claude.env(),
-            ...(await this.o.env?.()),
-            CLAUDE_CODE_RESUME_INTERRUPTED_TURN: "1",
-            CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: String(MAX_PARALLEL),
-          },
-          stderr: (d) => this.log(`[cli stderr] ${d.trimEnd()}`),
-        },
+        });
+        try {
+          await started.initializationResult();
+        } catch (e) {
+          started.close();
+          throw e;
+        }
+        return started;
       });
-      try {
-        await q.initializationResult();
-      } catch (e) {
-        q.close();
-        throw e;
-      }
       live = { q, input, lease, expiresAt: session.expiresAt, told: false };
     } catch (e) {
       lease.release();
@@ -331,6 +337,7 @@ export class FrontSession {
       failure = new Error("Claude Code exited");
     } catch (e) {
       failure = e instanceof Error ? e : new Error(String(e));
+      if (isAuthFailure(failure)) void this.o.claude.recheck("turn-auth-failure");
     }
     if (this.live !== live) return;
     this.pendingClose = undefined;
@@ -346,6 +353,8 @@ export class FrontSession {
 
   private observe(m: SDKMessage) {
     if (m.type === "result") {
+      if (m.is_error && isAuthFailure("result" in m ? m.result : m.errors.join("; ")))
+        void this.o.claude.recheck("turn-auth-failure");
       this.record(m);
       this.turn = false;
       this.armIdle();

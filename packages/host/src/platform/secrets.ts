@@ -35,3 +35,9 @@ export const channelTokenSecretName = (kind: string) => `channel-token:${kind}`;
 
 /** The custom Claude provider (`ClaudeGateway` as JSON), token included; only in the secrets backend. */
 export const claudeGatewaySecretName = "claude-gateway";
+
+/** The long-lived Claude token (from `claude setup-token`), as the bare string; only in the secrets backend. */
+export const claudeLongLivedTokenSecretName = "claude-long-lived-token";
+
+/** The SHA-256 digest of a long-lived token a CLI turn refused, so a restart with that token starts out rejected; never the token. Deleted when a token is stored or removed. */
+export const claudeTokenRejectedSecretName = "claude-long-lived-token-rejected";

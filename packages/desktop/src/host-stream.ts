@@ -1,31 +1,33 @@
 import { BotsEvent, type BotSummary } from "@tomte/contract/events";
+import { HostStatusEvent, type HostStatus } from "@tomte/contract/host-status";
 
 import type { HostFetch } from "./host-api.ts";
 
 const FIRST_RETRY_MS = 1_000;
 const LONGEST_RETRY_MS = 30_000;
 
-export interface BotsFollower {
+export interface HostFollower {
   stop(): void;
 }
 
 /**
- * Follows a host's server-sent event stream (`GET /api/events`) with a device token and reports every `bots` slice. The
- * stream also carries chats, memory and credentials; those events are skipped without being parsed against any schema,
- * so the app reads nothing but what the banner needs. A stream that ends or fails is opened again after a pause that
+ * Follows a host's server-sent event stream (`GET /api/events`) with a device token and reports every `bots` slice and
+ * every `host-status`. The stream also carries chats, memory and credentials; those events are skipped without being
+ * parsed against any schema, so the app reads nothing but what the tray and the banner need. A stream that ends or fails is opened again after a pause that
  * doubles up to 30 seconds. `onOpen` runs each time one is open, before its first event, so a consumer can tell a fresh
  * snapshot from a change.
  */
-export function followBots(
+export function followHost(
   target: { origin: string; token: string },
   deps: {
     fetch: HostFetch;
     onOpen(): void;
     onBots(bots: BotSummary[]): void;
+    onStatus(status: HostStatus): void;
     /** Why the stream is down, once per outage. */
     onDown(reason: string): void;
   },
-): BotsFollower {
+): HostFollower {
   const controller = new AbortController();
   const { signal } = controller;
   let opened = false;
@@ -67,10 +69,14 @@ export function followBots(
     } catch {
       return;
     }
-    if (typeof event !== "object" || event === null || !("type" in event) || event.type !== "bots")
-      return;
-    const bots = BotsEvent.safeParse(event);
-    if (bots.success) deps.onBots(bots.data.bots);
+    if (typeof event !== "object" || event === null || !("type" in event)) return;
+    if (event.type === "bots") {
+      const bots = BotsEvent.safeParse(event);
+      if (bots.success) deps.onBots(bots.data.bots);
+    } else if (event.type === "host-status") {
+      const status = HostStatusEvent.safeParse(event);
+      if (status.success) deps.onStatus(status.data.status);
+    }
   }
 
   void (async () => {

@@ -16,6 +16,16 @@ export const HOST_INFO_PATH = "/api/host-info";
 /** `/oauth/callback` is protected by its OAuth state parameter, not by a device token. */
 const OAUTH_CALLBACK_PATH = "/oauth/callback";
 
+/** The streamed file upload (ADR-0005, amended): the one mutating `/api/*` route whose body is raw bytes. */
+export const UPLOAD_PATH = "/api/files/upload";
+
+const JSON_TYPE = /^application\/json\s*(;|$)/i;
+const BYTES_TYPE = /^application\/octet-stream\s*(;|$)/i;
+
+/** A mutating request's body is JSON, except the upload's, which is bytes. */
+const hasAllowedContentType = (path: string, contentType: string | undefined) =>
+  (path === UPLOAD_PATH ? BYTES_TYPE : JSON_TYPE).test(contentType ?? "");
+
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
@@ -63,10 +73,10 @@ function touchPresence(presence: Pick<Presence, "touch">) {
 /**
  * The one check every request to the client listener passes before it is routed, so a rejected request never
  * reaches a handler. In order: the Host names this host (403); a mutating request's Origin is the public URL's or
- * the loopback origin (403), which stops other web pages, and its body is JSON (415), which forces a CORS
- * preflight; then a valid device token (401), except on the open paths. The events post is exempt from the Origin
- * rule as well as the device token. The method's own rules stay with its route. A request a device token accepted
- * is the owner's presence, except the event stream.
+ * the loopback origin (403), which stops other web pages, and its body is JSON (415), or raw bytes on the upload
+ * route; neither type can be sent cross-origin without a CORS preflight; then a valid device token (401), except
+ * on the open paths. The events post is exempt from the Origin rule as well as the device token. The method's own
+ * rules stay with its route. A request a device token accepted is the owner's presence, except the event stream.
  */
 export function withBoundary(
   origin: HostOrigin,
@@ -82,8 +92,14 @@ export function withBoundary(
     if (!SAFE_METHODS.has(method)) {
       if (!isEventsPost(path, method) && !origin.namesOrigin(req.headers.origin))
         return reject(res, 403, "same-origin requests only");
-      if (!/^application\/json\s*(;|$)/i.test(req.headers["content-type"] ?? ""))
-        return reject(res, 415, "content type must be application/json");
+      if (!hasAllowedContentType(path, req.headers["content-type"]))
+        return reject(
+          res,
+          415,
+          path === UPLOAD_PATH
+            ? "content type must be application/octet-stream"
+            : "content type must be application/json",
+        );
     }
     if (!isOpen(path, method)) {
       const token = presentedToken(req);

@@ -8,7 +8,7 @@ Type=simple
 User=tomte
 Group=tomte
 EnvironmentFile=/etc/tomte/tomte.env
-# Optional settings in that file beyond the installer's: TOMTE_PAUSE_AFTER_ABSENCE_DAYS=14 pauses every routine after 14 days without you (0, the default, is off).
+# Optional settings in that file beyond the installer's: TOMTE_PAUSE_AFTER_ABSENCE_DAYS=14 pauses every routine after 14 days without you (0, the default, is off); TOMTE_MAX_UPLOAD_MIB=200 caps one uploaded file at 200 MiB (1024, 1 GiB, is the default).
 LoadCredentialEncrypted=secrets-key:/etc/credstore.encrypted/tomte.secrets-key
 ExecStart=/usr/local/bin/tomte-host --mode remote --data-root /var/lib/tomte --secrets-key-file %d/secrets-key
 WorkingDirectory=/var/lib/tomte

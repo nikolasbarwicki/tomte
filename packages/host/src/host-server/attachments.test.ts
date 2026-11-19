@@ -1,19 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { UploadResponse } from "@tomte/contract/api";
+import type { Attachment } from "@tomte/contract/events";
+
 import { botFilesPath } from "../bots/index.ts";
 import { startHandoffHost, type HandoffHost } from "../testing/test-host.ts";
+import { uploadFile } from "../testing/upload-file.ts";
 import { eventsOf } from "../testing/watch-events.ts";
 
 let host: HandoffHost;
@@ -38,13 +33,27 @@ afterEach(async () => {
 });
 
 const open = () => host.ui("/api/open", { botId });
-const b64 = (s: string | Uint8Array) => Buffer.from(s).toString("base64");
-const attach = async (...entries: [path: string, data: string | Uint8Array][]) => {
-  const res = await host.ui("/api/files/attach", {
-    files: entries.map(([path, data]) => ({ path, data: b64(data) })),
-  });
-  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
-};
+
+/** What the page does before it sends a file: uploads it under `attachments/`. */
+async function saveFile(name: string, data: string): Promise<Attachment> {
+  const res = await uploadFile(host, `attachments/${name}`, data);
+  expect(res.status).toBe(200);
+  return { path: ((await res.json()) as UploadResponse).path, folder: false };
+}
+
+/** What the page does before it sends a folder: uploads each file into one new folder under `attachments/`. */
+async function saveFolder(
+  name: string,
+  ...files: [path: string, data: string][]
+): Promise<Attachment> {
+  let top = `attachments/${name}`;
+  for (const [path, data] of files) {
+    const res = await uploadFile(host, `${top}/${path}`, data, { folder: top });
+    expect(res.status).toBe(200);
+    top = ((await res.json()) as UploadResponse).path.split("/").slice(0, 2).join("/");
+  }
+  return { path: top, folder: true };
+}
 
 async function userEvents(): Promise<unknown[]> {
   const ctl = new AbortController();
@@ -67,85 +76,14 @@ async function userEvents(): Promise<unknown[]> {
     .filter((e) => e.type === "user");
 }
 
-describe("attaching", () => {
-  beforeEach(async () => {
-    expect((await open()).status).toBe(200);
-  });
-
-  test("a file is saved with its exact bytes, and a second one of the same name gets a new name", async () => {
-    const bytes = Uint8Array.from({ length: 70_000 }, (_, i) => i % 256);
-    expect(await attach(["report.v1.bin", bytes])).toEqual({
-      status: 200,
-      body: { attachment: { path: "attachments/report.v1.bin", folder: false } },
-    });
-    expect(await attach(["report.v1.bin", "other"])).toEqual({
-      status: 200,
-      body: { attachment: { path: "attachments/report.v1 2.bin", folder: false } },
-    });
-    expect(new Uint8Array(readFileSync(join(files, "attachments", "report.v1.bin")))).toEqual(
-      bytes,
-    );
-    expect(readFileSync(join(files, "attachments", "report.v1 2.bin"), "utf8")).toBe("other");
-  });
-
-  test("a folder keeps its tree under one name", async () => {
-    expect(await attach(["notes/a.md", "A"], ["notes/2026/june.md", "J"])).toEqual({
-      status: 200,
-      body: { attachment: { path: "attachments/notes", folder: true } },
-    });
-    expect((await attach(["notes/b.md", "B"])).body).toEqual({
-      attachment: { path: "attachments/notes 2", folder: true },
-    });
-    expect(readFileSync(join(files, "attachments", "notes", "2026", "june.md"), "utf8")).toBe("J");
-    expect(readdirSync(join(files, "attachments", "notes 2"))).toEqual(["b.md"]);
-  });
-
-  test("paths that escape, mix names or mix a file with a folder are refused and write nothing", async () => {
-    for (const entries of [
-      [["../evil.txt", "x"]],
-      [["notes/../../evil.txt", "x"]],
-      [["/etc/evil.txt", "x"]],
-      [
-        ["a/x.txt", "x"],
-        ["b/y.txt", "y"],
-      ],
-      [
-        ["a", "x"],
-        ["a/y.txt", "y"],
-      ],
-      [
-        ["a.txt", "x"],
-        ["a.txt", "y"],
-      ],
-    ] as [string, string][][]) {
-      expect((await attach(...entries)).status).toBe(400);
-    }
-    expect(existsSync(join(files, "evil.txt"))).toBe(false);
-    expect(existsSync(join(files, "..", "evil.txt"))).toBe(false);
-    expect(existsSync(join(files, "attachments"))).toBe(false);
-  });
-
-  test("an attachments folder a bot swapped for a symlink outside is refused", async () => {
-    const outside = mkdtempSync(join(tmpdir(), "attachments-outside-"));
-    try {
-      mkdirSync(files, { recursive: true });
-      symlinkSync(outside, join(files, "attachments"));
-      expect((await attach(["report.txt", "x"])).status).toBe(400);
-      expect(readdirSync(outside)).toEqual([]);
-    } finally {
-      rmSync(outside, { recursive: true, force: true });
-    }
-  });
-});
-
 describe("sending with attachments", () => {
   beforeEach(async () => {
     expect((await open()).status).toBe(200);
   });
 
   test("the bot gets each attachment's absolute path, and the page shows them beside the text", async () => {
-    const file = (await attach(["report.txt", "r"])).body.attachment;
-    const folder = (await attach(["notes/a.md", "a"])).body.attachment;
+    const file = await saveFile("report.txt", "r");
+    const folder = await saveFolder("notes", ["a.md", "a"]);
     expect(
       (await host.ui("/api/send", { text: "read these", attachments: [file, folder] })).status,
     ).toBe(200);
@@ -163,7 +101,7 @@ describe("sending with attachments", () => {
   });
 
   test("a message may be only attachments", async () => {
-    const file = (await attach(["report.txt", "r"])).body.attachment;
+    const file = await saveFile("report.txt", "r");
     expect((await host.ui("/api/send", { text: "", attachments: [file] })).status).toBe(200);
     await host.until(() => host.messagesOf(botId).length === 1);
     expect(host.messagesOf(botId)[0]).toBe(

@@ -34,23 +34,23 @@ describe("the host supervisor", () => {
   test("goes from starting to running with the sidecar that was launched", async () => {
     const sidecar = fakeSidecar();
     const { supervisor, seen } = setup(async () => sidecar);
-    await supervisor.start();
+    await supervisor.want(true);
     expect(seen).toEqual(["starting", "running"]);
     expect(supervisor.state()).toEqual({ status: "running", sidecar });
   });
 
-  test("an unexpected exit is reported as stopped, and start() brings it back with a fresh sidecar", async () => {
+  test("an unexpected exit is reported as stopped, and want(true) brings it back with a fresh sidecar", async () => {
     const launched: ReturnType<typeof fakeSidecar>[] = [];
     const { supervisor, seen } = setup(async () => {
       launched.push(fakeSidecar());
       return launched.at(-1)!;
     });
-    await supervisor.start();
+    await supervisor.want(true);
     launched[0]!.crash();
     await tick();
     expect(supervisor.state().status).toBe("stopped");
 
-    await supervisor.start();
+    await supervisor.want(true);
     expect(supervisor.state()).toEqual({ status: "running", sidecar: launched[1]! });
     expect(seen).toEqual(["starting", "running", "stopped", "starting", "running"]);
     launched[0]!.crash();
@@ -58,7 +58,7 @@ describe("the host supervisor", () => {
     expect(supervisor.state().status).toBe("running");
   });
 
-  test("start() while starting or running launches nothing more", async () => {
+  test("want(true) while starting or running launches nothing more", async () => {
     let launches = 0;
     const gate = Promise.withResolvers<void>();
     const { supervisor } = setup(async () => {
@@ -66,11 +66,11 @@ describe("the host supervisor", () => {
       await gate.promise;
       return fakeSidecar();
     });
-    const first = supervisor.start();
-    const second = supervisor.start();
+    const first = supervisor.want(true);
+    const second = supervisor.want(true);
     gate.resolve();
     await Promise.all([first, second]);
-    await supervisor.start();
+    await supervisor.want(true);
     expect(launches).toBe(1);
   });
 
@@ -80,21 +80,21 @@ describe("the host supervisor", () => {
       if (attempt++ === 0) throw new Error("no host binary");
       return fakeSidecar();
     });
-    await supervisor.start();
+    await supervisor.want(true);
     expect(supervisor.state()).toEqual({ status: "stopped", reason: "no host binary" });
-    await supervisor.start();
+    await supervisor.want(true);
     expect(supervisor.state().status).toBe("running");
   });
 
   test("stop() ends the sidecar without a stopped state, and nothing starts after it", async () => {
     const sidecar = fakeSidecar();
     const { supervisor, seen } = setup(async () => sidecar);
-    await supervisor.start();
+    await supervisor.want(true);
     await supervisor.stop();
     await tick();
     expect(sidecar.stopped).toBe(true);
     expect(seen).toEqual(["starting", "running"]);
-    await supervisor.start();
+    await supervisor.want(true);
     expect(seen).toEqual(["starting", "running"]);
   });
 
@@ -105,11 +105,91 @@ describe("the host supervisor", () => {
       await gate.promise;
       return sidecar;
     });
-    const starting = supervisor.start();
+    const starting = supervisor.want(true);
     const stopping = supervisor.stop();
     gate.resolve();
     await Promise.all([starting, stopping]);
     expect(sidecar.stopped).toBe(true);
+  });
+
+  test("want(false) ends a running host as paused, never as an unexpected exit, and want(true) starts a new one", async () => {
+    const launched: ReturnType<typeof fakeSidecar>[] = [];
+    const { supervisor, seen } = setup(async () => {
+      launched.push(fakeSidecar());
+      return launched.at(-1)!;
+    });
+    await supervisor.want(true);
+    await supervisor.want(false);
+    await tick();
+    expect(launched[0]!.stopped).toBe(true);
+    expect(supervisor.state()).toEqual({ status: "paused" });
+    expect(seen).toEqual(["starting", "running", "paused"]);
+
+    await supervisor.want(true);
+    expect(supervisor.state()).toEqual({ status: "running", sidecar: launched[1]! });
+    expect(launched).toHaveLength(2);
+  });
+
+  test("repeating the wish for the state the host is in changes nothing", async () => {
+    let launches = 0;
+    const { supervisor, seen } = setup(async () => {
+      launches++;
+      return fakeSidecar();
+    });
+    await supervisor.want(false);
+    await supervisor.want(false);
+    expect(launches).toBe(0);
+    await supervisor.want(true);
+    await supervisor.want(true);
+    expect(launches).toBe(1);
+    expect(seen).toEqual(["paused", "starting", "running"]);
+  });
+
+  test("a host never started, or one that crashed, is paused without launching anything", async () => {
+    const launched: ReturnType<typeof fakeSidecar>[] = [];
+    const { supervisor } = setup(async () => {
+      launched.push(fakeSidecar());
+      return launched.at(-1)!;
+    });
+    await supervisor.want(false);
+    expect(supervisor.state()).toEqual({ status: "paused" });
+
+    await supervisor.want(true);
+    launched[0]!.crash();
+    await tick();
+    expect(supervisor.state().status).toBe("stopped");
+    await supervisor.want(false);
+    expect(supervisor.state()).toEqual({ status: "paused" });
+    expect(launched).toHaveLength(1);
+  });
+
+  test("wishes made while a start is in progress run in order, so two hosts never overlap", async () => {
+    const gate = Promise.withResolvers<void>();
+    const sidecars: ReturnType<typeof fakeSidecar>[] = [];
+    const { supervisor, seen } = setup(async () => {
+      await gate.promise;
+      sidecars.push(fakeSidecar());
+      return sidecars.at(-1)!;
+    });
+    const calls = [supervisor.want(true), supervisor.want(false), supervisor.want(true)];
+    gate.resolve();
+    await Promise.all(calls);
+    expect(seen).toEqual(["starting", "running", "paused", "starting", "running"]);
+    expect(sidecars[0]!.stopped).toBe(true);
+    expect(supervisor.state()).toEqual({ status: "running", sidecar: sidecars[1]! });
+  });
+
+  test("a paused host can be stopped for good, and nothing is wanted after it", async () => {
+    let launches = 0;
+    const { supervisor } = setup(async () => {
+      launches++;
+      return fakeSidecar();
+    });
+    await supervisor.want(false);
+    await supervisor.stop();
+    await supervisor.want(true);
+    expect(launches).toBe(0);
+    expect(supervisor.state()).toEqual({ status: "paused" });
   });
 
   test("a listener can be removed", async () => {
@@ -117,7 +197,7 @@ describe("the host supervisor", () => {
     const seen: string[] = [];
     const remove = supervisor.onChange((s) => void seen.push(s.status));
     remove();
-    await supervisor.start();
+    await supervisor.want(true);
     expect(seen).toEqual([]);
   });
 });

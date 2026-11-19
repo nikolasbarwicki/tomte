@@ -3,7 +3,7 @@ import { request } from "node:http";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { PublicHostInfo } from "@tomte/contract/api";
+import { PublicHostInfo, SHELL_API } from "@tomte/contract/api";
 
 import { getBot, setBrowserEnabled, setBrowserHeaded } from "../bots/index.ts";
 import { defined } from "../testing/defined.ts";
@@ -42,47 +42,33 @@ function statusWithHost(h: HandoffHost, path: string, hostHeader: string) {
 }
 
 describe("host-info", () => {
-  test("local mode answers without a device token: everything available, no Claude sign-in state", async () => {
+  test("local mode answers without a device token: everything available", async () => {
     const h = await start();
     const { status, body } = await hostInfo(h);
     expect(status).toBe(200);
     expect(body.success).toBe(true);
     const info = defined(body.data, "host info");
     expect(info.mode).toBe("local");
-    expect(info.apiVersion).toBe(1);
+    expect(info.shellApi).toEqual(SHELL_API);
     expect(info.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(info.capabilities).toEqual({ reveal: true, headedBrowser: true, browserSandbox: true });
-    expect("claude" in info).toBe(false);
   });
 
-  test("remote mode reports no reveal and no headed Chrome, and the Claude sign-in as the CLI last said", async () => {
+  test("remote mode reports no reveal and no headed Chrome", async () => {
     const h = await start(REMOTE);
-    await h.until(() => h.server.signInState() === "signed-in");
     const signedIn = defined((await hostInfo(h)).body.data, "host info");
     expect(signedIn.mode).toBe("remote");
-    expect(signedIn.claude).toBe("signed-in");
     expect(signedIn.capabilities).toEqual({
       reveal: false,
       headedBrowser: false,
       browserSandbox: true,
     });
-
-    h.setSignedIn(false);
-    await h.restart(REMOTE);
-    await h.until(() => h.server.signInState() === "signed-out");
-    expect(defined((await hostInfo(h)).body.data, "host info").claude).toBe("signed-out");
   });
 
-  test("it carries nothing but version, API version, mode, sign-in state and capabilities", async () => {
+  test("it carries nothing but version, shell API range, mode and capabilities", async () => {
     const h = await start(REMOTE);
     const body = (await (await fetch(`${h.clientUrl}/api/host-info`)).json()) as object;
-    expect(Object.keys(body).sort()).toEqual([
-      "apiVersion",
-      "capabilities",
-      "claude",
-      "mode",
-      "version",
-    ]);
+    expect(Object.keys(body).sort()).toEqual(["capabilities", "mode", "shellApi", "version"]);
   });
 
   test("the Host check still applies, and only a GET skips the device token", async () => {

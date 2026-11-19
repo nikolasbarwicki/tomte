@@ -481,7 +481,7 @@ async function main(): Promise<number> {
   mkdirSync(process.env.FAKE_CLAUDE_DIR);
   const claude = createClaudeAccess(config, cli);
   try {
-    if ((await claude.checkSignIn()) === "signed-out") {
+    if ((await claude.recheck("host-command")).state === "signed-out") {
       console.error(
         `Claude is not signed in (CLI ${cli.path}). Sign in with \`${hostCommand("auth-login")}\` and run the eval again.`,
       );

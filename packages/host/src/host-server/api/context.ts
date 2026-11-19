@@ -13,6 +13,7 @@ import type { Integrations } from "../../integrations/index.ts";
 import type { HostConfig } from "../../platform/config.ts";
 import type { SecretStore } from "../../platform/secrets.ts";
 import type { Routines } from "../../routines/index.ts";
+import type { Upkeep } from "../../upkeep/index.ts";
 import type { Chats, OpenChat } from "../chats.ts";
 import type { DeviceSessions } from "../device-sessions.ts";
 import type { EventStream } from "../events.ts";
@@ -32,6 +33,8 @@ export interface ApiContext {
   cli: ResolvedCli;
   /** The Claude CLI's environment and sign-in. */
   claude: ClaudeAccess;
+  /** The host's own update: `/api/updates/run` hands it the owner's action. */
+  upkeep: Upkeep;
   /** How this host was started: its mode and secrets backend name the sign-in command. */
   config: HostConfig;
   db: Database;

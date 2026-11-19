@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 
 import { _electron, type ElectronApplication, type Page } from "playwright-core";
 
+import { LOCAL_HOST_QUESTION_ENV } from "../packages/desktop/src/local-policy.ts";
 import { UPDATES_ENV } from "../packages/desktop/src/updates.ts";
 import {
   outsideLineage,
@@ -259,6 +260,8 @@ export async function createSmokeRun(
       TOMTE_DESKTOP_LOGIN_ITEM_FILE: loginItemFile,
       // No smoke asks an update feed for anything; a launch that wants the check on says so through `extra`.
       [UPDATES_ENV]: "off",
+      // No smoke opens the one-time "keep this Mac's bots running" dialog; the one that exercises the question replaces it in the main process.
+      [LOCAL_HOST_QUESTION_ENV]: "off",
       ...extra,
     };
   }
@@ -275,8 +278,19 @@ export async function createSmokeRun(
       timeout: LAUNCH_TIMEOUT_MS,
     });
     launched.push(app);
-    const page = await app.firstWindow();
-    await page.waitForURL(CLIENT_URL, { timeout: timeoutMs });
+    // Not `firstWindow()`: when the saved host is down the app also opens the Connections window at once, and Playwright may list it first.
+    const page = await until("the main window to show a host's UI", timeoutMs, () =>
+      app.windows().find((w) => CLIENT_URL.test(w.url())),
+    ).catch((error: unknown) => {
+      const urls = app.windows().map((w) => w.url().slice(0, 120));
+      info(`windows when it gave up: ${JSON.stringify(urls)}`);
+      for (const name of ["desktop.log", "host.log"]) {
+        const file = join(userData, "logs", name);
+        if (existsSync(file))
+          info(`${name} tail:\n${readFileSync(file, "utf8").split("\n").slice(-25).join("\n")}`);
+      }
+      throw error;
+    });
     return {
       app,
       page,

@@ -1,7 +1,16 @@
+import { Database } from "bun:sqlite";
 // The whole host as the desktop app runs it: `main.ts --sidecar` as a subprocess on a temp data root, with the fake Claude CLI and file secrets, driven over stdin, stdout and HTTP.
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,6 +18,7 @@ import { DeviceList } from "@tomte/contract/api";
 import { LAUNCH_DEVICE_NAME, SESSION_COOKIE, SidecarReady } from "@tomte/contract/sidecar";
 
 import { acquireDataRootLock } from "../platform/data-root-lock.ts";
+import { migrate, SCHEMA_VERSION } from "../platform/db.ts";
 
 const REPO = join(import.meta.dir, "../../../..");
 const MAIN = join(import.meta.dir, "../main.ts");
@@ -274,5 +284,26 @@ describe("a host started without --sidecar", () => {
     await Bun.sleep(500);
     expect(proc.exitCode).toBeNull();
     expect((await fetch(`${url}/api/host-info`)).status).toBe(200);
+  });
+
+  test("exits 2 naming both schema versions and leaves the database as it was when it is newer than the host knows", async () => {
+    mkdirSync(dataRootOf(), { recursive: true });
+    const file = join(dataRootOf(), "tomte.db");
+    const old = migrate(new Database(file, { create: true }));
+    old.run(`PRAGMA user_version = ${SCHEMA_VERSION + 1}`);
+    old.run("PRAGMA wal_checkpoint(TRUNCATE)");
+    old.close();
+    const before = readFileSync(file);
+
+    const proc = start("pipe");
+    procs.push(proc);
+    const stderr = new Response(proc.stderr).text();
+
+    expect(await proc.exited).toBe(2);
+    const text = await stderr;
+    expect(text).toContain(`version ${SCHEMA_VERSION + 1}`);
+    expect(text).toContain(`version ${SCHEMA_VERSION} this host knows`);
+    expect(text).not.toContain("tomte UI:");
+    expect(readFileSync(file).equals(before)).toBe(true);
   });
 });

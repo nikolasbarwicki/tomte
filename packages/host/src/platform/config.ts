@@ -38,6 +38,8 @@ export interface HostConfig {
   sidecar: boolean;
   /** Days without any action of the owner (a request from a paired device except the event stream, or a linked channel action) after which every active routine is paused; 0 is off. `--pause-after-absence-days`, `TOMTE_PAUSE_AFTER_ABSENCE_DAYS`. */
   pauseAfterAbsenceDays: number;
+  /** The most bytes one uploaded file may hold, per file; a larger upload is refused with 413. `--max-upload-mib`, `TOMTE_MAX_UPLOAD_MIB` (whole MiB, at least 1); 1 GiB by default. */
+  maxUploadBytes: number;
 }
 
 /** The startup flags or environment variables are wrong; the message says which and why. */
@@ -57,6 +59,7 @@ const FLAGS = {
   "secrets-key-file": { type: "string" },
   "relay-config": { type: "string" },
   "pause-after-absence-days": { type: "string" },
+  "max-upload-mib": { type: "string" },
 } as const;
 
 const MODES: readonly string[] = ["local", "remote"] satisfies HostMode[];
@@ -171,6 +174,20 @@ function parseAbsenceDays(raw: string): number {
   return Number(raw);
 }
 
+/** One MiB is 2^20 bytes. */
+const MIB = 2 ** 20;
+
+/** The per-file upload cap when nothing sets one: 1 GiB. */
+const DEFAULT_MAX_UPLOAD_MIB = 1024;
+
+function parseMaxUploadMib(raw: string): number {
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw) * MIB) || Number(raw) < 1)
+    throw new InvalidConfig(
+      `invalid max upload size "${raw}": expected a whole number of MiB, at least 1`,
+    );
+  return Number(raw);
+}
+
 /** Remote mode is Linux-only (ADR-0006): the message says why for the platform this host runs on and where remote mode can run instead. */
 function remoteRefusal(platform: NodeJS.Platform): string {
   const why =
@@ -190,8 +207,8 @@ function parseFlags(argv: readonly string[]) {
 
 /**
  * Reads the host's configuration from command-line flags (`--mode`, `--data-root`, `--host`, `--port`, `--public-url`, `--allow-plain-http`,
- * `--secrets`, `--secrets-key-file`, `--relay-config`, `--pause-after-absence-days`, `--vite`, `--sidecar`) and
- * `TOMTE_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|ALLOW_PLAIN_HTTP|SECRETS|SECRETS_KEY_FILE|RELAY_CONFIG|PAUSE_AFTER_ABSENCE_DAYS|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
+ * `--secrets`, `--secrets-key-file`, `--relay-config`, `--pause-after-absence-days`, `--max-upload-mib`, `--vite`, `--sidecar`) and
+ * `TOMTE_MODE|DATA_ROOT|HOST|PORT|PUBLIC_URL|ALLOW_PLAIN_HTTP|SECRETS|SECRETS_KEY_FILE|RELAY_CONFIG|PAUSE_AFTER_ABSENCE_DAYS|MAX_UPLOAD_MIB|VITE|ASK_APPROVAL`. `positionals` are the arguments that are not flags.
  * Without a data root the OS application-data directory is used. Remote mode parses on Linux only (ADR-0006).
  */
 export function parseHostConfig(
@@ -231,6 +248,7 @@ export function parseHostConfig(
   const rawAskApproval = get("TOMTE_ASK_APPROVAL");
   const rawAbsenceDays =
     values["pause-after-absence-days"] ?? get("TOMTE_PAUSE_AFTER_ABSENCE_DAYS");
+  const rawMaxUploadMib = values["max-upload-mib"] ?? get("TOMTE_MAX_UPLOAD_MIB");
   const rawRelayConfig = values["relay-config"] ?? get("TOMTE_RELAY_CONFIG");
   if (rawRelayConfig !== undefined && !isAbsolute(rawRelayConfig))
     throw new InvalidConfig(`invalid relay config "${rawRelayConfig}": expected an absolute path`);
@@ -259,6 +277,10 @@ export function parseHostConfig(
       isolateAllBots: mode === "remote",
       sidecar: values.sidecar ?? false,
       pauseAfterAbsenceDays: rawAbsenceDays === undefined ? 0 : parseAbsenceDays(rawAbsenceDays),
+      maxUploadBytes:
+        (rawMaxUploadMib === undefined
+          ? DEFAULT_MAX_UPLOAD_MIB
+          : parseMaxUploadMib(rawMaxUploadMib)) * MIB,
       vite: values.vite ?? (rawVite === undefined ? false : parseBool("TOMTE_VITE", rawVite)),
       askApproval:
         rawAskApproval === undefined ? false : parseBool("TOMTE_ASK_APPROVAL", rawAskApproval),

@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import { ATTACHMENTS_DIR } from "@tomte/contract/api";
 import { BotAvatar, COLOR_NAMES, defaultAvatar } from "@tomte/contract/avatars";
 import {
   Bot,
@@ -23,7 +24,6 @@ import {
 } from "@tomte/contract/events";
 import { z } from "zod";
 
-import { ATTACHMENTS_DIR } from "./attachments.ts";
 import { CHIEF_OF_STAFF_INSTRUCTIONS } from "./chief-of-staff.ts";
 import { instructionsPath, readMemory, userMemoryPath, writeMemory } from "./memory.ts";
 import { type HostDelegate } from "./session-kit.ts";
@@ -63,14 +63,10 @@ export {
   listAllowances,
   removeAllowance,
 } from "./allowance-store.ts";
+export { attachmentExists, attachmentTags, parseAttachments } from "./attachments.ts";
+export { BadUpload, UploadTooLarge, writeUpload } from "./upload.ts";
 export {
-  attachmentExists,
-  attachmentTags,
-  BadAttachment,
-  parseAttachments,
-  saveAttachment,
-} from "./attachments.ts";
-export {
+  archive,
   deleteFile,
   listFiles,
   openFileInside,

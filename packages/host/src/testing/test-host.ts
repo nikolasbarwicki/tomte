@@ -67,7 +67,7 @@ export interface HandoffHost {
     priority?: string;
     origin?: { kind: string };
   }[];
-  /** CLI launches the fake CLI recorded: the directory it ran in, the system prompt addition, the MCP servers it was given, the whole environment it started with and its command line. */
+  /** CLI launches the fake CLI recorded: the directory it ran in, the system prompt addition, the MCP servers it was given, the whole environment it started with, the credential it read from a descriptor, and its command line. */
   launches(): {
     cwd: string;
     appendSystemPrompt?: string;
@@ -78,6 +78,8 @@ export interface HandoffHost {
     >;
     mcpServers: Record<string, { url: string; headers: { Authorization: string } }>;
     env: Record<string, string>;
+    /** What the fake CLI read from the descriptor the host named in the environment; absent when none was named. */
+    credential?: { variable: string; token?: string; error?: string };
     argv: string[];
   }[];
   /** The `set_model` and `apply_flag_settings` control requests the fake CLI received, oldest first. */
@@ -141,6 +143,8 @@ export interface HandoffHost {
   /** The executable the host runs as its Claude CLI, and what its `auth status` reports from now on. */
   readonly cliPath: string;
   setSignedIn(signedIn: boolean): void;
+  /** The one long-lived token the fake CLI's pretend API refuses from now on (its turns fail `401 Invalid bearer token`, `auth status` still says signed in); undefined accepts every token again. */
+  setInvalidToken(token: string | undefined): void;
   /** The exit code the fake's `auth login` returns from now on. */
   setLoginExit(code: number): void;
   /** Completes a waiting `auth login` the way the real CLI's local callback does, without a pasted code. */
@@ -199,6 +203,8 @@ export async function startHandoffHost(
     | "absenceCheckMs"
     | "lockedTools"
     | "google"
+    | "claudeRecheckMs"
+    | "upkeep"
   >,
   /** The environment the host's configuration is read from, such as `TOMTE_ASK_APPROVAL`. */
   env: Record<string, string> = {},
@@ -361,6 +367,10 @@ export async function startHandoffHost(
         ? rmSync(join(claudeDir, "signed-out"), { force: true })
         : writeFileSync(join(claudeDir, "signed-out"), ""),
     setLoginExit: (code) => writeFileSync(join(claudeDir, "login-exit"), String(code)),
+    setInvalidToken: (token) =>
+      token === undefined
+        ? rmSync(join(claudeDir, "invalid-token"), { force: true })
+        : writeFileSync(join(claudeDir, "invalid-token"), token),
     completeLoginCallback: () => writeFileSync(join(claudeDir, "login-callback"), ""),
     setSandboxAvailable: (available) => {
       sandboxAvailable = available;

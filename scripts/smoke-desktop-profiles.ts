@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { chmod, copyFile, mkdir } from "node:fs/promises";
+import { chmod, copyFile, mkdir, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 
@@ -13,9 +13,9 @@ import type { ElectronApplication, Page } from "playwright-core";
 // folders. These are FIXTURES, not a VPS: the "remote" host is a second compiled host on loopback http, the mismatch
 // and TLS servers are Bun fixtures, and `shell.openExternal` is a recording stub.
 // Covered: Add through the Connections window (token encrypted in profiles.json), Connect, the navigation/OAuth policy
-// on the new origin, Forget (revoke), the API version check, an invalid TLS certificate, a refused plain-HTTP URL, and
+// on the new origin, a needs-you rise on the remote while This computer is shown (a banner naming the remote, a tray line per host, a click that opens the remote's bot), a folder download from the remote (saved zip, announcement, reveal call), Forget (revoke), the shell API range check, an invalid TLS certificate, a refused plain-HTTP URL, and
 // startup on a saved active profile with and without its host. Never prints a token, pairing code or cookie value.
-import { API_VERSION } from "../packages/contract/src/api.ts";
+import { SHELL_API } from "../packages/contract/src/api.ts";
 import { oauthFixture } from "../packages/host/src/testing/fake-oauth-server.ts";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
@@ -81,6 +81,8 @@ async function main(): Promise<void> {
     nothingRemains,
     quit,
     sweep,
+    settingsFile,
+    gone,
     cleanup,
   } = run;
   const oauth = oauthFixture();
@@ -109,6 +111,17 @@ async function main(): Promise<void> {
       // Keep draining so the fixture host never blocks on a full pipe.
     }
   })();
+  /** The fixture host and what it started (its Claude CLI, once an event reaches a bot): theirs are not the app's to leave behind. */
+  const fixtureFamily = (): number[] => {
+    const rows = processes();
+    const family = [remote.pid];
+    for (let grew = true; grew;) {
+      const next = rows.filter((p) => family.includes(p.ppid) && !family.includes(p.pid));
+      family.push(...next.map((p) => p.pid));
+      grew = next.length > 0;
+    }
+    return family;
+  };
   const remoteOrigin = `http://127.0.0.1:${remotePort}`;
   await until("the fixture host to answer", 60_000, () =>
     fetch(`${remoteOrigin}/api/host-info`).then(
@@ -128,8 +141,11 @@ async function main(): Promise<void> {
     return paired.stdout;
   };
 
-  /** A fixture host-info server whose API version, and request count, the smoke controls. */
-  let fixtureApi = API_VERSION + 1;
+  /** A fixture host-info server whose shell API range, and request count, the smoke controls. */
+  let fixtureRange: { min: number; max: number } = {
+    min: SHELL_API.max + 1,
+    max: SHELL_API.max + 1,
+  };
   const fixtureRequests: string[] = [];
   const mismatch = Bun.serve({
     hostname: "127.0.0.1",
@@ -138,7 +154,8 @@ async function main(): Promise<void> {
       fixtureRequests.push(`${req.method} ${new URL(req.url).pathname}`);
       return Response.json({
         version: "fixture",
-        apiVersion: fixtureApi,
+        apiVersion: 99,
+        shellApi: fixtureRange,
         mode: "local",
         capabilities: { reveal: false, headedBrowser: false, browserSandbox: false },
       });
@@ -490,6 +507,196 @@ async function main(): Promise<void> {
     );
 
     console.log(
+      "\n[3c] download a folder from the fixture remote: saved as a zip, announced, revealed (stubs: notifier, showItemInFolder)",
+    );
+    const downloads = join(root, "downloads");
+    await mkdir(downloads);
+    const created = await main.evaluate(async () => {
+      const response = await fetch("/api/bots/new", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Zipper", purpose: "", shape: "ball", color: "ink" }),
+      });
+      return response.ok ? ((await response.json()) as { id: string }) : undefined;
+    });
+    const bot = created ?? fail("could not create a bot on the fixture host");
+    const botFiles = join(remoteData, "bots", bot.id, "files");
+    await mkdir(join(botFiles, "reports", "2026"), { recursive: true });
+    await mkdir(join(botFiles, "drafts", "empty"), { recursive: true });
+    await writeFile(join(botFiles, "reports", "2026", "q3.txt"), "q3 numbers");
+    await writeFile(join(botFiles, "top.md"), "top");
+    // The recorders replace the last hops to the OS: the banner's notifier and `shell.showItemInFolder`. The downloads
+    // folder is moved into the temp root; the real one is never written.
+    await a.app.evaluate(({ app, shell }, folder) => {
+      type Note = { title: string; body: string; onClick: () => void };
+      const d = (
+        process as unknown as {
+          mainModule: {
+            exports: {
+              desktop: { banner: { notifier: { show: (n: Note) => { close: () => void } } } };
+            };
+          };
+        }
+      ).mainModule.exports.desktop;
+      app.setPath("downloads", folder);
+      const notes: Note[] = [];
+      const revealed: string[] = [];
+      Reflect.set(globalThis, "downloadNotes", notes);
+      Reflect.set(globalThis, "revealed", revealed);
+      d.banner.notifier.show = (note) => {
+        notes.push(note);
+        return { close() {} };
+      };
+      shell.showItemInFolder = (path: string) => void revealed.push(path);
+    }, downloads);
+    await main.goto(`${remoteOrigin}/bots/${bot.id}?panel=files`);
+    const zipButton = main.getByLabel("Download as zip");
+    await zipButton
+      .waitFor({ timeout: 20_000 })
+      .catch(async () =>
+        fail(
+          `no "Download as zip" button on ${main.url()}: ${(await main.locator("body").innerText()).slice(0, 400)}`,
+        ),
+      );
+    await zipButton.click();
+    const zipPath = join(downloads, "Zipper.zip");
+    await until("the zip to be saved in the downloads folder", 30_000, async () =>
+      existsSync(zipPath),
+    );
+    const tested = Bun.spawnSync(["unzip", "-tq", zipPath], { stdout: "pipe", stderr: "pipe" });
+    const members = Bun.spawnSync(["unzip", "-Z1", zipPath], { stdout: "pipe", stderr: "pipe" })
+      .stdout.toString()
+      .split("\n")
+      .filter(Boolean)
+      .sort();
+    check(tested.exitCode === 0, "the saved file passes a standard unzip's integrity test");
+    check(
+      members.join("|") ===
+        [
+          "Zipper/",
+          "Zipper/drafts/",
+          "Zipper/drafts/empty/",
+          "Zipper/reports/",
+          "Zipper/reports/2026/",
+          "Zipper/reports/2026/q3.txt",
+          "Zipper/top.md",
+        ].join("|"),
+      `the zip holds the folder tree with its empty folder (${members.length} members)`,
+    );
+    const announced = await until("the download to be announced", 15_000, () =>
+      a.app.evaluate(
+        () => (Reflect.get(globalThis, "downloadNotes") as { title: string; body: string }[])[0],
+      ),
+    );
+    check(
+      announced.title === "Downloaded Zipper.zip" && announced.body.includes("Finder"),
+      `the download is announced: "${announced.title}"`,
+    );
+    const revealedAfter = await a.app.evaluate(() => {
+      const notes = Reflect.get(globalThis, "downloadNotes") as { onClick: () => void }[];
+      const revealed = Reflect.get(globalThis, "revealed") as string[];
+      const before = revealed.length;
+      notes[0]!.onClick();
+      return { before, revealed };
+    });
+    check(
+      revealedAfter.before === 0 &&
+        revealedAfter.revealed.length === 1 &&
+        revealedAfter.revealed[0] === zipPath,
+      "clicking the announcement calls showItemInFolder with the saved zip, and nothing revealed it before",
+    );
+
+    console.log(
+      "\n[3d] a needs-you rise on the fixture remote while This computer is shown: a banner naming the remote",
+    );
+    await clickTray(a, "This computer");
+    await main.waitForURL(`${localOrigin}/**`, { timeout: 30_000 });
+    await a.app.evaluate(() => {
+      type Note = { title: string; body: string; onClick: () => void };
+      const d = (
+        process as unknown as {
+          mainModule: {
+            exports: {
+              desktop: { banner: { notifier: { show: (n: Note) => { close: () => void } } } };
+            };
+          };
+        }
+      ).mainModule.exports.desktop;
+      const notes: Note[] = [];
+      Reflect.set(globalThis, "followNotes", notes);
+      d.banner.notifier.show = (note) => {
+        notes.push(note);
+        return { close() {} };
+      };
+    });
+    // The Connections window is open too: close the host window, the one that is not the app's own page.
+    await a.app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()
+        .find((w) => !w.webContents.getURL().startsWith("tomte-desktop:"))!
+        .close(),
+    );
+    await until("the window to be hidden", 10_000, async () => !(await trayView(a)).visible);
+    // The remote's own stream has to be open before the rise, or the rise is the baseline.
+    await until("the tray to show the remote as connected", 20_000, async () =>
+      (await trayView(a)).items.some((i) => i.label.startsWith("Fixture remote: connected")),
+    );
+    const eventToken = await fetch(`${remoteOrigin}/api/bots/events-token`, {
+      method: "POST",
+      headers: bearer(observer.token),
+      body: JSON.stringify({ botId: bot.id }),
+    }).then(async (r) => ((await r.json()) as { token: string }).token);
+    const posted = await fetch(`${remoteOrigin}/api/bots/${bot.id}/events`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${eventToken}` },
+      body: JSON.stringify({
+        kind: "question",
+        key: "q1",
+        source: { id: "auth-sso", label: "auth-sso" },
+        title: "Which database?",
+      }),
+    });
+    check(
+      posted.status === 202,
+      "a question event posted to Zipper on the fixture remote was accepted",
+    );
+    const followNotes = () =>
+      a.app.evaluate(() =>
+        (Reflect.get(globalThis, "followNotes") as { title: string; body: string }[]).map(
+          ({ title, body }) => ({ title, body }),
+        ),
+      );
+    await until("a banner for the remote", 20_000, async () => (await followNotes()).length === 1);
+    const remoteNote = (await followNotes())[0]!;
+    check(
+      remoteNote.title === "Zipper (Fixture remote): 1 thing needs you" &&
+        remoteNote.body === "auth-sso",
+      `the banner names the host that rose, not the one shown: "${remoteNote.title}"`,
+    );
+    const lines = await until("the tray to count the remote's item", 20_000, async () => {
+      const labels = (await trayView(a)).items.map((i) => i.label);
+      return labels.some((l) => l.startsWith("Fixture remote: connected · 1 needs you"))
+        ? labels
+        : undefined;
+    });
+    check(
+      lines.some((l) => l.startsWith("This computer: running")),
+      "the tray has a line per host: This computer: running, Fixture remote: connected · 1 needs you",
+    );
+    await a.app.evaluate(() =>
+      (Reflect.get(globalThis, "followNotes") as { onClick: () => void }[])[0]!.onClick(),
+    );
+    await main.waitForURL(`${remoteOrigin}/bots/${bot.id}`, { timeout: 30_000 });
+    await until(
+      "the remote to be saved as active",
+      10_000,
+      () => readProfiles()!.active === profile.id,
+    );
+    check(
+      (await trayView(a)).visible && readProfiles()!.active === profile.id,
+      "clicking the banner showed the window on the remote's bot and saved the remote as the connection shown",
+    );
+
+    console.log(
       "\n[4] Forget: revoke on the host, delete the profile, clear the origin, back to local",
     );
     const forgetNotice = await submit(manager, () =>
@@ -541,21 +748,20 @@ async function main(): Promise<void> {
       "the Connections menu is back to This computer*",
     );
 
-    console.log("\n[5] API version mismatch (loopback fixture, nothing stored)");
+    console.log("\n[5] shell API range out of range (loopback fixture, nothing stored)");
     const mismatchOrigin = `http://127.0.0.1:${mismatch.port}`;
-    fixtureApi = API_VERSION + 1;
+    fixtureRange = { min: SHELL_API.max + 1, max: SHELL_API.max + 1 };
     const newer = await addProfile(manager, "Newer host", mismatchOrigin, "AAAA-BBBB-CCCC");
     info(`page says: ${newer}`);
     check(
-      newer ===
-        `The host at ${mismatchOrigin} runs API version ${API_VERSION + 1}; this app needs ${API_VERSION}. Update the desktop app.`,
+      newer.includes(mismatchOrigin) && newer.endsWith("Update the desktop app."),
       'a newer host shows "... Update the desktop app."',
     );
-    fixtureApi = API_VERSION - 1;
+    fixtureRange = { min: SHELL_API.min - 1, max: SHELL_API.min - 1 };
     const older = await addProfile(manager, "Older host", mismatchOrigin, "AAAA-BBBB-CCCC");
     info(`page says: ${older}`);
     check(
-      older.endsWith("Update the host.") && older.includes(`API version ${API_VERSION - 1}`),
+      older.includes(mismatchOrigin) && older.endsWith("Update the host."),
       'an older host shows "... Update the host."',
     );
     check(
@@ -610,7 +816,7 @@ async function main(): Promise<void> {
       "the second add is connected and saved as active",
     );
     await quit(a);
-    await nothingRemains("launch A", [remote.pid]);
+    await nothingRemains("launch A", fixtureFamily());
 
     const b = await launch({ CLAUDE_PATH: fakeCli }, LAUNCH_TIMEOUT_MS);
     const startup = await devices(b.page);
@@ -680,7 +886,113 @@ async function main(): Promise<void> {
       "the remote profile is saved as active again for the next start",
     );
     await quit(b);
-    await nothingRemains("launch B", [remote.pid]);
+    await nothingRemains("launch B", fixtureFamily());
+
+    console.log(
+      '\n[8c] the one-time question: answering "pause" stops this computer\'s host while a server is shown',
+    );
+    const localHostSetting = (): unknown =>
+      (JSON.parse(readFileSync(settingsFile, "utf8")) as { localHost?: string }).localHost;
+    check(
+      localHostSetting() === undefined,
+      "no answer is stored yet (settings.json has no localHost)",
+    );
+    const d = await launch({ CLAUDE_PATH: fakeCli }, LAUNCH_TIMEOUT_MS);
+    await d.page.waitForURL(`${remoteOrigin}/**`, { timeout: 30_000 });
+    check(true, "launch D opens on the saved server");
+    await until("this computer's host to run before any answer", 120_000, async () => {
+      const t = await trayView(d);
+      return t.status === "running" && hostOf(d.pid) !== undefined;
+    });
+    const unanswered = await trayView(d);
+    check(
+      unanswered.items.some((i) => i.label === "Run this Mac's host" && i.checked) &&
+        localHostSetting() === undefined,
+      "with the server shown and no answer yet, the host keeps running and the tray item is checked",
+    );
+    // Show This computer so the next server shown counts as a first time, then replace the question: a stub in the
+    // main process records the call and answers, so no OS dialog is ever opened.
+    await clickTray(d, "This computer");
+    await d.page.waitForURL((u) => !u.href.startsWith(remoteOrigin), { timeout: 60_000 });
+    await d.app.evaluate(() => {
+      type Hook = { localHostQuestion: { ask(name: string): Promise<string> } };
+      const desktop = (process as unknown as { mainModule: { exports: { desktop: Hook } } })
+        .mainModule.exports.desktop;
+      const asked: string[] = [];
+      Reflect.set(globalThis, "asked", asked);
+      desktop.localHostQuestion.ask = async (name) => {
+        asked.push(name);
+        return "while-shown";
+      };
+    });
+    const asked = (): Promise<string[]> =>
+      d.app.evaluate(() => Reflect.get(globalThis, "asked") as string[]);
+    const hostD = hostOf(d.pid) ?? fail("no host process is a child of the app");
+    await clickTray(d, "Fixture remote");
+    await until("the host to pause", 60_000, async () => (await trayView(d)).status === "paused");
+    await d.page.waitForURL(`${remoteOrigin}/**`, { timeout: 30_000 });
+    await gone(hostD.pid, "the paused host");
+    const pausedView = await trayView(d);
+    check(
+      JSON.stringify(await asked()) === JSON.stringify(["Fixture remote"]) &&
+        localHostSetting() === "while-shown",
+      "the question named the server, was asked once, and its answer is stored as while-shown",
+    );
+    check(
+      hostOf(d.pid) === undefined &&
+        pausedView.tooltip.split("\n")[0] === "This computer: paused" &&
+        pausedView.items.some((i) => i.label === "Run this Mac's host" && !i.checked) &&
+        pausedView.items.every((i) => i.label !== "Restart host"),
+      "the sidecar is gone, the tray line reads paused with no count and Run this Mac's host is unchecked",
+    );
+    const whilePaused = await devices(d.page);
+    check(
+      whilePaused.status === 200 &&
+        whilePaused.body.some((x) => x.current && x.id === profile2.deviceId),
+      "the server works while this computer's host is paused",
+    );
+    await clickTray(d, "This computer");
+    await until(
+      "the host to run again",
+      120_000,
+      async () => (await trayView(d)).status === "running",
+    );
+    await d.page.waitForURL((u) => !u.href.startsWith(remoteOrigin), { timeout: 60_000 });
+    const hostD2 = hostOf(d.pid) ?? fail("no host process after showing This computer");
+    const resumed = await until("the window to be signed in on the new host", 30_000, async () => {
+      const r = await devices(d.page).catch(() => undefined);
+      return r?.status === 200 ? r : undefined;
+    });
+    check(
+      hostD2.pid !== hostD.pid &&
+        resumed.status === 200 &&
+        resumed.body.length === 1 &&
+        resumed.body[0]!.current,
+      `showing This computer starts the host again (pid ${hostD2.pid}) and the window is signed in on it`,
+    );
+    await clickTray(d, "Fixture remote");
+    await until(
+      "the host to pause again",
+      60_000,
+      async () => (await trayView(d)).status === "paused",
+    );
+    check(
+      (await asked()).length === 1,
+      "showing the server a second time does not ask the question again",
+    );
+    await clickTray(d, "Run this Mac's host");
+    await until("the host to run beside the server", 120_000, async () => {
+      const t = await trayView(d);
+      return t.status === "running" && hostOf(d.pid) !== undefined;
+    });
+    check(
+      localHostSetting() === "always" &&
+        d.page.url().startsWith(remoteOrigin) &&
+        (await trayView(d)).items.some((i) => i.label === "Run this Mac's host" && i.checked),
+      "checking Run this Mac's host stores always and starts the host while the server stays shown",
+    );
+    await quit(d);
+    await nothingRemains("launch D", fixtureFamily());
 
     remote.kill("SIGTERM");
     await remote.exited;

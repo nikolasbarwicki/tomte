@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import { z } from "zod";
 
@@ -656,44 +656,68 @@ async function sweepHostedGmailSecrets(db: Database, secrets: SecretStore): Prom
   }
 }
 
-/** Applies pending schema versions, tracked in `PRAGMA user_version`. */
+const MIGRATIONS = [
+  SCHEMA_V1,
+  SCHEMA_V2,
+  SCHEMA_V3,
+  SCHEMA_V4,
+  SCHEMA_V5,
+  SCHEMA_V6,
+  SCHEMA_V7,
+  SCHEMA_V8,
+  SCHEMA_V9,
+  SCHEMA_V10,
+  SCHEMA_V11,
+  SCHEMA_V12,
+  SCHEMA_V13,
+  SCHEMA_V14,
+  SCHEMA_V15,
+  SCHEMA_V16,
+  SCHEMA_V17,
+  SCHEMA_V18,
+  SCHEMA_V19,
+  SCHEMA_V20,
+  SCHEMA_V21,
+  SCHEMA_V22,
+  SCHEMA_V23,
+  SCHEMA_V24,
+  SCHEMA_V25,
+  SCHEMA_V26,
+  SCHEMA_V27,
+  SCHEMA_V28,
+  SCHEMA_V29,
+  SCHEMA_V30,
+];
+
+/** The schema version this binary writes and the newest database it can open. */
+export const SCHEMA_VERSION = MIGRATIONS.length;
+
+/** A database written by a newer binary than this one. Running on it would skip migrations it has no knowledge of, so the host refuses it. */
+export class DatabaseTooNew extends Error {
+  constructor(
+    readonly databaseVersion: number,
+    readonly knownVersion: number,
+  ) {
+    super(
+      `the database is at schema version ${databaseVersion}, newer than the version ${knownVersion} this host knows. ` +
+        `Update the host to the version that wrote it, or restore a database backup made by this version. The database was not changed.`,
+    );
+  }
+}
+
+/** Reads `PRAGMA user_version` and throws `DatabaseTooNew` when it is past `SCHEMA_VERSION`; it writes nothing. */
+function schemaVersion(db: Database): number {
+  const { user_version } = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!;
+  if (user_version > SCHEMA_VERSION) throw new DatabaseTooNew(user_version, SCHEMA_VERSION);
+  return user_version;
+}
+
+/** Applies pending schema versions, tracked in `PRAGMA user_version`; refuses (`DatabaseTooNew`) a database newer than `SCHEMA_VERSION` before changing anything. */
 export function migrate(db: Database): Database {
+  const user_version = schemaVersion(db);
   db.run("PRAGMA journal_mode = WAL");
   db.run("PRAGMA foreign_keys = ON");
-  const { user_version } = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!;
-  const migrations = [
-    SCHEMA_V1,
-    SCHEMA_V2,
-    SCHEMA_V3,
-    SCHEMA_V4,
-    SCHEMA_V5,
-    SCHEMA_V6,
-    SCHEMA_V7,
-    SCHEMA_V8,
-    SCHEMA_V9,
-    SCHEMA_V10,
-    SCHEMA_V11,
-    SCHEMA_V12,
-    SCHEMA_V13,
-    SCHEMA_V14,
-    SCHEMA_V15,
-    SCHEMA_V16,
-    SCHEMA_V17,
-    SCHEMA_V18,
-    SCHEMA_V19,
-    SCHEMA_V20,
-    SCHEMA_V21,
-    SCHEMA_V22,
-    SCHEMA_V23,
-    SCHEMA_V24,
-    SCHEMA_V25,
-    SCHEMA_V26,
-    SCHEMA_V27,
-    SCHEMA_V28,
-    SCHEMA_V29,
-    SCHEMA_V30,
-  ];
-  for (const [i, schema] of migrations.entries()) {
+  for (const [i, schema] of MIGRATIONS.entries()) {
     if (user_version > i) continue;
     db.transaction(() => {
       if (typeof schema === "string") db.run(schema);
@@ -710,9 +734,15 @@ const DB_FILE = "tomte.db";
 export async function openDb(dataRoot: string, secrets: SecretStore): Promise<Database> {
   mkdirSync(dataRoot, { recursive: true });
   const db = new Database(join(dataRoot, DB_FILE), { create: true });
-  await sweepVaultSecrets(db, secrets);
-  await sweepHostedGmailSecrets(db, secrets);
-  return migrate(db);
+  try {
+    schemaVersion(db);
+    await sweepVaultSecrets(db, secrets);
+    await sweepHostedGmailSecrets(db, secrets);
+    return migrate(db);
+  } catch (e) {
+    db.close();
+    throw e;
+  }
 }
 
 /** The database file in the data root, and the write-ahead log and shared-memory files SQLite keeps beside it in WAL mode. */
@@ -720,3 +750,22 @@ export const dbFiles = (dataRoot: string): string[] => {
   const file = join(dataRoot, DB_FILE);
   return [file, `${file}-wal`, `${file}-shm`];
 };
+
+/**
+ * Writes a consistent copy of the database to `path` with SQLite's `VACUUM INTO` (one moment in time, no `-wal` beside it) and replaces
+ * whatever is there. The copy goes to a temporary name first, so a crash never leaves a half-written file under the name an automatic
+ * rollback would restore. The file is private to the service user, like the database.
+ */
+export function snapshotDatabase(db: Database, path: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const partial = `${path}.partial`;
+  rmSync(partial, { force: true });
+  try {
+    db.run("VACUUM INTO ?", [partial]);
+    chmodSync(partial, 0o600);
+    renameSync(partial, path);
+  } catch (e) {
+    rmSync(partial, { force: true });
+    throw e;
+  }
+}

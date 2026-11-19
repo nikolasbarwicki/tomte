@@ -5,15 +5,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { desktopAssets } from "./desktop-kit.ts";
-import { writeChecksums } from "./release-kit.ts";
+import { signChecksums, writeChecksums, writeManifest } from "./release-kit.ts";
+import { generateTestKey } from "./release-test-kit.ts";
 import {
   expectedFiles,
   parseChecksums,
   parseUpdateMetadata,
-  verifyRelease,
+  verifyRelease as verifyReleaseWith,
 } from "./release-verify.ts";
 
 const VERSION = "0.2.0-rc.1";
+const key = generateTestKey();
+/** Written by writeRelease itself, not as filler bytes. */
+const SKIPPED = ["SHA256SUMS", "SHA256SUMS.sig", "release.json", "install.sh"];
+const verifyRelease = (folder: string, version: string) =>
+  verifyReleaseWith(folder, version, key.publicKey);
+const installer = (repo: string, publicKey: string) =>
+  `set -e\nDEFAULT_REPO="${repo}"\nRELEASE_PUBLIC_KEY="${publicKey}"\n`;
 
 let dir: string;
 beforeEach(async () => {
@@ -45,10 +53,11 @@ async function writeRelease(version = VERSION): Promise<void> {
     (["darwin", "win32", "linux"] as const).map((p) => desktopAssets(p, ["x64"], version).metadata),
   );
   for (const name of required) {
-    if (metadata.has(name) || name === "SHA256SUMS" || name === "install.sh") continue;
+    if (SKIPPED.includes(name) || metadata.has(name)) continue;
     await writeFile(join(dir, name), `bytes of ${name}`);
   }
-  await writeFile(join(dir, "install.sh"), 'set -e\nDEFAULT_REPO="acme/tomte-fixture"\n');
+  await writeFile(join(dir, "install.sh"), installer("acme/tomte-fixture", key.publicKey));
+  await writeManifest(dir, { version, shellApi: { min: 1, max: 1 }, schemaVersion: 7 });
   for (const platform of ["darwin", "win32", "linux"] as const) {
     const archs = platform === "darwin" ? (["arm64", "x64"] as const) : (["x64"] as const);
     const { installers, metadata: name } = desktopAssets(platform, archs, version);
@@ -66,8 +75,9 @@ async function writeRelease(version = VERSION): Promise<void> {
   }
   await writeChecksums(
     dir,
-    required.filter((n) => n !== "SHA256SUMS"),
+    required.filter((n) => n !== "SHA256SUMS" && n !== "SHA256SUMS.sig"),
   );
+  await signChecksums(dir, key.privateKeyPem, key.publicKey);
 }
 
 describe("verifyRelease", () => {
@@ -117,7 +127,7 @@ describe("verifyRelease", () => {
 
   test("an empty DEFAULT_REPO means the workflow never filled it in", async () => {
     await writeRelease();
-    await writeFile(join(dir, "install.sh"), 'DEFAULT_REPO=""\n');
+    await writeFile(join(dir, "install.sh"), installer("", key.publicKey));
     const problems = await verifyRelease(dir, VERSION);
     expect(problems).toContain('install.sh has DEFAULT_REPO="", expected OWNER/REPO');
   });
@@ -157,6 +167,61 @@ describe("verifyRelease", () => {
     const problems = await verifyRelease(dir, VERSION);
     expect(problems[0]).toContain("line 1 is not");
     expect(problems).toContain("SHA256SUMS has no entry for install.sh");
+  });
+
+  test("a missing release.json, a manifest for another version and an empty shell API range each fail", async () => {
+    await writeRelease();
+    const manifest = join(dir, "release.json");
+    const text = await readFile(manifest, "utf8");
+    await rm(manifest);
+    expect(await verifyRelease(dir, VERSION)).toContain("missing: release.json");
+
+    await writeFile(manifest, text.replace(VERSION, "0.1.0"));
+    expect(await verifyRelease(dir, VERSION)).toContain(
+      `release.json names version 0.1.0, the release is ${VERSION}`,
+    );
+
+    await writeFile(manifest, '{"version":"x"}');
+    expect(
+      (await verifyRelease(dir, VERSION)).some((p) => p.includes("not a release manifest")),
+    ).toBe(true);
+
+    await writeFile(
+      manifest,
+      JSON.stringify({ version: VERSION, shellApi: { min: 3, max: 2 }, schemaVersion: 7 }),
+    );
+    expect(await verifyRelease(dir, VERSION)).toContain("release.json has an empty shellApi range");
+  });
+
+  test("a missing signature, a tampered SHA256SUMS and a signature by another key each fail", async () => {
+    await writeRelease();
+    const signature = join(dir, "SHA256SUMS.sig");
+    const good = await readFile(signature);
+    await rm(signature);
+    expect(await verifyRelease(dir, VERSION)).toContain("missing: SHA256SUMS.sig");
+
+    await writeFile(signature, good);
+    await writeFile(
+      join(dir, "SHA256SUMS"),
+      `${await readFile(join(dir, "SHA256SUMS"), "utf8")}\n`,
+    );
+    expect(await verifyRelease(dir, VERSION)).toContain(
+      "SHA256SUMS.sig is not a valid signature of SHA256SUMS by the pinned release key",
+    );
+
+    await writeRelease();
+    expect(await verifyRelease(dir, VERSION)).toEqual([]);
+    expect(await verifyReleaseWith(dir, VERSION, generateTestKey().publicKey)).toContain(
+      "SHA256SUMS.sig is not a valid signature of SHA256SUMS by the pinned release key",
+    );
+  });
+
+  test("an installer that pins another key, or none, is reported", async () => {
+    await writeRelease();
+    await writeFile(join(dir, "install.sh"), installer("acme/tomte-fixture", ""));
+    expect(await verifyRelease(dir, VERSION)).toContain(
+      "install.sh does not pin the release public key of this checkout",
+    );
   });
 });
 

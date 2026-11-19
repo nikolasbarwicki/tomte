@@ -1,14 +1,16 @@
 import { Outlet, useNavigate, useParams } from "@tanstack/react-router";
+import { needsYou } from "@tomte/contract/host-status";
 import { createContext, useCallback, useContext, useEffect, useEffectEvent, useState } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { NewBotDialog } from "@/features/bots/index.ts";
 import { needsAttention } from "@/features/integrations/index.ts";
-import { useBots, useIntegrations } from "@/host/hooks.ts";
+import { useBots, useHostStatus, useIntegrations } from "@/host/hooks.ts";
 import { hostStore } from "@/host/store.ts";
 import { connectHostStream } from "@/host/stream.ts";
 
 import { AppSidebar } from "./app-sidebar.tsx";
+import { HostProblems } from "./host-problems.tsx";
 
 const NewBotContext = createContext<(() => void) | undefined>(undefined);
 
@@ -25,6 +27,7 @@ export function Shell() {
   const newBot = useCallback(() => setNewBotOpen(true), []);
   const bots = useBots();
   const integrations = useIntegrations();
+  const status = useHostStatus();
   const navigate = useNavigate();
   const { botId: routeBotId } = useParams({ strict: false });
 
@@ -39,6 +42,12 @@ export function Shell() {
     [],
   );
 
+  // The tab's badge counts what waits for the user on this host: its bots' items and its problems.
+  const waiting = needsYou(bots ?? [], status);
+  useEffect(() => {
+    document.title = waiting > 0 ? `(${waiting}) Bots` : "Bots";
+  }, [waiting]);
+
   return (
     <NewBotContext value={newBot}>
       <SidebarProvider className="h-svh overflow-hidden">
@@ -49,7 +58,10 @@ export function Shell() {
         />
         {/* On a narrow window, where the sidebar is a sheet, the inset's bars start under the native window controls; from md up the sidebar is always there (its narrowest stop is a rail as wide as the controls) and its own strip holds them. From md up the inset is the sheet on the desk (the sidebar's `variant="inset"`): 8px from the window's edges, with its own corners and shadow. A view that lays out sheets of its own (`data-split`, the chat beside its panel and the rail) gets a bare inset instead. */}
         <SidebarInset className="min-h-0 min-w-0 overflow-hidden [--titlebar-inset:env(titlebar-area-x,0px)] has-data-split:overflow-visible has-data-split:bg-transparent md:[--titlebar-inset:0px] md:peer-data-[variant=inset]:shadow-(--sheet-shadow) md:peer-data-[variant=inset]:has-data-split:shadow-none">
-          <Outlet />
+          <HostProblems problems={status?.problems ?? []} />
+          <div className="min-h-0 flex-1">
+            <Outlet />
+          </div>
         </SidebarInset>
         {/* The desk's margin above the sheet and the sidebar moves the window too. */}
         <div

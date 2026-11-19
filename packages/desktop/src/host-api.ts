@@ -1,4 +1,4 @@
-import { API_VERSION, PairingResponse, PublicHostInfo } from "@tomte/contract/api";
+import { PairingResponse, PublicHostInfo, SHELL_API } from "@tomte/contract/api";
 import { z } from "zod";
 
 import { ConnectionError } from "./connection-error.ts";
@@ -6,16 +6,13 @@ import { ConnectionError } from "./connection-error.ts";
 /** The host's error body, such as `{ "error": "invalid pairing code" }`. */
 const ErrorBody = z.object({ error: z.string().min(1) });
 
-/** The API versions this app speaks. One constant, so widening support is a one-line change. */
-const SUPPORTED_API: { min: number; max: number } = { min: API_VERSION, max: API_VERSION };
-
 const REQUEST_TIMEOUT_MS = 10_000;
 
 /** The shape of `fetch` the client needs: the app passes Electron's `net.fetch`, so Chromium's network stack and certificate checks decide every connection. */
 export type HostFetch = (url: string, init: RequestInit) => Promise<Response>;
 
 export interface HostClient {
-  /** `GET /api/host-info`, then the version check; throws a `ConnectionError` naming the way out on a mismatch. */
+  /** `GET /api/host-info`; throws a `ConnectionError` when the server is not a Tomte host. Compatibility is `shellCompat`'s to judge. */
   checkHost(origin: string): Promise<PublicHostInfo>;
   /** Exchanges a pairing code for a device; a wrong code throws with the host's own error text. */
   pair(origin: string, code: string, deviceName: string): Promise<PairingResponse>;
@@ -23,15 +20,11 @@ export interface HostClient {
   revoke(origin: string, token: string, deviceId: string): Promise<"revoked" | "already-revoked">;
 }
 
-/** Throws when `apiVersion` is outside `SUPPORTED_API`, saying which side to update. Nothing else happens on a mismatch. */
-function checkApiVersion(origin: string, apiVersion: number): void {
-  const { min, max } = SUPPORTED_API;
-  if (apiVersion >= min && apiVersion <= max) return;
-  const needs = min === max ? String(min) : `${min} to ${max}`;
-  const verdict = apiVersion < min ? "Update the host." : "Update the desktop app.";
-  throw new ConnectionError(
-    `The host at ${origin} runs API version ${apiVersion}; this app needs ${needs}. ${verdict}`,
-  );
+/** How a host's shell API range sits against this app's: `update-host` when the host is older than the app needs, `update-app` when it is newer than the app knows. The window is the host's own, so only the shell's calls depend on this. */
+export function shellCompat(info: PublicHostInfo): "ok" | "update-host" | "update-app" {
+  if (info.shellApi.max < SHELL_API.min) return "update-host";
+  if (info.shellApi.min > SHELL_API.max) return "update-app";
+  return "ok";
 }
 
 function describeNetworkError(origin: string, error: unknown): string {
@@ -85,7 +78,6 @@ export function createHostClient(fetchHost: HostFetch): HostClient {
       if (!response.ok) throw new ConnectionError(notTomte);
       const info = PublicHostInfo.safeParse(await response.json().catch(() => undefined));
       if (!info.success) throw new ConnectionError(notTomte);
-      checkApiVersion(origin, info.data.apiVersion);
       return info.data;
     },
 

@@ -15,6 +15,7 @@ import type {
   ServerEvent,
   WorkEvent,
 } from "@tomte/contract/events";
+import { UPDATING } from "@tomte/contract/update";
 
 import {
   botFilesPath,
@@ -35,6 +36,7 @@ import type { Handoffs, Mention } from "../handoffs/index.ts";
 import type { HostServersSource } from "../harness/index.ts";
 import { openFront, type FrontSession, type LoopStore } from "../loop/index.ts";
 import { parkingDelegate, type Executor } from "../routines/index.ts";
+import type { RunGate } from "../upkeep/index.ts";
 import {
   approvalActions,
   canonicalInput,
@@ -57,6 +59,8 @@ export interface ChatsDeps extends ThreadEnv {
   frontIdleMs?: number;
   /** Where a double-loop bot's tasks and reports are kept. */
   loop: LoopStore;
+  /** While an update closes it, the user's messages are refused (see `UPDATING`). */
+  gate: Pick<RunGate, "closed">;
   handoffs: Pick<Handoffs, "receivedCards" | "startDelivered">;
   events: Pick<Events, "split" | "needsYou">;
   /** External needs-you items, so chats can tie an answer to the one it answers. `acted` closes an item the user answered, with the answer to relay to the sender. */
@@ -110,13 +114,15 @@ export interface Chats {
   execute: Executor;
   /** Sends a host message into a bot's session: queued while the bot is busy, and the session reopens if it is closed. A double-loop bot's front takes it at once, as a synthetic message. */
   deliver(botId: string, text: string): Promise<void>;
+  /** Delivers what `deliver` held while the gate was closed (an update draining or applying); called when the gate reopens. */
+  releaseHeld(): void;
   /**
    * Gives the user's message to a bot, shown or not, or resolves a question it asked, and returns what happened. The web route and every channel use this one function.
    * With `eventId` the message answers that needs-you item, and the host decides where the answer goes:
    * - `answered`: the bot has a pending question linked to this item; it receives `answer` (the message when omitted) as the question's answer, and the item is closed as acted. No chat message is created, and queued answers to the item are cancelled.
    * - `queued`: the bot is busy; the item is closed only when the entry is delivered, never on queueing.
    * - `sent`: the message is shown and the turn runs; the item is closed as it starts. A double-loop bot always answers `sent` (its front takes the message even mid-turn) and never `queued`.
-   * - `refused`: the bot does not exist, the item is not open for this bot any more, or an answer to it is already queued.
+   * - `refused`: the bot does not exist, the item is not open for this bot any more, an answer to it is already queued, or the host is draining for an update (`UPDATING`; an answer to a question a turn is waiting on is still `answered`, since it ends work).
    * A bot that has no chat open gets one for the message, released again when nothing is left running in it.
    */
   send(
@@ -132,6 +138,8 @@ export interface Chats {
   /** Gives the external-event rows already in a bot's chat their new state, shown live when the chat is. */
   updateExternal(botId: string, rows: ExternalRow[]): void;
   isWorking(botId: string): boolean;
+  /** Units of work running now: chats with a turn, queued messages, a front's work in flight or a pending task, plus routine turns running headless or waiting for their bot. What an update waits for. */
+  active(): number;
   /** The routine run the bot's unattended turn belongs to, if one is running now: a chat-hosted or headless routine turn, including a double-loop bot's run in a session of its own. */
   runOf(botId: string): { runId: string; sessionId: string | undefined } | undefined;
   /** Whether the bot is in a scheduled run now: a chat-hosted routine turn or a headless run, in the bot's session or one of its own. */
@@ -231,6 +239,18 @@ export function createChats(deps: ChatsDeps): Chats {
       (chat !== undefined && chat.presence !== "idle") ||
       routineTurns.headlessRun(botId) !== undefined
     );
+  };
+  const active = () => {
+    let n = routineTurns.pending();
+    for (const chat of chats.values())
+      if (
+        chat.busy ||
+        chat.presence !== "idle" ||
+        chat.inbox.length > 0 ||
+        deps.loop.hasActive(chat.bot.id)
+      )
+        n++;
+    return n;
   };
   const runOf = (botId: string) => {
     const runId = chats.get(botId)?.routineRun;
@@ -360,7 +380,18 @@ export function createChats(deps: ChatsDeps): Chats {
     for (const card of deps.handoffs.receivedCards(text, chat.bot.id)) emit(chat, card);
   }
 
+  /**
+   * Host messages that arrived while the gate was closed. They start no turn: a turn begun after the drain ended would be cut off
+   * by the helper's restart. They wait here, in memory, until the gate reopens (`releaseHeld`); a process that is replaced first
+   * loses them, which is why what matters survives elsewhere (events stay open items, handoffs are redelivered at start).
+   */
+  const held: { botId: string; text: string }[] = [];
+
   async function deliver(botId: string, text: string) {
+    if (deps.gate.closed()) {
+      held.push({ botId, text });
+      return;
+    }
     const bot = getBot(dataRoot, botId);
     if (!bot) return;
     let chat = chats.get(botId);
@@ -802,6 +833,7 @@ export function createChats(deps: ChatsDeps): Chats {
       if (chat.inbox.some((e) => e.source === "user" && e.eventId === eventId))
         return { outcome: "refused", reason: "an answer to that item is already queued" };
     }
+    if (deps.gate.closed()) return { outcome: "refused", reason: UPDATING };
     if (chat.front) {
       userSaid(chat, shown, refs);
       pushToFront(chat, text, false);
@@ -875,6 +907,12 @@ export function createChats(deps: ChatsDeps): Chats {
   return {
     execute: routineTurns.execute,
     deliver,
+    releaseHeld() {
+      for (const h of held.splice(0))
+        deliver(h.botId, h.text).catch((e: Error) =>
+          console.error(`[chats] held delivery to ${h.botId} failed: ${e.message}`),
+        );
+    },
     send,
     emitTo(botId, e) {
       const chat = chats.get(botId);
@@ -897,7 +935,7 @@ export function createChats(deps: ChatsDeps): Chats {
       }
     },
     isWorking,
-
+    active,
     runOf,
     unattended: (botId) => runOf(botId) !== undefined,
     botsEvent: chatsBotsEvent,

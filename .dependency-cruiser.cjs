@@ -18,7 +18,7 @@ const REACT = "node_modules/(@types/)?(react|react-dom)/";
 const TESTS = `(\\.test\\.tsx?$|${HOST}testing/)`;
 /** Folders under packages/host/src whose files are private behind index.ts. */
 const MODULES =
-  "(bots|browser|channels|credentials|device-auth|events|handoffs|harness|host-mcp|host-server|integrations|loop|presence|routines|ui|waits)";
+  "(bots|browser|channels|credentials|device-auth|events|handoffs|harness|host-mcp|host-server|integrations|loop|presence|routines|ui|update-helper|upkeep|waits)";
 const PRIVATE = `${HOST}${MODULES}/(?!index\\.ts$)`;
 const HOST_SMOKE = `${HOST}browser/smoke\\.ts$`;
 const HOST_CLI = `${HOST}host\\.ts$`;
@@ -159,6 +159,22 @@ module.exports = {
       severity: "error",
       from: { path: `${HOST}platform/` },
       to: { path: "^packages/", pathNot: `${HOST}platform/|${CONTRACT}` },
+    },
+    {
+      name: "update-helper-runs-as-root",
+      comment:
+        "ADR-0014: the root update helper imports only platform/ and the contract package, so no host server code runs with root's rights.",
+      severity: "error",
+      from: { path: `${HOST}update-helper/`, pathNot: "\\.test\\.ts$" },
+      to: { path: "^packages/", pathNot: `${HOST}(update-helper|platform)/|${CONTRACT}` },
+    },
+    {
+      name: "upkeep-imports-platform-and-contract",
+      comment:
+        "Upkeep (host updates, ADR-0014) imports only upkeep/, platform/ and the contract package; the composition root hands it everything else.",
+      severity: "error",
+      from: { path: `${HOST}upkeep/`, pathNot: "\\.test\\.ts$" },
+      to: { path: "^packages/", pathNot: `${HOST}(upkeep|platform)/|${CONTRACT}` },
     },
     {
       name: "feature-privacy",

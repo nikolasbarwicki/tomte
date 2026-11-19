@@ -10,6 +10,7 @@ import type {
   ServerEvent,
   WorkEvent,
 } from "@tomte/contract/events";
+import type { HostStatus } from "@tomte/contract/host-status";
 
 import { reduce, type Item } from "./transcript.ts";
 
@@ -52,6 +53,8 @@ export type HostState = {
   info: HostInfo | undefined;
   /** What the host says it can do; undefined until `/api/host-info` answers, which counts as nothing being available. */
   publicInfo: PublicHostInfo | undefined;
+  /** Undefined until the host's first `host-status` event arrives; it is sent on connect and again on every change. */
+  hostStatus: HostStatus | undefined;
   /** Undefined until the host's first bots event arrives. */
   bots: BotSummary[] | undefined;
   /** The bot whose chat the host is streaming: chat, memory and files events are about it. */
@@ -81,6 +84,7 @@ export const emptyView: BotView = {
 export const initialHostState: HostState = {
   info: undefined,
   publicInfo: undefined,
+  hostStatus: undefined,
   bots: undefined,
   openBotId: undefined,
   views: {},
@@ -95,6 +99,8 @@ export function applyEvent(s: HostState, e: HostEvent): HostState {
       return { ...s, info: e.info };
     case "public-info":
       return { ...s, publicInfo: e.info };
+    case "host-status":
+      return { ...s, hostStatus: e.status };
     case "integrations":
       return { ...s, integrations: e.integrations };
     case "memory":

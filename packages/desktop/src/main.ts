@@ -1,21 +1,26 @@
 // The desktop app's main process: starts the bundled host as a sidecar, signs the window in and shows the UI the host serves.
 // It runs no host code; the host is a separate binary that it spawns and whose pipe it holds. Closing the window leaves the app and the host running in the tray.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { app, net } from "electron";
+import { app, net, shell } from "electron";
 
 import { installAppMenu } from "./app-menu.ts";
 import { keepInTray, type Background } from "./background.ts";
 import { registerConnectionsScheme } from "./connections-window.ts";
-import { setupBanner, type Notifier } from "./desktop-banner.ts";
 import { setupConnections } from "./desktop-connections.ts";
+import { setupFollow, type Notifier } from "./desktop-follow.ts";
 import { createDesktopLog } from "./desktop-log.ts";
+import { fileManagerName, handleDownload } from "./downloads.ts";
 import { createLoginItem } from "./electron-login-item.ts";
 import { createElectronUpdateEngine } from "./electron-update-engine.ts";
 import { createHostClient } from "./host-api.ts";
 import { hostBinaryPath } from "./host-binary.ts";
+import { hostLines } from "./host-lines.ts";
+import { createLocalHostQuestion, type LocalHostQuestion } from "./local-host-question.ts";
+import { createLocalHostPolicy, localWanted } from "./local-policy.ts";
 import { installNavigationPolicy } from "./navigation.ts";
+import { openSettings } from "./settings.ts";
 import { startSidecar } from "./sidecar.ts";
 import { createStartAtLogin, type StartAtLogin } from "./start-at-login.ts";
 import { createSupervisor, type Supervisor } from "./supervisor.ts";
@@ -43,6 +48,7 @@ export const desktop: {
   tray?: DesktopTray;
   background?: Background;
   startAtLogin?: StartAtLogin;
+  localHostQuestion?: LocalHostQuestion;
   banner?: { notifier: Notifier };
   updater?: Updater;
 } = {};
@@ -51,11 +57,8 @@ function start(): void {
   log = createDesktopLog(join(app.getPath("userData"), "logs", "desktop.log"));
   const navigation = installNavigationPolicy();
   const loginItem = createLoginItem();
-  const startAtLogin = createStartAtLogin(
-    join(app.getPath("userData"), "settings.json"),
-    loginItem,
-    log,
-  );
+  const settings = openSettings(join(app.getPath("userData"), "settings.json"), log);
+  const startAtLogin = createStartAtLogin(settings, loginItem);
   // An app the OS opened at login stays in the tray; the window waits for "Open Tomte".
   const window = createWindow(!loginItem.openedAtLogin());
   const background = keepInTray(window, () => quit !== "running");
@@ -63,6 +66,14 @@ function start(): void {
   const supervisor = createSupervisor(() =>
     startSidecar(hostBinaryPath(app.isPackaged, process.resourcesPath, REPO_ROOT), logFile),
   );
+
+  const question = createLocalHostQuestion(window, process.env);
+  const localHost = createLocalHostPolicy({
+    settings,
+    supervisor,
+    ask: (serverName) => question.ask(serverName),
+    canAsk: () => background.visible(),
+  });
 
   const connections = setupConnections({
     window,
@@ -72,7 +83,19 @@ function start(): void {
     userData: app.getPath("userData"),
   });
   installAppMenu(connections);
-  const banner = setupBanner({ window, background, connections, log });
+  const follow = setupFollow({ window, background, connections, log });
+  const banner = { notifier: follow.notifier };
+  // Downloads the page starts (a file, or a folder as a zip) are saved to the downloads folder and announced; the announcement reveals the file.
+  window.webContents.session.on("will-download", (_event, item) =>
+    handleDownload(item, {
+      folder: () => app.getPath("downloads"),
+      exists: existsSync,
+      notify: (note) => banner.notifier.show(note),
+      reveal: (path) => shell.showItemInFolder(path),
+      fileManager: fileManagerName(process.platform),
+      log,
+    }),
+  );
 
   const tray = createTray(join(__dirname, "assets"), {
     open: () => background.reveal(),
@@ -84,7 +107,16 @@ function start(): void {
       }
       render();
     },
-    restartHost: () => void supervisor.start(),
+    setLocalHost(setting) {
+      try {
+        settings.update({ localHost: setting });
+      } catch (error) {
+        log(`could not change Run this Mac's host: ${String(error)}`);
+      }
+      refreshLocalHost();
+      render();
+    },
+    restartHost: () => void supervisor.want(true).catch(logLocalHost),
     quit: () => app.quit(),
     connect: (id) => void connections.connect(id).then(render),
     manageConnections: () => connections.openConnections(),
@@ -96,7 +128,25 @@ function start(): void {
 
   const updater = startUpdater();
 
-  /** The tray shows the host's state, the profiles and a downloaded update; the newest render wins, since listing the profiles is asynchronous. */
+  const logLocalHost = (error: unknown) => log(`local host: ${String(error)}`);
+  /** Lets the policy see the connection the window shows now: it asks the one-time question when a server has just been shown and pauses or starts this computer's host. The newest list wins, since listing the profiles is asynchronous. */
+  let localHostSyncs = 0;
+  function syncLocalHost(): void {
+    const mine = ++localHostSyncs;
+    void connections
+      .list()
+      .then(async (profiles) => {
+        const shown = profiles.find((profile) => profile.active);
+        if (mine === localHostSyncs && shown !== undefined) await localHost.reconcile(shown);
+      })
+      .catch(logLocalHost);
+  }
+  const refreshLocalHost = () => void localHost.refresh().catch(logLocalHost);
+  connections.onChange(syncLocalHost);
+  // A window that was hidden gets the question when it appears.
+  window.on("show", refreshLocalHost);
+
+  /** The tray shows a line per host, the profiles and a downloaded update; the newest render wins, since listing the profiles is asynchronous. */
   let rendered = 0;
   function render(): void {
     const mine = ++rendered;
@@ -104,8 +154,8 @@ function start(): void {
       if (mine !== rendered) return;
       const update = updater?.state();
       tray.update(
-        supervisor.state(),
-        startAtLogin.enabled(),
+        hostLines(profiles, supervisor.state(), follow.view),
+        settings.get(),
         profiles,
         update?.status === "ready" ? update.version : undefined,
       );
@@ -122,14 +172,28 @@ function start(): void {
       void connections.localChanged().catch((error) => log(`local host: ${String(error)}`));
   });
   connections.onChange(render);
+  follow.onChange(render);
   render();
 
-  Object.assign(desktop, { supervisor, tray, background, startAtLogin, banner, updater });
+  Object.assign(desktop, {
+    supervisor,
+    tray,
+    background,
+    startAtLogin,
+    localHostQuestion: question,
+    banner,
+    updater,
+  });
   app.on("second-instance", () => background.reveal());
   app.on("activate", () => background.reveal());
-  // The host starts first so the window shows "Starting" rather than "not running" while the saved connection is chosen.
-  void supervisor.start();
-  void connections.start().catch((error) => log(`connections: ${String(error)}`));
+  // The host is wished first, by what the saved connection will show, so the window shows "Starting" rather than "not running" while that connection is chosen; with no answer to the one-time question yet it always runs.
+  void connections
+    .savedActive()
+    .then((saved) => {
+      void supervisor.want(localWanted(settings.get().localHost, saved)).catch(logLocalHost);
+      return connections.start();
+    })
+    .catch((error) => log(`connections: ${String(error)}`));
 }
 
 const hostClient = createHostClient((url, init) => net.fetch(url, init));

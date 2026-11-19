@@ -19,6 +19,8 @@ const useView = <T>(sel: (v: BotView) => T) => {
 
 export const useHostInfo = () => useHost((s) => s.info);
 export const usePublicHostInfo = () => useHost((s) => s.publicInfo);
+/** What the host says is wrong or right with itself, live; undefined until the host's first status arrives. */
+export const useHostStatus = () => useHost((s) => s.hostStatus);
 export const useBots = () => useHost((s) => s.bots);
 export const useOpenBotId = () => useHost((s) => s.openBotId);
 export const useChat = () => useView((v) => v.chat ?? emptyChat);

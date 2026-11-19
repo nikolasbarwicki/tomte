@@ -5,6 +5,7 @@
     "": {
       "name": "tomte",
       "devDependencies": {
+        "@anthropic-ai/claude-agent-sdk": "^0.3.318",
         "@commitlint/cli": "^21.2.4",
         "@commitlint/config-conventional": "^21.2.4",
         "@swc/core": "^1.16.22",
@@ -20,6 +21,7 @@
         "oxlint-tsgolint": "7.0.2006",
         "playwright-core": "^1.65.0",
         "typescript": "^7.0.2",
+        "zod": "^4.6.7",
       },
     },
     "packages/contract": {

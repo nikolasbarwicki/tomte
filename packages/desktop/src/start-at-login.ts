@@ -1,5 +1,5 @@
 import type { LoginItem } from "./login-item.ts";
-import { loadSettings, saveSettings } from "./settings.ts";
+import type { SettingsStore } from "./settings.ts";
 
 export interface StartAtLogin {
   enabled(): boolean;
@@ -7,20 +7,14 @@ export interface StartAtLogin {
   set(enabled: boolean): void;
 }
 
-/** Reads the settings (writing them on a first launch) and applies them to the OS login item, as on every launch. */
-export function createStartAtLogin(
-  settingsFile: string,
-  item: LoginItem,
-  log: (message: string) => void,
-): StartAtLogin {
-  let enabled = loadSettings(settingsFile, log).startAtLogin;
-  item.set(enabled);
+/** Applies the stored setting to the OS login item, as on every launch. */
+export function createStartAtLogin(settings: SettingsStore, item: LoginItem): StartAtLogin {
+  item.set(settings.get().startAtLogin);
   return {
-    enabled: () => enabled,
+    enabled: () => settings.get().startAtLogin,
     set(next) {
-      saveSettings(settingsFile, { startAtLogin: next });
+      settings.update({ startAtLogin: next });
       item.set(next);
-      enabled = next;
     },
   };
 }

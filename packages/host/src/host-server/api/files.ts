@@ -1,17 +1,17 @@
 import { closeSync, createReadStream, existsSync } from "node:fs";
 import { basename } from "node:path";
+import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-import { AttachRequest, MAX_ATTACHMENT_BYTES } from "@tomte/contract/api";
 import { z } from "zod";
 
 import {
-  BadAttachment,
+  archive,
+  BROWSER_FILES_DIR,
   botFilesPath,
   deleteFile,
   openFileInside,
   resolveInside,
-  saveAttachment,
 } from "../../bots/index.ts";
 import { json } from "../http.ts";
 import type { ApiContext, OpenChatRoutes } from "./context.ts";
@@ -30,29 +30,15 @@ function attachment(name: string): string {
   return `attachment; filename="${fallback}"; filename*=UTF-8''${exact}`;
 }
 
+/** The name of the folder a zip unpacks to, without what a file system refuses. */
+function folderName(raw: string): string {
+  const name = raw.replace(/[\\/:*?"<>|\p{Cc}]/gu, "-").trim();
+  return name === "" || name === "." || name === ".." ? "files" : name;
+}
+
 /** The open bot's Files panel. */
 export function fileRoutes({ dataRoot, reveal }: ApiContext): OpenChatRoutes {
   return {
-    "/api/files/attach": async ({ res, parse }, chat) => {
-      const files = parse(AttachRequest).files.map((f) => ({
-        path: f.path,
-        bytes: Buffer.from(f.data, "base64"),
-      }));
-      if (files.reduce((n, f) => n + f.bytes.length, 0) > MAX_ATTACHMENT_BYTES)
-        return json(
-          res,
-          { error: `an attachment holds at most ${MAX_ATTACHMENT_BYTES / 2 ** 20} MB` },
-          413,
-        );
-      try {
-        return json(res, {
-          attachment: saveAttachment(botFilesPath(dataRoot, chat.bot.id), files),
-        });
-      } catch (e) {
-        if (e instanceof BadAttachment) return json(res, { error: e.message }, 400);
-        throw e;
-      }
-    },
     "/api/files/delete": async ({ res, parse }, chat) => {
       if (!deleteFile(botFilesPath(dataRoot, chat.bot.id), parse(FilePath).path))
         return json(res, { error: "no such file" }, 404);
@@ -67,11 +53,24 @@ export function fileRoutes({ dataRoot, reveal }: ApiContext): OpenChatRoutes {
       reveal(target, (l) => console.error(l));
       return json(res, { ok: true });
     },
-    // A GET with the path in the query, so the web page can use a plain link with its session cookie.
+    // A GET with the path in the query, so the web page can use a plain link with its session cookie. A path that
+    // names a folder (the empty path is the whole files folder) downloads as a zip.
     "/api/files/download": async ({ res, query }, chat) => {
       const rel = query.get("path") ?? "";
-      const file = openFileInside(botFilesPath(dataRoot, chat.bot.id), rel);
-      if (!file) return json(res, { error: "no such file" }, 404);
+      const dir = botFilesPath(dataRoot, chat.bot.id);
+      const file = rel ? openFileInside(dir, rel) : undefined;
+      if (!file) {
+        const root = folderName(rel ? basename(rel) : chat.bot.name);
+        const zip = archive(dir, rel, root, rel ? undefined : new Set([BROWSER_FILES_DIR]));
+        if (!zip) return json(res, { error: "no such file" }, 404);
+        res.writeHead(200, {
+          "content-type": "application/zip",
+          "content-disposition": attachment(`${root}.zip`),
+          "x-content-type-options": "nosniff",
+        });
+        await pipeline(Readable.from(zip), res);
+        return;
+      }
       res.writeHead(200, {
         "content-type": "application/octet-stream",
         "content-disposition": attachment(basename(rel)),

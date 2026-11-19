@@ -1,5 +1,7 @@
 import {
   ClaudeGateway,
+  ClaudeLongLivedToken,
+  type ClaudeTokenSaved,
   ClaudeLoginCode,
   type ClaudeLoginStart,
   type ClaudeUsage,
@@ -10,6 +12,7 @@ import {
   type ProviderStatus,
 } from "@tomte/contract/api";
 import { BotModel } from "@tomte/contract/events";
+import type { ClaudeState } from "@tomte/contract/host-status";
 
 import {
   botMemoryPath,
@@ -19,12 +22,16 @@ import {
   userMemoryPath,
   writeMemory,
 } from "../../bots/index.ts";
-import { remoteLoginCommand, type SignInState } from "../../harness/index.ts";
-import { claudeGatewaySecretName } from "../../platform/secrets.ts";
+import { remoteLoginCommand } from "../../harness/index.ts";
+import {
+  claudeGatewaySecretName,
+  claudeLongLivedTokenSecretName,
+  claudeTokenRejectedSecretName,
+} from "../../platform/secrets.ts";
 import { json } from "../http.ts";
 import type { ApiContext, ApiRoutes } from "./context.ts";
 
-const PROVIDER_STATUS: Record<SignInState, ProviderStatus> = {
+const PROVIDER_STATUS: Record<ClaudeState, ProviderStatus> = {
   "signed-in": "connected",
   "signed-out": "disconnected",
   unknown: "unknown",
@@ -70,7 +77,7 @@ export function settingsRoutes({
       return json(res, { ok: true });
     },
     "/api/providers": async ({ res }) => {
-      const state = await claude.checkSignIn();
+      const { state } = await claude.recheck("providers");
       const { account, cliVersion } = claude.report();
       const gateway = claude.gateway();
       const claudeProvider: ModelProvider = {
@@ -88,6 +95,8 @@ export function settingsRoutes({
         account,
         cliVersion,
         gateway: gateway ?? null,
+        longLivedToken: claude.hasLongLivedToken(),
+        sshCommand: config.mode === "remote" ? remoteLoginCommand(config) : null,
         login: claude.login.pending() ?? null,
       };
       return json(res, { providers: [claudeProvider] } satisfies ModelProviders);
@@ -115,7 +124,10 @@ export function settingsRoutes({
       } catch (e) {
         return json(res, { error: (e as Error).message }, 400);
       }
-      return json(res, { ok: true, status: PROVIDER_STATUS[await claude.checkSignIn()] });
+      return json(res, {
+        ok: true,
+        status: PROVIDER_STATUS[(await claude.recheck("login")).state],
+      });
     },
     "/api/providers/claude/login/cancel": async ({ res }) => {
       claude.login.cancel();
@@ -131,6 +143,24 @@ export function settingsRoutes({
     "/api/providers/claude/gateway/remove": async ({ res }) => {
       await secrets.delete(claudeGatewaySecretName);
       claude.setGateway(undefined);
+      chats.reconfigure(undefined, "model provider changed");
+      return json(res, { ok: true });
+    },
+    "/api/providers/claude/token": async ({ res, parse }) => {
+      const { token } = parse(ClaudeLongLivedToken);
+      await secrets.set(claudeLongLivedTokenSecretName, token);
+      await secrets.delete(claudeTokenRejectedSecretName);
+      claude.setLongLivedToken(token);
+      chats.reconfigure(undefined, "model provider changed");
+      return json(res, {
+        ok: true,
+        status: PROVIDER_STATUS[(await claude.recheck("long-lived-token")).state],
+      } satisfies ClaudeTokenSaved);
+    },
+    "/api/providers/claude/token/remove": async ({ res }) => {
+      await secrets.delete(claudeLongLivedTokenSecretName);
+      await secrets.delete(claudeTokenRejectedSecretName);
+      claude.setLongLivedToken(undefined);
       chats.reconfigure(undefined, "model provider changed");
       return json(res, { ok: true });
     },

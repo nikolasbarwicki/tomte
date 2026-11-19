@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { ConnectionError } from "./connection-error.ts";
+import { UPDATE_LABEL } from "./connection-items.ts";
 import type { Connections, ProfileView } from "./connections.ts";
 import { LOCAL_ID } from "./profile-store.ts";
 
@@ -67,7 +68,10 @@ function profileRow(profile: ProfileView): string {
     profile.id === LOCAL_ID
       ? ""
       : `<form method="post" action="/forget">${id}<button>Forget</button></form>`;
-  return `<li><div class="who"><div>${esc(profile.name)}</div><div class="origin">${esc(profile.origin)}</div></div>${connect}${forget}</li>`;
+  const update = profile.update
+    ? `<div class="origin">${UPDATE_LABEL[profile.update]}: the tray and notifications cannot follow this host</div>`
+    : "";
+  return `<li><div class="who"><div>${esc(profile.name)}</div><div class="origin">${esc(profile.origin)}</div>${update}</div>${connect}${forget}</li>`;
 }
 
 function noticeHtml(notice: Notice): string {
@@ -142,7 +146,13 @@ export function createConnectionsPages(connections: PageConnections): Connection
         }
         case "/connect":
           await connections.connect(id);
-          return { kind: "ok", text: "Connected." };
+          const update = (await connections.list()).find((p) => p.id === id)?.update;
+          return update
+            ? {
+                kind: "error",
+                text: `Connected, but ${UPDATE_LABEL[update]}: the tray and notifications cannot follow this host.`,
+              }
+            : { kind: "ok", text: "Connected." };
         case "/forget": {
           const result = await connections.forget(id, {
             withoutRevoking: form.get("withoutRevoking") === "1",

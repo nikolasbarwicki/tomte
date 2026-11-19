@@ -1,6 +1,7 @@
+import { HostProblem, updateFailedText } from "@tomte/contract/host-status";
 import { z } from "zod";
 
-import { cut, linkTo } from "./cards/compose.ts";
+import { cut, linkTo, webLink } from "./cards/compose.ts";
 import type { ChannelMessage } from "./types.ts";
 
 /** How much of a failed run's error a notice keeps. */
@@ -35,11 +36,20 @@ export const Notice = z.discriminatedUnion("kind", [
     routine: z.string(),
     output: z.string(),
   }),
+  /** Something is wrong with the host itself, whichever bot is open; sent once when the problem appears. `hostName` is how the owner knows this host. */
+  z.object({ kind: z.literal("host_problem"), hostName: z.string(), problem: HostProblem }),
 ]);
 export type Notice = z.output<typeof Notice>;
 
-/** The notice as one plain message, with a link to the bot's Routines panel unless the public URL is a loopback `http` one. */
+/** The notice as one plain message, with a link to where it can be dealt with (a bot's Routines panel, or Settings for the host) unless the public URL is a loopback `http` one. */
 export function noticeMessage(notice: Notice, publicUrl: string): ChannelMessage {
+  if (notice.kind === "host_problem") {
+    const link = webLink(
+      publicUrl,
+      notice.problem.kind === "update-failed" ? "/settings/about" : "/settings/models",
+    );
+    return { text: hostProblemText(notice), ...(link && { link }) };
+  }
   const link = linkTo(publicUrl, { botId: notice.botId, panel: "routines" });
   const text = (() => {
     switch (notice.kind) {
@@ -56,4 +66,15 @@ export function noticeMessage(notice: Notice, publicUrl: string): ChannelMessage
     }
   })();
   return { text, ...(link && { link }) };
+}
+
+function hostProblemText({ hostName, problem }: Extract<Notice, { kind: "host_problem" }>): string {
+  switch (problem.kind) {
+    case "claude-signed-out":
+      return problem.reason === "token-rejected"
+        ? `${hostName}: Claude rejected the long-lived token, so no bot there can run. Replace it in Settings, Models.`
+        : `${hostName}: Claude is signed out, so no bot there can run. Sign in from Settings, Models.`;
+    case "update-failed":
+      return `${hostName}: ${updateFailedText(problem)}. Details are in Settings, About.`;
+  }
 }

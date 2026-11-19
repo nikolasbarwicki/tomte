@@ -1,37 +1,31 @@
-import { AttachResponse } from "@tomte/contract/api";
+import { ATTACHMENTS_DIR } from "@tomte/contract/api";
 import type { Attachment, BotModel, ChatMode, EffortLevel } from "@tomte/contract/events";
-import { toast } from "sonner";
 
-import { act, errorOf, post, readJson } from "@/host/api.ts";
+import { act } from "@/host/api.ts";
+import { upload, uploadAll } from "@/host/upload.ts";
+import type { PickedFile } from "@/lib/picked-files.ts";
 
-/** A file the user picked or dropped, with its path as picked: `report.pdf`, or `notes/june.md` inside a folder. */
-export type PickedFile = { path: string; file: File };
-
-/** The file's bytes in base64: a data URL without its prefix, which the browser encodes natively. */
-function base64Of(file: File): Promise<string> {
-  const { promise, resolve, reject } = Promise.withResolvers<string>();
-  const reader = new FileReader();
-  reader.onload = () => {
-    const url = typeof reader.result === "string" ? reader.result : "";
-    resolve(url.slice(url.indexOf(",") + 1));
-  };
-  reader.onerror = () => reject(reader.error ?? new Error(`could not read ${file.name}`));
-  reader.readAsDataURL(file);
-  return promise;
-}
-
-/** Saves one attachment (a file, or a folder's files) in the open bot's files folder; `undefined` when the host refused it (shown as a toast). */
-export async function attach(files: PickedFile[]): Promise<Attachment | undefined> {
-  const res = await post("/api/files/attach", {
-    files: await Promise.all(
-      files.map(async (f) => ({ path: f.path, data: await base64Of(f.file) })),
-    ),
-  });
-  if (!res.ok) {
-    toast.error(await errorOf(res));
-    return undefined;
+/**
+ * Uploads one attachment (a file, or a folder's files) into `attachments/` of the open bot's files folder, streaming each
+ * file, and resolves to where it went; `undefined` when the host refused a file (shown as a toast, and files of a folder
+ * already sent stay). A folder whose name is taken becomes a new one (`notes 2`): the first file names it, the rest follow.
+ */
+export async function attach([first, ...rest]: PickedFile[]): Promise<Attachment | undefined> {
+  if (!first) return undefined;
+  const name = first.path.split("/")[0]!;
+  if (!first.path.includes("/")) {
+    const saved = await upload(`${ATTACHMENTS_DIR}/${first.path}`, first.file);
+    return saved && { path: saved.path, folder: false };
   }
-  return (await readJson(res, AttachResponse)).attachment;
+  const asked = `${ATTACHMENTS_DIR}/${name}`;
+  const lead = await upload(`${ATTACHMENTS_DIR}/${first.path}`, first.file, asked);
+  if (!lead) return undefined;
+  const folder = lead.path.split("/").slice(0, 2).join("/");
+  const results = await uploadAll(
+    rest.map((f) => ({ path: `${folder}/${f.path.slice(name.length + 1)}`, file: f.file })),
+    { stopOnFailure: true },
+  );
+  return results.every((r) => r !== undefined) ? { path: folder, folder: true } : undefined;
 }
 
 export const cancelSend = (id: string) => act("/api/send/cancel", { id });

@@ -4,10 +4,12 @@
   "type": "module",
   "exports": {
     "./item-actions": "./src/item-actions.ts",
+    "./host-status": "./src/host-status.ts",
     "./events": "./src/events.ts",
     "./avatars": "./src/avatars.ts",
     "./api": "./src/api.ts",
-    "./sidecar": "./src/sidecar.ts"
+    "./sidecar": "./src/sidecar.ts",
+    "./update": "./src/update.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

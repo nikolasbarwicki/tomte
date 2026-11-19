@@ -414,10 +414,10 @@ async function main(): Promise<void> {
     info(`tray   ${JSON.stringify(view0)}`);
     check(
       view0.status === "running" &&
-        view0.tooltip === "Tomte: host running" &&
+        view0.tooltip.startsWith("This computer: running") &&
         view0.items[0]!.label === view0.tooltip &&
         !view0.items[0]!.enabled,
-      'the tray tooltip and its first, disabled item say "Tomte: host running"',
+      'the tray tooltip and its first, disabled item say "This computer: running"',
     );
     check(
       view0.items.map((i) => i.label).join("|") ===
@@ -612,7 +612,7 @@ async function main(): Promise<void> {
     await until("one banner for ticker", 15_000, async () => (await notes()).length === 1);
     const firstNote = (await notes())[0]!;
     check(
-      firstNote.title === "ticker: 1 thing needs you" &&
+      firstNote.title === "ticker (This computer): 1 thing needs you" &&
         firstNote.body === "auth-sso" &&
         !firstNote.closed,
       `a rise while the window is hidden shows "${firstNote.title}" with the source label as body (${firstNote.body})`,
@@ -627,7 +627,7 @@ async function main(): Promise<void> {
     check(
       afterTwo[0]!.closed &&
         !afterTwo[1]!.closed &&
-        afterTwo[1]!.title === "builder: 1 thing needs you" &&
+        afterTwo[1]!.title === "builder (This computer): 1 thing needs you" &&
         afterTwo[1]!.body === "export-csv",
       `a later rise replaced the banner, naming the bot with the newest item: "${afterTwo[1]!.title}" (the first was closed, ${(await live()).length} live)`,
     );
@@ -680,7 +680,8 @@ async function main(): Promise<void> {
     );
     const thirdNote = (await notes())[2]!;
     check(
-      thirdNote.title === "builder: 2 things need you" && (await live()).length === 1,
+      thirdNote.title === "builder (This computer): 2 things need you" &&
+        (await live()).length === 1,
       `one live banner: "${thirdNote.title}"`,
     );
     await clickNote(2);
@@ -724,10 +725,10 @@ async function main(): Promise<void> {
       return v.status === "stopped" && v;
     });
     check(
-      stoppedView.tooltip === "Tomte: host stopped" &&
-        stoppedView.items[0]!.label === "Tomte: host stopped" &&
+      stoppedView.tooltip === "This computer: stopped" &&
+        stoppedView.items[0]!.label === "This computer: stopped" &&
         stoppedView.items.some((i) => i.label === "Restart host" && i.enabled),
-      'the tray switched to "Tomte: host stopped" and offers Restart host',
+      'the tray switched to "This computer: stopped" and offers Restart host',
     );
     check(
       (await bg.page.textContent("body"))?.includes("host is not running") === true,

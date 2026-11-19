@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { ClaudeGateway } from "@tomte/contract/api";
 import type { IntegrationsEvent, RoutinesEvent } from "@tomte/contract/events";
+import type { ClaudeState } from "@tomte/contract/host-status";
 
 import {
   allowsTool,
@@ -43,16 +44,22 @@ import { createEvents, eventsPath } from "../events/index.ts";
 import { createHandoffs, type BotsEndpoint } from "../handoffs/index.ts";
 import {
   combineLeases,
+  VERSION,
   createClaudeAccess,
   type HostServersSource,
   type ResolvedCli,
-  type SignInState,
 } from "../harness/index.ts";
 import { createIntegrations, type GoogleEndpoints } from "../integrations/index.ts";
 import { createLoopStore } from "../loop/index.ts";
 import { AGENT_ADDRESS, clientOrigin, agentOrigin, type HostConfig } from "../platform/config.ts";
+import { snapshotDatabase } from "../platform/db.ts";
 import { openSecrets } from "../platform/file-secrets.ts";
-import { claudeGatewaySecretName, type SecretStore } from "../platform/secrets.ts";
+import {
+  claudeGatewaySecretName,
+  claudeLongLivedTokenSecretName,
+  claudeTokenRejectedSecretName,
+  type SecretStore,
+} from "../platform/secrets.ts";
 import { TokenRegistry } from "../platform/tokens.ts";
 import { ensureWorkspace } from "../platform/workspace.ts";
 import { createPresence } from "../presence/index.ts";
@@ -62,6 +69,7 @@ import {
   type RoutinesEndpoint,
 } from "../routines/index.ts";
 import { serveUi, type UiAssets } from "../ui/index.ts";
+import { createRunGate, createUpkeep, type UpkeepOptions } from "../upkeep/index.ts";
 import { createWaits } from "../waits/index.ts";
 import { absenceActions } from "./absence.ts";
 import { externalEventsRoute } from "./api/external-events.ts";
@@ -74,6 +82,8 @@ import { createChats } from "./chats.ts";
 import { createDeviceSessions } from "./device-sessions.ts";
 import { createEventCards } from "./event-cards.ts";
 import { createEventStream } from "./events.ts";
+import { createHostAlerts, hostNameOf } from "./host-alerts.ts";
+import { createHostStatus } from "./host-status.ts";
 import { agentRoutes, clientRoutes, createRequestListener } from "./http.ts";
 import { createHostIsolation } from "./isolation.ts";
 import { openListener } from "./listener.ts";
@@ -125,6 +135,15 @@ export interface HostServerOptions {
   lockedTools?: ReadonlySet<string>;
   /** Where the host reaches Google (sign-in, tokens, the Gmail API); Google's own endpoints for any left out. Tests and smokes point them at a fake. */
   google?: Partial<GoogleEndpoints>;
+  /** How often the Claude sign-in is checked when nothing else asks; 10 minutes when omitted. */
+  claudeRecheckMs?: number;
+  /** The update helper's configuration file, how often the release feed is asked and the HTTP client it uses; the real ones when omitted. Tests point them at a fake release directory. */
+  upkeep?: Pick<
+    UpkeepOptions,
+    "confPath" | "checkEveryMs" | "fetch" | "drainOverdueMs" | "resultPollMs" | "applyTimeoutMs"
+  > & {
+    /** How often a closed run gate counts the work still running; a second when omitted. */ gatePollMs?: number;
+  };
 }
 
 export interface HostServer {
@@ -147,8 +166,8 @@ export interface HostServer {
   currentBotId: () => string | undefined;
   /** Whether the bot is working (a turn, a busy double-loop front or a headless run): deleting it, a new session and a mode switch are refused then. */
   isWorking: (botId: string) => boolean;
-  /** Whether the Claude CLI is signed in, as the last `auth status` reported; always `unknown` in local mode, which never checks. */
-  signInState: () => SignInState;
+  /** Whether the Claude CLI is signed in, as the last check reported; `unknown` until one has answered. */
+  signInState: () => ClaudeState;
   /** Closes every thread and browser, then stops listening. */
   close(): Promise<void>;
   /** Everything the host holds for a bot being deleted: its open handoffs fail, its routines and browser go, its chat closes, and its directory moves to the trash (`bots/.trash/`). */
@@ -330,7 +349,36 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     events: externalEvents,
     loop,
   });
-  const claude = createClaudeAccess(o.config, cli);
+  const claude = createClaudeAccess(o.config, cli, {
+    ...(o.claudeRecheckMs !== undefined && { recheckMs: o.claudeRecheckMs }),
+    onTokenRejected: (digest) =>
+      void secrets.set(claudeTokenRejectedSecretName, digest).catch((e: unknown) => {
+        const why = e instanceof Error ? e.message : String(e);
+        console.error(`[claude] could not keep that the long-lived token was rejected: ${why}`);
+      }),
+  });
+  // An update closes it: user messages are refused, scheduled routines wait, and the update waits for `chats.active()` to reach zero. It reopens
+  // by catching up what the routines missed meanwhile.
+  const { gatePollMs, ...upkeepOptions } = o.upkeep ?? {};
+  const gate = createRunGate({
+    active: () => chats.active(),
+    opened: () => {
+      routines.catchUp();
+      chats.releaseHeld();
+    },
+    ...(gatePollMs !== undefined && { pollMs: gatePollMs }),
+  });
+  const upkeep = createUpkeep({
+    version: VERSION,
+    sidecar: o.config.sidecar,
+    dataRoot,
+    gate,
+    snapshot: (path) => snapshotDatabase(db, path),
+    ...upkeepOptions,
+  });
+  const hostStatus = createHostStatus({ config: o.config, claude, upkeep });
+  claude.onChange(() => broadcast(hostStatus.event()));
+  upkeep.onChange(() => broadcast(hostStatus.event()));
   const storedGateway = await secrets.get(claudeGatewaySecretName);
   if (storedGateway) {
     try {
@@ -341,6 +389,12 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       );
     }
   }
+  const storedToken = await secrets.get(claudeLongLivedTokenSecretName);
+  if (storedToken)
+    claude.setLongLivedToken(
+      storedToken,
+      (await secrets.get(claudeTokenRejectedSecretName)) ?? undefined,
+    );
   const chats = createChats({
     cwd,
     dataRoot,
@@ -352,6 +406,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     hostServers,
     frontServers,
     loop,
+    gate,
     botEnv: (botId) => externalEvents.env(botId),
     approveAll: !o.config.askApproval,
     allows: (botId, tool) => allowsTool(db, botId, tool),
@@ -386,6 +441,12 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     ...(o.notices?.retryMs !== undefined && { noticeRetryMs: o.notices.retryMs }),
   });
   const botSaid = forwardToOrigin({ dataRoot, db, channels });
+  const hostAlerts = createHostAlerts({
+    hostName: hostNameOf(clientAt.publicUrl),
+    notify: (notice) => void channels.notify(notice),
+  });
+  claude.onChange(() => hostAlerts.sync(hostStatus.current()));
+  upkeep.onChange(() => hostAlerts.sync(hostStatus.current()));
   const receive: Channels["receive"] = (kind, inbound) => channels.receive(kind, inbound);
   channels.register(
     createTelegramChannel({ secrets, receive, ...(o.telegram && { options: o.telegram }) }),
@@ -396,6 +457,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     dataRoot,
     execute: chats.execute,
     waits,
+    gate,
     notice: async (botId, text) => chats.emitTo(botId, { type: "info", text }),
     deliver: (botId, text) => chats.deliver(botId, text),
     events: externalEvents,
@@ -441,7 +503,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     routines: routines.list(botId),
   });
 
-  if (o.config.mode === "remote") void claude.checkSignIn();
+  claude.start();
+  upkeep.start();
   // Every kind has its handler by now: what a restart left unanswerable is cancelled, and overdue waits expire.
   waits.start();
   if (initial) await chats.switchTo(initial);
@@ -492,6 +555,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     dataRoot,
     cli,
     claude,
+    upkeep,
     config: o.config,
     db,
     chats,
@@ -510,6 +574,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       return [
         chats.botsEvent(),
         integrationsEvent(),
+        hostStatus.event(),
         ...memoryEvents(dataRoot, botId),
         filesEvent(dataRoot, botId),
         ...chats.replayOpen(),
@@ -521,7 +586,6 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     oauthCallback: (_req, res, url) => oauthCallback(integrations, res, url.searchParams),
     hostInfo: hostInfoRoute({
       config: o.config,
-      signInState: () => claude.signInState(),
       sandbox: () => browser.sandbox(),
     }),
     externalEvents: externalEventsRoute(externalEvents),
@@ -563,12 +627,14 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     channels,
     currentBotId: chats.currentBotId,
     isWorking: (botId) => chats.isWorking(botId),
-    signInState: () => claude.signInState(),
+    signInState: () => claude.status().state,
     removeBot,
     async close() {
       clientListener.pause();
       agentListener.pause();
       claude.close();
+      upkeep.stop();
+      gate.stop();
       chats.close();
       waits.close();
       clearInterval(absenceTimer);

@@ -3,14 +3,15 @@ import { join } from "node:path";
 import { Menu, nativeImage, Tray, type MenuItemConstructorOptions } from "electron";
 
 import type { ProfileView } from "./connections.ts";
-import type { HostState } from "./supervisor.ts";
-import { hostStatusText, trayMenu, type TrayActions } from "./tray-menu.ts";
+import type { HostLine } from "./host-lines.ts";
+import type { DesktopSettings } from "./settings.ts";
+import { trayMenu, trayTooltip, type TrayActions } from "./tray-menu.ts";
 
 export interface DesktopTray {
-  /** Shows the state, the profiles (the active one checked), the Start at login choice and a downloaded update's version in the tooltip and the menu. */
+  /** Shows a line per host, the profiles (the active one checked), the desktop settings (Start at login, Run this Mac's host) and a downloaded update's version in the tooltip and the menu. */
   update(
-    state: HostState,
-    startAtLogin: boolean,
+    hosts: readonly HostLine[],
+    settings: DesktopSettings,
     profiles: ProfileView[],
     readyUpdate: string | undefined,
   ): void;
@@ -25,10 +26,10 @@ export function createTray(assetsDir: string, actions: TrayActions): DesktopTray
   const tray = new Tray(image);
   let current = { tooltip: "", items: [] as MenuItemConstructorOptions[] };
   return {
-    update(state, startAtLogin, profiles, readyUpdate) {
+    update(hosts, settings, profiles, readyUpdate) {
       current = {
-        tooltip: hostStatusText(state),
-        items: trayMenu(state, startAtLogin, profiles, readyUpdate, actions),
+        tooltip: trayTooltip(hosts),
+        items: trayMenu(hosts, settings, profiles, readyUpdate, actions),
       };
       tray.setToolTip(current.tooltip);
       tray.setContextMenu(Menu.buildFromTemplate(current.items));

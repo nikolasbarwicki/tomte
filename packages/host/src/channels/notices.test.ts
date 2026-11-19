@@ -67,3 +67,18 @@ test("a run with no output is told as finished, with no summary", () => {
     "Digest finished",
   );
 });
+
+test("a failed update names the host, the version and what was put back, and links to About", () => {
+  const message = noticeMessage(
+    {
+      kind: "host_problem",
+      hostName: "my-vps",
+      problem: { kind: "update-failed", version: "0.4.2", rolledBackTo: "0.4.1" },
+    },
+    "https://c.example",
+  );
+  expect(message.text).toBe(
+    "my-vps: Update to 0.4.2 failed, rolled back to 0.4.1. Details are in Settings, About.",
+  );
+  expect(message.link?.url).toBe("https://c.example/settings/about");
+});

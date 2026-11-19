@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import {
   closeSync,
   constants,
+  createReadStream,
   existsSync,
   fstatSync,
   lstatSync,
@@ -16,6 +17,8 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { BotFile } from "@tomte/contract/events";
+
+import { zip, type ZipEntry } from "../platform/zip.ts";
 
 const IGNORED = new Set([".DS_Store"]);
 
@@ -81,6 +84,80 @@ export function openFileInside(dir: string, rel: string): OpenedFile | undefined
   }
   if (fd !== undefined) closeSync(fd);
   return undefined;
+}
+
+/** Whether `rel` names a real folder inside `dir` (the empty path is `dir` itself), after links are followed. */
+function isFolderInside(dir: string, rel: string): boolean {
+  try {
+    const root = realpathSync(dir);
+    const target = realpathSync(resolve(dir, rel));
+    const inside = target === root || resolveInside(root, target) !== undefined;
+    return inside && statSync(target).isDirectory();
+  } catch (e) {
+    if (NOT_READABLE.has((e as NodeJS.ErrnoException).code ?? "")) return false;
+    throw e;
+  }
+}
+
+/** The folder `rel` and everything under it, parents first, as paths relative to `dir`; symlinks and `skip` are left out. */
+function walkFolder(dir: string, rel: string, skip: ReadonlySet<string>) {
+  const out: { rel: string; mtime: number; folder: boolean }[] = [];
+  const walk = (here: string) => {
+    out.push({ rel: here, mtime: lstatSync(join(dir, here)).mtimeMs, folder: true });
+    const children = readdirSync(join(dir, here), { withFileTypes: true });
+    for (const e of children.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+      if (IGNORED.has(e.name)) continue;
+      const child = here ? join(here, e.name) : e.name;
+      if (skip.has(child.split(sep).join("/"))) continue;
+      if (e.isDirectory()) walk(child);
+      else if (e.isFile())
+        out.push({ rel: child, mtime: lstatSync(join(dir, child)).mtimeMs, folder: false });
+    }
+  };
+  walk(rel);
+  return out;
+}
+
+/**
+ * The folder `rel` under `dir` (the empty path is `dir`) as a store-only ZIP64 archive whose members sit under a
+ * folder called `root`, empty subfolders included; `skip` lists paths relative to `dir` left out. Undefined when `rel`
+ * is not a folder inside `dir`. Files are opened one at a time as the archive reaches them, through
+ * `openFileInside`, so a symlink is never followed out of `dir` and a file that vanished meanwhile is left out.
+ */
+export function archive(
+  dir: string,
+  rel: string,
+  root: string,
+  skip: ReadonlySet<string> = new Set(),
+): AsyncGenerator<Uint8Array> | undefined {
+  if (!isFolderInside(dir, rel)) return undefined;
+  const listed = walkFolder(dir, rel, skip);
+  const base = rel.split(sep).join("/").replace(/\/+$/, "");
+  async function* entries(): AsyncGenerator<ZipEntry> {
+    for (const e of listed) {
+      const inner = e.rel.split(sep).join("/").slice(base.length).replace(/^\//, "");
+      const name = `${root}/${inner}${e.folder && inner ? "/" : ""}`;
+      if (e.folder) {
+        yield { name, mtime: e.mtime };
+        continue;
+      }
+      const file = openFileInside(dir, e.rel);
+      if (!file) continue;
+      if (file.size === 0) {
+        closeSync(file.fd);
+        yield { name, mtime: e.mtime, data: [] };
+      } else {
+        const data = createReadStream("", {
+          fd: file.fd,
+          start: 0,
+          end: file.size - 1,
+          highWaterMark: 1 << 20,
+        });
+        yield { name, mtime: e.mtime, data };
+      }
+    }
+  }
+  return zip(entries());
 }
 
 /** Delete one file, then prune subfolders it leaves empty (never `dir` itself). */

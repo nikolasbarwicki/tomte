@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { fileLoginItem } from "./login-item.ts";
-import { loadSettings } from "./settings.ts";
+import { openSettings } from "./settings.ts";
 import { createStartAtLogin } from "./start-at-login.ts";
 
 let dir: string;
@@ -27,58 +27,40 @@ const read = (file: string) => JSON.parse(readFileSync(file, "utf8")) as unknown
 
 describe("Start at login", () => {
   test("is on after the first launch, in the settings file and in the login item", () => {
-    const startAtLogin = createStartAtLogin(settings, fileLoginItem(item), log);
+    const startAtLogin = createStartAtLogin(openSettings(settings, log), fileLoginItem(item));
     expect(startAtLogin.enabled()).toBe(true);
     expect(read(settings)).toEqual({ startAtLogin: true });
     expect(read(item)).toEqual({ openAtLogin: true });
   });
 
   test("turning it off updates both, and a relaunch keeps it off", () => {
-    createStartAtLogin(settings, fileLoginItem(item), log).set(false);
+    createStartAtLogin(openSettings(settings, log), fileLoginItem(item)).set(false);
     expect(read(settings)).toEqual({ startAtLogin: false });
     expect(read(item)).toEqual({ openAtLogin: false });
 
-    const relaunched = createStartAtLogin(settings, fileLoginItem(item), log);
+    const relaunched = createStartAtLogin(openSettings(settings, log), fileLoginItem(item));
     expect(relaunched.enabled()).toBe(false);
     expect(read(item)).toEqual({ openAtLogin: false });
   });
 
   test("every launch applies the setting to the login item, even one the OS lost", () => {
-    createStartAtLogin(settings, fileLoginItem(item), log);
+    createStartAtLogin(openSettings(settings, log), fileLoginItem(item));
     fileLoginItem(item).set(false);
-    createStartAtLogin(settings, fileLoginItem(item), log);
+    createStartAtLogin(openSettings(settings, log), fileLoginItem(item));
     expect(fileLoginItem(item).get()).toBe(true);
   });
 
   test("a failed write changes neither the answer nor the login item", () => {
-    const startAtLogin = createStartAtLogin(settings, fileLoginItem(item), log);
+    const startAtLogin = createStartAtLogin(openSettings(settings, log), fileLoginItem(item));
     writeFileSync(join(dir, "blocker"), "");
     const broken = createStartAtLogin(
-      join(dir, "blocker", "settings.json"),
+      openSettings(join(dir, "blocker", "settings.json"), log),
       fileLoginItem(item),
-      log,
     );
     expect(broken.enabled()).toBe(false);
     expect(() => broken.set(true)).toThrow();
     expect(broken.enabled()).toBe(false);
     expect(startAtLogin.enabled()).toBe(true);
-  });
-});
-
-describe("loadSettings", () => {
-  test("a file that is not valid settings is kept, logged, and nothing registers itself", () => {
-    createStartAtLogin(settings, fileLoginItem(item), log);
-    writeFileSync(settings, '{"startAtLogin":"yes"}');
-    expect(loadSettings(settings, log)).toEqual({ startAtLogin: false });
-    expect(readFileSync(settings, "utf8")).toBe('{"startAtLogin":"yes"}');
-    expect(logs).toHaveLength(1);
-  });
-
-  test("unparseable JSON gets the same treatment", () => {
-    createStartAtLogin(settings, fileLoginItem(item), log);
-    writeFileSync(settings, "{");
-    expect(loadSettings(settings, log)).toEqual({ startAtLogin: false });
-    expect(readFileSync(settings, "utf8")).toBe("{");
   });
 });
 

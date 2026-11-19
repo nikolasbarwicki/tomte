@@ -32,13 +32,10 @@ export function parseButtonData(
 }
 
 /**
- * The link to the web UI at the item's panel, or undefined when the public URL is a loopback `http` URL: Telegram refuses a URL button that
- * points at the machine itself, and no phone could open it.
+ * The link "Open in Tomte" to a path of the web UI, or undefined when the public URL is a loopback `http` URL: Telegram refuses a URL button
+ * that points at the machine itself, and no phone could open it.
  */
-export function linkTo(
-  publicUrl: string,
-  item: Pick<CardItem, "botId" | "panel">,
-): ChannelMessage["link"] {
+export function webLink(publicUrl: string, pathAndQuery: string): ChannelMessage["link"] {
   let url: URL;
   try {
     url = new URL(publicUrl);
@@ -51,11 +48,19 @@ export function linkTo(
     url.hostname === "0.0.0.0" ||
     url.hostname.startsWith("127.");
   if (url.protocol === "http:" && loopback) return undefined;
+  return { label: "Open in Tomte", url: `${url.origin}${pathAndQuery}` };
+}
+
+/** The link to the web UI at the item's bot and panel (see `webLink`). */
+export function linkTo(
+  publicUrl: string,
+  item: Pick<CardItem, "botId" | "panel">,
+): ChannelMessage["link"] {
   const path = `/bots/${encodeURIComponent(item.botId)}`;
   const search = new URLSearchParams({
     ...(item.panel && { panel: item.panel }),
   }).toString();
-  return { label: "Open in Tomte", url: `${url.origin}${path}${search ? `?${search}` : ""}` };
+  return webLink(publicUrl, `${path}${search ? `?${search}` : ""}`);
 }
 
 /**

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import type { BotSummary } from "@tomte/contract/events";
+import type { HostStatus } from "@tomte/contract/host-status";
 
 import { applyEvent, initialHostState, type HostEvent, type HostState } from "./state.ts";
 
@@ -125,6 +126,7 @@ test("snapshot events replace their slice: routines and work by their bot, files
     cli: "claude",
     browser: { status: "unavailable", reason: "none" },
     pauseAfterAbsenceDays: 0,
+    maxUploadBytes: 2 ** 30,
   } as const;
   expect(applyEvent(s, { type: "host-info", info }).info).toBe(info);
 });
@@ -133,15 +135,34 @@ test("public-info sets what the host can do, which stays undefined until then", 
   expect(initialHostState.publicInfo).toBeUndefined();
   const info = {
     version: "0.1.0",
-    apiVersion: 1,
+    shellApi: { min: 1, max: 1 },
     mode: "remote",
-    claude: "signed-in",
     capabilities: { reveal: false, headedBrowser: false, browserSandbox: true },
   } as const;
   const s = play([{ type: "user", text: "hi" }]);
   const next = applyEvent(s, { type: "public-info", info });
   expect(next.publicInfo).toBe(info);
   expect(next.views).toBe(s.views);
+});
+
+test("host-status replaces what the page knows of the host's sign-in, and stays undefined until the first", () => {
+  expect(initialHostState.hostStatus).toBeUndefined();
+  const status = (state: "signed-in" | "signed-out"): HostStatus => ({
+    version: "0.1.0",
+    mode: "local",
+    claude: { state, ignoredEnv: [], checkedAt: 1 },
+    update: { status: "bundled" },
+    autoUpdate: false,
+    problems: [],
+  });
+  const s = play([{ type: "user", text: "hi" }]);
+  const first = applyEvent(s, { type: "host-status", status: status("signed-in") });
+  expect(first.hostStatus?.claude.state).toBe("signed-in");
+  expect(first.views).toBe(s.views);
+  expect(
+    applyEvent(first, { type: "host-status", status: status("signed-out") }).hostStatus?.claude
+      .state,
+  ).toBe("signed-out");
 });
 
 test("a bots event leaves the views identical, and drops the view of a deleted bot", () => {

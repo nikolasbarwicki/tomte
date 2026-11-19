@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import { BotAvatar } from "./avatars.ts";
-import { Attachment, EventSource, ExternalEventKind, WorkSnapshot } from "./events.ts";
+import { EventSource, ExternalEventKind, WorkSnapshot } from "./events.ts";
 
 /** Whether bots can get a browser on this host, and why not. */
 export const BrowserAvailability = z.discriminatedUnion("status", [
@@ -12,32 +12,51 @@ export const BrowserAvailability = z.discriminatedUnion("status", [
 ]);
 export type BrowserAvailability = z.infer<typeof BrowserAvailability>;
 
-/** The `/api/info` response: where the host runs, which Claude CLI it uses and the days of absence after which it pauses routines. */
+/** The `/api/info` response: where the host runs, which Claude CLI it uses, the days of absence after which it pauses routines and the largest file it accepts as an upload. */
 export const HostInfo = z.object({
   cwd: z.string(),
   cli: z.string(),
   browser: BrowserAvailability,
   /** `--pause-after-absence-days`; 0 when the absence pause is off (or the host is older than the setting). */
   pauseAfterAbsenceDays: z.number().int().nonnegative().default(0),
+  /** `--max-upload-mib`, in bytes: the per-file cap of `POST /api/files/upload`. */
+  maxUploadBytes: z.number().int().positive(),
 });
 export type HostInfo = z.infer<typeof HostInfo>;
 
-/** The version of the `/api/*` surface a client talks to; the host-info route reports it. */
-export const API_VERSION = 1;
+/** A range of versions of the shell's own surface: `host-info`, pair, revoke and the `bots` event. */
+export const ShellApiRange = z.object({ min: z.number().int(), max: z.number().int() });
+export type ShellApiRange = z.infer<typeof ShellApiRange>;
 
-/** Whether the Claude CLI holds a sign-in. `unknown`: `auth status` could not run or its output did not parse. */
-export const ClaudeSignIn = z.enum(["signed-in", "signed-out", "unknown"]);
-export type ClaudeSignIn = z.infer<typeof ClaudeSignIn>;
+/**
+ * The shell surface this build speaks, and what a host reports as its own. Versioned apart from the window's API,
+ * because the host serves the window: only the desktop app's handful of calls can differ between app and host.
+ * Additive changes bump nothing.
+ */
+export const SHELL_API: ShellApiRange = { min: 1, max: 1 };
+
+/**
+ * `release.json`, published in every release inside the `SHA256SUMS` set (so the signature covers it): what a server
+ * learns about a release before it installs it. `shellApi` is the range the release's host speaks (`SHELL_API`) and
+ * `schemaVersion` the database schema it migrates to (`SCHEMA_VERSION`), which is what tells a rollback whether the
+ * previous binary can still read the database.
+ */
+export const ReleaseManifest = z.object({
+  version: z.string(),
+  shellApi: ShellApiRange,
+  schemaVersion: z.number().int().positive(),
+});
+export type ReleaseManifest = z.infer<typeof ReleaseManifest>;
 
 /**
  * The `/api/host-info` response, which needs no device token: what this host is and what it can do, so the UI hides
- * actions it cannot perform. `claude` is present in remote mode only. It carries no other host state.
+ * actions it cannot perform. It carries no other host state.
  */
 export const PublicHostInfo = z.object({
   version: z.string(),
-  apiVersion: z.number().int(),
+  /** The shell surface the host speaks. A host that predates the field speaks version 1 only. */
+  shellApi: ShellApiRange.default({ min: 1, max: 1 }),
   mode: z.enum(["local", "remote"]),
-  claude: ClaudeSignIn.optional(),
   capabilities: z.object({
     reveal: z.boolean(),
     headedBrowser: z.boolean(),
@@ -131,22 +150,15 @@ export type ChannelTokenRequest = z.infer<typeof ChannelTokenRequest>;
 /** The largest `/api/bots/<botId>/events` request body in bytes; a larger one gets 413. */
 export const MAX_EVENT_BODY_BYTES = 64 * 1024;
 
-/** The most bytes one attachment (a file, or a folder's files together) may hold; the request carries them base64-encoded. */
-export const MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024;
+/** The subfolder of a bot's files folder that holds what the user attaches to a message. */
+export const ATTACHMENTS_DIR = "attachments";
 
 /**
- * The `/api/files/attach` request: one file or one folder the user attaches to a message, saved in the open bot's files
- * folder. Each `path` is the file's path as the user picked it, `/`-separated (`report.pdf`, or `notes/2026/june.md` for a
- * folder's file); every path starts with the same first segment, the attachment's name. `data` is the file's bytes in base64.
+ * The `POST /api/files/upload` response: where the host saved the file, relative to the open bot's files folder. A name
+ * that was taken is renamed (`report 2.pdf`), and then `renamedFrom` is the path the request asked for.
  */
-export const AttachRequest = z.object({
-  files: z.array(z.object({ path: z.string().min(1).max(1024), data: z.string() })).min(1),
-});
-export type AttachRequest = z.infer<typeof AttachRequest>;
-
-/** Where the host saved an attachment; the message that carries it names this. */
-export const AttachResponse = z.object({ attachment: Attachment });
-export type AttachResponse = z.infer<typeof AttachResponse>;
+export const UploadResponse = z.object({ path: z.string(), renamedFrom: z.string().optional() });
+export type UploadResponse = z.infer<typeof UploadResponse>;
 
 /**
  * A name that is safe to place in a program's argument list as an element of its own: letters, digits and `. _ : -`,
@@ -251,7 +263,7 @@ export type MemoryUpdate = z.infer<typeof MemoryUpdate>;
 export const Instructions = z.object({ text: z.string().max(MAX_TEXT_DOCUMENT) });
 export type Instructions = z.infer<typeof Instructions>;
 
-/** How a custom Claude provider takes its token: `bearer` as `ANTHROPIC_AUTH_TOKEN`, `api_key` as `ANTHROPIC_API_KEY`. */
+/** How a custom Claude provider takes its token: `bearer` as `ANTHROPIC_AUTH_TOKEN`, `api_key` as `ANTHROPIC_API_KEY` (to the CLI, each on a file descriptor, never in its environment). */
 export const ClaudeGatewayAuth = z.enum(["bearer", "api_key"]);
 export type ClaudeGatewayAuth = z.infer<typeof ClaudeGatewayAuth>;
 
@@ -266,6 +278,18 @@ export const ClaudeGateway = z.object({
 });
 export type ClaudeGateway = z.infer<typeof ClaudeGateway>;
 
+/** The `/api/providers/claude/token` request: a long-lived token, the `sk-ant-oat01-…` line `claude setup-token` prints, which the CLI uses instead of its sign-in. The shape is checked here because the CLI's own `auth status` reports signed in for any string; the page checks it with this schema before sending. */
+export const ClaudeLongLivedToken = z.object({
+  token: z
+    .string()
+    .trim()
+    .regex(
+      /^sk-ant-oat01-[A-Za-z0-9_-]+$/,
+      "That is not a long-lived token. Paste the sk-ant-oat01-… line that `claude setup-token` prints at the end, not the code the browser shows.",
+    ),
+});
+export type ClaudeLongLivedToken = z.infer<typeof ClaudeLongLivedToken>;
+
 /** The `/api/providers/claude/login` response: the page where the owner signs in. */
 export const ClaudeLoginStart = z.object({ url: z.string() });
 export type ClaudeLoginStart = z.infer<typeof ClaudeLoginStart>;
@@ -277,6 +301,10 @@ export type ClaudeLoginCode = z.infer<typeof ClaudeLoginCode>;
 /** Whether the host can reach a model provider: `connected`, `disconnected`, or `unknown` when it could not tell. */
 export const ProviderStatus = z.enum(["connected", "disconnected", "unknown"]);
 export type ProviderStatus = z.infer<typeof ProviderStatus>;
+
+/** The `/api/providers/claude/token` response: the token is stored whatever `status` is, which is the CLI's answer to it. */
+export const ClaudeTokenSaved = z.object({ ok: z.literal(true), status: ProviderStatus });
+export type ClaudeTokenSaved = z.infer<typeof ClaudeTokenSaved>;
 
 /**
  * A model provider the host runs bots on. Claude is the only one today; the list is how the UI is told about more.
@@ -305,6 +333,10 @@ export const ModelProvider = z.object({
   cliVersion: z.string().nullable(),
   /** The custom provider used instead of the sign-in; never carries the token. */
   gateway: z.object({ baseUrl: z.string(), auth: ClaudeGatewayAuth }).nullable(),
+  /** Whether a long-lived token is stored and used instead of the sign-in (unless a custom provider is set); never carries the token. */
+  longLivedToken: z.boolean(),
+  /** The command that signs the host in from a terminal on it, over SSH; null when the host is the user's own computer. */
+  sshCommand: z.string().nullable(),
   /** A sign-in started from the UI and still waiting for its code. */
   login: z.object({ url: z.string() }).nullable(),
 });

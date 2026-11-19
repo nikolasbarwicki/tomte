@@ -1,11 +1,14 @@
 import {
   type ClaudeGateway,
   type ClaudeLoginCode,
+  type ClaudeLongLivedToken,
   ClaudeLoginStart,
+  ClaudeTokenSaved,
   ClaudeUsage,
   Instructions,
   ModelProviders,
 } from "@tomte/contract/api";
+import type { UpdateAction } from "@tomte/contract/update";
 import { toast } from "sonner";
 
 import { act, errorOf, post, readJson } from "@/host/api.ts";
@@ -62,3 +65,19 @@ export async function setClaudeGateway(gateway: ClaudeGateway): Promise<string |
 
 /** Goes back to the Claude sign-in. */
 export const removeClaudeGateway = () => act("/api/providers/claude/gateway/remove", {});
+
+/** Asks the host to do something about its own update; resolves to whether it did (the host's reason is shown as a toast). The host's status event brings the new state. */
+export const runUpdate = (action: UpdateAction) => act("/api/updates/run", action);
+
+/** Stores a long-lived token (from `claude setup-token`) for Claude to use instead of the sign-in; resolves to why Claude is not signed in with it (the host's error, or the CLI not accepting it), or undefined when it is. */
+export async function setClaudeLongLivedToken(token: string): Promise<string | undefined> {
+  const res = await post("/api/providers/claude/token", { token } satisfies ClaudeLongLivedToken);
+  if (!res.ok) return errorOf(res);
+  const { status } = await readJson(res, ClaudeTokenSaved);
+  return status === "connected"
+    ? undefined
+    : "Claude did not accept that token. Remove it to use another way of signing in.";
+}
+
+/** Goes back to the Claude sign-in. */
+export const removeClaudeLongLivedToken = () => act("/api/providers/claude/token/remove", {});

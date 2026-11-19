@@ -273,10 +273,10 @@ try {
     case "auth-login": {
       const { cli, claude } = preflight();
       const status = cmd === "auth-status";
-      const code = await authCommand(cli, status ? "status" : "login", claude.env());
+      const code = await authCommand(cli, status ? "status" : "login", claude.spawnSpec().env);
       if (status || code !== 0) process.exit(code);
       // A sign-in can land where the host's children do not look, such as a keyring that exists only in this terminal session.
-      const state = await claude.checkSignIn();
+      const { state } = await claude.recheck("host-command");
       if (state === "signed-out") {
         log(
           `error: the sign-in is not visible to the host: after login, \`auth status\` in ${claudeConfigDir(config)} reports signed out`,
