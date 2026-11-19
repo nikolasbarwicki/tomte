@@ -18,7 +18,7 @@
 // - `{ text: "..." }`: `stream_event` deltas (message_start, content_block_start, one content_block_delta per word, content_block_stop, message_delta, message_stop), then the matching `assistant` message.
 // - `{ hook: "PreToolUse", input: {...}, tool_use_id?, ifDenied?: Step[] }`: sends a `hook_callback` control request to every callback id the initialize request registered for that event whose `matcher` (a regex against `tool_name`, else `agent_type`; none means all) matches, waits for the replies and appends one `{ hook, input, callback, response }` line per callback to `hook-results.jsonl` (`response` is the hook's output, or `{ error }`; `callback` is null, with a null `response`, when nothing is registered). `ifDenied` runs when a reply denies (`hookSpecificOutput.permissionDecision` "deny" or `decision` "block").
 // - `{ canUseTool: { tool_name, input?, agent_id?, tool_use_id?, ifDenied?: Step[] } }`: sends a `can_use_tool` control request, as the CLI does when a tool call needs the host's permission (`agent_id` is the background agent making the call, as the CLI names it for a subagent's calls), waits for the host's answer and appends `{ tool_name, agent_id, response }` to `permission-results.jsonl` (`response` is the answer, `{ behavior: "allow" | "deny", ... }`, or `{ error }`). `ifDenied` runs when the host denies. The step waits for the answer, which for a user's approval card takes as long as the user does.
-// - `{ mcp: { server, tool, args?, tool_use_id? } }`: calls the in-process SDK MCP server named `server` (initialized once per server and launch; `tool_use_id` goes in the request's `_meta["claudecode/toolUseId"]`, as the CLI names the tool use), waits for the result and appends `{ server, tool, ...<MCP response message> }` to `tool-results.jsonl`.
+// - `{ mcp: { server, tool, args?, tool_use_id? } }`: calls the in-process SDK MCP server named `server` with `args`, or, right after a `canUseTool` step for the same tool that the host allowed with an `updatedInput`, with that input, as the real CLI does (initialized once per server and launch; `tool_use_id` goes in the request's `_meta["claudecode/toolUseId"]`, as the CLI names the tool use), waits for the result and appends `{ server, tool, ...<MCP response message> }` to `tool-results.jsonl`.
 // - `{ httpTool: { server, tool, args?, agent_id? } }`: a tool call on a host HTTP MCP server (`bots`, `routines`, `browser`) as the real CLI makes it: first a `can_use_tool` control request for `mcp__<server>__<tool>` (its answer is appended to `permission-results.jsonl`), and only when the host allows it the JSON-RPC call, whose result is appended to `tool-results.jsonl` as `{ server, tool, result }`. A denial makes no call.
 // - `{ result: "text" }`: emits the turn's `result` message; steps may follow (background work that reports after the turn).
 // - `{ sleep: ms }`; `{ waitFor: "<file name>" }` polls until that file exists in the directory (a test sequences steps with it); `{ exit: code }` ends the process, as a crash.
@@ -352,6 +352,8 @@ const denies = (r: unknown) => {
 /** Runs `steps`; true once a `result` step has emitted the turn's result. */
 const runSteps = async (steps: Step[], vars: Substitutions): Promise<boolean> => {
   let answered = false;
+  /** The input the host allowed the last `canUseTool` step to run with: the real CLI calls the tool with it, not with the input it asked about. */
+  let allowed: { tool: string; input: Record<string, unknown> } | undefined;
   for (const raw of steps) {
     const step = subst(raw, vars);
     if (step.emit) {
@@ -400,6 +402,10 @@ const runSteps = async (steps: Step[], vars: Substitutions): Promise<boolean> =>
       const response =
         reply.subtype === "error" ? { error: reply.error } : (reply.response ?? null);
       record("permission-results.jsonl", { tool_name, agent_id, response });
+      const updated = (
+        response as { behavior?: string; updatedInput?: Record<string, unknown> } | null
+      )?.updatedInput;
+      allowed = updated && { tool: tool_name, input: updated };
       if (ifDenied && (response as { behavior?: string } | null)?.behavior === "deny")
         answered = (await runSteps(ifDenied, vars)) || answered;
     } else if (step.httpTool) {
@@ -418,7 +424,9 @@ const runSteps = async (steps: Step[], vars: Substitutions): Promise<boolean> =>
       if ((response as { behavior?: string } | null)?.behavior === "allow")
         await callHttpTool(server, tool, args);
     } else if (step.mcp) {
-      await callTool(step.mcp.server, step.mcp.tool, step.mcp.args ?? {}, step.mcp.tool_use_id);
+      const { server, tool, args, tool_use_id } = step.mcp;
+      const input = allowed?.tool === `mcp__${server}__${tool}` ? allowed.input : (args ?? {});
+      await callTool(server, tool, input, tool_use_id);
     } else if (step.result !== undefined) {
       out(resultMessage(step.result));
       answered = true;

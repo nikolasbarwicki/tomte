@@ -1,4 +1,4 @@
-import type { IntegrationTransport, ToolPolicy } from "@tomte/contract/events";
+import type { ToolPolicy } from "@tomte/contract/events";
 
 import { act, post } from "@/host/api.ts";
 
@@ -36,7 +36,7 @@ export type CustomIntegration =
     }
   | {
       name: string;
-      transport: Exclude<IntegrationTransport["type"], "stdio">;
+      transport: "http" | "sse";
       url: string;
       token: string | undefined;
       oauth: boolean;

@@ -57,7 +57,10 @@ const record = (r: Row): IntegrationRecord => ({
   updatedAt: r.updated_at,
 });
 
-const tool = (r: ToolRow): IntegrationTool => ({
+/** A tool as stored; the integrations module adds the computed `locked`. */
+export type StoredTool = Omit<IntegrationTool, "locked">;
+
+const tool = (r: ToolRow): StoredTool => ({
   name: r.tool_name,
   description: r.description,
   readOnly: !!r.read_only,
@@ -128,7 +131,7 @@ export function setEnabled(db: Database, id: string, enabled: boolean, now: numb
 export const remove = (db: Database, id: string) =>
   db.query("DELETE FROM integrations WHERE id = ?").run(id);
 
-export const tools = (db: Database, id: string): IntegrationTool[] =>
+export const tools = (db: Database, id: string): StoredTool[] =>
   db
     .query<ToolRow, [string]>(
       "SELECT * FROM integration_tools WHERE integration_id = ? ORDER BY tool_name",
@@ -148,6 +151,8 @@ export type DiscoveredTool = {
   description: string;
   readOnly: boolean;
   destructive: boolean;
+  /** The policy a new tool starts with; Auto when read-only and Ask otherwise when absent. */
+  policy?: ToolPolicy;
 };
 
 /** Inserts new tools with a default policy; an existing tool keeps its policy and only refreshes what the server says about it. */
@@ -166,7 +171,7 @@ export function upsertTools(db: Database, id: string, found: DiscoveredTool[], n
         t.description,
         t.readOnly ? 1 : 0,
         t.destructive ? 1 : 0,
-        t.readOnly ? "auto" : "ask",
+        t.policy ?? (t.readOnly ? "auto" : "ask"),
         now,
       );
   })();

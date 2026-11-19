@@ -189,15 +189,18 @@ export class FrontSession {
     const generation = this.generation;
     const input = new Inbox();
     await this.o.claude.requireSignIn();
-    const session = await this.o.integrations.session();
+    const session = await this.o.integrations.session(this.o.files);
     const lease = this.o.hostServers();
     // An integration named like one of the host's own servers would shadow it, so it is left out of this session.
     const integrationServers = Object.entries(session.mcpServers).filter(
       ([name]) => !HOST_SERVER_NAMES.includes(name),
     );
+    const builtinServers = Object.entries(session.builtinServers).filter(
+      ([name]) => !HOST_SERVER_NAMES.includes(name),
+    );
     const worker: WorkerSetup = {
       shell: lease.isolation?.shell !== "disabled",
-      integrationServers: integrationServers.map(([name]) => name),
+      integrationServers: [...integrationServers, ...builtinServers].map(([name]) => name),
       context: this.o.workerPersona() + memorySections(this.o.memory),
     };
     const agents = agentDefinitions(this.settings, worker);
@@ -232,6 +235,7 @@ export class FrontSession {
           canUseTool: this.canUseTool,
           // Only the worker asks the user: the front never blocks on a question, and its own tool set (`frontAgent`) leaves ask_user out.
           mcpServers: {
+            ...Object.fromEntries(builtinServers),
             host: createHostMcpServer({
               delegate: {
                 askUser: (question, options, eventId, toolUseId) =>

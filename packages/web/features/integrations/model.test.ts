@@ -13,6 +13,7 @@ const tool = (
   readOnly: false,
   destructive: false,
   policy: "ask",
+  locked: false,
   lastSeen: 0,
   ...kind,
 });

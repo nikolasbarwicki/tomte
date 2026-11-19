@@ -12,6 +12,7 @@ import { approvalActions, canonicalInput, type Waits } from "../waits/index.ts";
 export function parkingDelegate(
   waits: Pick<Waits, "open" | "consumeApproval">,
   botId: string,
+  locked: (tool: string) => boolean,
 ): HostDelegate {
   return {
     askUser: async (question, options) => {
@@ -28,7 +29,7 @@ export function parkingDelegate(
       waits.open(botId, {
         kind: "tool_approval",
         payload: { tool, input, canonical: canonicalInput(input), reason },
-        actions: approvalActions(tool),
+        actions: approvalActions(tool, locked(tool)),
       });
       return {
         behavior: "deny",

@@ -191,7 +191,14 @@ export async function startHandoffHost(
   /** Overrides for the host's timing, so a test need not wait out the defaults, the channel adapters it runs and where Telegram's API is. */
   timing?: Pick<
     HostServerOptions,
-    "frontIdleMs" | "channelAdapters" | "telegram" | "cards" | "notices" | "absenceCheckMs"
+    | "frontIdleMs"
+    | "channelAdapters"
+    | "telegram"
+    | "cards"
+    | "notices"
+    | "absenceCheckMs"
+    | "lockedTools"
+    | "google"
   >,
   /** The environment the host's configuration is read from, such as `TOMTE_ASK_APPROVAL`. */
   env: Record<string, string> = {},

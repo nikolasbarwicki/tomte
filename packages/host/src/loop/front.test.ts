@@ -97,12 +97,15 @@ function openFront({
     integrations: {
       session: async () => ({
         mcpServers: {},
+        builtinServers: {},
         disallowedTools: [],
         plugins: [],
         policyOf: () => undefined,
         expiresAt: await expiresAt?.(),
       }),
       decide: () => undefined,
+      prepareApproval: async (_name, input) => ({ input }),
+      locked: () => false,
       reconcile: () => {},
     },
     observer,

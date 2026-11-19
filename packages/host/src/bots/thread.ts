@@ -85,6 +85,8 @@ export interface ThreadOptions {
   meter?: UsageMeter;
   /** The bot this thread belongs to, saved with the usage mark of its session. */
   botId?: string;
+  /** The bot's files folder, handed to built-in integrations so a tool can save a file where the bot and the owner see it. */
+  filesDir?: string;
 }
 
 const HOST_INSTRUCTIONS = `${ASK_INSTRUCTIONS}\n\n${MEMORY_INSTRUCTIONS}`;
@@ -137,7 +139,7 @@ export class Thread {
   private async open() {
     const inbox = new Inbox();
     await this.o.claude.requireSignIn();
-    const session = await this.o.integrations?.session();
+    const session = await this.o.integrations?.session(this.o.filesDir);
     const lease = this.o.hostServers?.();
     const persona = this.o.persona?.();
     const append =
@@ -166,6 +168,7 @@ export class Thread {
           includePartialMessages: true,
           canUseTool: this.canUseTool,
           mcpServers: {
+            ...session?.builtinServers,
             host: createHostMcpServer({
               delegate: this.o.delegate,
               memory: this.o.memory,

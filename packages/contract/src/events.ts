@@ -463,7 +463,12 @@ export const ToolPolicy = z.enum(["off", "ask", "auto"]);
 export type ToolPolicy = z.infer<typeof ToolPolicy>;
 export const ConnState = z.enum(["disconnected", "connected", "needs-auth", "failed"]);
 export type ConnState = z.infer<typeof ConnState>;
-/** `skillsDir`: absolute path of a local folder of skills; custom integrations only. */
+/**
+ * `skillsDir`: absolute path of a local folder of skills; custom integrations only. A `builtin` transport is a server the host
+ * itself runs in process, named by the service it speaks for.
+ */
+export const BuiltinService = z.enum(["gmail"]);
+export type BuiltinService = z.infer<typeof BuiltinService>;
 export const IntegrationTransport = z.union([
   z.object({
     type: z.enum(["http", "sse"]),
@@ -475,6 +480,11 @@ export const IntegrationTransport = z.union([
     command: z.string(),
     args: z.array(z.string()),
     envKeys: z.array(z.string()),
+    skillsDir: z.string().exactOptional(),
+  }),
+  z.object({
+    type: z.literal("builtin"),
+    service: BuiltinService,
     skillsDir: z.string().exactOptional(),
   }),
 ]);
@@ -513,6 +523,8 @@ export const IntegrationTool = z.object({
   readOnly: z.boolean(),
   destructive: z.boolean(),
   policy: ToolPolicy,
+  /** Computed from the built-in integration's definition, never stored: a locked tool always asks, so its policy is Ask or Off. */
+  locked: z.boolean(),
   lastSeen: z.number(),
 });
 export type IntegrationTool = z.infer<typeof IntegrationTool>;

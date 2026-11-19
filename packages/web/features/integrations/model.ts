@@ -8,10 +8,16 @@ import {
   type ToolPolicy,
 } from "@tomte/contract/events";
 
-export const TRANSPORT_LABEL: Record<IntegrationTransport["type"], string> = {
+/** The transports a custom integration can use. */
+export const CUSTOM_TRANSPORT_LABEL = {
   http: "HTTP",
   sse: "SSE",
   stdio: "Local command",
+} as const;
+
+export const TRANSPORT_LABEL: Record<IntegrationTransport["type"], string> = {
+  ...CUSTOM_TRANSPORT_LABEL,
+  builtin: "Built in",
 };
 
 /** Switched on but failed or signed out: what the sidebar badge counts and the list sorts first. */
@@ -76,10 +82,13 @@ export const endpoint = (i: Integration) =>
         ...i.transport.args,
         ...i.transport.envKeys.map((k) => `${k}=•••`),
       ].join(" ")
-    : i.transport.url;
+    : i.transport.type === "builtin"
+      ? "Runs inside Tomte"
+      : i.transport.url;
 
 export const host = (i: Integration) => {
   if (i.transport.type === "stdio") return i.transport.command;
+  if (i.transport.type === "builtin") return "Built in";
   try {
     return new URL(i.transport.url).host;
   } catch {

@@ -587,7 +587,7 @@ export function createChats(deps: ChatsDeps): Chats {
         broadcast({ type: "memory", scope, text });
     },
     unattended: () => chat().routineRun !== undefined,
-    park: parkingDelegate(deps.waits, bot.id),
+    park: parkingDelegate(deps.waits, bot.id, (tool) => deps.integrations.locked(tool)),
     ownedEvent(claimed) {
       if (claimed === undefined) return undefined;
       const { bot: owner, delivered } = chat();
@@ -609,7 +609,7 @@ export function createChats(deps: ChatsDeps): Chats {
       const { wait, text } = await waitFor(c, {
         kind: "tool_approval",
         payload: { tool, input, canonical: canonicalInput(input), reason },
-        actions: approvalActions(tool),
+        actions: approvalActions(tool, deps.integrations.locked(tool)),
       });
       if (isApproved(wait.outcome)) return { behavior: "allow", updatedInput: input };
       // A denial the user made keeps its short wording; a cancelled or expired wait says why.

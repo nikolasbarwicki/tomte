@@ -26,6 +26,11 @@ beforeAll(() => {
         { description: "Send an email", annotations: { destructiveHint: true } },
         async () => ({ content: [{ type: "text", text: "sent" }] }),
       );
+      server.registerTool(
+        "list_mail",
+        { description: "List emails", annotations: { readOnlyHint: true } },
+        async () => ({ content: [{ type: "text", text: "none" }] }),
+      );
       const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });
       await server.connect(transport);
       return transport.handleRequest(req);
@@ -133,6 +138,12 @@ async function openBot(name = "Planner") {
   const botId = host.createBot(name);
   expect((await host.ui("/api/open", { botId })).status).toBe(200);
   return botId;
+}
+
+/** Restarts the host with the integration's send tool locked, as a built-in integration's definition would lock it. */
+async function lockSend() {
+  await host.stop();
+  host = await startHandoffHost([], undefined, undefined, { lockedTools: new Set([TOOL]) });
 }
 
 describe("Always allow on an attended approval card", () => {
@@ -295,6 +306,101 @@ describe("Always allow on an attended approval card", () => {
   });
 });
 
+describe("A locked integration tool", () => {
+  const view = async (integration: string) =>
+    (
+      (await (await host.ui("/api/integrations/list", {})).json()) as {
+        id: string;
+        tools: { name: string; policy: string; locked: boolean }[];
+      }[]
+    )
+      .find((i) => i.id === integration)!
+      .tools.map((t) => [t.name, t.locked, t.policy]);
+
+  test("asks with an approval of Allow and Deny only, though the host approves everything", async () => {
+    await lockSend();
+    await addIntegration();
+    const botId = await openBot();
+    const page = await watch();
+    host.approveOnMessage(TOOL, INPUT);
+    await host.ui("/api/send", { text: "go" });
+    await host.until(() => page.approvals().length === 1);
+    const card = page.approvals()[0]!;
+    expect(card.actions).toEqual([
+      { id: "allow", label: "Allow" },
+      { id: "deny", label: "Deny" },
+    ]);
+
+    expect((await answer(card.id, "allow_always")).status).toBe(404);
+    expect(await allowances(botId)).toEqual([]);
+    expect(host.permissionResults()).toHaveLength(0);
+
+    expect((await answer(card.id, "allow")).status).toBe(200);
+    await host.until(() => page.done() === 1);
+    expect(last()?.response).toMatchObject({ behavior: "allow" });
+    expect(await allowances(botId)).toEqual([]);
+
+    // Allow covered that call only: the next call asks again.
+    await turn(page, "again", async (id) => {
+      expect((await answer(id, "deny")).status).toBe(200);
+    });
+    expect(page.approvals()).toHaveLength(2);
+  });
+
+  test("is refused Auto, accepts Ask and Off, and is shown as locked", async () => {
+    await lockSend();
+    const integration = await addIntegration();
+    const set = (tool: string, policy: string) =>
+      host.ui("/api/integrations/set-policy", { id: integration, tool, policy });
+    expect(await view(integration)).toEqual([
+      ["list_mail", false, "auto"],
+      ["send_mail", true, "ask"],
+    ]);
+
+    expect((await set("send_mail", "auto")).status).toBe(400);
+    expect(await view(integration)).toContainEqual(["send_mail", true, "ask"]);
+    expect((await set("send_mail", "off")).status).toBe(200);
+    expect((await set("send_mail", "ask")).status).toBe(200);
+    expect((await set("list_mail", "auto")).status).toBe(200);
+    expect(await view(integration)).toEqual([
+      ["list_mail", false, "auto"],
+      ["send_mail", true, "ask"],
+    ]);
+  });
+
+  test("that is switched off is denied with no card", async () => {
+    await lockSend();
+    const integration = await addIntegration();
+    await openBot();
+    const page = await watch();
+    expect(
+      (
+        await host.ui("/api/integrations/set-policy", {
+          id: integration,
+          tool: "send_mail",
+          policy: "off",
+        })
+      ).status,
+    ).toBe(200);
+    host.approveOnMessage(TOOL, INPUT);
+    await turn(page, "go", async () => {});
+    expect(last()?.response).toMatchObject({ behavior: "deny" });
+    expect(last()?.response?.message).toContain("switched off");
+    expect(page.approvals()).toHaveLength(0);
+  });
+
+  test("leaves a tool that is not locked on its own policy", async () => {
+    await lockSend();
+    await addIntegration();
+    await openBot();
+    const page = await watch();
+    host.approveOnMessage("mcp__fx__list_mail", {});
+    await turn(page, "go", async () => {});
+    expect(last()?.response).toMatchObject({ behavior: "allow" });
+    expect(page.approvals()).toHaveLength(0);
+  });
+});
+
 describe.each([
   ["chat-hosted", true],
   ["headless", false],
@@ -354,5 +460,27 @@ describe.each([
     expect(last()?.response).toMatchObject({ behavior: "allow" });
     expect((await runs(routineId)).map((r) => r.status)).not.toContain("waiting");
     expect(page.approvals()).toHaveLength(1);
+  });
+
+  test("a locked tool's parked approval carries no Always allow, and an answer naming it is refused", async () => {
+    await lockSend();
+    const { botId, other, routineId } = await setup();
+    const page = await watch();
+    host.approveOnMessage(TOOL, INPUT);
+    expect((await host.ui("/api/routines/run", { id: routineId })).status).toBe(200);
+    await untilRun(routineId, 1, "waiting");
+
+    if (!chatHosted) await host.ui("/api/open", { botId });
+    await host.until(() => page.approvals().length === 1);
+    const id = page.approvals()[0]!.id;
+    expect(page.approvals()[0]?.actions?.map((a) => a.id)).toEqual(["allow", "deny"]);
+    if (!chatHosted) await host.ui("/api/open", { botId: other });
+    expect((await answer(id, "allow_always")).status).toBe(404);
+    expect(await allowances(botId)).toEqual([]);
+    expect((await runs(routineId))[0]?.status).toBe("waiting");
+
+    expect((await answer(id, "allow")).status).toBe(200);
+    await untilRun(routineId, 1, "succeeded");
+    expect(await allowances(botId)).toEqual([]);
   });
 });

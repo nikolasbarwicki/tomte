@@ -124,10 +124,13 @@ export interface Waits {
  */
 export const ALWAYS_ASK_TOOLS: ReadonlySet<string> = new Set(["mcp__bots__create_bot"]);
 
-/** The buttons of a tool approval: allow this call, allow the tool for the bot from now on (never for an `ALWAYS_ASK_TOOLS` tool), or deny. The second names the tool, so a rule for Bash says how broad it is. */
-export const approvalActions = (tool: string): WaitAction[] => [
+/**
+ * The buttons of a tool approval: allow this call, allow the tool for the bot from now on, or deny. The second names the tool, so a
+ * rule for Bash says how broad it is. It is left out for an `ALWAYS_ASK_TOOLS` tool and for a `locked` integration tool.
+ */
+export const approvalActions = (tool: string, locked: boolean): WaitAction[] => [
   { id: "allow", label: "Allow" },
-  ...(ALWAYS_ASK_TOOLS.has(tool)
+  ...(ALWAYS_ASK_TOOLS.has(tool) || locked
     ? []
     : [{ id: "allow_always", label: `Always allow ${tool} for this bot` }]),
   { id: "deny", label: "Deny" },

@@ -157,7 +157,8 @@ Each is independent and fits in one PR. Order within the section is by user-visi
 **Plan.**
 
 - **Shipped.** 30 catalog entries in `packages/host/src/integrations/catalog.ts` (commit `5c61276`), plus 4 services (Figma, Trello, Obsidian, Paper) as custom-server recipes in [`custom-integrations.md`](custom-integrations.md). Spec: [`.scratch/integrations-catalog/spec.md`](../.scratch/integrations-catalog/spec.md). Live sign-in checks: [`.scratch/integrations-catalog/live-checklist.md`](../.scratch/integrations-catalog/live-checklist.md). Per-service research: [`research/integrations/`](research/integrations/).
-- Spike Composio's MCP endpoint against the existing OAuth and bearer flows. If it fits, one entry covers thousands of apps; if its auth model needs a new code path, drop it. Unverified until tried.
+- **Gmail is built in** ([ADR 0012](adr/0012-gmail-is-a-built-in-integration-on-the-rest-api.md)). It runs inside the host on the Gmail REST API with the owner's own Google client, with read, draft, organize, trash and send tools; sending always asks and cannot be switched to Auto or always allowed. No Developer Preview enrolment is needed. Calendar, Sheets, Docs and Drive still use Google's hosted preview MCP servers and are the next candidates to move to their REST APIs the same way. Open: the real-Google check of the scope, the refresh token and its 7-day expiry (ticket 03, recorded in the ADR's Evaluation).
+- Spike Composio's MCP endpoint against the existing OAuth and bearer flows, as an opt-in entry with the data path disclosed (mail would pass through Composio), never the default for Gmail. If it fits, one entry covers thousands of apps; if its auth model needs a new code path, drop it. Unverified until tried.
 
 **Done when.** Each new entry connects from the UI and one read and one write tool works from a bot, the write asking for approval.
 

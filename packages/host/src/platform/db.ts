@@ -2,7 +2,9 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-import type { SecretStore } from "./secrets.ts";
+import { z } from "zod";
+
+import { secretName, type SecretStore } from "./secrets.ts";
 
 const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS routines (
@@ -567,6 +569,93 @@ CREATE TABLE IF NOT EXISTS chat_origins (
 );
 `;
 
+const StoredTransportType = z.object({ type: z.string() });
+/** What a sweep needs of an integration's secret entry: the OAuth client, whatever its shape. */
+const StoredSecret = z.object({
+  oauth: z.object({ client: z.record(z.string(), z.unknown()).optional() }).optional(),
+});
+
+/**
+ * The ids of Gmail rows still on Google's hosted MCP server. A row converted by V30 has the `builtin` transport and is not found,
+ * so the conversion and the secret sweep before it do nothing the second time.
+ */
+function hostedGmailRows(db: Database): string[] {
+  const present = db
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'integrations'")
+    .get();
+  if (!present) return [];
+  return db
+    .query<{ id: string; transport: string }, []>(
+      "SELECT id, transport FROM integrations WHERE catalog_id = 'gmail'",
+    )
+    .all()
+    .filter((r) => StoredTransportType.parse(JSON.parse(r.transport)).type !== "builtin")
+    .map((r) => r.id);
+}
+
+/** The built-in Gmail tool that replaces each tool of the hosted server; the four label tools became one. */
+const HOSTED_GMAIL_TOOLS: Record<string, { replacedBy: string; readOnly: boolean }> = {
+  search_threads: { replacedBy: "search_threads", readOnly: true },
+  get_thread: { replacedBy: "get_thread", readOnly: true },
+  list_drafts: { replacedBy: "list_drafts", readOnly: true },
+  list_labels: { replacedBy: "list_labels", readOnly: true },
+  create_draft: { replacedBy: "create_draft", readOnly: false },
+  label_message: { replacedBy: "modify_labels", readOnly: false },
+  label_thread: { replacedBy: "modify_labels", readOnly: false },
+  unlabel_message: { replacedBy: "modify_labels", readOnly: false },
+  unlabel_thread: { replacedBy: "modify_labels", readOnly: false },
+};
+
+// Gmail moved from Google's hosted MCP server to the built-in server. Each hosted row becomes a needs-auth built-in row: the owner
+// signs in once, with the Google client already stored (the secret sweep before this step took the old tokens out). The hosted
+// tools are dropped; only a tool the owner switched Off is kept, under the name of the built-in tool that replaces it (Off if any of
+// the label tools was), so the switch survives. The other built-in tools are added at start with the policies their verb classes
+// give them, and the row's auth is brought to the catalog's by the start-up sync, so the step names neither.
+const SCHEMA_V30 = (db: Database) => {
+  const t = Date.now();
+  for (const id of hostedGmailRows(db)) {
+    const off = new Map<string, boolean>();
+    for (const { tool_name } of db
+      .query<{ tool_name: string }, [string]>(
+        "SELECT tool_name FROM integration_tools WHERE integration_id = ? AND policy = 'off'",
+      )
+      .all(id)) {
+      const known = HOSTED_GMAIL_TOOLS[tool_name];
+      if (known) off.set(known.replacedBy, known.readOnly);
+    }
+    db.query("DELETE FROM integration_tools WHERE integration_id = ?").run(id);
+    for (const [name, readOnly] of off)
+      db.query(
+        `INSERT INTO integration_tools (integration_id, tool_name, description, read_only, destructive, policy, last_seen)
+         VALUES (?, ?, '', ?, 0, 'off', ?)`,
+      ).run(id, name, readOnly ? 1 : 0, t);
+    db.query(
+      "UPDATE integrations SET transport = ?, state = 'needs-auth', error = NULL, updated_at = ? WHERE id = ?",
+    ).run(JSON.stringify({ type: "builtin", service: "gmail" }), t, id);
+  }
+};
+
+/**
+ * Takes the hosted Gmail tokens out of the secret store while the row still names the hosted server; V30 then converts the row. The
+ * owner's Google client stays, as it does on Disconnect, so signing in again needs no new client ID and secret. A no-op once the row is
+ * converted. A secret that cannot be rewritten is logged and left: the built-in server then asks for a new sign-in itself when
+ * Google rejects the old grant's scopes.
+ */
+async function sweepHostedGmailSecrets(db: Database, secrets: SecretStore): Promise<void> {
+  for (const id of hostedGmailRows(db)) {
+    const name = secretName(id);
+    try {
+      const raw = await secrets.get(name);
+      if (raw === null) continue;
+      const client = StoredSecret.parse(JSON.parse(raw)).oauth?.client;
+      if (client === undefined) await secrets.delete(name);
+      else await secrets.set(name, JSON.stringify({ oauth: { client } }));
+    } catch (e) {
+      console.error(`[db] removing the hosted Gmail sign-in failed: ${(e as Error).message}`);
+    }
+  }
+}
+
 /** Applies pending schema versions, tracked in `PRAGMA user_version`. */
 export function migrate(db: Database): Database {
   db.run("PRAGMA journal_mode = WAL");
@@ -602,6 +691,7 @@ export function migrate(db: Database): Database {
     SCHEMA_V27,
     SCHEMA_V28,
     SCHEMA_V29,
+    SCHEMA_V30,
   ];
   for (const [i, schema] of migrations.entries()) {
     if (user_version > i) continue;
@@ -621,6 +711,7 @@ export async function openDb(dataRoot: string, secrets: SecretStore): Promise<Da
   mkdirSync(dataRoot, { recursive: true });
   const db = new Database(join(dataRoot, DB_FILE), { create: true });
   await sweepVaultSecrets(db, secrets);
+  await sweepHostedGmailSecrets(db, secrets);
   return migrate(db);
 }
 

@@ -55,7 +55,11 @@ export function createRoutineTurns(deps: RoutineTurnsDeps): RoutineTurns {
 
   function startHeadless(item: QueuedRoutine) {
     const { bot, routine, runId, ownSession } = item.job;
-    const h = runHeadless(deps, item.job, parkingDelegate(deps.waits, bot.id));
+    const h = runHeadless(
+      deps,
+      item.job,
+      parkingDelegate(deps.waits, bot.id, (tool) => deps.integrations.locked(tool)),
+    );
     item.stop = h.stop;
     headlessRuns.set(bot.id, { routine: routine.name, runId, ownSession });
     deps.announceBots();

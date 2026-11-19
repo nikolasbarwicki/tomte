@@ -138,7 +138,7 @@ function ToolRow({
           if (policy && policy !== t.policy) onPolicy(policy);
         }}
       >
-        {POLICIES.map((p) => (
+        {POLICIES.filter((p) => !t.locked || p.value !== "auto").map((p) => (
           <ToggleGroupItem key={p.value} value={p.value} className="px-2 text-xs">
             {p.label}
           </ToggleGroupItem>

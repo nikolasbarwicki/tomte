@@ -379,12 +379,15 @@ async function runCase(c: Case, n: number, env: Env): Promise<Outcome> {
     integrations: {
       session: async () => ({
         mcpServers: {},
+        builtinServers: {},
         disallowedTools: [],
         plugins: [],
         policyOf: () => undefined,
         expiresAt: undefined,
       }),
       decide: () => undefined,
+      prepareApproval: async (_name, input) => ({ input }),
+      locked: () => false,
       reconcile: () => {},
     },
     agentSettings: { model: DEFAULT_MODEL, effort: DEFAULT_EFFORT },

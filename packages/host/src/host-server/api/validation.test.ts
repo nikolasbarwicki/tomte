@@ -52,3 +52,21 @@ test("an open bot's routes reject a bad body with 400", async () => {
     expect(res.status).toBe(400);
   }
 });
+
+test.each(["host", "browser", "bots", "routines", "gmail"])(
+  "adding a custom integration named %s answers 400",
+  async (name) => {
+    const res = await host.ui("/api/integrations/add-custom", {
+      name,
+      url: "http://127.0.0.1:9/mcp",
+      transport: "http",
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain(name);
+    const list = (await (await host.ui("/api/integrations/list", {})).json()) as {
+      name: string;
+      catalogId: string | null;
+    }[];
+    expect(list.filter((i) => i.catalogId === null)).toEqual([]);
+  },
+);

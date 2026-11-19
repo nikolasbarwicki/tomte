@@ -1,6 +1,6 @@
 # Google / Gmail OAuth: research notes
 
-Status: research, no decision taken
+Status: research. Gmail's direction is decided in [ADR 0012](../adr/0012-gmail-is-a-built-in-integration-on-the-rest-api.md): a built-in integration on the Gmail REST API with the owner's own client. Sections 1, 2 and 4 to 7 record what was known before that decision; section 6 now states what was adopted and what was not.
 Scope: how tomte should handle Gmail setup for a public release; how competitors handle it.
 Gathered: against repo clones and Google docs fetched during one session. Competitor stars, plans and prices are snapshots.
 
@@ -8,18 +8,18 @@ Legend: **[V]** observed in a doc or in source. **[I]** inference, not observed.
 
 ## 1. Problem
 
-Gmail setup today asks each user to:
+Before ADR 0012, connecting Gmail asked each user to:
 
 1. Join the Workspace Developer Preview Program (the Gmail MCP server is Developer Preview) **[V]**.
 2. Create their own Google Cloud project and OAuth client, with "Use this client for an AI-powered agent" selected **[V]**.
 3. Click through a consent screen, with the unverified-app warning if the client is unverified **[V]**.
 
-## 2. Tomte's current wiring **[V]**
+## 2. Tomte's wiring before ADR 0012 **[V]**
 
-- `src/integrations/catalog.ts`: `GMAIL_OAUTH` is an own-client entry. Scopes `gmail.readonly gmail.compose`. URL `https://gmailmcp.googleapis.com/mcp/v1`.
-- `src/integrations/index.ts`: `connectOAuth` uses `deps.oauthRedirectUrl` (loopback `/oauth/callback`, port from `PORT`, default 5173) through the MCP SDK `mcpAuth`.
+- `src/integrations/catalog.ts`: the Gmail entry was an own-client entry for Google's hosted Gmail MCP server. Scopes `gmail.readonly gmail.compose`. It is now a built-in entry (scope `gmail.modify`) and the hosted URL is gone from the code.
+- `src/integrations/index.ts`: `connectOAuth` uses `deps.oauthRedirectUrl` (loopback `/oauth/callback`, port from `PORT`, default 5173) through the MCP SDK `mcpAuth`. A built-in server now signs in through `integrations/google-oauth.ts` instead.
 - `.env`: `APP_ORIGIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
-- No `access_type` string exists in `src/integrations/*.ts`. The installed MCP SDK (`node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js`) matches only `offline_access`, and only to add `prompt=consent`; it never sets `access_type`. **[V]** by grep, not by a live Google sign-in. So tomte sends no `access_type=offline` today, and Google likely issues no refresh token **[I]** until tested.
+- No `access_type` string existed in `src/integrations/*.ts`. The installed MCP SDK (`node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js`) matches only `offline_access`, and only to add `prompt=consent`; it never sets `access_type`. **[V]** by grep, not by a live Google sign-in. So tomte sent no `access_type=offline`, and Google likely issued no refresh token **[I]**. The built-in sign-in sends `access_type=offline` and `prompt=consent`; the remote Google entries (Calendar, Sheets, Docs, Drive) keep `withOfflineAccess`.
 
 ## 3. Google facts
 
@@ -100,18 +100,24 @@ Composio's own account of managed auth (`composio.dev/content/ship-gmail-integra
 | D   | IMAP with an app password.                                                          | Not seen in any competitor. Avoids Google OAuth verification. Mail still goes to the model provider. Not evaluated beyond that **[I]**.                                                                                            |
 | E   | Closed beta on the 100-user unverified cap.                                         | Fallback only. Users still see the warning.                                                                                                                                                                                        |
 
-## 6. Recommended direction (not yet decided)
+## 6. Direction adopted for Gmail, and what is left
 
-1. Add a Composio catalog entry as the opt-in one-click path, with explicit data-path disclosure. Keep A.
-2. Port MausBot-style verb-class grants and send-always-asks before any managed Gmail path ships. This depends on the approval-policy gap in `bots/thread.ts` `canUseTool`: the integration "ask" branch precedes the `approveAll` short-circuit, and routines and chat default to `approveAll: true`.
-3. Add `access_type=offline` + `prompt=consent` to Google authorization URLs (SDK does not, see section 2). Confirm with a live sign-in.
-4. Write a Limited Use-style disclosure for the model-provider transfer.
-5. Do not start a verified-client project until Google answers whether piping Gmail into Claude, or a user-chosen model, is a permitted transfer.
+Adopted ([ADR 0012](../adr/0012-gmail-is-a-built-in-integration-on-the-rest-api.md)):
+
+1. Option A, in a different shape: Gmail runs inside the host on the generally available Gmail REST API with the owner's own OAuth client. Setup no longer needs the Developer Preview, the Gmail MCP API or the AI-agent flag. Mail goes Google, host, model provider; no third party.
+2. Verb-class grants and send-always-asks, before any managed path: each tool has a verb class (read, draft, organize, delete, send), and `send_message` is a locked tool that always asks, with no Auto and no always-allow.
+3. `access_type=offline` and `prompt=consent` on Google's authorization URL, with the host refreshing the token itself.
+
+Not adopted, still open:
+
+4. A Composio catalog entry as an opt-in one-click path, with explicit data-path disclosure; never the default for Gmail.
+5. A Limited Use-style disclosure for the model-provider transfer.
+6. A verified-client project, until Google answers whether piping Gmail into Claude, or a user-chosen model, is a permitted transfer.
 
 ## 7. Open questions
 
 - Does Google treat sending Gmail content to Anthropic, or to a user-chosen model, as a permitted Limited Use transfer? Needs an answer from Google, not from policy text.
-- With `access_type=offline` added, does `gmailmcp.googleapis.com` issue a refresh token? Test with a throwaway client; the SDK-side gap is already confirmed by grep.
+- Does Google's refresh token for `gmail.modify` work with the built-in sign-in, and does it survive 7 days for an unverified client in "In production" status? Ticket 03 of `.scratch/gmail-native`; the result goes in ADR 0012's Evaluation.
 - Does a general agent platform qualify under Google's approved Gmail use cases? **[I]** gray area.
 - CASA cost and timeline for tomte specifically. No Google figure found.
 - Turnstone's Gmail setup. Not researched.

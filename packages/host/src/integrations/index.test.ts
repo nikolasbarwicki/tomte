@@ -136,6 +136,41 @@ test("disallowedTools holds exactly the Off tools, named mcp__<server>__<tool>",
   expect((await integrations.session()).disallowedTools).toEqual(["mcp__fx__delete_all"]);
 });
 
+test("a locked tool never reads as Auto and refuses it, though it is read-only", async () => {
+  integrations = createIntegrations({
+    db: migrate(new Database(":memory:")),
+    secrets,
+    hostDir,
+    now: () => clock,
+    onChange: () => changes++,
+    oauthRedirectUrl: REDIRECT,
+    lockedTools: new Set(["mcp__fx__lookup"]),
+  });
+  const i = await add();
+  const tool = (name: string) =>
+    integrations
+      .list()
+      .find((x) => x.id === i.id)!
+      .tools.find((t) => t.name === name)!;
+  expect([tool("lookup").locked, tool("lookup").policy]).toEqual([true, "ask"]);
+  expect([tool("delete_all").locked, tool("delete_all").policy]).toEqual([false, "ask"]);
+  expect(integrations.locked("mcp__fx__lookup")).toBe(true);
+  expect(integrations.locked("mcp__fx__delete_all")).toBe(false);
+  expect(integrations.decide("mcp__fx__lookup")).toBe("ask");
+  expect((await integrations.session()).policyOf("mcp__fx__lookup")).toBe("ask");
+
+  expect(() => integrations.setPolicy(i.id, "lookup", "auto")).toThrow(InvalidInput);
+  integrations.setPolicy(i.id, "lookup", "off");
+  expect(integrations.decide("mcp__fx__lookup")).toBe("deny");
+  integrations.setPolicy(i.id, "lookup", "ask");
+  expect(tool("lookup").policy).toBe("ask");
+  integrations.resetPolicies(i.id);
+  expect(integrations.decide("mcp__fx__lookup")).toBe("ask");
+
+  integrations.setPolicy(i.id, "delete_all", "auto");
+  expect(integrations.decide("mcp__fx__delete_all")).toBe("allow");
+});
+
 test("tool decisions follow policy, and an unrecorded tool is Ask", async () => {
   const { id } = await add();
   expect(integrations.decide("mcp__fx__lookup")).toBe("allow");
@@ -166,8 +201,8 @@ test("remove forgets the tool policies", async () => {
   expect(await policies()).toEqual({ lookup: "auto", delete_all: "ask" });
 });
 
-test("host, empty, malformed names and malformed urls are rejected and save nothing", async () => {
-  for (const name of ["host", "", "Bad", "1x", "has-dash", "a".repeat(33)]) {
+test("empty, malformed names and malformed urls are rejected and save nothing", async () => {
+  for (const name of ["", "Bad", "1x", "has-dash", "a".repeat(33)]) {
     await expect(integrations.addCustom({ name, url, transport: "http" })).rejects.toBeInstanceOf(
       InvalidInput,
     );
@@ -180,6 +215,20 @@ test("host, empty, malformed names and malformed urls are rejected and save noth
   expect(integrations.list().filter((i) => i.catalogId === null)).toEqual([]);
   expect(changes).toBe(0);
 });
+
+test.each(["host", "browser", "bots", "routines", "gmail"])(
+  "the name %s is reserved: refused as invalid input and nothing is saved",
+  async (name) => {
+    await expect(integrations.addCustom({ name, url, transport: "http" })).rejects.toBeInstanceOf(
+      InvalidInput,
+    );
+    await expect(
+      integrations.addCustom({ name, transport: "stdio", command: "true" }),
+    ).rejects.toBeInstanceOf(InvalidInput);
+    expect(integrations.list().filter((i) => i.catalogId === null)).toEqual([]);
+    expect(changes).toBe(0);
+  },
+);
 
 test("a duplicate name is rejected", async () => {
   await add();
@@ -916,7 +965,11 @@ for (const kind of ["oauth", "bearer"] as const) {
       expect(JSON.stringify((await integrations.session()).mcpServers)).toContain("Bearer at-");
 
       await integrations.disconnect(id);
-      expect(secrets.entries.size).toBe(0);
+      expect(JSON.stringify(integrations.list())).not.toContain("s3cret");
+      const left = [...secrets.entries.values()].join();
+      expect(left).toContain("s3cret");
+      expect(left).not.toContain("at-");
+      expect((await integrations.session()).mcpServers).toEqual({});
     } finally {
       await f.server.stop(true);
     }

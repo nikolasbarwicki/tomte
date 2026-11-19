@@ -102,7 +102,8 @@ const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 /**
  * Tomte's permission rules for one session: host tools run freely, integration tools follow their setting, and files outside the
  * session's roots and shell commands need the user. A tool the owner always allows for the bot (`allows`) skips the question; a
- * tool switched off in Integrations is denied whatever `allows` says. A tool in `ALWAYS_ASK_TOOLS` asks on every call, whatever
+ * tool switched off in Integrations is denied whatever `allows` says. A locked integration tool (`integrations.locked`) asks on
+ * every call, whatever `allows` says. A tool in `ALWAYS_ASK_TOOLS` asks on every call, whatever
  * `allows` and `approveAll` say, and is refused outright where nobody watches (no approval is parked for a scheduled run).
  */
 export function createCanUseTool(o: {
@@ -142,10 +143,15 @@ export function createCanUseTool(o: {
         return { behavior: "allow", updatedInput: input };
       case "deny":
         return { behavior: "deny", message: "this tool is switched off in Integrations" };
-      case "ask":
-        return o.allows?.(name)
-          ? { behavior: "allow", updatedInput: input }
-          : o.delegate.approve(name, input, "integration tool");
+      case "ask": {
+        if (o.allows?.(name) && !o.integrations.locked(name))
+          return { behavior: "allow", updatedInput: input };
+        // What the owner approves is what runs: the delegates allow with the input they were given.
+        const prepared = await o.integrations.prepareApproval(name, input);
+        return "refused" in prepared
+          ? { behavior: "deny", message: prepared.refused }
+          : o.delegate.approve(name, prepared.input, "integration tool");
+      }
     }
     if (o.approveAll || o.allows?.(name)) return { behavior: "allow", updatedInput: input };
     const path = input.file_path ?? input.notebook_path ?? input.path;

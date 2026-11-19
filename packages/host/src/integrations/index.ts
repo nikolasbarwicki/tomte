@@ -3,7 +3,11 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
-import type { McpServerConfig, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  McpSdkServerConfigWithInstance,
+  McpServerConfig,
+  SdkPluginConfig,
+} from "@anthropic-ai/claude-agent-sdk";
 import {
   auth as mcpAuth,
   type OAuthClientProvider,
@@ -24,6 +28,7 @@ import {
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { OAuthStart } from "@tomte/contract/api";
 import type {
+  BuiltinService,
   CatalogInfo,
   Integration,
   IntegrationAuth,
@@ -35,17 +40,38 @@ import { z } from "zod";
 
 import { InvalidInput, NotFound } from "../platform/errors.ts";
 import { secretName, type SecretStore } from "../platform/secrets.ts";
+import {
+  BUILTIN_LOCKED_TOOLS,
+  builtinTools,
+  createBuiltinServer,
+  prepareBuiltinApproval,
+} from "./builtin.ts";
 import { CATALOG, type CatalogEntry } from "./catalog.ts";
+import { GmailError } from "./gmail/client.ts";
+import {
+  GOOGLE_ENDPOINTS,
+  GrantRevoked,
+  authorizationUrl,
+  exchangeCode,
+  newPkce,
+  refreshTokens,
+  type GoogleEndpoints,
+} from "./google-oauth.ts";
 import { buildPlugin, gitClone, scanSkills, type GitClone } from "./skills.ts";
 import * as store from "./store.ts";
 import type { DiscoveredTool, IntegrationRecord } from "./store.ts";
 
-export type { ToolPolicy };
+export type { GoogleEndpoints, ToolPolicy };
 export type ServerName = string & { readonly __brand: "ServerName" };
 export type ToolDecision = "deny" | "ask" | "allow";
 
 export type SessionIntegrations = {
   mcpServers: Record<ServerName, McpServerConfig>;
+  /**
+   * In-process servers of built-in integrations, by server name, a fresh set for every session. An instance cannot be serialised,
+   * so these never go into the CLI's `--mcp-config` file: a session merges them into the SDK `query()` options' `mcpServers`.
+   */
+  builtinServers: Record<ServerName, McpSdkServerConfigWithInstance>;
   disallowedTools: string[];
   plugins: SdkPluginConfig[];
   /** Policy of an integration tool by its `mcp__<server>__<tool>` name; undefined when no integration owns it. */
@@ -56,9 +82,20 @@ export type SessionIntegrations = {
 
 /** What a thread needs from the integrations module. */
 export interface IntegrationsSource {
-  session(): Promise<SessionIntegrations>;
+  /** `filesDir` is the bot's files folder, which a built-in integration's tools may save files in. */
+  session(filesDir?: string): Promise<SessionIntegrations>;
   /** undefined: not an integration tool, so the caller's own rules apply. */
   decide(toolName: string): ToolDecision | undefined;
+  /**
+   * The input to show the owner for approval and then run: a built-in tool may add what the owner must see and the run must still
+   * find true (a send of a draft gains the draft's content). `refused` is why the call cannot be offered. Any other tool: `input`.
+   */
+  prepareApproval(
+    toolName: string,
+    input: Record<string, unknown>,
+  ): Promise<{ input: Record<string, unknown> } | { refused: string }>;
+  /** True for a tool a built-in integration locks: it always asks, whatever its setting or the bot's always-allow rules say. */
+  locked(toolName: string): boolean;
   /** Records what Claude Code reports about each server after a session opened. */
   reconcile(statuses: ServerStatus[]): void;
 }
@@ -79,7 +116,7 @@ export type ServerStatus = {
 export class NameTaken extends Error {}
 
 const NAME = /^[a-z][a-z0-9_]{0,31}$/;
-const RESERVED = new Set(["host"]);
+const RESERVED = new Set(["host", "browser", "bots", "routines", "gmail"]);
 const DISCOVERY_TIMEOUT_MS = 15_000;
 const SIGN_IN_TTL_MS = 10 * 60_000;
 const EXPIRY_MARGIN_MS = 5 * 60_000;
@@ -210,6 +247,7 @@ function parseStdio(input: {
 
 const remoteUrl = (t: IntegrationTransport): string => {
   if (t.type === "stdio") throw new InvalidInput("a local server cannot sign in with OAuth");
+  if (t.type === "builtin") throw new InvalidInput("a built-in server does not sign in with MCP");
   return t.url;
 };
 
@@ -224,12 +262,16 @@ const takesToken = (a: IntegrationAuth) =>
 
 const toolId = (server: string, tool: string) => `mcp__${server}__${tool}`;
 
+const entryTransport = (c: CatalogEntry): IntegrationTransport =>
+  c.builtin !== undefined ? { type: "builtin", service: c.builtin } : { type: "http", url: c.url };
+
 /** Lists a remote server's tools straight through the MCP client; Claude Code is not involved. */
 async function discover(
   t: IntegrationTransport,
   token?: string,
   env?: Record<string, string>,
 ): Promise<DiscoveredTool[]> {
+  if (t.type === "builtin") return builtinTools(t.service);
   const client = new Client({ name: "tomte", version: "0.1.0" });
   const timer = new AbortController();
   const timeout = setTimeout(() => timer.abort(), DISCOVERY_TIMEOUT_MS);
@@ -284,6 +326,12 @@ export function createIntegrations(deps: {
   gitClone?: GitClone;
   catalog?: readonly CatalogEntry[];
   now?: () => number;
+  /** The `mcp__<server>__<tool>` names that are locked; the built-in definitions' lock set when omitted, so tests inject one. */
+  lockedTools?: ReadonlySet<string>;
+  /** Where the host reaches Google; Google's own endpoints for any left out. Tests and smokes point them at a fake. */
+  google?: Partial<GoogleEndpoints>;
+  /** Where the built-in servers log operations, statuses and ids; the host's error stream when omitted. */
+  log?: (line: string) => void;
   onChange: () => void;
   /** Where providers send the browser back after sign-in; the Tomte server's own /oauth/callback. */
   oauthRedirectUrl: string;
@@ -292,6 +340,13 @@ export function createIntegrations(deps: {
   const now = deps.now ?? Date.now;
   const catalog = deps.catalog ?? CATALOG;
   const clone = deps.gitClone ?? gitClone;
+  const lockedTools = deps.lockedTools ?? BUILTIN_LOCKED_TOOLS;
+  const google = { ...GOOGLE_ENDPOINTS, ...deps.google };
+  const log = deps.log ?? ((line: string) => console.error(line));
+  const isLocked = (toolName: string) => lockedTools.has(toolName);
+  /** A locked tool never runs on Auto: a stored Auto (a default or an old row) reads as Ask. */
+  const effective = (toolName: string, policy: ToolPolicy): ToolPolicy =>
+    policy === "auto" && isLocked(toolName) ? "ask" : policy;
   const pluginsDir = join(deps.hostDir, "plugins");
   const clonesDir = join(deps.hostDir, "skills");
   const skillsErrors = new Map<string, string>();
@@ -311,7 +366,10 @@ export function createIntegrations(deps: {
       catalog: entry ? info(entry) : null,
       redirectUrl: deps.oauthRedirectUrl,
       label: entry?.label ?? r.name,
-      tools: store.tools(db, r.id),
+      tools: store.tools(db, r.id).map((t) => {
+        const id = toolId(r.name, t.name);
+        return { ...t, policy: effective(id, t.policy), locked: isLocked(id) };
+      }),
       skills: store.skills(db, r.id),
       ...(skillsError !== undefined && { skillsError }),
     };
@@ -327,7 +385,7 @@ export function createIntegrations(deps: {
     catalog: info(c),
     label: c.label,
     name: c.id,
-    transport: { type: "http", url: c.url },
+    transport: entryTransport(c),
     auth: c.auth,
     redirectUrl: deps.oauthRedirectUrl,
     enabled: true,
@@ -348,7 +406,7 @@ export function createIntegrations(deps: {
       id,
       catalogId: c.id,
       name: c.id,
-      transport: { type: "http", url: c.url },
+      transport: entryTransport(c),
       auth: c.auth,
       enabled: true,
       state: "disconnected",
@@ -402,12 +460,30 @@ export function createIntegrations(deps: {
       store.setAuth(db, row.id, c.auth);
   }
 
+  // A built-in row's tools follow its definition: a row converted from a hosted server, or made by a release with fewer tools, shows
+  // the whole list at start with the default policies; a tool it already has keeps the owner's policy.
+  for (const r of store.list(db))
+    if (r.transport.type === "builtin")
+      store.upsertTools(db, r.id, builtinTools(r.transport.service), now());
+
   const readSecret = async (id: string): Promise<Secret> => {
     const raw = await secrets.get(secretName(id));
     return raw ? Secret.parse(JSON.parse(raw)) : {};
   };
 
-  const pending = new Map<string, { id: string; provider: OAuthState; at: number }>();
+  const pending = new Map<
+    string,
+    { id: string; at: number } & (
+      | { provider: OAuthState }
+      | {
+          google: {
+            service: BuiltinService;
+            client: OAuthClientInformationMixed;
+            verifier: string;
+          };
+        }
+    )
+  >();
 
   /** The bearer credential to present: a stored token, or an OAuth access token refreshed when it is about to expire. */
   async function readToken(
@@ -432,6 +508,79 @@ export function createIntegrations(deps: {
     return { token: o.tokens.access_token, expiresAt: o.expiresAt };
   }
 
+  const builtinToken = async (id: string) => (await readSecret(id)).oauth?.tokens?.access_token;
+
+  /**
+   * Removes a sign-in's tokens. A client the owner entered (the Google services share one by `appLabel`) stays, so connecting
+   * again, or connecting another service of the same app, needs no new client ID and secret; anything else in the entry goes.
+   */
+  async function dropTokens(r: IntegrationRecord) {
+    const client = ownClientOf(r.auth) ? (await readSecret(r.id)).oauth?.client : undefined;
+    if (client)
+      await secrets.set(secretName(r.id), JSON.stringify({ oauth: { client } } satisfies Secret));
+    else await secrets.delete(secretName(r.id));
+  }
+
+  /** The grant is gone or too narrow: the card asks for a new sign-in and the stale tokens are dropped. Only a connected card changes. */
+  async function needsSignIn(id: string) {
+    const r = store.get(db, id);
+    if (r?.state !== "connected") return;
+    await dropTokens(r);
+    store.setState(db, id, "needs-auth", null, now());
+    onChange();
+  }
+
+  const SIGNED_OUT = "Gmail is not signed in; the owner must sign in again in Integrations";
+
+  /** Concurrent callers share one token request per integration. */
+  const refreshing = new Map<string, Promise<string>>();
+
+  /** Trades the stored refresh token for a new access token and writes it back, keeping the refresh token Google leaves out. */
+  async function refreshBuiltin(id: string): Promise<string> {
+    const o = (await readSecret(id)).oauth;
+    const refresh = o?.tokens?.refresh_token;
+    if (!o?.client || !refresh) throw new GmailError(401, SIGNED_OUT);
+    let fresh: OAuthTokens;
+    try {
+      fresh = await refreshTokens(google, { client: o.client, refreshToken: refresh });
+    } catch (e) {
+      if (!(e instanceof GrantRevoked)) throw new GmailError(0, (e as Error).message);
+      await needsSignIn(id);
+      throw new GmailError(401, SIGNED_OUT);
+    }
+    // A sign-in that ended or was replaced while Google answered owns the entry now; this answer is for the old grant.
+    const secret = await readSecret(id);
+    const current = secret.oauth;
+    if (current?.tokens?.refresh_token !== refresh)
+      return current?.tokens?.access_token ?? Promise.reject(new GmailError(401, SIGNED_OUT));
+    const next: OAuthSecret = {
+      ...current,
+      tokens: { ...fresh, refresh_token: fresh.refresh_token ?? refresh },
+    };
+    if (fresh.expires_in === undefined) delete next.expiresAt;
+    else next.expiresAt = now() + fresh.expires_in * 1000;
+    await secrets.set(secretName(id), JSON.stringify({ ...secret, oauth: next } satisfies Secret));
+    return fresh.access_token;
+  }
+
+  /**
+   * The access token a built-in server presents, read on every request: the stored one, or a refreshed one when it is within the
+   * expiry margin or is `rejected` (the token a request just failed with, unless a refresh has already replaced it).
+   */
+  async function accessToken(id: string, rejected?: string): Promise<string> {
+    const o = (await readSecret(id)).oauth;
+    const token = o?.tokens?.access_token;
+    if (!token) throw new GmailError(401, SIGNED_OUT);
+    const expired = o.expiresAt !== undefined && now() >= o.expiresAt - EXPIRY_MARGIN_MS;
+    if (!expired && token !== rejected) return token;
+    let shared = refreshing.get(id);
+    if (!shared) {
+      shared = refreshBuiltin(id).finally(() => refreshing.delete(id));
+      refreshing.set(id, shared);
+    }
+    return shared;
+  }
+
   const need = (id: string) => {
     const r = store.get(db, id);
     if (!r) throw new NotFound("no such integration");
@@ -444,7 +593,7 @@ export function createIntegrations(deps: {
     syncSkills(r);
     const pasted = token !== undefined;
     if (r.auth.kind !== "none" && !token) {
-      token = (await readToken(id)).token;
+      token = r.transport.type === "builtin" ? await builtinToken(id) : (await readToken(id)).token;
       if (!token) {
         if (r.auth.kind === "oauth") {
           store.setState(db, id, "needs-auth", null, now());
@@ -511,6 +660,24 @@ export function createIntegrations(deps: {
         throw new InvalidInput(`enter the client ID and secret of your ${ownClient.appLabel}`);
     }
     const id = added(rawId);
+    if (r.transport.type === "builtin") {
+      if (!client || ownClient?.scope === undefined)
+        throw new InvalidInput("no Google client to sign in with");
+      const { verifier, challenge } = newPkce();
+      pending.set(state, {
+        id,
+        at: now(),
+        google: { service: r.transport.service, client, verifier },
+      });
+      const authorizeUrl = authorizationUrl(google, {
+        clientId: client.client_id,
+        redirectUrl: deps.oauthRedirectUrl,
+        scope: ownClient.scope,
+        state,
+        challenge,
+      });
+      return { authorizeUrl: authorizeUrl.toString() };
+    }
     const provider = new OAuthState(deps.oauthRedirectUrl, state, client ? { client } : {}, now);
     let result;
     try {
@@ -544,19 +711,33 @@ export function createIntegrations(deps: {
         throw new Error(
           result.error ? `sign-in refused: ${result.error}` : "no authorization code returned",
         );
-      if (
-        (await mcpAuth(p.provider, {
-          serverUrl: remoteUrl(r.transport),
-          authorizationCode: result.code,
-        })) !== "AUTHORIZED"
-      )
-        throw new Error("the provider did not accept the sign-in");
-      const tokens = p.provider.secret.tokens!;
+      let tokens: OAuthTokens;
+      let secret: OAuthSecret;
+      if ("google" in p) {
+        tokens = await exchangeCode(google, {
+          client: p.google.client,
+          code: result.code,
+          verifier: p.google.verifier,
+          redirectUrl: deps.oauthRedirectUrl,
+        });
+        secret = {
+          client: p.google.client,
+          tokens,
+          ...(tokens.expires_in !== undefined && { expiresAt: now() + tokens.expires_in * 1000 }),
+        };
+      } else {
+        if (
+          (await mcpAuth(p.provider, {
+            serverUrl: remoteUrl(r.transport),
+            authorizationCode: result.code,
+          })) !== "AUTHORIZED"
+        )
+          throw new Error("the provider did not accept the sign-in");
+        tokens = p.provider.secret.tokens!;
+        secret = p.provider.secret;
+      }
       store.upsertTools(db, r.id, await discover(r.transport, tokens.access_token), now());
-      await secrets.set(
-        secretName(r.id),
-        JSON.stringify({ oauth: p.provider.secret } satisfies Secret),
-      );
+      await secrets.set(secretName(r.id), JSON.stringify({ oauth: secret } satisfies Secret));
       store.setState(db, r.id, "connected", null, now());
     } catch (e) {
       store.setState(db, r.id, "failed", (e as Error).message, now());
@@ -579,7 +760,7 @@ export function createIntegrations(deps: {
 
   const policyOf = (toolName: string): ToolPolicy | undefined => {
     const o = owner(toolName);
-    return o && (store.toolPolicy(db, o.r.id, o.tool) ?? "ask");
+    return o && effective(toolName, store.toolPolicy(db, o.r.id, o.tool) ?? "ask");
   };
 
   return {
@@ -649,10 +830,10 @@ export function createIntegrations(deps: {
       return connect(id, t);
     },
 
-    /** Deletes the secret and takes the tools out of the next turn; tool policies stay for a later reconnect. */
+    /** Deletes the tokens and takes the tools out of the next turn; tool policies and a client the owner entered stay for a later reconnect. */
     async disconnect(id: string) {
-      need(id);
-      await secrets.delete(secretName(id));
+      const r = need(id);
+      await dropTokens(r);
       store.setState(db, id, "disconnected", null, now());
       onChange();
     },
@@ -664,7 +845,9 @@ export function createIntegrations(deps: {
     },
 
     setPolicy(id: string, tool: string, policy: ToolPolicy) {
-      need(id);
+      const r = need(id);
+      if (policy === "auto" && isLocked(toolId(r.name, tool)))
+        throw new InvalidInput("this tool always asks; its policy can be Ask or Off");
       if (!store.setToolPolicy(db, id, tool, policy)) throw new NotFound("no such tool");
       onChange();
     },
@@ -693,8 +876,9 @@ export function createIntegrations(deps: {
     },
 
     /** Everything a new live query needs: only enabled, connected integrations contribute. */
-    async session(): Promise<SessionIntegrations> {
+    async session(filesDir?: string): Promise<SessionIntegrations> {
       const mcpServers: Record<ServerName, McpServerConfig> = {};
+      const builtinServers: Record<ServerName, McpSdkServerConfigWithInstance> = {};
       const disallowedTools: string[] = [];
       const plugins: SdkPluginConfig[] = [];
       let expiresAt: number | undefined;
@@ -714,7 +898,20 @@ export function createIntegrations(deps: {
           if (path) plugins.push({ type: "local", path, skipMcpDiscovery: true });
         }
         if (!r.enabled || r.state !== "connected") continue;
-        if (r.transport.type === "stdio") {
+        if (r.transport.type === "builtin") {
+          if (!(await builtinToken(r.id))) {
+            store.setState(db, r.id, "needs-auth", null, now());
+            setTimeout(onChange, 0);
+            continue;
+          }
+          builtinServers[r.name as ServerName] = createBuiltinServer(r.transport.service, {
+            apiBase: google.gmailApiBase,
+            accessToken: (rejected) => accessToken(r.id, rejected),
+            signInLost: () => needsSignIn(r.id),
+            filesDir,
+            log,
+          });
+        } else if (r.transport.type === "stdio") {
           const env = (await readSecret(r.id)).env;
           mcpServers[r.name as ServerName] = {
             type: "stdio",
@@ -742,7 +939,7 @@ export function createIntegrations(deps: {
         for (const t of store.tools(db, r.id))
           if (t.policy === "off") disallowedTools.push(toolId(r.name, t.name));
       }
-      return { mcpServers, disallowedTools, plugins, policyOf, expiresAt };
+      return { mcpServers, builtinServers, disallowedTools, plugins, policyOf, expiresAt };
     },
 
     policyOf,
@@ -792,8 +989,27 @@ export function createIntegrations(deps: {
       if (!toolName.startsWith("mcp__")) return undefined;
       const o = owner(toolName);
       if (!o || !o.r.enabled || o.r.state !== "connected") return "deny";
-      const policy = store.toolPolicy(db, o.r.id, o.tool) ?? "ask";
+      const policy = effective(toolName, store.toolPolicy(db, o.r.id, o.tool) ?? "ask");
       return policy === "off" ? "deny" : policy === "auto" ? "allow" : "ask";
+    },
+
+    locked: isLocked,
+
+    async prepareApproval(toolName: string, input: Record<string, unknown>) {
+      const o = owner(toolName);
+      if (o?.r.transport.type !== "builtin") return { input };
+      const { id } = o.r;
+      return prepareBuiltinApproval(
+        o.r.transport.service,
+        {
+          apiBase: google.gmailApiBase,
+          accessToken: (rejected) => accessToken(id, rejected),
+          signInLost: () => needsSignIn(id),
+          log,
+        },
+        o.tool,
+        input,
+      );
     },
   };
 }

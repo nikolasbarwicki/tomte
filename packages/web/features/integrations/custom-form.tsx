@@ -1,4 +1,4 @@
-import { Integration, type IntegrationTransport } from "@tomte/contract/events";
+import { Integration } from "@tomte/contract/events";
 import { useActionState, useState } from "react";
 import { toast } from "sonner";
 
@@ -20,11 +20,14 @@ import { errorOf, readJson } from "@/host/api.ts";
 
 import { addCustomIntegration } from "./api.ts";
 import { signIn } from "./auth.tsx";
-import { TRANSPORT_LABEL } from "./model.ts";
+import { CUSTOM_TRANSPORT_LABEL } from "./model.ts";
 
-type Transport = IntegrationTransport["type"];
-const TRANSPORTS = Object.entries(TRANSPORT_LABEL).map(([value, label]) => ({ value, label }));
-const isTransport = (v: string): v is Transport => v in TRANSPORT_LABEL;
+type Transport = keyof typeof CUSTOM_TRANSPORT_LABEL;
+const TRANSPORTS = Object.entries(CUSTOM_TRANSPORT_LABEL).map(([value, label]) => ({
+  value,
+  label,
+}));
+const isTransport = (v: string): v is Transport => v in CUSTOM_TRANSPORT_LABEL;
 
 /** Adds a custom MCP server; `onDone` gets the new integration's id. */
 export function CustomForm({ onDone }: { onDone: (id: string) => void }) {

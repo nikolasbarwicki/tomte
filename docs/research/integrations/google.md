@@ -1,6 +1,6 @@
 # Google group: Calendar, Sheets, Docs (+ Drive)
 
-Precedent: `docs/research/google-oauth-research.md` — Gmail is an own-client entry against `https://gmailmcp.googleapis.com/mcp/v1`.
+Precedent: `docs/research/google-oauth-research.md`. Gmail was an own-client entry on Google's hosted Gmail MCP server; it is now a built-in integration on the Gmail REST API ([ADR 0012](../../adr/0012-gmail-is-a-built-in-integration-on-the-rest-api.md)). This note covers the four services still on hosted MCP servers.
 
 ## Shared facts (all four) [V]
 
@@ -11,10 +11,10 @@ Precedent: `docs/research/google-oauth-research.md` — Gmail is an own-client e
   - Docs `https://docsmcp.googleapis.com/mcp/v1`
   - Drive `https://drivemcp.googleapis.com/mcp/v1`
   - (also Slides `slidesmcp`, Chat `chatmcp`, People `people.googleapis.com/mcp/v1`, Classroom `classroommcp`)
-- **No DCR.** `curl https://<host>/.well-known/oauth-protected-resource/mcp/v1` → `authorization_servers: ["https://accounts.google.com/"]`, `bearer_methods_supported: ["header"]`. `accounts.google.com/.well-known/openid-configuration` has no `registration_endpoint` (grep count 0). No API-key/PAT path. → `auth: { kind: "oauth", client: "own" }`, same as Gmail.
+- **No DCR.** `curl https://<host>/.well-known/oauth-protected-resource/mcp/v1` → `authorization_servers: ["https://accounts.google.com/"]`, `bearer_methods_supported: ["header"]`. `accounts.google.com/.well-known/openid-configuration` has no `registration_endpoint` (grep count 0). No API-key/PAT path. → `auth: { kind: "oauth", client: "own" }`, as Gmail's own-client sign-in.
 - Setup per project: enable REST API **and** MCP API (`calendar-json`+`calendarmcp`, `sheets`+`sheetsmcp`, `docs`+`docsmcp`, `drive`+`drivemcp`), configure consent screen + scopes, create **Web application** client with **"Use this client for an AI-powered agent"** checked (requests from clients without it are rejected).
-- **One Google client can serve all of them** [V]: the guide uses the same `OAUTH_CLIENT_ID`/secret for every server in the Antigravity config and one consent screen with all scopes added. Each server is still a separate MCP connection with its own token/consent (resource differs) [I]. Tomte can reuse `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` across Gmail/Calendar/Sheets/Docs/Drive entries; steps list just adds "enable X API + X MCP API, add scopes".
-- Refresh tokens: guide states Google only issues one with `access_type=offline` (+ `prompt=consent` to re-issue); `offline_access` scope doesn't work. Same SDK gap as Gmail — without it users re-auth ~hourly.
+- **One Google client can serve all of them** [V]: the guide uses the same `OAUTH_CLIENT_ID`/secret for every server in the Antigravity config and one consent screen with all scopes added. Each server is still a separate MCP connection with its own token/consent (resource differs) [I]. Tomte reuses one client across Gmail/Calendar/Sheets/Docs/Drive entries (the shared `appLabel`); the hosted entries' steps add "enable X API + X MCP API, add scopes".
+- Refresh tokens: guide states Google only issues one with `access_type=offline` (+ `prompt=consent` to re-issue); `offline_access` scope doesn't work. The remote entries add it with `withOfflineAccess`; the built-in Gmail sign-in sends it itself.
 - Unverified client: warning screen, 100-user cap, 7-day refresh-token expiry in Testing status (per Gmail research).
 
 ## Scope classification

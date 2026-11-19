@@ -337,6 +337,7 @@ export function botContext(dataRoot: string, bot: Bot) {
     sessionId: currentSession(bot),
     persona,
     memory: botMemory(dataRoot, bot.id),
+    filesDir: files,
   };
 }
 

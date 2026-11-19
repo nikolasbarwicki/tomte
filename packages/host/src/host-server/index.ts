@@ -48,7 +48,7 @@ import {
   type ResolvedCli,
   type SignInState,
 } from "../harness/index.ts";
-import { createIntegrations } from "../integrations/index.ts";
+import { createIntegrations, type GoogleEndpoints } from "../integrations/index.ts";
 import { createLoopStore } from "../loop/index.ts";
 import { AGENT_ADDRESS, clientOrigin, agentOrigin, type HostConfig } from "../platform/config.ts";
 import { openSecrets } from "../platform/file-secrets.ts";
@@ -121,6 +121,10 @@ export interface HostServerOptions {
   frontIdleMs?: number;
   /** How often the absence check runs; an hour when omitted. */
   absenceCheckMs?: number;
+  /** The locked tools (`mcp__<server>__<tool>`) in place of the built-in definitions' own; tests inject them. */
+  lockedTools?: ReadonlySet<string>;
+  /** Where the host reaches Google (sign-in, tokens, the Gmail API); Google's own endpoints for any left out. Tests and smokes point them at a fake. */
+  google?: Partial<GoogleEndpoints>;
 }
 
 export interface HostServer {
@@ -310,6 +314,8 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     db,
     hostDir: dataRoot,
     secrets,
+    ...(o.lockedTools !== undefined && { lockedTools: o.lockedTools }),
+    ...(o.google !== undefined && { google: o.google }),
     oauthRedirectUrl: `${clientAt.publicUrl}/oauth/callback`,
     onChange: () => {
       broadcast(integrationsEvent());
