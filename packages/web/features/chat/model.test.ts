@@ -121,7 +121,7 @@ test("a question about an open external item is that item's row, not a second on
   expect(needsYouRows(undefined, "b1", [linked]).map((r) => r.type)).toEqual(["request"]);
 });
 
-test("an approval card's buttons come from the host's actions, the first is the main one, and only Deny takes a note", () => {
+test("an approval card's buttons come from the host's actions, the first is the main one, only Deny takes a note, and Always allow leaves out the tool the title names", () => {
   const actions = [
     { id: "allow", label: "Allow" },
     { id: "allow_always", label: "Always allow Bash for this bot" },
@@ -129,7 +129,7 @@ test("an approval card's buttons come from the host's actions, the first is the 
   ];
   expect(approvalButtons(actions)).toEqual([
     { id: "allow", label: "Allow", main: true, takesNote: false },
-    { id: "allow_always", label: "Always allow Bash for this bot", main: false, takesNote: false },
+    { id: "allow_always", label: "Always allow for this bot", main: false, takesNote: false },
     { id: "deny", label: "Deny", main: false, takesNote: true },
   ]);
 });

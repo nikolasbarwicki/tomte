@@ -161,6 +161,14 @@ export type ApprovalButton = WaitAction & {
   takesNote: boolean;
 };
 
-/** The card's buttons, from the actions the host stored with the wait. */
+/**
+ * The card's buttons, from the actions the host stored with the wait. The host's "Always allow <tool> for this bot" repeats the
+ * tool the card's title already names, and a tool name can be long enough to crowd the row, so the card says it without the name.
+ */
 export const approvalButtons = (actions: WaitAction[]): ApprovalButton[] =>
-  actions.map((a, i) => ({ ...a, main: i === 0, takesNote: a.id === "deny" }));
+  actions.map((a, i) => ({
+    ...a,
+    ...(a.id === "allow_always" && { label: "Always allow for this bot" }),
+    main: i === 0,
+    takesNote: a.id === "deny",
+  }));

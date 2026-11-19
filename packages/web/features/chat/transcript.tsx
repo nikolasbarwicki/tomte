@@ -32,10 +32,8 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   Item as ItemRow,
-  ItemActions,
   ItemContent,
   ItemDescription,
-  ItemFooter,
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
@@ -450,9 +448,14 @@ function TaskLine({ item }: { item: Extract<Item, { kind: "task" }> }) {
   );
 }
 
+/** A row of buttons whose labels (a tool name, an option the bot wrote) may be longer than the card: they wrap, never overflow. */
+const WRAPPING_BUTTONS =
+  "flex flex-wrap gap-2 [&>[data-slot=button]]:h-auto [&>[data-slot=button]]:min-h-7 [&>[data-slot=button]]:max-w-full [&>[data-slot=button]]:py-1 [&>[data-slot=button]]:text-left [&>[data-slot=button]]:whitespace-normal";
+
 /**
  * Something the bot is blocked on, after the Confirmation pattern. Open while `answer` is undefined: outlined, with `actions`.
- * Settled: muted, with the answer in their place. `footer` spans the full width below.
+ * Settled: muted, with the answer in their place. Everything stacks in the text column beside the icon, `children` above the
+ * actions, so a long tool name, label or answer wraps inside the card instead of squeezing the title or overflowing a neighbour.
  */
 function Request({
   icon,
@@ -461,7 +464,7 @@ function Request({
   answer,
   expired,
   actions,
-  footer,
+  children,
 }: {
   icon: React.ReactNode;
   title: React.ReactNode;
@@ -470,38 +473,42 @@ function Request({
   /** Nobody is waiting for an answer any more. */
   expired?: boolean | undefined;
   actions?: React.ReactNode;
-  footer?: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   const open = answer === undefined && !expired;
   return (
-    <ItemRow variant={open ? "outline" : "muted"} size="sm">
-      <ItemMedia variant="icon" className={cn(open && "text-primary")}>
+    <ItemRow variant={open ? "outline" : "muted"} size="sm" className="flex-nowrap items-start">
+      <ItemMedia
+        variant="icon"
+        className={cn("translate-y-0.5 self-start", open && "text-primary")}
+      >
         {icon}
       </ItemMedia>
-      <ItemContent className="min-w-0">
-        <ItemTitle className="line-clamp-none">{title}</ItemTitle>
+      <ItemContent className="min-w-0 gap-1.5 [overflow-wrap:anywhere]">
+        <ItemTitle className="line-clamp-none block w-full">{title}</ItemTitle>
         {description && (
-          <ItemDescription className="line-clamp-none whitespace-pre-wrap">
+          <ItemDescription className="-mt-0.5 line-clamp-none whitespace-pre-wrap">
             {description}
           </ItemDescription>
         )}
+        {children && <div className="mt-1 flex flex-col gap-2">{children}</div>}
+        {open ? (
+          actions && <div className={cn("mt-1", WRAPPING_BUTTONS)}>{actions}</div>
+        ) : (
+          <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
+            {expired && answer === undefined ? (
+              <>
+                <ProhibitIcon className="mt-px size-3.5 shrink-0" /> No longer waiting: its turn
+                ended
+              </>
+            ) : (
+              <>
+                <CheckCircleIcon className="mt-px size-3.5 shrink-0" /> {answer}
+              </>
+            )}
+          </p>
+        )}
       </ItemContent>
-      {open ? (
-        actions && <ItemActions className="flex-wrap">{actions}</ItemActions>
-      ) : (
-        <ItemActions className="text-muted-foreground text-xs">
-          {expired && answer === undefined ? (
-            <>
-              <ProhibitIcon className="size-3.5" /> No longer waiting: its turn ended
-            </>
-          ) : (
-            <>
-              <CheckCircleIcon className="size-3.5" /> {answer}
-            </>
-          )}
-        </ItemActions>
-      )}
-      {footer && <ItemFooter>{footer}</ItemFooter>}
     </ItemRow>
   );
 }
@@ -589,12 +596,11 @@ function AskCard({ item }: { item: Extract<Item, { kind: "ask" }> }) {
       description={item.question}
       answer={item.answer}
       expired={item.expired}
-      footer={
-        item.answer === undefined &&
-        !item.expired &&
-        (item.options?.length ? (
-          <div className="flex w-full flex-col gap-2">
-            <div className="flex flex-wrap gap-2">
+    >
+      {item.answer === undefined && !item.expired && (
+        <>
+          {item.options?.length ? (
+            <div className={WRAPPING_BUTTONS}>
               {item.options.map((option, i) => (
                 <Button
                   key={i}
@@ -608,13 +614,11 @@ function AskCard({ item }: { item: Extract<Item, { kind: "ask" }> }) {
                 </Button>
               ))}
             </div>
-            {form}
-          </div>
-        ) : (
-          form
-        ))
-      }
-    />
+          ) : null}
+          {form}
+        </>
+      )}
+    </Request>
   );
 }
 
@@ -646,23 +650,20 @@ function ApproveCard({ item }: { item: Extract<Item, { kind: "approve" }> }) {
           {a.label}
         </Button>
       ))}
-      footer={
-        <div className="flex w-full flex-col gap-2">
-          {open && (
-            <Input
-              aria-label="Note for the bot if you deny"
-              placeholder="Note for the bot if you deny (optional)"
-              maxLength={500}
-              value={note}
-              disabled={pending}
-              onChange={(e) => setNote(e.target.value)}
-            />
-          )}
-          <pre className="bg-muted/60 max-h-60 w-full overflow-auto rounded-md p-3 font-mono text-xs whitespace-pre-wrap">
-            {item.input}
-          </pre>
-        </div>
-      }
-    />
+    >
+      <pre className="bg-muted/60 max-h-60 w-full overflow-auto rounded-md p-3 font-mono text-xs whitespace-pre-wrap">
+        {item.input}
+      </pre>
+      {open && (
+        <Input
+          aria-label="Note for the bot if you deny"
+          placeholder="Note if you deny (optional)"
+          maxLength={500}
+          value={note}
+          disabled={pending}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      )}
+    </Request>
   );
 }
