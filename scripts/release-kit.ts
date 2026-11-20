@@ -23,6 +23,8 @@ export const SIGNATURE_FILE = "SHA256SUMS.sig";
 export const MANIFEST_FILE = "release.json";
 /** The self-hoster's installer; its `RELEASE_PUBLIC_KEY` line is the one place the release public key is pinned. */
 export const INSTALLER_FILE = "install.sh";
+/** The license files that go with the host binaries (`scripts/third-party-licenses.ts`, ADR-0013). */
+export const LICENSE_FILES = ["LICENSE", "NOTICE", "THIRD-PARTY-LICENSES.txt"] as const;
 
 // The fixed prefix of an Ed25519 SubjectPublicKeyInfo (RFC 8410); the key itself is the 32 bytes after it.
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -183,4 +185,20 @@ export async function signChecksums(
     );
   }
   await writeFile(join(dir, SIGNATURE_FILE), signature);
+}
+
+/**
+ * The PEM `release.ts sign` signs with: the file `--key-file` names (a local run, so the key never passes through the
+ * shell's environment or history), else `$RELEASE_SIGNING_KEY` (the workflow's secret). Both at once is refused, so
+ * which key signed is never a guess.
+ */
+export async function signingKeyPem(
+  keyFile: string | undefined,
+  envKey: string | undefined,
+): Promise<string> {
+  if (keyFile === undefined) return envKey ?? "";
+  if (envKey !== undefined && envKey !== "") {
+    throw new Error("both --key-file and RELEASE_SIGNING_KEY are set; use one");
+  }
+  return readFile(keyFile, "utf8");
 }

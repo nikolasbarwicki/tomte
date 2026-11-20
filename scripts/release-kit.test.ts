@@ -14,6 +14,7 @@ import {
   releaseForTag,
   SIGNATURE_FILE,
   signChecksums,
+  signingKeyPem,
   writeChecksums,
   writeManifest,
 } from "./release-kit.ts";
@@ -135,6 +136,19 @@ describe("the release signature", () => {
       .toString();
     await expect(signChecksums(dir, rsa, key.publicKey)).rejects.toThrow("not Ed25519");
     expect(await Bun.file(join(dir, SIGNATURE_FILE)).exists()).toBe(false);
+  });
+
+  test("signs with the PEM a key file holds; the file and the variable together are refused", async () => {
+    const pem = join(dir, "key.pem");
+    await writeFile(pem, key.privateKeyPem);
+    await signChecksums(dir, await signingKeyPem(pem, undefined), key.publicKey);
+    const sums = await readFile(join(dir, CHECKSUM_FILE));
+    expect(checkSignature(sums, await readFile(join(dir, SIGNATURE_FILE)), key.publicKey)).toBe(
+      true,
+    );
+    await expect(signingKeyPem(pem, key.privateKeyPem)).rejects.toThrow("use one");
+    expect(await signingKeyPem(undefined, key.privateKeyPem)).toBe(key.privateKeyPem);
+    await expect(signingKeyPem(join(dir, "absent.pem"), "")).rejects.toThrow("ENOENT");
   });
 });
 

@@ -12,7 +12,7 @@ The key pair is the owner's. The private key is the repository secret `RELEASE_S
 
 ## One-time setup (a person does this; no script can)
 
-The repository ships with `RELEASE_PUBLIC_KEY=""`. While it is empty, `install.sh` refuses to install from a release, `bun scripts/release.ts verify-release` refuses, and the release workflow fails in its `verify` job, before anything is built.
+The owner's public key is pinned in `deploy/install.sh` (steps 1 and 3 below, done 2026-11-20); the private key's repository secret (step 2) is set apart from the repository. While the pin is empty, as it was before, `install.sh` refuses to install from a release, `bun scripts/release.ts verify-release` refuses, and the release workflow fails in its `verify` job, before anything is built.
 
 1. Generate the key pair on a machine you trust (OpenSSL 3 or newer; on a Mac, `brew install openssl` and use that `openssl`, not the system LibreSSL):
 
@@ -29,7 +29,7 @@ The repository ships with `RELEASE_PUBLIC_KEY=""`. While it is empty, `install.s
    gh secret set RELEASE_SIGNING_KEY < release-signing.pem
    ```
 
-3. Pin the public key: put the printed value between the quotes of `RELEASE_PUBLIC_KEY=""` in `deploy/install.sh`, run `bun run check`, commit and merge.
+3. Pin the public key: put the printed value between the quotes of `RELEASE_PUBLIC_KEY="…"` in `deploy/install.sh` (replacing the old value on a rotation), run `bun run check`, commit and merge.
 4. Check the setup before tagging: `RELEASE_SIGNING_KEY_SET=set bun scripts/release.ts signing-ready` exits 0 once the pin is a valid key. That the secret really is this key's pair is checked by the release itself (below).
 5. Cut a pre-release (`v0.2.0-rc.1`, AGENTS.md "Releasing"), download it with `gh release download v0.2.0-rc.1 -R OWNER/REPO -D <dir>` and run `bun scripts/release.ts verify-release <dir> 0.2.0-rc.1`.
 
@@ -37,6 +37,7 @@ The repository ships with `RELEASE_PUBLIC_KEY=""`. While it is empty, `install.s
 
 - `verify` runs `release.ts signing-ready`: it fails unless the pin is a valid key and the secret exists (only whether it is set reaches the step).
 - `publish` writes `release.json` (`release.ts manifest`), writes `SHA256SUMS` over every file including it (`checksums`), signs it (`sign`, the only step that sees the secret) and checks the finished folder with `verify-release`. `sign` verifies its own signature against the pinned key before writing it, so a secret that is not the pinned key's pair fails the release instead of shipping sums no server accepts. A release without the secret never reaches `gh release create`.
+- Locally, without the secret, `sign <dir> --key-file <pem>` reads the private key from a file (never together with `$RELEASE_SIGNING_KEY`). `docs/release/local-release.md` is the whole dry run on a Mac.
 
 ## What a server does
 

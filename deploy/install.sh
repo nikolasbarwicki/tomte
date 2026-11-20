@@ -123,9 +123,9 @@ lookup_checksum() { # <SHA256SUMS file> <name>
 
 # The release public key, pinned here on purpose: base64 of the 32 raw bytes of the Ed25519 public key whose private
 # half signs every release's SHA256SUMS (a GitHub repository secret). There is no trust-on-first-use: nothing a download
-# or a config file says can replace it. Empty until the owner pins it (docs/release/signing.md, "One-time setup"); the
-# release workflow, `verify-release` and this script all refuse while it is empty.
-RELEASE_PUBLIC_KEY=""
+# or a config file says can replace it. Pinned by the owner (docs/release/signing.md, "One-time setup"); the release
+# workflow, `verify-release` and this script all refuse while it is empty.
+RELEASE_PUBLIC_KEY="1sKKiFKzHTbFFL1sDYdo5xrjh2f/+h6i/V4Z4WMtYlM="
 
 require_pinned_key() {
   [[ $RELEASE_PUBLIC_KEY =~ ^[A-Za-z0-9+/]{43}=$ ]] ||

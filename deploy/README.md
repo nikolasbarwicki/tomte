@@ -72,7 +72,7 @@ This is weaker. Every program on the server regains unprivileged user namespaces
 
 ### Install from a GitHub Release
 
-A release publishes the five host binaries, `SHA256SUMS` (the checksum of every other file, `release.json` included), `SHA256SUMS.sig` (its Ed25519 signature), `release.json` (the version, shell API range and database schema version), `install.sh` and `tomte.service`. The `install.sh` attached to a release already knows its repository. Download it on the server, read it, and run it as root:
+A release publishes the five host binaries, `SHA256SUMS` (the checksum of every other file, `release.json` included), `SHA256SUMS.sig` (its Ed25519 signature), `release.json` (the version, shell API range and database schema version), `install.sh`, `tomte.service` and the license files (`LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.txt`). The `install.sh` attached to a release already knows its repository. Download it on the server, read it, and run it as root:
 
 ```sh
 curl -fsSLO https://github.com/<owner>/<repo>/releases/latest/download/install.sh

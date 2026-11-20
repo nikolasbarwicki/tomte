@@ -11,15 +11,17 @@ import { join } from "node:path";
 
 import { ReleaseManifest } from "../packages/contract/src/api.ts";
 import {
-  type DesktopPlatform,
+  type DesktopScope,
   desktopAssets,
   releaseAssets,
+  scopedPlatforms,
   SUPPORTED_DESKTOP,
 } from "./desktop-kit.ts";
 import {
   CHECKSUM_FILE,
   checkSignature,
   INSTALLER_FILE,
+  LICENSE_FILES,
   MANIFEST_FILE,
   SIGNATURE_FILE,
   sha256,
@@ -121,31 +123,47 @@ export function parseChecksums(text: string): {
   return { entries, problems };
 }
 
-const PLATFORMS = Object.keys(SUPPORTED_DESKTOP) as DesktopPlatform[];
+/** The files `release.ts checksums` requires before it writes `SHA256SUMS`: the host binaries, the scope's installers
+ * and metadata, the license files and `release.json`, so a release missing one fails before it is signed. */
+export function checksumRequirements(
+  version: string,
+  scope: DesktopScope = SUPPORTED_DESKTOP,
+): string[] {
+  return [...releaseAssets(version, scope), ...LICENSE_FILES, MANIFEST_FILE];
+}
 
 /** What electron-updater applies per OS; the dmg and the deb are for people, not for the updater. */
 const updatable = (name: string): boolean =>
   name.endsWith("-mac.zip") || name.endsWith(".exe") || name.endsWith(".AppImage");
 
-/** Blockmaps electron-builder writes for installers; the `.deb` (fpm) has none. */
-const hasBlockmap = (installer: string): boolean => !installer.endsWith(".deb");
+/**
+ * Blockmaps a release must carry: the updater's differential download reads the zip's, the exe's and the AppImage's.
+ * The `.deb` (fpm) has none, and the DMG's is optional: CI ships the one electron-builder writes, while a stapled DMG
+ * (the local signing route, `scripts/local-signing.ts`) has none, since stapling changes the bytes it was built from.
+ */
+const blockmapRequired = (installer: string): boolean =>
+  !installer.endsWith(".deb") && !installer.endsWith(".dmg");
 
-/** Every file name a complete release folder holds for `version`. */
-export function expectedFiles(version: string): { required: string[]; optional: string[] } {
-  const installers = PLATFORMS.flatMap(
-    (p) => desktopAssets(p, SUPPORTED_DESKTOP[p], version).installers,
+/** Every file name a release folder holds for `version` and the scope's installers (all of them when published). */
+export function expectedFiles(
+  version: string,
+  scope: DesktopScope = SUPPORTED_DESKTOP,
+): { required: string[]; optional: string[] } {
+  const installers = scopedPlatforms(scope).flatMap(
+    (p) => desktopAssets(p, scope[p], version).installers,
   );
   return {
     required: [
-      ...releaseAssets(version),
-      ...installers.filter(hasBlockmap).map((n) => `${n}.blockmap`),
+      ...releaseAssets(version, scope),
+      ...installers.filter(blockmapRequired).map((n) => `${n}.blockmap`),
       INSTALLER_FILE,
       SERVICE_UNIT,
+      ...LICENSE_FILES,
       CHECKSUM_FILE,
       SIGNATURE_FILE,
       MANIFEST_FILE,
     ],
-    optional: installers.filter((n) => !hasBlockmap(n)).map((n) => `${n}.blockmap`),
+    optional: installers.filter((n) => !blockmapRequired(n)).map((n) => `${n}.blockmap`),
   };
 }
 
@@ -156,19 +174,22 @@ async function isFile(path: string): Promise<boolean> {
   );
 }
 
-async function checkMetadata(dir: string, name: string, version: string): Promise<string[]> {
+async function checkMetadata(
+  dir: string,
+  name: string,
+  version: string,
+  scope: DesktopScope,
+): Promise<string[]> {
   const problems: string[] = [];
   const meta = parseUpdateMetadata(await readFile(join(dir, name), "utf8"));
   if (meta.version !== version) {
     problems.push(`${name} names version ${meta.version ?? "(none)"}, the release is ${version}`);
   }
   if (meta.files.length === 0) problems.push(`${name} lists no files`);
-  const platform = PLATFORMS.find(
-    (p) => desktopAssets(p, SUPPORTED_DESKTOP[p], version).metadata === name,
+  const platform = scopedPlatforms(scope).find(
+    (p) => desktopAssets(p, scope[p], version).metadata === name,
   );
-  const installers = platform
-    ? desktopAssets(platform, SUPPORTED_DESKTOP[platform], version).installers
-    : [];
+  const installers = platform ? desktopAssets(platform, scope[platform], version).installers : [];
   for (const wanted of installers.filter(updatable)) {
     if (!meta.files.some((f) => f.url === wanted)) problems.push(`${name} does not list ${wanted}`);
   }
@@ -213,12 +234,14 @@ async function checkManifest(dir: string, version: string): Promise<string[]> {
 
 /**
  * Checks a downloaded Release folder against `version` and returns every problem found (empty: the folder is a
- * complete, consistent release). Never writes; a folder that cannot be read throws.
+ * complete, consistent release). `scope` narrows the installers required, for a local dry run (`--only`); a published
+ * release is always checked against every supported installer. Never writes; a folder that cannot be read throws.
  */
 export async function verifyRelease(
   dir: string,
   version: string,
   publicKey: string,
+  scope: DesktopScope = SUPPORTED_DESKTOP,
 ): Promise<string[]> {
   const problems: string[] = [];
   const names = await readdir(dir);
@@ -228,7 +251,7 @@ export async function verifyRelease(
     else problems.push(`${name} is not a file`);
   }
 
-  const { required, optional } = expectedFiles(version);
+  const { required, optional } = expectedFiles(version, scope);
   for (const name of required) {
     if (!files.includes(name)) problems.push(`missing: ${name}`);
   }
@@ -280,9 +303,10 @@ export async function verifyRelease(
     }
   }
 
-  for (const platform of PLATFORMS) {
-    const { metadata } = desktopAssets(platform, SUPPORTED_DESKTOP[platform], version);
-    if (files.includes(metadata)) problems.push(...(await checkMetadata(dir, metadata, version)));
+  for (const platform of scopedPlatforms(scope)) {
+    const { metadata } = desktopAssets(platform, scope[platform], version);
+    if (files.includes(metadata))
+      problems.push(...(await checkMetadata(dir, metadata, version, scope)));
   }
   return problems;
 }

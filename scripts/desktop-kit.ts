@@ -99,10 +99,40 @@ export function desktopAssets(
   return { installers: [`${v}.AppImage`, `${v}.deb`], metadata: "latest-linux.yml" };
 }
 
-/** Every file a complete release holds: the five host binaries, and for every supported OS its installers and metadata. */
-export function releaseAssets(version: string): string[] {
-  const desktop = (Object.keys(SUPPORTED_DESKTOP) as DesktopPlatform[]).flatMap((platform) => {
-    const { installers, metadata } = desktopAssets(platform, SUPPORTED_DESKTOP[platform], version);
+/**
+ * The installers a release folder is held to, per OS: every supported one for a published release, or the subset a
+ * local dry run names with `--only` (this Mac cannot build the Windows and Linux installers). An OS with no arch
+ * contributes nothing, not even its metadata.
+ */
+export type DesktopScope = Readonly<Record<DesktopPlatform, readonly DesktopArch[]>>;
+
+/** The scope of `--only` targets, named as host targets (`darwin-arm64`, `windows-x64`); each must ship an installer. */
+export function desktopScope(targets: readonly string[]): DesktopScope {
+  const known = (Object.keys(SUPPORTED_DESKTOP) as DesktopPlatform[]).flatMap((platform) =>
+    SUPPORTED_DESKTOP[platform].map((arch) => ({ platform, arch })),
+  );
+  const scope: Record<DesktopPlatform, DesktopArch[]> = { darwin: [], win32: [], linux: [] };
+  for (const target of targets) {
+    const found = known.find((k) => hostTarget(k.platform, k.arch) === target);
+    if (found === undefined) {
+      throw new Error(
+        `--only ${target}: no installer is released for it; one of ${known.map((k) => hostTarget(k.platform, k.arch)).join(", ")}`,
+      );
+    }
+    if (!scope[found.platform].includes(found.arch)) scope[found.platform].push(found.arch);
+  }
+  return scope;
+}
+
+/** The operating systems a scope holds any installer for. */
+export function scopedPlatforms(scope: DesktopScope): DesktopPlatform[] {
+  return (Object.keys(scope) as DesktopPlatform[]).filter((p) => scope[p].length > 0);
+}
+
+/** Every file a release holds: the five host binaries, and for every OS in the scope its installers and metadata. */
+export function releaseAssets(version: string, scope: DesktopScope = SUPPORTED_DESKTOP): string[] {
+  const desktop = scopedPlatforms(scope).flatMap((platform) => {
+    const { installers, metadata } = desktopAssets(platform, scope[platform], version);
     return [...installers, metadata];
   });
   return [...HOST_BINARIES, ...desktop];

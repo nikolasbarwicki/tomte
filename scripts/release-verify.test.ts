@@ -4,10 +4,16 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { desktopAssets } from "./desktop-kit.ts";
+import {
+  type DesktopScope,
+  desktopAssets,
+  desktopScope,
+  SUPPORTED_DESKTOP,
+} from "./desktop-kit.ts";
 import { signChecksums, writeChecksums, writeManifest } from "./release-kit.ts";
 import { generateTestKey } from "./release-test-kit.ts";
 import {
+  checksumRequirements,
   expectedFiles,
   parseChecksums,
   parseUpdateMetadata,
@@ -46,9 +52,12 @@ const yml = (version: string, files: { url: string; bytes: string }[]) =>
     "",
   ].join("\n");
 
-/** A complete, consistent release folder of small fixture files. */
-async function writeRelease(version = VERSION): Promise<void> {
-  const { required } = expectedFiles(version);
+/** A complete, consistent release folder of small fixture files, holding the scope's installers. */
+async function writeRelease(
+  version = VERSION,
+  scope: DesktopScope = SUPPORTED_DESKTOP,
+): Promise<void> {
+  const { required } = expectedFiles(version, scope);
   const metadata = new Set(
     (["darwin", "win32", "linux"] as const).map((p) => desktopAssets(p, ["x64"], version).metadata),
   );
@@ -59,8 +68,8 @@ async function writeRelease(version = VERSION): Promise<void> {
   await writeFile(join(dir, "install.sh"), installer("acme/tomte-fixture", key.publicKey));
   await writeManifest(dir, { version, shellApi: { min: 1, max: 1 }, schemaVersion: 7 });
   for (const platform of ["darwin", "win32", "linux"] as const) {
-    const archs = platform === "darwin" ? (["arm64", "x64"] as const) : (["x64"] as const);
-    const { installers, metadata: name } = desktopAssets(platform, archs, version);
+    if (scope[platform].length === 0) continue;
+    const { installers, metadata: name } = desktopAssets(platform, scope[platform], version);
     const listed = installers.filter(
       (n) =>
         n.endsWith(".zip") || n.endsWith(".dmg") || n.endsWith(".exe") || n.endsWith(".AppImage"),
@@ -108,6 +117,17 @@ describe("verifyRelease", () => {
     expect(await verifyRelease(dir, VERSION)).toContain(
       `missing: Tomte-Setup-${VERSION}.exe.blockmap`,
     );
+  });
+
+  test("a DMG's blockmap may be there (CI) or not (a stapled local DMG)", async () => {
+    await writeRelease();
+    expect(await verifyRelease(dir, VERSION)).toEqual([]);
+    for (const dmg of [`Tomte-${VERSION}-arm64.dmg`, `Tomte-${VERSION}.dmg`]) {
+      await writeFile(join(dir, `${dmg}.blockmap`), `blockmap of ${dmg}`);
+    }
+    await writeChecksums(dir, []);
+    await signChecksums(dir, key.privateKeyPem, key.publicKey);
+    expect(await verifyRelease(dir, VERSION)).toEqual([]);
   });
 
   test("another version's folder reports every asset as missing and unexpected", async () => {
@@ -221,6 +241,47 @@ describe("verifyRelease", () => {
     await writeFile(join(dir, "install.sh"), installer("acme/tomte-fixture", ""));
     expect(await verifyRelease(dir, VERSION)).toContain(
       "install.sh does not pin the release public key of this checkout",
+    );
+  });
+});
+
+describe("a release folder scoped to some installers (--only)", () => {
+  const armOnly = desktopScope(["darwin-arm64"]);
+
+  test("an arm64-only folder passes its scope and still fails a full check", async () => {
+    await writeRelease(VERSION, armOnly);
+    expect(await verifyReleaseWith(dir, VERSION, key.publicKey, armOnly)).toEqual([]);
+    const full = await verifyRelease(dir, VERSION);
+    expect(full).toContain(`missing: Tomte-${VERSION}.dmg`);
+    expect(full).toContain(`missing: Tomte-Setup-${VERSION}.exe`);
+    expect(full).toContain("missing: latest-linux.yml");
+  });
+
+  test("every host binary is still required, and other installers are unexpected", async () => {
+    await writeRelease(VERSION, armOnly);
+    await rm(join(dir, "tomte-host-windows-x64.exe"));
+    await writeFile(join(dir, `Tomte-Setup-${VERSION}.exe`), "stray");
+    const problems = await verifyReleaseWith(dir, VERSION, key.publicKey, armOnly);
+    expect(problems).toContain("missing: tomte-host-windows-x64.exe");
+    expect(problems).toContain(`unexpected: Tomte-Setup-${VERSION}.exe`);
+  });
+
+  test("checksums require the scope's installers and the host binaries", () => {
+    const required = checksumRequirements(VERSION, armOnly);
+    expect(required).toContain(`Tomte-${VERSION}-arm64-mac.zip`);
+    expect(required).toContain("tomte-host-linux-arm64");
+    expect(required).not.toContain(`Tomte-${VERSION}-mac.zip`);
+    expect(required).not.toContain("latest.yml");
+  });
+
+  test("checksums refuse a folder without a license file, scoped or not", async () => {
+    await writeRelease(VERSION, armOnly);
+    await rm(join(dir, "NOTICE"));
+    await expect(writeChecksums(dir, checksumRequirements(VERSION, armOnly))).rejects.toThrow(
+      /missing from .*: NOTICE$/,
+    );
+    expect(checksumRequirements(VERSION)).toEqual(
+      expect.arrayContaining(["LICENSE", "NOTICE", "THIRD-PARTY-LICENSES.txt", "release.json"]),
     );
   });
 });

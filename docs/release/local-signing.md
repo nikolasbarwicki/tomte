@@ -152,7 +152,7 @@ The route runs the same checks itself: the app and the host, and the browser in 
 
 - arm64 only; Windows and Linux are untouched.
 - The personal build bakes the placeholder update feed (`https://updates.invalid/tomte`) unless `GITHUB_REPOSITORY` is set: it will never auto-update. That is intended for a test build.
-- The `.dmg`/`.zip` produced here are not byte-identical to a CI release and are not for publishing.
+- The `.dmg`/`.zip` produced here are not byte-identical to a CI release and are not for publishing. `docs/release/local-release.md` puts them into a partial release folder (with the other host binaries, `release.json` and the signed `SHA256SUMS`) and checks it with `verify-release --only darwin-arm64`; `<out>/artifacts/SHA256SUMS` is not that file.
 - Whether the Bun-compiled host, Chrome and its helpers run under the hardened runtime with the JIT entitlements and `disable-library-validation` (`scripts/entitlements.mac.plist`) is unobserved. The host job's smoke on a signed host exists in CI for this and `bun run smoke:desktop` on the signed app covers Chrome; this route starts neither. If a signed binary fails to start, add the entitlement to the plist and `MAC_ENTITLEMENT_KEYS` in `signing-kit.ts`.
 - Whether DMG notarization with a timestamp-only `codesign --force --timestamp` (no hardened runtime, as for any DMG) is accepted by Apple is unobserved; the route fails with Apple's log when it is not.
 

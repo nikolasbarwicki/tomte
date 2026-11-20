@@ -9,6 +9,7 @@ import {
   bundledHostPath,
   collectDesktopRelease,
   desktopAssets,
+  desktopScope,
   hostBinaryName,
   icnsFromPng,
   inCi,
@@ -70,6 +71,22 @@ describe("what a release holds", () => {
   test("refuses an installer for a CPU the release does not ship", () => {
     expect(() => desktopAssets("linux", ["arm64"], "1.0.0")).toThrow("supported: x64");
     expect(() => desktopAssets("win32", ["arm64"], "1.0.0")).toThrow("no win32 installer");
+  });
+
+  test("--only targets narrow the installers to those, never the host binaries", () => {
+    expect(releaseAssets("1.2.0", desktopScope(["darwin-arm64", "windows-x64"]))).toEqual([
+      ...HOST_BINARIES,
+      "Tomte-1.2.0-arm64.dmg",
+      "Tomte-1.2.0-arm64-mac.zip",
+      "latest-mac.yml",
+      "Tomte-Setup-1.2.0.exe",
+      "latest.yml",
+    ]);
+  });
+
+  test("--only refuses a target that ships no installer", () => {
+    expect(() => desktopScope(["linux-arm64"])).toThrow("--only linux-arm64: no installer");
+    expect(() => desktopScope(["win32-x64"])).toThrow("one of darwin-arm64, darwin-x64");
   });
 
   test("host binaries and unpacked apps follow the build and electron-builder naming", () => {
