@@ -421,8 +421,8 @@ async function main(): Promise<void> {
     );
     check(
       view0.items.map((i) => i.label).join("|") ===
-        `${view0.tooltip}||This computer||Manage Connections…||Open Tomte|Start at login||Quit Tomte`,
-      "the menu is: state, separator, This computer, separator, Manage Connections…, separator, Open Tomte, Start at login, separator, Quit Tomte",
+        `${view0.tooltip}||This computer||Manage Connections…||Open Tomte|Start at login|Run this Mac's host||Quit Tomte`,
+      "the menu is: state, separator, This computer, separator, Manage Connections…, separator, Open Tomte, Start at login, Run this Mac's host, separator, Quit Tomte",
     );
     check(
       view0.items.find((i) => i.label === "This computer")?.checked === true,
