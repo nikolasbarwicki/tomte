@@ -30,8 +30,10 @@ export interface EventsOptions {
   secrets: SecretStore;
   /** Whether a bot with this id exists. A token check for a bot that does not fails without reading the secrets. */
   botExists: (botId: string) => boolean;
-  /** The events route's full URL for a bot, on the client listener's own origin. */
+  /** The events route's full URL for a bot on the client listener's loopback origin: what a harness process on this machine gets in its environment. */
   routeUrl: (botId: string) => string;
+  /** The same route at the client listener's public URL: what the owner copies for a sender elsewhere (the loopback URL when no public URL is set). */
+  publicRouteUrl: (botId: string) => string;
   /** Sends a host message into a bot's session: queued while the bot is busy. A failure is the caller's to report. */
   deliver: (botId: string, text: string) => void;
   /**
@@ -252,14 +254,14 @@ export function createEvents(o: EventsOptions): Events {
       if (result === "archived") o.onChange(botId, []);
       return result;
     },
-    access: async (botId) => ({ url: o.routeUrl(botId), token: await tokens.get(botId) }),
+    access: async (botId) => ({ url: o.publicRouteUrl(botId), token: await tokens.get(botId) }),
     split: (botId, text) =>
       splitWrapped(text).flatMap((piece): (string | ExternalRow)[] => {
         if (typeof piece === "string") return [piece];
         const row = store.row(botId, piece.id);
         return row ? [row] : [];
       }),
-    rotate: async (botId) => ({ url: o.routeUrl(botId), token: await tokens.rotate(botId) }),
+    rotate: async (botId) => ({ url: o.publicRouteUrl(botId), token: await tokens.rotate(botId) }),
     async env(botId) {
       try {
         return {

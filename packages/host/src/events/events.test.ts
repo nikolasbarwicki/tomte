@@ -400,6 +400,24 @@ describe("a bot's CLI", () => {
     ]);
   });
 
+  test("a host with a public URL shows that URL to the owner while its bots keep the loopback one", async () => {
+    host = await startHandoffHost(["--public-url", "https://tomte.example.com"]);
+    const a = host.createBot("A");
+    expect((await host.ui("/api/open", { botId: a })).status).toBe(200);
+    expect((await host.ui("/api/send", { text: "hi" })).status).toBe(200);
+    await host.until(() => host.messagesOf(a).length === 1);
+
+    const shown = `https://tomte.example.com/api/bots/${a}/events`;
+    expect((await accessOf(a)).url).toBe(shown);
+    const rotated = (await (
+      await host.ui("/api/bots/events-token/rotate", { botId: a })
+    ).json()) as EventAccess;
+    expect(rotated.url).toBe(shown);
+    expect(host.launches()[0]?.env?.TOMTE_EVENTS_URL).toBe(
+      `${host.clientUrl}/api/bots/${a}/events`,
+    );
+  });
+
   test("opens on the default model and effort, with the bot's events variables on top of the host's environment", async () => {
     process.env.TOMTE_TEST_BASE = "from-host";
     try {

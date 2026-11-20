@@ -24,7 +24,7 @@ Neither listener fits as ADR-0005 left it.
 
 ## Consequences
 
-- The events URL is `<client listener's loopback URL>/api/bots/<botId>/events`, stable while `HostConfig` is. It is the host's bind address, so a host that binds a wildcard address gives its bots a URL that may not be a good loopback address.
+- The events URL a bot's CLI gets (`TOMTE_EVENTS_URL`) is `<client listener's loopback URL>/api/bots/<botId>/events`, stable while `HostConfig` is. It is the host's bind address, so a host that binds a wildcard address gives its bots a URL that may not be a good loopback address. The URL the owner copies from the Events endpoint section (`/api/bots/events-token`) is the same route at the client listener's public URL (`--public-url`), the loopback URL when none is set, because a sender outside the machine cannot use a loopback address.
 - **The caller is not verified to be local.** In remote mode the client listener is on the network behind the public URL, so anyone holding a bot's token can post to it from anywhere. The token is the whole credential. A leaked token lets someone put text in front of that bot (wrapped as untrusted) and nothing else; rotating it ends that.
 - **A sandboxed shell cannot reach the route.** The shell sandbox gives a bot's commands no loopback access. A coordinator started from a sandboxed Bash cannot post here. The environment variables are present regardless, so a process started outside the sandbox can.
 - A crash after an event is stored and before it is delivered to the bot loses the wake-up. The event is stored and a retry with the same key answers 200 `duplicate` without delivering again.

@@ -27,7 +27,7 @@ A seventh kind, `notice`, is the host's own: it raises a notice about itself (a 
 
 ## Quick start
 
-1. **Get the URL and token.** Work tab, Events endpoint: Copy URL, Copy token (never shown on the page), Replace token (the old one stops at once; running sessions keep it until their next session; the new one is copied).
+1. **Get the URL and token.** Work tab, Events endpoint: Copy URL (the host's public URL, so on a remote host it is the address you reach the host at; the loopback address only when the host has no `--public-url`), Copy token (never shown on the page), Replace token (the old one stops at once; running sessions keep it until their next session; the new one is copied).
 2. **Store them privately.** Create the file with mode 600 and paste with your editor, never on a command line:
 
    ```sh

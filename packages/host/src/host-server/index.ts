@@ -269,6 +269,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
     botExists: (botId) => getBot(dataRoot, botId) !== undefined,
     relay: { configPath: o.config.relayConfig, remote: o.config.mode === "remote" },
     routeUrl: (botId) => `${clientAt.localUrl}${eventsPath(botId)}`,
+    publicRouteUrl: (botId) => `${clientAt.publicUrl}${eventsPath(botId)}`,
     onChange: (botId, changed) => {
       chats.updateExternal(botId, changed);
       if (botId === chats.currentBotId()) broadcast(externalEvents.work(botId));
