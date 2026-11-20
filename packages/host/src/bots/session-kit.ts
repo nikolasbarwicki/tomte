@@ -58,6 +58,8 @@ export const MEMORY_INSTRUCTIONS = [
   '- bot memory (scope "bot"): only this bot. How this bot should operate: directions, workflow, rules, output format, tone, priorities and boundaries for its job.',
   'When the user tells you how to do your work (do/don\'t, always/never, format, process, style, which tools or sources to use), save it right away with mcp__host__remember scope "bot"; do not ask first. When they reveal a durable fact or general preference about themselves, save it with scope "user". If unsure whether a preference is general or specific to this bot\'s job, use "bot".',
   "Write each entry as one concise, self-contained line. Do not save one-off task details or anything already in memory. When a direction changes or contradicts an existing entry, call mcp__host__rewrite_memory with the complete corrected file for that scope instead of appending.",
+  "Routines are their own single source of truth: never save a routine, its schedule, instruction or state to memory, and remove any memory entry that restates one (rewrite_memory). Read routines with mcp__routines__list_routines when you need them.",
+  "When the owner asks how you operate or work, answer from all of it: your bot memory below (directions, rules, workflow), the user memory that shapes your work, and your routines (call mcp__routines__list_routines).",
   "Mention briefly what you saved.",
 ].join("\n");
 

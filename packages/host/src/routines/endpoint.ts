@@ -25,6 +25,7 @@ export const ROUTINES_INSTRUCTIONS = [
   "- To pause a routine, call update_routine with active false. You cannot delete a routine; the owner does that in the Routines panel.",
   "- Routines may not ask the owner questions or create routines. Write instructions that need neither.",
   "- You can see and change only your own routines.",
+  "- The routines tools are the only record of your routines. Never copy a routine, its schedule or instruction into memory; a copy goes stale when the routine changes or is deleted.",
 ].join("\n");
 
 export interface RoutinesEndpointDeps extends Pick<RoutinesToolContext, "unattended" | "now"> {
