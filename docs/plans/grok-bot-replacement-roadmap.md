@@ -12,7 +12,7 @@ Tomte is a side project and a portfolio piece. It grows in three stages, and eac
 2. **Published.** Anyone can self-host it with one command. The repository, the docs and a demo show the work to employers and future partners.
 3. **A product.** A hosted version for business owners, priced like competitors ($15, $49 and $99 a month). The company brain sets it apart.
 
-Competitor research is in `docs/research/grok-bot-alternatives/`. Grok Bot facts come from its docs at `docs.x.ai/grok-bot` and from `x.ai/bot`, read on 2026-11-14. Vendor prices are list prices from the same day.
+Competitor research is kept outside the public repository. Grok Bot facts come from its docs at `docs.x.ai/grok-bot` and from `x.ai/bot`, read on 2026-11-14. Vendor prices are list prices from the same day.
 
 ## The differentiator: a company brain
 
@@ -411,7 +411,7 @@ A nightly `VACUUM INTO` copy and a tar of the data root to an EU R2 bucket, kept
 ## Sources
 
 - Grok Bot: [overview](https://docs.x.ai/grok-bot/overview), [bots and memory](https://docs.x.ai/grok-bot/bots), [skills and routines](https://docs.x.ai/grok-bot/skills-routines-and-automations), [1.0 launch](https://x.ai/news/grok-bot-1-0), [product and pricing](https://x.ai/bot).
-- Competitors: `docs/research/grok-bot-alternatives/README.md` and the notes beside it.
+- Competitors: private research notes, not in the repository.
 - Anthropic: [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance).
 - Fly.io: [pricing update](https://fly.io/pricing-update/), [pricing](https://docs.fly.io/about/pricing), [autostop and autostart](https://docs.fly.io/reference/fly-proxy-autostop-autostart.md), [suspend and resume](https://docs.fly.io/reference/suspend-resume).
 - boat.dev: [pricing](https://docs.boat.dev/pricing.md), [terms](https://boat.dev/terms), [auto-stop](https://docs.boat.dev/long-running-tasks/auto-stop.md), [OpenBot hosted servers](https://github.com/nightly-labs/openbot/blob/main/docs/hosted-servers.md).

@@ -65,7 +65,7 @@ The catalog (`src/integrations/catalog.ts`) has 5 entries: Gmail, Linear, GitHub
 
 - Back and close. Header: icon, name, and two equal-weight buttons, `Share` and `Uninstall`.
 - One-line description: "Search, read, draft, and manage email."
-- **Accounts**: the real identity (`nikolas.barwicki@gmail.com`) with an edit icon and `Connected`. `+ Add Another Account` sits inline.
+- **Accounts**: the real identity (the signed-in email address) with an edit icon and `Connected`. `+ Add Another Account` sits inline.
 - **Apps 1**: "gmail · Connector", the MCP server the plugin installs.
 - **Information**: Capabilities (1 app), Developer (Cursor, not Google: it names who built the connector), Category (Featured), Website, Availability (Public).
 
