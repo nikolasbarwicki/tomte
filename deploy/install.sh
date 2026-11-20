@@ -493,6 +493,58 @@ say "Installing the browser engine"
 as_service_user "$BIN" install-browser "${HOST_FLAGS[@]}" ||
   warn "tomte-host install-browser failed (see above): browser bots are unavailable until it succeeds; re-run this script to retry"
 
+chrome_bin=$(find "$DATA_ROOT/.agent-browser/browsers" -maxdepth 3 -name chrome -type f 2>/dev/null | head -n 1 || true)
+if [[ -n $chrome_bin ]]; then
+  if ldd "$chrome_bin" 2>/dev/null | grep -q "not found"; then
+    if command -v apt-get >/dev/null 2>&1; then
+      say "Installing Chrome shared library dependencies with apt-get"
+      chrome_pkgs=(libgbm1 libcairo2 libpango-1.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2)
+      for base in libatk1.0-0 libatk-bridge2.0-0 libcups2 libasound2 libatspi2.0-0; do
+        if apt-cache show "${base}t64" >/dev/null 2>&1; then
+          chrome_pkgs+=("${base}t64")
+        else
+          chrome_pkgs+=("$base")
+        fi
+      done
+      { apt-get update -q && DEBIAN_FRONTEND=noninteractive apt-get install -y "${chrome_pkgs[@]}"; } ||
+        warn "apt-get could not install Chrome shared libraries; browser bots may fail to launch"
+    elif command -v dnf >/dev/null 2>&1; then
+      say "Installing Chrome shared library dependencies with dnf"
+      dnf install -y atk at-spi2-atk cups-libs alsa-lib mesa-libgbm cairo pango libXcomposite libXdamage libXfixes libXrandr at-spi2-core ||
+        warn "dnf could not install Chrome shared libraries; browser bots may fail to launch"
+    fi
+    if ldd "$chrome_bin" 2>/dev/null | grep -q "not found"; then
+      warn "Chrome is still missing shared libraries; browser bots may fail to launch (check: ldd $chrome_bin | grep 'not found')"
+    fi
+  fi
+
+  if [[ $(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || true) == 1 ]]; then
+    if command -v apparmor_parser >/dev/null 2>&1 && [[ -d /etc/apparmor.d ]]; then
+      chrome_profile="/etc/apparmor.d/$SERVICE-chrome"
+      want_chrome_profile=$(cat <<EOF
+abi <abi/4.0>,
+include <tunables/global>
+
+profile $SERVICE-chrome $DATA_ROOT/.agent-browser/browsers/*/chrome flags=(unconfined) {
+  userns,
+
+  include if exists <local/$SERVICE-chrome>
+}
+EOF
+)
+      if [[ ! -e $chrome_profile || $(cat "$chrome_profile" 2>/dev/null) != "$want_chrome_profile" ]]; then
+        say "Installing AppArmor userns profile for Chrome ($chrome_profile)"
+        printf '%s\n' "$want_chrome_profile" >"$chrome_profile"
+        chmod 0644 "$chrome_profile"
+      fi
+      apparmor_parser -r "$chrome_profile" ||
+        warn "could not load $chrome_profile; browser bots may fail to launch (see deploy/README.md)"
+    else
+      warn "kernel.apparmor_restrict_unprivileged_userns=1 stops Chrome's sandbox; see the Ubuntu user namespaces section of deploy/README.md"
+    fi
+  fi
+fi
+
 # --- 9. Unit ---------------------------------------------------------------------------------
 
 say "Installing and starting $SERVICE.service"

@@ -32,11 +32,11 @@ Supported targets are systemd Linux on x86_64 and aarch64. The kit was run on Ub
 
 ### Ubuntu user namespaces
 
-Bot shells and browser bots run under bubblewrap, which creates unprivileged user namespaces. Ubuntu 24.04 sets `kernel.apparmor_restrict_unprivileged_userns=1` by default, and with it bubblewrap fails with `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`.
+Bot shells and browser bots run under bubblewrap, and Chrome for Testing runs its own Chromium sandbox; both create unprivileged user namespaces. Ubuntu 24.04+ sets `kernel.apparmor_restrict_unprivileged_userns=1` by default, which causes bubblewrap to fail with `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted` and Chrome to exit with `No usable sandbox!`.
 
-When the sandbox cannot start, remote mode fails closed ([ADR-0006](../docs/adr/0006-remote-mode-is-linux-only.md)). The host refuses shell commands for every bot, and browser bots are unavailable. Nothing runs unsandboxed. Debian 12 allows unprivileged user namespaces by default, so it needs nothing here.
+When the bubblewrap sandbox cannot start, remote mode fails closed ([ADR-0006](../docs/adr/0006-remote-mode-is-linux-only.md)). The host refuses shell commands for every bot, and browser bots are unavailable. Nothing runs unsandboxed. Debian 12 allows unprivileged user namespaces by default, so it needs nothing here.
 
-The installer never changes the sysctl and never installs an AppArmor profile. It detects the problem, warns, and finishes. You have two options.
+The installer never changes the sysctl and never installs an AppArmor profile for the system `bwrap` binary: it detects the problem, warns, and finishes. For tomte's own managed Chrome binary (`$DATA_ROOT/.agent-browser/browsers/*/chrome`), the installer installs its missing shared libraries (`libatk`, `libcups2`, `libasound2`, `libgbm1`, `libcairo2`, `libpango`, X11/atspi) and, when `kernel.apparmor_restrict_unprivileged_userns=1` and `apparmor_parser` are present, writes and loads `/etc/apparmor.d/tomte-chrome` scoped only to that binary. For `bwrap`, you have two options.
 
 **Option 1, preferred: an AppArmor profile that grants `userns` to `/usr/bin/bwrap` only.** Only bubblewrap regains user namespaces. Create `/etc/apparmor.d/bwrap`:
 
@@ -57,7 +57,7 @@ Load it:
 sudo apparmor_parser -r /etc/apparmor.d/bwrap
 ```
 
-The profile survives a reboot. Re-run the installer afterwards. Its sandbox check should now pass.
+The profile survives a reboot. Re-run the installer afterwards. Its sandbox check should now pass. (The installer writes the matching `/etc/apparmor.d/tomte-chrome` profile for `/var/lib/tomte/.agent-browser/browsers/*/chrome` automatically when `apparmor_parser` is available.)
 
 **Option 2: turn the restriction off for the whole system.**
 
@@ -407,7 +407,7 @@ What has been checked:
 - In a disposable Ubuntu 24.04 VM (arm64, systemd 255), the unit started as `tomte`, received the key as a credential with no key in the process environment, kept `secrets.enc` readable across restarts and reboots, and restarted after `kill -9`. Pairing tokens survived restarts and reboots. The plain-file fallback drop-in worked. With the default sysctl the sandbox failed and the installer warned. After loading the AppArmor profile above, the sandbox started under the unit's directives and denied the key, `tomte.db` and `<data root>/claude`, while the bot's own files stayed readable. The profile survived a reboot.
 - In the same VM, Caddy 2.6 with this Caddyfile (plus `local_certs`, so no real certificate) proxied the web UI, pairing and the event stream: events arrived immediately through the proxy, and a foreign `Origin` got 403.
 - The unit and installer were also checked statically and in local disposable environments only.
-- On a real VPS (OVH, Ubuntu 26.04 x86_64, systemd 259), with an existing `tomte` user whose home was moved to the data root first: the installer, the AppArmor profile and the sandbox check passed, `auth-login` over SSH signed in with `claude/.credentials.json` at mode `0600`, and `tailscale serve` (Option B) served the UI, `/api/host-info` and pairing, including the desktop app as a remote profile. A running host reports `claude: "signed-out"` until it is restarted after the first sign-in. Before the musl check was fixed, this glibc system (its loader is `/lib64/ld-linux-x86-64.so.2`, with no `/lib/ld-linux-*`) got the musl Claude CLI, which fails to start with `ENOENT`.
+- On a real VPS (OVH, Ubuntu 26.04 x86_64, systemd 259): the installer, the AppArmor profiles (`bwrap` and `tomte-chrome`), Chrome's shared libraries and the sandbox check passed; `auth-login` over SSH signed in with `claude/.credentials.json` at mode `0600`; `tailscale serve` (Option B) served the UI, `/api/host-info` and pairing; and real browser routines (login wall, DataDome bot wall, takeover park + restart) ran against Chrome 158. A running host reports `claude: "signed-out"` until it is restarted after the first sign-in. Before the musl check was fixed, this glibc system (its loader is `/lib64/ld-linux-x86-64.so.2`, with no `/lib/ld-linux-*`) got the musl Claude CLI, which fails to start with `ENOENT`.
 - The release download path ran against a local fixture laid out like a GitHub Release, in an Ubuntu 24.04 arm64 container with systemd: the `aarch64` pick, the `SHA256SUMS` check, `--version`, and the unit fetched from the release. A tampered binary, a `SHA256SUMS` without the entry, and a missing release each aborted before anything was installed. In that container the service never started, with the legacy `--url` path as well (systemd did not provide the credential there), so this covers the download and verification, not a running host. It has not run against GitHub Releases.
 
 What has not been checked: Caddy certificate issuance, an OAuth connection, live view and takeover through a proxy, the sysctl option and the `systemd-creds` key migration.
