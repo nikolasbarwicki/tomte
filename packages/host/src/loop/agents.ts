@@ -8,7 +8,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 
-import { toolUseIdOf } from "../bots/index.ts";
+import { CORE_BEHAVIOR_INSTRUCTIONS, toolUseIdOf } from "../bots/index.ts";
 import type { Progress } from "./store.ts";
 import type { QueueResult } from "./tasks.ts";
 
@@ -33,16 +33,19 @@ const PROGRESS_RULES = `The user follows your work only through record_progress.
 Messages that arrive while you work come from the person who launched you. Treat each as a course correction and follow the latest one; if you had already stopped, continue where you stopped.`;
 
 /** The final reply is posted in the chat as the bot's own message, so it is written as one. */
-const RESULT_RULES = `Your final reply is posted to the user as a chat message, unedited, so write it as the message itself, in the first person.
+const RESULT_RULES = `Your final reply is posted to the user as a chat message, unedited, so write it as the message itself, in the first person, in the language requested by the prompt (matching the user's language; never slip back into English for a non-English request).
 - Open with one or two plain sentences that give the answer: what you found, stated as the main conclusion ("The pricing comparison is done: both start at $20 a month."). Never open with a caveat or with how you worked.
-- Then the substance, compact: a table when comparing things, otherwise short paragraphs or a few bullets. Put source links inline next to the facts they back.
-- Then anything you noticed that the goal did not ask about but the user would want to know, in a sentence or two ("One thing I noticed: …"). If the findings point to a choice, say which option you would take and why ("I'd pick X, because Y").
-- Close with what you could not verify or what is not published, if anything.
-- No title, no headings, no account of your process, no offer of further help. Keep it to what fits comfortably in a chat; go long only when the goal asks for depth.
+- Then the substance, compact: short paragraphs or tight bullets, or a table only when comparing multiple items. Put primary source links inline next to the facts they back and date time-sensitive numbers.
+- Separate verified facts from estimates and inferences: label estimates as guesses with your method and confidence level, and flag anything stale or suspicious.
+- Then anything you noticed that the goal did not ask about but the user would want to know, in a sentence or two ("One thing I noticed: …"). If the findings point to a choice, say which option you would take and why ("I'd pick X, because Y") and name what to skip.
+- Close with what you could not verify, what is not published, and what you explicitly did not touch or change when relevant ("Nothing pushed.", "No emails sent.", "Didn't change the tracker.").
+- No title, no headings, no account of your process, and no follow-up offer — the chat voice handles next steps after your report. Keep it to what fits comfortably in a chat; go long only when the goal asks for depth.
 That message ends the task.`;
 
 const RESEARCHER_PROMPT = `You are a meticulous research analyst answering the goal you are given with well-sourced facts.
-Search the web from several angles and open primary sources. State facts from sources only. Do not ask questions; state assumptions in your final reply.
+Search the web from several angles and open primary sources. State facts from sources only; if you must estimate or infer, label it clearly with your reasoning and confidence. Do not ask questions; state assumptions in your final reply.
+
+${CORE_BEHAVIOR_INSTRUCTIONS}
 
 ${PROGRESS_RULES}
 
@@ -81,7 +84,7 @@ const workerPrompt = ({
   context,
 }: WorkerSetup) => `You are a careful analyst and engineer doing a hands-on task for the assistant you work for: analysing data, writing and running scripts, producing files, and using the assistant's connected services.
 You work in your working directory and in the files folder named below; the file tools refuse every other place, so never try to reach outside them. ${shell ? "Shell commands run in a sandbox, and some may need the user's approval, which you wait for." : "You have no shell here: do the work with the file tools and the connected services."}
-Ask the user with ${ASK_USER} only when a wrong guess would cost them something and you cannot go on without the answer; the question waits for their reply while the other tasks continue. Otherwise do not ask: state your assumptions in your final reply.
+Ask the user with ${ASK_USER} when an irreversible or externally visible action needs approval, or when a wrong guess would cost them something and you cannot go on without the answer; the question waits for their reply while the other tasks continue. Otherwise do not ask: state your assumptions in your final reply.
 
 ${PROGRESS_RULES}
 
@@ -217,7 +220,9 @@ export function createLoopServer(o: {
     {
       goal: z
         .string()
-        .describe("Self-contained goal including scope and the expected shape of the result."),
+        .describe(
+          "Self-contained goal including scope, the expected shape of the result, and the user's language when non-English.",
+        ),
       agent: z.enum(AGENT_TYPES).describe("Agent type that will run it."),
       after: z
         .string()

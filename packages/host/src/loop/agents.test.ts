@@ -7,6 +7,7 @@ import {
   sessionTools,
   type WorkerSetup,
 } from "./agents.ts";
+import { FRONT_PROMPT } from "./prompt.ts";
 
 const finding = { phase: "Pricing", finding: "$20 a month", next: "Check teams" };
 
@@ -68,6 +69,10 @@ describe("agentDefinitions", () => {
       tools: ["WebSearch", "WebFetch", "mcp__loop__record_progress"],
     });
     expect(researcher?.prompt).toContain("record_progress");
+    expect(researcher?.prompt).toContain("## Core assistant behavior");
+    expect(researcher?.prompt).toContain("never slip back into English");
+    expect(researcher?.prompt).toContain("confidence level");
+    expect(researcher?.prompt).toContain("did not touch or change");
   });
 
   test("the worker has the bot's file tools, its shell, its integrations, ask_user and its recorder, and no web or browser tools", () => {
@@ -106,7 +111,17 @@ describe("agentDefinitions", () => {
 
     expect(worker?.prompt).toContain("record_progress");
     expect(worker?.prompt).toContain("posted to the user as a chat message");
+    expect(worker?.prompt).toContain("never slip back into English");
+    expect(worker?.prompt).toContain("confidence level");
+    expect(worker?.prompt).toContain("did not touch or change");
+    expect(worker?.prompt).toContain("irreversible or externally visible action");
     expect(worker?.prompt.endsWith("# This bot\nYou are Dev.")).toBe(true);
+  });
+
+  test("FRONT_PROMPT carries active-language instructions for background tasks and avoids duplicating core behavior", () => {
+    expect(FRONT_PROMPT).toContain("language other than English");
+    expect(FRONT_PROMPT).toContain("including the user's language in the goal when non-English");
+    expect(FRONT_PROMPT).not.toContain("## Core assistant behavior");
   });
 });
 

@@ -24,11 +24,13 @@ import {
 } from "@tomte/contract/events";
 import { z } from "zod";
 
+import { CORE_BEHAVIOR_INSTRUCTIONS } from "./behavior.ts";
 import { CHIEF_OF_STAFF_INSTRUCTIONS } from "./chief-of-staff.ts";
 import { instructionsPath, readMemory, userMemoryPath, writeMemory } from "./memory.ts";
 import { type HostDelegate } from "./session-kit.ts";
 import { Thread, type ThreadEnv } from "./thread.ts";
 
+export { CORE_BEHAVIOR_INSTRUCTIONS } from "./behavior.ts";
 export { Thread, type ThreadEnv, type TurnResult } from "./thread.ts";
 export {
   TurnError,
@@ -292,7 +294,7 @@ export function touchBot(dataRoot: string, bot: Bot) {
 /** The heading the user's instructions sit under in every bot's system prompt. */
 const INSTRUCTIONS_HEADING = "# The user's instructions for every bot";
 
-/** Who the bot is, as the system prompt tells every session of it, followed by the user's instructions when there are any. */
+/** Who the bot is, followed by the shared core behavior, the user's instructions when there are any, and the Chief of Staff role when enabled. */
 function botIdentity(dataRoot: string, bot: Bot): string[] {
   const instructions = readMemory(instructionsPath(dataRoot)).trim();
   return [
@@ -301,6 +303,8 @@ function botIdentity(dataRoot: string, bot: Bot): string[] {
     bot.purpose
       ? `Your job: ${bot.purpose}`
       : "No job description was given; infer it from the conversation and bot memory.",
+    "",
+    CORE_BEHAVIOR_INSTRUCTIONS,
     ...(instructions ? ["", INSTRUCTIONS_HEADING, instructions] : []),
     ...(bot.chiefOfStaff ? ["", CHIEF_OF_STAFF_INSTRUCTIONS] : []),
   ];
