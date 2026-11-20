@@ -1,4 +1,14 @@
-import { chmod, copyFile, cp, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -44,6 +54,7 @@ import {
   FIXTURE_BUNDLE_ID,
   hostBinaryName,
   hostTarget,
+  icnsFromPng,
   inCi,
   isDesktopArch,
   PRODUCTION_BUNDLE_ID,
@@ -114,8 +125,13 @@ const SIGNING_AND_PUBLISH_ENV = [
 ];
 
 const MAC_CATEGORY = "public.app-category.developer-tools";
+/** App icons drawn by `bun run brand:assets`: the macOS one sits on Apple's icon grid, the other fills its canvas. */
+const APP_ICON = join(ROOT, "brand/app-icon.png");
+const MAC_ICON_PNG = join(ROOT, "brand/app-icon-mac.png");
+/** The staged `.icns` of `MAC_ICON_PNG` (`icnsFromPng`), so electron-builder never converts an icon under Bun. */
+const MAC_ICON = join(STAGE, "app-icon-mac.icns");
 /** Unsigned and unnotarized, and no identity is looked up: the local and the default release build. */
-const UNSIGNED_MAC = { identity: null, notarize: false, category: MAC_CATEGORY };
+const UNSIGNED_MAC = { identity: null, notarize: false, category: MAC_CATEGORY, icon: MAC_ICON };
 /**
  * Developer ID signed with the hardened runtime and notarized (notarization staples the ticket), from the one
  * certificate in CSC_LINK. Everything Mach-O in the app is signed by electron-builder with the same entitlements file,
@@ -124,6 +140,7 @@ const UNSIGNED_MAC = { identity: null, notarize: false, category: MAC_CATEGORY }
  */
 const SIGNED_MAC = {
   category: MAC_CATEGORY,
+  icon: MAC_ICON,
   hardenedRuntime: true,
   entitlements: MAC_ENTITLEMENTS,
   entitlementsInherit: MAC_ENTITLEMENTS,
@@ -262,6 +279,7 @@ async function main(): Promise<void> {
     await prepareBrowserBundle(join(STAGE, "browser", arch), arch);
   }
   await writeLicenses(join(STAGE, "licenses"));
+  if (PLATFORM === "darwin") await writeFile(MAC_ICON, icnsFromPng(await readFile(MAC_ICON_PNG)));
 
   // Credentials come from the environment only when this run signs; every run starts from an environment without them.
   const credentials = signing.signed
@@ -311,6 +329,7 @@ async function main(): Promise<void> {
         appId: BUNDLE_ID,
         productName: APP_NAME,
         electronVersion: electronVersion(),
+        icon: APP_ICON,
         asar: true,
         npmRebuild: false,
         directories: { output: bundleDir },

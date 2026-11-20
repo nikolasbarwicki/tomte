@@ -113,6 +113,27 @@ export function inCi(env: Record<string, string | undefined>): boolean {
   return env.CI !== undefined && env.CI !== "" && env.CI !== "false" && env.CI !== "0";
 }
 
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+/**
+ * The macOS app icon as an `.icns` holding the 1024px PNG as its one `ic10` entry. electron-builder takes an `.icns`
+ * as is; for a PNG it runs its icon tool with `process.execPath`, which under Bun never exits, so packaging hangs.
+ */
+export function icnsFromPng(png: Uint8Array): Uint8Array {
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  const isPng = png.length >= 24 && PNG_SIGNATURE.every((b, i) => png[i] === b);
+  if (!isPng || view.getUint32(16) !== 1024 || view.getUint32(20) !== 1024)
+    throw new Error("the macOS app icon must be a 1024x1024 PNG");
+  const out = new Uint8Array(16 + png.length);
+  const head = new DataView(out.buffer);
+  out.set(new TextEncoder().encode("icns"), 0);
+  head.setUint32(4, out.length);
+  out.set(new TextEncoder().encode("ic10"), 8);
+  head.setUint32(12, 8 + png.length);
+  out.set(png, 16);
+  return out;
+}
+
 /**
  * The metadata channel of every build. electron-builder names a pre-release's metadata after its suffix (`rc-mac.yml` for
  * `0.2.0-rc.1`), but the release holds `latest-*.yml` for every tag (`releaseAssets`); electron-updater asks a

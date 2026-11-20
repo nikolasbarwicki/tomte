@@ -10,11 +10,37 @@ import {
   collectDesktopRelease,
   desktopAssets,
   hostBinaryName,
+  icnsFromPng,
   inCi,
   releaseAssets,
   updateProvider,
 } from "./desktop-kit.ts";
 import { HOST_BINARIES } from "./release-kit.ts";
+
+describe("the macOS app icon", () => {
+  const png = (size: number) => {
+    const bytes = new Uint8Array(40);
+    bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+    new DataView(bytes.buffer).setUint32(16, size);
+    new DataView(bytes.buffer).setUint32(20, size);
+    return bytes;
+  };
+
+  test("is an icns whose one ic10 entry is the 1024px PNG", () => {
+    const icns = icnsFromPng(png(1024));
+    const view = new DataView(icns.buffer);
+    expect(new TextDecoder().decode(icns.subarray(0, 4))).toBe("icns");
+    expect(view.getUint32(4)).toBe(icns.length);
+    expect(new TextDecoder().decode(icns.subarray(8, 12))).toBe("ic10");
+    expect(view.getUint32(12)).toBe(icns.length - 8);
+    expect(icns.subarray(16)).toEqual(png(1024));
+  });
+
+  test("refuses anything but a 1024x1024 PNG", () => {
+    expect(() => icnsFromPng(png(512))).toThrow("1024x1024 PNG");
+    expect(() => icnsFromPng(new Uint8Array(40))).toThrow("1024x1024 PNG");
+  });
+});
 
 describe("what a release holds", () => {
   test("every host binary, and per supported OS its installers and metadata", () => {
