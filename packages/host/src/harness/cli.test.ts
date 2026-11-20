@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { installManagedCli, resolveCli } from "./cli.ts";
+import { installManagedCli, loginShellPath, resolveCli } from "./cli.ts";
 
 const envKeys = ["CLAUDE_PATH", "PATH"] as const;
 const realFetch = globalThis.fetch;
@@ -83,5 +83,57 @@ describe("managed Claude CLI", () => {
     await expect(installManagedCli(dataRoot)).rejects.toThrow("integrity mismatch");
     expect(existsSync(dataRoot)).toBe(false);
     expect(resolveCli(dataRoot)).toBeUndefined();
+  });
+});
+
+describe.skipIf(process.platform === "win32")("the login shell's PATH", () => {
+  let dir: string;
+  const saved = { SHELL: process.env.SHELL, isTTY: process.stdin.isTTY };
+
+  /** A stand-in login shell that counts how often it runs and answers with `answer` as its PATH. */
+  const shell = (name: string, answer: string) => {
+    const script = join(dir, name);
+    writeFileSync(
+      script,
+      `#!/bin/sh\necho run >> ${JSON.stringify(join(dir, `${name}.runs`))}\nprintf %s ${answer}\n`,
+      {
+        mode: 0o755,
+      },
+    );
+    return script;
+  };
+  const runs = (name: string) =>
+    readFileSync(join(dir, `${name}.runs`), "utf8")
+      .trim()
+      .split("\n").length;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "login-shell-"));
+    Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+  });
+  afterEach(() => {
+    Object.defineProperty(process.stdin, "isTTY", { value: saved.isTTY, configurable: true });
+    if (saved.SHELL === undefined) delete process.env.SHELL;
+    else process.env.SHELL = saved.SHELL;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("is asked of the shell once per process, however often it is read", () => {
+    process.env.SHELL = shell("a", "/login/a");
+    expect([loginShellPath(), loginShellPath(), loginShellPath()]).toEqual([
+      "/login/a",
+      "/login/a",
+      "/login/a",
+    ]);
+    expect(runs("a")).toBe(1);
+  });
+
+  test("is asked again when the shell is another one", () => {
+    process.env.SHELL = shell("b", "/login/b");
+    expect(loginShellPath()).toBe("/login/b");
+    process.env.SHELL = shell("c", "/login/c");
+    expect(loginShellPath()).toBe("/login/c");
+    expect(runs("b")).toBe(1);
+    expect(runs("c")).toBe(1);
   });
 });

@@ -142,12 +142,20 @@ export function cmdExeSpawner(opts: SpawnOptions): SpawnedProcess {
   return Object.assign(child, { kill: killTree }) as unknown as SpawnedProcess;
 }
 
-/** PATH from the login shell when the host was not launched from a terminal (e.g. a GUI/launchd). */
+const loginPaths = new Map<string, string | undefined>();
+
+/**
+ * PATH from the login shell when the host was not launched from a terminal (e.g. a GUI/launchd). The shell is interactive, so it runs the
+ * owner's rc files, and the call blocks the event loop: it runs once per shell and process, since the answer cannot change while the host runs.
+ */
 export function loginShellPath(): string | undefined {
   if (process.stdin.isTTY || isWin) return process.env.PATH;
   const sh = process.env.SHELL ?? "/bin/zsh";
-  const r = spawnSync(sh, ["-ilc", 'printf "%s" "$PATH"'], { encoding: "utf8", timeout: 5000 });
-  return r.status === 0 && r.stdout ? r.stdout : process.env.PATH;
+  if (!loginPaths.has(sh)) {
+    const r = spawnSync(sh, ["-ilc", 'printf "%s" "$PATH"'], { encoding: "utf8", timeout: 5000 });
+    loginPaths.set(sh, r.status === 0 && r.stdout ? r.stdout : process.env.PATH);
+  }
+  return loginPaths.get(sh);
 }
 
 /** `claude auth status` or `claude auth login` in the foreground with the caller's terminal, in `env`; resolves with its exit code. */
