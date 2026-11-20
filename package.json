@@ -36,7 +36,7 @@
     "build:desktop": "bun scripts/build-desktop.ts",
     "package:desktop": "bun scripts/package-desktop.ts",
     "sign:local": "bun scripts/sign-local.ts",
-    "icons:desktop": "bun scripts/make-tray-icons.ts",
+    "brand:assets": "bun scripts/make-brand-assets.ts",
     "smoke:desktop": "bun scripts/smoke-desktop.ts",
     "smoke:desktop:profiles": "bun scripts/smoke-desktop-profiles.ts",
     "smoke:desktop:titlebar": "bun scripts/smoke-desktop-titlebar.ts",
