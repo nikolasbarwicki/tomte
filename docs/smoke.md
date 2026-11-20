@@ -83,6 +83,14 @@ The host's Telegram adapter is pointed at `packages/host/src/testing/fake-telegr
 | 7. `@Name` from the phone     | A message `@planner what is new?` from the owner reaches the bot with the name taken off, the bot's reply arrives in the owner's chat as "Planner\n\nok" (name first), and a plain message with no open card gets the hint naming the newest bot.                |
 | 8. Linked, then Unlink        | The page shows Linked with the account's name; Unlink (with its confirm dialog) clears it, the bot token stays and the bot keeps running.                                                                                                                        |
 
+## README screenshots (`shots:readme`)
+
+`bun run shots:readme` is not a smoke and not part of `bun run check` or `smoke:ui`: it makes the pictures the README shows. It uses the same harness (`scripts/smoke-kit.ts`: web build, whole-host test harness, fake Claude CLI, fake Telegram Bot API), so it needs Chrome and no network or model, and writes only to `.github/assets/screens/` and its own run directory (removed when it passes). It also needs `ffmpeg` (`/opt/homebrew/bin/ffmpeg`, or `FFMPEG_PATH`) for the GIF, and exits non-zero saying so when it is missing.
+
+It seeds three bots (Inbox, with a session file of fixed times and the Chief of Staff switch; Research, double loop, with one finished and two running tasks from the fake CLI's `loop.json`; Ops, with two needs-you items, a routine with three runs and its browser switched on), links a fake Telegram account, and writes `chat`, `tasks`, `work`, `routines`, `browser`, `channels`, `chief-of-staff` and `model-chip` as `<name>-light.png` and `<name>-dark.png` (1400×900), plus `hero.gif` (Inbox answering one message, recorded as Playwright video, converted with a palette). The themes are the page's own: next-themes follows `prefers-color-scheme`, which the script sets with `emulateMedia`.
+
+The host stamps real times on runs, links and the sidebar, so the script rewrites every date, clock time and "N min ago" the page renders to a fixed one (the browser runs in UTC, `en-US`, with motion off). Two runs write byte-identical PNGs; the GIF is re-encoded each run and may differ in bytes. The fake engine has no screen, so the Browser shot shows the section as the host renders it with the browser on and not yet started, not a live takeover.
+
 ## The update helper (`scripts/smoke-update-helper.sh`)
 
 Not a browser smoke, and not part of `smoke:ui`. It is the VM check of the root update helper (ADR-0014): run as root on a disposable systemd Linux machine with a compiled host (`bun run build:host linux-x64`, or `linux-arm64`), optionally a second build with another `VERSION`:

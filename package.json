@@ -22,6 +22,7 @@
     "smoke:channels-ui": "bun scripts/smoke-channels-ui.ts",
     "smoke:files-ui": "bun scripts/smoke-files-ui.ts",
     "smoke:ui": "bun scripts/smoke-ui.ts",
+    "shots:readme": "bun scripts/shots-readme.ts",
     "eval:loop-routing": "bun scripts/eval-loop-routing.ts",
     "probe:credential-fd": "bun scripts/probe-credential-fd.ts",
     "typecheck": "bun --filter '*' typecheck && tsc -p scripts",
