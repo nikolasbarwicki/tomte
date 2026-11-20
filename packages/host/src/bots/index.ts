@@ -56,6 +56,7 @@ export {
 } from "./memory.ts";
 export { deleteActivity, getActivity, markSeen, recordMessage } from "./activity-store.ts";
 export { deleteOrigin, getOrigin, setOrigin } from "./origin-store.ts";
+export { readBotOrder, writeBotOrder } from "./order-store.ts";
 export {
   allowTool,
   allowsTool,

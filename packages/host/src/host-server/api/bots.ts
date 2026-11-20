@@ -14,6 +14,7 @@ import {
   setChatMode,
   setChiefOfStaff,
   setProfile,
+  writeBotOrder,
 } from "../../bots/index.ts";
 import { json } from "../http.ts";
 import type { ApiContext, ApiRoutes } from "./context.ts";
@@ -28,6 +29,7 @@ const NewBot = z.object({
 const BrowserEnabled = BotId.extend({ enabled: z.boolean() });
 const BrowserHeaded = BotId.extend({ headed: z.boolean() });
 const ChatModeChange = BotId.extend({ chatMode: ChatMode });
+const BotOrderChange = z.object({ botIds: z.array(z.string()) });
 const AllowanceRemoval = BotId.extend({ tool: z.string().min(1) });
 
 /** Routes that address a bot by id, or none; they work whether or not a bot is open. */
@@ -151,6 +153,15 @@ export function botRoutes({
       if (!getBot(dataRoot, botId)) return json(res, { error: "no such bot" }, 404);
       if (!removeAllowance(db, botId, tool))
         return json(res, { error: "that tool is not always allowed" }, 404);
+      return json(res, { ok: true });
+    },
+    "/api/bots/order": async ({ res, parse }) => {
+      const { botIds } = parse(BotOrderChange);
+      writeBotOrder(
+        dataRoot,
+        botIds.filter((id) => getBot(dataRoot, id)),
+      );
+      chats.announceBots();
       return json(res, { ok: true });
     },
     "/api/bots/browser/restart": browserLifecycle,

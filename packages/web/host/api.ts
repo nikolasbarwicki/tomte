@@ -105,3 +105,6 @@ export const markSeen = (botId: string) => post("/api/seen", { botId });
 
 /** Deletes `botId` on the host; resolves to whether it did (a working bot is refused). */
 export const deleteBot = (botId: string) => act("/api/bots/delete", { botId });
+
+/** Saves the sidebar's bot order, top first; resolves to whether the host kept it. */
+export const reorderBots = (botIds: string[]) => act("/api/bots/order", { botIds });

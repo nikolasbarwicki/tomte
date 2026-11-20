@@ -4,6 +4,7 @@
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
   "exports": {
+    "./bot-order": "./src/bot-order.ts",
     "./item-actions": "./src/item-actions.ts",
     "./host-status": "./src/host-status.ts",
     "./events": "./src/events.ts",

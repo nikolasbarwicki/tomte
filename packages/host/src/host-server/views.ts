@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 
+import { arrangeBots } from "@tomte/contract/bot-order";
 import type { BotStatus, BotsEvent, FilesEvent, MemoryEvent } from "@tomte/contract/events";
 
 import {
@@ -9,6 +10,7 @@ import {
   getActivity,
   listBots,
   listFiles,
+  readBotOrder,
   readMemory,
   userMemoryPath,
 } from "../bots/index.ts";
@@ -66,7 +68,7 @@ function withWaits(
   };
 }
 
-/** The sidebar: every bot with its latest message, whether it is working, unseen or idle, and its open needs-you items and waits. */
+/** The sidebar: every bot in the owner's order, with its latest message, whether it is working, unseen or idle, and its open needs-you items and waits. */
 export const botsEvent = (
   dataRoot: string,
   db: Database,
@@ -74,7 +76,7 @@ export const botsEvent = (
   needsYou: () => ReadonlyMap<string, OpenItems>,
   waits: WaitCounts,
 ): BotsEvent => {
-  const listed = listBots(dataRoot);
+  const listed = arrangeBots(listBots(dataRoot), readBotOrder(dataRoot));
   // No bots, no count query: a host with nothing to list has nothing to ask the database.
   const open = listed.length > 0 ? needsYou() : new Map<string, OpenItems>();
   const openWaits = listed.length > 0 ? waits.list() : [];

@@ -36,6 +36,8 @@ import { useHostStatus } from "@/host/hooks.ts";
 import { shortTime } from "@/lib/format.ts";
 import { cn } from "@/lib/utils";
 
+import { useBotOrder, type RowProps } from "./use-bot-order.ts";
+
 const STATUS_LABEL: Record<BotStatus, string> = {
   idle: "Idle",
   working: "Working",
@@ -87,7 +89,15 @@ function StatusAvatar({
 }
 
 /** A bot's sidebar row; right-clicking it (or a long press) opens its actions. */
-function BotContextMenu({ bot, children }: { bot: BotSummary; children: ReactNode }) {
+function BotContextMenu({
+  bot,
+  row,
+  children,
+}: {
+  bot: BotSummary;
+  row: RowProps;
+  children: ReactNode;
+}) {
   const navigate = useNavigate();
   const remove = async () => {
     const ok = await confirmAction({
@@ -101,7 +111,16 @@ function BotContextMenu({ bot, children }: { bot: BotSummary; children: ReactNod
   };
   return (
     <ContextMenu>
-      <ContextMenuTrigger render={<SidebarMenuItem />}>{children}</ContextMenuTrigger>
+      <ContextMenuTrigger
+        render={
+          <SidebarMenuItem
+            {...row}
+            className="data-dragging:opacity-50 data-[drop=after]:shadow-[0_2px_0_0_var(--sidebar-ring)] data-[drop=before]:shadow-[0_-2px_0_0_var(--sidebar-ring)]"
+          />
+        }
+      >
+        {children}
+      </ContextMenuTrigger>
       <ContextMenuContent>
         <DropdownMenuItem
           onClick={() =>
@@ -142,6 +161,7 @@ export function AppSidebar({
   const matchRoute = useMatchRoute();
   // A host whose Claude CLI is signed out cannot run any bot; Settings points at Models, where it says how to sign in.
   const claudeSignedOut = useHostStatus()?.claude.state === "signed-out";
+  const { shown: orderedBots, rowProps } = useBotOrder(bots);
   // On phones the sidebar is a sheet; picking a destination should reveal it.
   const reveal = () => {
     if (isMobile) setOpenMobile(false);
@@ -178,11 +198,11 @@ export function AppSidebar({
           )}
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
-              {bots.map((b) => (
-                <BotContextMenu key={b.id} bot={b}>
+              {orderedBots.map((b) => (
+                <BotContextMenu key={b.id} bot={b} row={rowProps(b.id)}>
                   <SidebarMenuButton
                     isActive={!!matchRoute({ to: "/bots/$botId", params: { botId: b.id } })}
-                    render={<Link to="/bots/$botId" params={{ botId: b.id }} />}
+                    render={<Link to="/bots/$botId" params={{ botId: b.id }} draggable={false} />}
                     onClick={reveal}
                     title={rail ? undefined : b.purpose || undefined}
                     aria-label={rail ? b.name : undefined}

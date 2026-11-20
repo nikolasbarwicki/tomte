@@ -318,7 +318,7 @@ export const BotSummary = Bot.extend({
   needsYouAt: z.number().nonnegative(),
 });
 export type BotSummary = z.infer<typeof BotSummary>;
-/** Every bot for the sidebar, most recently active first; lives outside chat history. */
+/** Every bot for the sidebar, in the owner's order (`arrangeBots`: bots they have not placed yet first, most recently active first); lives outside chat history. */
 export const BotsEvent = z.object({ type: z.literal("bots"), bots: z.array(BotSummary) });
 export type BotsEvent = z.infer<typeof BotsEvent>;
 
