@@ -58,6 +58,7 @@ import {
   SIGNING_SECRETS,
   type SigningDecision,
 } from "./signing-kit.ts";
+import { writeLicenses } from "./third-party-licenses.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const { values: flags } = parseArgs({
@@ -260,6 +261,7 @@ async function main(): Promise<void> {
     await chmod(resource, 0o755);
     await prepareBrowserBundle(join(STAGE, "browser", arch), arch);
   }
+  await writeLicenses(join(STAGE, "licenses"));
 
   // Credentials come from the environment only when this run signs; every run starts from an environment without them.
   const credentials = signing.signed
@@ -318,6 +320,7 @@ async function main(): Promise<void> {
             to: `tomte-host${HOST_EXE}`,
           },
           { from: join(STAGE, "browser", "${arch}", BUNDLE_DIR), to: BUNDLE_DIR },
+          { from: join(STAGE, "licenses"), to: "licenses" },
         ],
         publish,
         mac:

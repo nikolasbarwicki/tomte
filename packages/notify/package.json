@@ -1,6 +1,7 @@
 {
   "name": "@tomte/notify",
   "private": true,
+  "license": "SEE LICENSE IN ../../LICENSE",
   "bin": {
     "tomte-notify": "src/main.ts"
   },

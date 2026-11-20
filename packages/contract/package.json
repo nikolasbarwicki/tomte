@@ -1,6 +1,7 @@
 {
   "name": "@tomte/contract",
   "private": true,
+  "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
   "exports": {
     "./item-actions": "./src/item-actions.ts",

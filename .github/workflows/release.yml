@@ -292,13 +292,18 @@ jobs:
           grep -qxF "DEFAULT_REPO=\"$GITHUB_REPOSITORY\"" release/install.sh
           cp deploy/tomte.service release/tomte.service
 
+      # LICENSE, NOTICE and THIRD-PARTY-LICENSES.txt go with the host binaries (ADR-0013); the desktop app carries the
+      # same files in Resources/licenses. The dependency walk reads node_modules (installed above).
+      - name: Licenses
+        run: bun scripts/third-party-licenses.ts release
+
       # What this release says about itself (version, shell API range, schema version), written before the checksums so
       # the signature covers it.
       - name: Manifest
         run: bun scripts/release.ts manifest release "$VERSION"
 
-      # Fails unless all five host binaries, release.json and every supported OS's installers and update metadata are
-      # there; covers every file in release/, SHA256SUMS excluded.
+      # Fails unless all five host binaries, release.json, the license files and every supported OS's installers and
+      # update metadata are there; covers every file in release/, SHA256SUMS excluded.
       - name: Checksums
         run: bun scripts/release.ts checksums release "$VERSION"
 

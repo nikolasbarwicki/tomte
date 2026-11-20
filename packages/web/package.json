@@ -1,6 +1,7 @@
 {
   "name": "@tomte/web",
   "private": true,
+  "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
   "sideEffects": [
     "**/*.css",

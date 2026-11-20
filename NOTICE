@@ -1,0 +1,58 @@
+Tomte
+Copyright (C) 2026 Nikolas Barwicki
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License, version 3 only, as
+published by the Free Software Foundation (the LICENSE file).
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+Additional permission under GNU AGPL version 3 section 7
+--------------------------------------------------------
+
+If you modify this program, or any covered work, by linking or combining it
+with the Claude Agent SDK (@anthropic-ai/claude-agent-sdk) or the Claude Code
+CLI (@anthropic-ai/claude-code), published by Anthropic PBC, or a modified
+version of either (each containing parts covered by Anthropic's own terms),
+the licensor of this program grants you additional permission to convey the
+resulting work. Corresponding Source for a non-source form of such a
+combination shall not include the source code for the parts of the Claude
+Agent SDK or the Claude Code CLI used, and those parts remain under
+Anthropic's terms, not the GNU AGPL.
+
+Trademarks
+----------
+
+The name "Tomte" and its logo are not licensed under the GNU AGPL. See
+TRADEMARKS.md.
+
+Third-party components
+----------------------
+
+Tomte's distributions contain or download the following components, each under
+its own terms. Their full license texts are in the licenses/ folder of each
+distribution (Resources/licenses in the desktop app, THIRD-PARTY-LICENSES.txt
+beside the host binaries of a release).
+
+- Claude Agent SDK (@anthropic-ai/claude-agent-sdk), Copyright Anthropic PBC.
+  All rights reserved; used under Anthropic's terms,
+  https://code.claude.com/docs/en/legal-and-compliance. Compiled into the host
+  binary.
+- Claude Code CLI (@anthropic-ai/claude-code), Copyright Anthropic PBC. Not
+  distributed: the host downloads it from npm at install time, under
+  Anthropic's terms.
+- Bun runtime, MIT License, Copyright Oven. The compiled host binary contains
+  the Bun runtime, which includes JavaScriptCore from WebKit under the GNU
+  LGPL 2.1 and BSD licenses; WebKit's source is at
+  https://github.com/oven-sh/WebKit.
+- Electron, MIT License, Copyright the Electron contributors, and Chromium,
+  BSD-style licenses. Their notices ship as LICENSE.electron.txt and
+  LICENSES.chromium.html in the desktop app.
+- agent-browser, Apache License 2.0, Copyright Vercel, Inc., the browser
+  engine bundled in the desktop app.
+- Chrome for Testing, Copyright Google LLC, bundled in the desktop app under
+  Google's terms, with the Chromium licenses.
+- npm packages compiled into the host binary, the web UI and the desktop app,
+  listed with their licenses in the licenses/ folder.
