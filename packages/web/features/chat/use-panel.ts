@@ -2,9 +2,10 @@ import { getRouteApi } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { DEFAULT_PANEL_SECTION, type PanelSection } from "@/lib/bot-panel.ts";
+import { DEFAULT_PANEL_SECTION, PANEL_SECTIONS, type PanelSection } from "@/lib/bot-panel.ts";
 
 const PANEL_KEY = "tomte:panel";
+const SECTION_KEY = "tomte:panel-section";
 const botRoute = getRouteApi("/bots/$botId");
 
 /** What the rail, the panel and the chat's own buttons share: whether the panel is open, on which section, and how to change both. */
@@ -24,9 +25,9 @@ export interface PanelControls {
 }
 
 /**
- * The panel's state. The section is the `panel` search param, so a link can name one; open or closed is the user's own choice,
- * remembered across bots and reloads for a wide window and per page for the sheet of a narrow one. A link that names a section
- * opens the panel on it.
+ * The panel's state. The section is the `panel` search param, so a link can name one; a link that names none (another bot's row
+ * in the sidebar) keeps the section last shown. Open or closed is the user's own choice, remembered across bots and reloads for
+ * a wide window and per page for the sheet of a narrow one. A link that names a section opens the panel on it.
  */
 export function usePanel(): PanelControls {
   const wide = useMediaQuery("(min-width: 1024px)");
@@ -34,10 +35,14 @@ export function usePanel(): PanelControls {
   const [sheetOpen, setSheetOpen] = useState(false);
   const navigate = botRoute.useNavigate();
   const linked = botRoute.useSearch({ select: (s) => s.panel });
-  const section = linked ?? DEFAULT_PANEL_SECTION;
+  const remembered = PANEL_SECTIONS.find((s) => s === localStorage.getItem(SECTION_KEY));
+  const section = linked ?? remembered ?? DEFAULT_PANEL_SECTION;
   const open = wide ? pinned : sheetOpen;
   const setOpen = (next: boolean) => (wide ? setPinned(next) : setSheetOpen(next));
   useEffect(() => localStorage.setItem(PANEL_KEY, pinned ? "open" : "closed"), [pinned]);
+  useEffect(() => {
+    if (linked) localStorage.setItem(SECTION_KEY, linked);
+  }, [linked]);
 
   // A link that names a section opens the panel on it, once per link.
   const [openedFor, setOpenedFor] = useState<PanelSection>();

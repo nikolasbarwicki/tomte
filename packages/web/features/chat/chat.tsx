@@ -1,6 +1,6 @@
 import { ChatTeardropDotsIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
 import type { BotSummary } from "@tomte/contract/events";
-import { useEffect, useEffectEvent, useTransition, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useState, useTransition, type ReactNode } from "react";
 
 import { BotAvatar } from "@/components/bot-avatar.tsx";
 import { confirmAction } from "@/components/confirm.tsx";
@@ -47,6 +47,9 @@ export function ChatView({
   const streamed = useOpenBotId() === bot.id;
   const controls = usePanel();
   const { wide, open } = controls;
+  // The chat is keyed on the bot, so a switch remounts it: a panel that was already open is not an enter, only one opened after the page was on screen is.
+  const [panelEnters, setPanelEnters] = useState(false);
+  if (!open && !panelEnters) setPanelEnters(true);
   const [starting, startNewSession] = useTransition();
 
   // A takeover request needs the live view, so bring it up as soon as one arrives.
@@ -156,7 +159,7 @@ export function ChatView({
             <aside
               className={cn(
                 "bg-background flex w-[400px] shrink-0 flex-col overflow-hidden rounded-xl shadow-(--sheet-shadow) xl:w-[440px]",
-                PANEL_ENTER,
+                panelEnters && PANEL_ENTER,
               )}
             >
               {panel(controls)}
