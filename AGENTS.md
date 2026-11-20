@@ -191,7 +191,7 @@ A release is a `v*` tag. Pushing one runs `.github/workflows/release.yml`: `veri
 
 The host's version is `VERSION` in `packages/host/src/harness/claude-access.ts` (no `package.json` carries a version). To cut a release:
 
-1. Set `VERSION` to the version without the `v` (`0.2.0`, or `0.2.0-rc.1` for a pre-release; a pre-release suffix is part of `VERSION`), run `bun run check`, commit and merge to the default branch.
+1. Set `VERSION` to the version without the `v` (`0.2.0`, or `0.2.0-rc.1` for a pre-release; a pre-release suffix is part of `VERSION`). For a release (not a pre-release), preview the notes GitHub will generate with `gh api repos/{owner}/{repo}/releases/generate-notes -f tag_name=v0.2.0 -f target_commitish=master -q .body` (it reads the tag even before it exists; categories come from PR labels through `.github/release.yml`) and turn them into a `## [0.2.0] - <date>` section of `CHANGELOG.md` under `[Unreleased]`, which is then emptied. Run `bun run check`, commit and merge to the default branch.
 2. Tag that commit and push the tag: `git tag v0.2.0 && git push origin v0.2.0`.
 3. Watch the `Release` run. A tag that does not match `VERSION` fails `verify` before anything is built; fix `VERSION` (or delete the tag), then tag again.
 4. Check the Release: five `tomte-host-<os>-<arch>[.exe]` files, `install.sh` (its `DEFAULT_REPO` filled in with the repository), `tomte.service`, `release.json`, `SHA256SUMS` and `SHA256SUMS.sig`; `sha256sum --check SHA256SUMS` in the download folder passes. `deploy/install.sh` installs a release's Linux binary without `--url` (`--repo`, `--version`; see `deploy/README.md`), after checking the signature. The first release needs the owner's one-time key setup (`docs/release/signing.md`).

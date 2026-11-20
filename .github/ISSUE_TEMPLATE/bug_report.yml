@@ -1,0 +1,91 @@
+name: Bug report
+description: Something in Tomte does not work as it should.
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A security problem goes to [private vulnerability reporting](https://github.com/nikolasbarwicki/tomte/security/advisories/new), not here.
+        Before you paste logs, remove tokens, emails and anything else private.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a bot with …
+        2. Send …
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Tomte version
+      description: The `version` field of `http://<your host>/api/host-info` (on macOS the desktop app also shows it under Tomte, About Tomte), or the commit if you run from source.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run Tomte
+      options:
+        - Desktop app
+        - Linux server (deploy kit, remote mode)
+        - Host binary, local mode
+        - From source
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: macOS 26.1, Ubuntu 24.04, Windows 11 24H2
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where it happens
+      multiple: true
+      options:
+        - Chat (standard)
+        - Chat (double-loop)
+        - Routines
+        - Needs you / Work
+        - Browser
+        - Channels (Telegram)
+        - Integrations
+        - Desktop app (window, tray, updates)
+        - Install or deploy
+        - Other
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Desktop app: `logs/host.log` and `logs/desktop.log` in the app's folder (`~/Library/Application Support/Tomte Desktop` on macOS, `%APPDATA%\Tomte Desktop` on Windows, `~/.config/Tomte Desktop` on Linux).
+        Linux server: `journalctl -u tomte --since "1 hour ago"`.
+        Host binary or source: the terminal output.
+      render: text
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Screenshots, the browser's console, what you already tried.

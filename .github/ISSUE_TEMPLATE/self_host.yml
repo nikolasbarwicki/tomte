@@ -1,0 +1,64 @@
+name: Self-hosting problem
+description: The deploy kit, install.sh, systemd, Caddy, or remote mode on your own server.
+labels: [area:deploy, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [deploy/README.md](https://github.com/nikolasbarwicki/tomte/blob/master/deploy/README.md) first. Remote mode runs on Linux only (ADR-0006).
+        Remove tokens, domains and IP addresses you do not want public before you paste anything.
+  - type: textarea
+    id: what
+    attributes:
+      label: What went wrong
+      description: The step you were on, what you expected and what happened.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Tomte version
+      description: The `version` field of `https://<your host>/api/host-info`, or the release you installed.
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution and architecture
+      placeholder: Ubuntu 24.04, x64
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed
+      options:
+        - deploy/install.sh from a release
+        - install.sh with --url
+        - By hand (binary + tomte.service)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: proxy
+    attributes:
+      label: In front of the host
+      options:
+        - Caddy (deploy/Caddyfile)
+        - Another TLS proxy
+        - Tailscale with --allow-plain-http
+        - Nothing, loopback only
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: The `TOMTE_*` variables and flags you set (values redacted where private) and any changes to the unit file.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: '`journalctl -u tomte --since "1 hour ago"`, and the installer output if it failed.'
+      render: text

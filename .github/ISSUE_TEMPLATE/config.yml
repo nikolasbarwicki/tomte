@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or help
+    url: https://github.com/nikolasbarwicki/tomte/discussions/categories/q-a
+    about: Ask how to do something, or get help with your setup.
+  - name: Idea
+    url: https://github.com/nikolasbarwicki/tomte/discussions/categories/ideas
+    about: Talk through a bigger change before anyone writes code.
+  - name: Security vulnerability
+    url: https://github.com/nikolasbarwicki/tomte/security/advisories/new
+    about: Report it privately. Never in a public issue.
