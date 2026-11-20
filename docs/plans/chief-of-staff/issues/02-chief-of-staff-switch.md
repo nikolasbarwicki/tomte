@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately; the prompt names `create_bot`, which ticket 01 adds, so merge 01 first)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] `Bot.chiefOfStaff: boolean` in the contract; `StoredBot` defaults it to false; `save()` keeps the stored value.
 - [x] `setChiefOfStaff(dataRoot, id, on)` in `bots/index.ts`: turning it on clears every other bot's flag; it returns the changed ids, and the caller reconfigures each one's open session and announces the bots.

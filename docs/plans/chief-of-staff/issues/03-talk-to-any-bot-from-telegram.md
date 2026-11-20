@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] `CardChat` (`channels/cards/types.ts`) is `send(botId, text, channel)` and `bots()` (newest first), composed in `host-server/phone-chat.ts`; `channels` still imports no feature.
 - [x] Decision order: reply to a card goes to its source; `@Name` (`cards/mention.ts`, `leadingMention`: case-insensitive, spaces collapsed, then a space, `:`, `,` or the end, longest name wins) goes to that bot with the name stripped, a bare name is asked for a message, an unknown name gets the list of names; otherwise one open card takes it, several ask for a reply, none gets the hint.

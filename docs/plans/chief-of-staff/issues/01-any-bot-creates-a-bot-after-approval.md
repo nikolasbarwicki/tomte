@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] `createBot(dataRoot, name, purpose, id, avatar, memory)` writes an optional memory seed to the new bot's memory file; blank writes nothing. `/api/bots/new` is unchanged.
 - [x] `create_bot` is registered for every bot. `BotsToolContext` gains `unattended()` and `createBot(spec)`; there is no `isPrimary()`.

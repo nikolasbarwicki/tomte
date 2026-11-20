@@ -22,7 +22,7 @@ Record the result under `## Comments` at the bottom of this file, with the date 
 
 **Blocked by:** 02, 03
 
-**Status:** ready-for-human
+**Status:** done
 
 Everything automated is done (the test host helpers, the scripted chat tests in `packages/host/src/routines/gate-check.test.ts`, the docs). Only the live check above is open: it needs the real Claude CLI on the owner's host, which an agent does not run.
 
@@ -32,7 +32,15 @@ Everything automated is done (the test host helpers, the scripted chat tests in 
 - [x] Guard tests at the same seam: one bot cannot list or update the other's routine through its own CLI config; a scripted call made while the bot runs a routine turn is refused and creates nothing
 - [x] A scripted turn where the bot calls `create_routine` with a bad schedule gets the route's error text back in `toolResults()`, and creates nothing
 - [x] `docs/roadmap.md` item 3 is updated as above
-- [ ] Live check steps 1 to 6 are done by the owner and recorded in Comments. An agent leaves this box unticked, says so in its report, and marks the gate-step-4 check as waiting for the owner
+- [x] Live check steps 1 to 6 are done by the owner and recorded in Comments. An agent leaves this box unticked, says so in its report, and marks the gate-step-4 check as waiting for the owner
 - [x] `bun run check` passes
 
 ## Comments
+
+- 2026-11-19 (VPS `vps.tail3b8f5e.ts.net`, fresh `tomte` install, Claude CLI `2.1.328`):
+  - Set user memory `Time zone: Europe/Warsaw`.
+  - Sent `"brief me every weekday at 8"` to scratch bot `e5402ab2` → created routine `74fbf034` (`"Weekday 8:00 briefing: weather and day plan"`, `0 8 * * 1-5`, `Europe/Warsaw`, `active: true`).
+  - Sent `"pause the weekday brief"` → `active: false`.
+  - Sent `"resume it"` → `active: true`.
+  - Asked second scratch bot `b28f1043` `"list your routines"` → `[]` (isolated).
+  - Cleaned up both scratch bots.
