@@ -165,7 +165,7 @@ Tomte is built with AI coding agents. [AGENTS.md](AGENTS.md) is their working co
 
 ## Your data
 
-Local-first, not offline-only. Everything Tomte stores (bots, memory, chats, routines, secrets) stays in its data root on your machine; there is no Tomte server and no telemetry. Data leaves your machine only to:
+Local-first, not offline-only. Everything Tomte stores (bots, memory, chats, routines, secrets) stays in its data root on your machine; there is no Tomte server, and Tomte itself sends no telemetry (the Claude CLI and Chrome make their own calls, see [privacy.md](docs/privacy.md)). Data leaves your machine only to:
 
 | To                              | What                                                       | When                                           |
 | ------------------------------- | ---------------------------------------------------------- | ---------------------------------------------- |

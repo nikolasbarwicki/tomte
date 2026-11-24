@@ -49,9 +49,11 @@ None of these requests carries anything about you or your bots beyond what any H
 - The web UI loads nothing from other sites: its Content Security Policy allows only its own origin (`packages/host/src/ui/serve.ts`).
 - Bots get no claude.ai connectors (`ENABLE_CLAUDEAI_MCP_SERVERS=false`) and none of your own Claude Code settings, hooks or plugins.
 
-### The Claude CLI's own traffic
+### Traffic the Claude CLI and Chrome make on their own
 
 Each bot turn is a Claude Code CLI process, and the CLI talks to Anthropic as Anthropic designed it, including any usage reporting Anthropic's defaults enable. Tomte turns off the CLI's self-update for the copy it manages and does not change its other defaults. Anthropic's [data usage documentation](https://docs.anthropic.com/en/docs/claude-code/data-usage) describes what the CLI sends.
+
+Chrome for Testing, the browser bots use, may make background requests of its own to Google. Tomte has not checked or turned these off.
 
 ## Where your data lives
 
