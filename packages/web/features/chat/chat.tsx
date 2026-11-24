@@ -40,7 +40,7 @@ export function ChatView({
 }) {
   const chat = useChat();
   const { items, context, rateLimits } = chat;
-  // A double-loop bot never has a turn that blocks the chat: its one presence line says what it is doing.
+  // A background-tasks bot never has a turn that blocks the chat: its one presence line says what it is doing.
   const live = livePresence(bot.chatMode, chat);
   const busy = live !== "idle";
   const bots = useBots() ?? [];
@@ -104,7 +104,7 @@ export function ChatView({
               )}
             </button>
           </h1>
-          {bot.chatMode === "double_loop" && <RateLimitMeter limits={rateLimits} />}
+          {bot.chatMode === "background_tasks" && <RateLimitMeter limits={rateLimits} />}
           <ContextMeter context={context} />
           <Tooltip>
             <TooltipTrigger

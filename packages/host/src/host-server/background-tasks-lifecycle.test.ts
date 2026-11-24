@@ -14,7 +14,7 @@ let scratch: string;
 const savedConfig = process.env.CLAUDE_CONFIG_DIR;
 
 beforeEach(async () => {
-  scratch = mkdtempSync(join(tmpdir(), "double-loop-lifecycle-"));
+  scratch = mkdtempSync(join(tmpdir(), "background-tasks-lifecycle-"));
   process.env.CLAUDE_CONFIG_DIR = join(scratch, "claude-config");
   host = await startHandoffHost(["--data-root", join(scratch, "state")]);
 });
@@ -27,9 +27,9 @@ afterEach(async () => {
 
 type Streamed = { type: string; [k: string]: unknown };
 
-async function doubleLoopBot() {
+async function backgroundTasksBot() {
   const id = host.createBot("Dev");
-  setChatMode(host.dataRoot, id, "double_loop");
+  setChatMode(host.dataRoot, id, "background_tasks");
   expect((await host.ui("/api/open", { id, botId: id })).status).toBe(200);
   return id;
 }
@@ -177,7 +177,7 @@ async function twoAgentsRunning(bot: string, after: Record<string, unknown>[] = 
 
 describe("a host restart with two agents running", () => {
   test("the front is told once which agents were cut off, resumes both under their ids and both report", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     const log = await twoAgentsRunning(bot);
     const startedAt = log.getTask("agent-1")?.startedAt;
     host.loopScript(...base, resumeScript);
@@ -223,7 +223,7 @@ describe("a host restart with two agents running", () => {
   });
 
   test("the notice is sent once per front process: not again while it stays open, again after the next restart if the agents are still cut off", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     const log = await twoAgentsRunning(bot);
     // The front gets the notice and does nothing about it (no script, so the fake answers "ok"): the tasks stay interrupted.
     await host.restart();
@@ -242,7 +242,7 @@ describe("a host restart with two agents running", () => {
   });
 
   test("TaskStop on an interrupted agent cancels it, and nothing is reported for it", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     const log = await twoAgentsRunning(bot);
     await host.restart();
     await host.until(() => noticesOf(bot).length === 1);
@@ -274,7 +274,7 @@ describe("a host restart with two agents running", () => {
 
 describe("the front's CLI dying with agents running", () => {
   test("marks them interrupted at once, and the next message reaches a front that is told first", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     const watch = await watchEvents(host);
     const log = await twoAgentsRunning(bot, [{ waitFor: "crash" }, { exit: 1 }]);
     host.allow("crash");
@@ -314,7 +314,7 @@ describe("the front's CLI dying with agents running", () => {
 
 describe("settings that change while agents run", () => {
   test("a changed setting closes the front once the agents are done, not before", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     const errors = spyOn(console, "error");
     const closedFor = (reason: string) =>
       errors.mock.calls.some((c) => String(c[0]).startsWith(`[host] front closed (${reason})`));

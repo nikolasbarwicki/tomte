@@ -13,6 +13,7 @@ The first public release.
 
 ### Changed
 
+- **The "double-loop" chat mode is now called Background tasks** (the model chip's popover, the Tasks section and the docs). Bots already in the mode carry over unchanged; the saved `"double_loop"` value is read as `"background_tasks"`. API clients must send `"background_tasks"` as `chatMode`.
 - **A long-lived token is checked.** Settings, Models refuses (before sending, and the host again) anything that is not the `sk-ant-oat01-…` line `claude setup-token` prints at the end, with a message that says so; the browser code is not a token. When Claude refuses a token you saved, the host now shows Claude as signed out ("Claude rejected the long-lived token" in the banner, the tray and the channel message) until you replace or remove the token, because Claude's own sign-in check cannot tell. A restart with the same token starts out rejected.
 - **Claude billing variables are no longer passed to the Claude CLI, in local mode too.** `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` and `CLAUDE_CODE_OAUTH_TOKEN` in the host's environment used to reach every CLI child on a local host (remote mode already left them out). They no longer do, so a bot is never billed by API, or signed in through a token, by something left in the environment.
   - If you signed in through `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`), the host now shows Claude as signed out until you use Sign in, or paste that token, under Settings, Models, Claude.

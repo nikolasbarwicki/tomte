@@ -36,7 +36,7 @@ const ReleaseOffer = z.object({
  *   still installs it, so the owner can say they want it after all.
  * - `available`: a newer release exists. `raisesShellApi` is whether the release speaks a higher shell API than this host (a higher minimum or maximum), which an older desktop app may not.
  * - `draining`: an update to `version` was asked for when idle. New turns are refused and routines wait while `running` units of work
- *   (turns, double-loop fronts with work in flight, headless runs) finish; `since` is when the wait began. `overdue` says it has gone on
+ *   (turns, background-tasks fronts with work in flight, headless runs) finish; `since` is when the wait began. `overdue` says it has gone on
  *   for 30 minutes, which is when Update now is offered.
  * - `applying`: the request is with the update helper, which replaces the binary and restarts the host.
  * - `failed`: the update to `version` did not happen, `reason` says why; `rolledBackTo` is the version the helper put back, when it had to.

@@ -36,7 +36,7 @@ export const newSession = () => act("/api/session/new", {});
 export const setChatMode = (botId: string, chatMode: ChatMode) =>
   act("/api/bots/chat-mode", { botId, chatMode });
 
-/** Saves the open bot's model or effort; the host applies it to the running session, or to a double-loop bot's next task. */
+/** Saves the open bot's model or effort; the host applies it to the running session, or to a background-tasks bot's next task. */
 export const setModel = (model: BotModel) => act("/api/model", { model });
 
 export const setEffort = (effort: EffortLevel) => act("/api/effort", { effort });

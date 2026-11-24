@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 
 // Built-in Gmail on a whole host: Connect through the HTTP routes against a loopback fake Google, then the fake Claude CLI calls the
-// in-process `gmail` server the way the real CLI does (a permission request, then the MCP call) in a standard and a double-loop chat.
+// in-process `gmail` server the way the real CLI does (a permission request, then the MCP call) in a standard and a background-tasks chat.
 import { setChatMode } from "../bots/index.ts";
 import { defined } from "../testing/defined.ts";
 import { fakeGoogle, type FakeGoogle } from "../testing/fake-google.ts";
@@ -86,9 +86,9 @@ const READ_CALLS = [
   { result: "Read it." },
 ];
 
-async function openChat(mode: "standard" | "double_loop" = "standard") {
+async function openChat(mode: "standard" | "background_tasks" = "standard") {
   const id = host.createBot("Mail", "Reads the owner's mail");
-  if (mode === "double_loop") setChatMode(host.dataRoot, id, "double_loop");
+  if (mode === "background_tasks") setChatMode(host.dataRoot, id, "background_tasks");
   expect((await host.ui("/api/open", { id, botId: id })).status).toBe(200);
   return id;
 }
@@ -226,10 +226,10 @@ describe("reading mail in a chat", () => {
   });
 });
 
-describe("reading mail in a double-loop chat", () => {
+describe("reading mail in a background-tasks chat", () => {
   test("the front hosts the server, the worker is given its tools and a background agent's call is allowed and answered", async () => {
     await connectGmail();
-    const id = await openChat("double_loop");
+    const id = await openChat("background_tasks");
     host.loopScript({
       match: "dig through my mail",
       steps: [

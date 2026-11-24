@@ -18,7 +18,7 @@ const TONE = {
 
 /**
  * The subscription's rate limit windows beside the context meter. Parallel agents spend the 5-hour and weekly limits faster, so a
- * double-loop bot shows the most pressing window and, on hover, every window with its reset. Nothing shows until the CLI reports one.
+ * background-tasks bot shows the most pressing window and, on hover, every window with its reset. Nothing shows until the CLI reports one.
  */
 export function RateLimitMeter({ limits }: { limits: Record<string, RateLimit> }) {
   const [top, ...others] = rateLimitRows(limits);

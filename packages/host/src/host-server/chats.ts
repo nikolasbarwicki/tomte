@@ -52,12 +52,12 @@ import type { Transcript } from "./transcript.ts";
 import { botsEvent, filesEvent, memoryEvents } from "./views.ts";
 
 export interface ChatsDeps extends ThreadEnv {
-  /** The host servers a double-loop bot's front session may use; `hostServers` is what a standard bot's thread gets. */
+  /** The host servers a background-tasks bot's front session may use; `hostServers` is what a standard bot's thread gets. */
   frontServers: HostServersSource;
   db: Database;
-  /** How long an idle double-loop front stays open; 10 minutes when omitted. */
+  /** How long an idle background-tasks front stays open; 10 minutes when omitted. */
   frontIdleMs?: number;
-  /** Where a double-loop bot's tasks and reports are kept. */
+  /** Where a background-tasks bot's tasks and reports are kept. */
   loop: LoopStore;
   /** While an update closes it, the user's messages are refused (see `UPDATING`). */
   gate: Pick<RunGate, "closed">;
@@ -76,7 +76,7 @@ export interface ChatsDeps extends ThreadEnv {
   routinesEvent(botId: string): RoutinesEvent;
   workEvent(botId: string): WorkEvent;
   broadcast: (e: HostEvent) => void;
-  /** A bot said something in its chat: a standard turn's answer, a double-loop front's reply or one of its reports; not a scheduled run's turn. The host sends it on to the channel the owner writes from. */
+  /** A bot said something in its chat: a standard turn's answer, a background-tasks front's reply or one of its reports; not a scheduled run's turn. The host sends it on to the channel the owner writes from. */
   botSaid(botId: string, text: string): void;
 }
 
@@ -90,10 +90,10 @@ export type SendOutcome =
 /** The chat the page shows, with what the user can do in it. */
 export interface OpenChat {
   bot: Bot;
-  /** Saves the bot's model or effort and applies it: to the running standard session at once, and to the next background task of a double-loop chat. */
+  /** Saves the bot's model or effort and applies it: to the running standard session at once, and to the next background task of a background-tasks chat. */
   setModel(model: BotModel): Promise<void>;
   setEffort(effort: EffortLevel): Promise<void>;
-  /** Starts a new session; false while a turn is running or a double-loop front is answering. */
+  /** Starts a new session; false while a turn is running or a background-tasks front is answering. */
   newSession(): boolean;
 }
 
@@ -112,7 +112,7 @@ const shownRefs = ({ mentions, attachments }: MessageRefs) => ({
 export interface Chats {
   /** Runs a routine turn in its bot's chat once the bot is free, or headless when the bot has no chat. */
   execute: Executor;
-  /** Sends a host message into a bot's session: queued while the bot is busy, and the session reopens if it is closed. A double-loop bot's front takes it at once, as a synthetic message. */
+  /** Sends a host message into a bot's session: queued while the bot is busy, and the session reopens if it is closed. A background-tasks bot's front takes it at once, as a synthetic message. */
   deliver(botId: string, text: string): Promise<void>;
   /** Delivers what `deliver` held while the gate was closed (an update draining or applying); called when the gate reopens. */
   releaseHeld(): void;
@@ -121,7 +121,7 @@ export interface Chats {
    * With `eventId` the message answers that needs-you item, and the host decides where the answer goes:
    * - `answered`: the bot has a pending question linked to this item; it receives `answer` (the message when omitted) as the question's answer, and the item is closed as acted. No chat message is created, and queued answers to the item are cancelled.
    * - `queued`: the bot is busy; the item is closed only when the entry is delivered, never on queueing.
-   * - `sent`: the message is shown and the turn runs; the item is closed as it starts. A double-loop bot always answers `sent` (its front takes the message even mid-turn) and never `queued`.
+   * - `sent`: the message is shown and the turn runs; the item is closed as it starts. A background-tasks bot always answers `sent` (its front takes the message even mid-turn) and never `queued`.
    * - `refused`: the bot does not exist, the item is not open for this bot any more, an answer to it is already queued, or the host is draining for an update (`UPDATING`; an answer to a question a turn is waiting on is still `answered`, since it ends work).
    * A bot that has no chat open gets one for the message, released again when nothing is left running in it.
    */
@@ -140,7 +140,7 @@ export interface Chats {
   isWorking(botId: string): boolean;
   /** Units of work running now: chats with a turn, queued messages, a front's work in flight or a pending task, plus routine turns running headless or waiting for their bot. What an update waits for. */
   active(): number;
-  /** The routine run the bot's unattended turn belongs to, if one is running now: a chat-hosted or headless routine turn, including a double-loop bot's run in a session of its own. */
+  /** The routine run the bot's unattended turn belongs to, if one is running now: a chat-hosted or headless routine turn, including a background-tasks bot's run in a session of its own. */
   runOf(botId: string): { runId: string; sessionId: string | undefined } | undefined;
   /** Whether the bot is in a scheduled run now: a chat-hosted routine turn or a headless run, in the bot's session or one of its own. */
   unattended(botId: string): boolean;
@@ -198,9 +198,9 @@ type Chat = {
   configStale: boolean;
   /** Messages for the bot that start the next turn once it is free: the user's sends while it was busy, and host messages (a human wait's outcome). */
   inbox: InboxEntry[];
-  /** The front session of a double-loop bot; absent for a standard bot, whose turns run on `thread`. A double-loop chat never uses `busy` or `inbox`. */
+  /** The front session of a background-tasks bot; absent for a standard bot, whose turns run on `thread`. A background-tasks chat never uses `busy` or `inbox`. */
   front: FrontSession | undefined;
-  /** What a double-loop chat shows as its presence line; always `idle` for a standard bot. */
+  /** What a background-tasks chat shows as its presence line; always `idle` for a standard bot. */
   presence: Presence;
   /** What the front has said in the turn running now, for when its result carries no text of its own. */
   frontText: string;
@@ -292,7 +292,7 @@ export function createChats(deps: ChatsDeps): Chats {
     chats.delete(chat.bot.id);
   }
 
-  /** Closes whatever CLI sessions a chat holds: its thread, and the front of a double-loop bot. */
+  /** Closes whatever CLI sessions a chat holds: its thread, and the front of a background-tasks bot. */
   function closeSessions(chat: Chat, reason: string) {
     chat.thread.close(reason);
     dropAwaiting(chat);
@@ -301,10 +301,10 @@ export function createChats(deps: ChatsDeps): Chats {
     chat.frontText = "";
   }
 
-  /** The latest rate limit report of each window. The limits belong to the account, not to a chat, so they outlive a new session and a reload; only a double-loop bot's page is sent them. */
+  /** The latest rate limit report of each window. The limits belong to the account, not to a chat, so they outlive a new session and a reload; only a background-tasks bot's page is sent them. */
   const rateLimits = new Map<string, ServerEvent>();
 
-  /** Changes what a double-loop chat's presence line shows, and the bot's sidebar status with it. */
+  /** Changes what a background-tasks chat's presence line shows, and the bot's sidebar status with it. */
   function setPresence(chat: Chat, state: Presence) {
     if (chat.presence === state) return;
     chat.presence = state;
@@ -317,7 +317,7 @@ export function createChats(deps: ChatsDeps): Chats {
     (m.type !== "assistant" && m.type !== "stream_event") ||
     (!m.parent_tool_use_id && !("agent_id" in m && m.agent_id));
 
-  /** What a double-loop chat's presence says while its front is not streaming: working while agents run. */
+  /** What a background-tasks chat's presence says while its front is not streaming: working while agents run. */
   const restingPresence = (chat: Chat): Presence =>
     (chat.front?.observer.running() ?? 0) > 0 ? "working" : "idle";
 
@@ -408,7 +408,7 @@ export function createChats(deps: ChatsDeps): Chats {
     await drain();
   }
 
-  /** Gives a double-loop bot's front a message, which it takes mid-turn if it is busy; the reply streams through `onFrontMessage`. */
+  /** Gives a background-tasks bot's front a message, which it takes mid-turn if it is busy; the reply streams through `onFrontMessage`. */
   function pushToFront(chat: Chat, text: string, synthetic: boolean) {
     const front = chat.front;
     if (!front) return;
@@ -472,7 +472,7 @@ export function createChats(deps: ChatsDeps): Chats {
   }
 
   /**
-   * What a double-loop chat shows of its front: each reply whole, once written, while the presence line says the bot is typing.
+   * What a background-tasks chat shows of its front: each reply whole, once written, while the presence line says the bot is typing.
    * Its tool calls start, steer and stop tasks, which the Tasks section of the bot panel follows, so the conversation holds only what was said.
    */
   function showFrontMessage(chat: Chat, m: SDKMessage) {
@@ -594,7 +594,7 @@ export function createChats(deps: ChatsDeps): Chats {
 
   /**
    * Opens a wait for a tool call of this chat's session and resolves, with the text the bot would have been sent, once the wait
-   * closes in this process. It belongs to no run: a double-loop front can ask while a routine run of the bot is parked or working
+   * closes in this process. It belongs to no run: a background-tasks front can ask while a routine run of the bot is parked or working
    * in a session of its own.
    */
   function waitFor<K extends WaitKind>(
@@ -655,13 +655,13 @@ export function createChats(deps: ChatsDeps): Chats {
   const openThread = (bot: Bot, resume: boolean, chat: () => Chat): Thread =>
     openBotThread(deps, bot, resume, sessionHooks(bot, chat));
 
-  /** The front session of a double-loop bot; a standard bot has none. */
+  /** The front session of a background-tasks bot; a standard bot has none. */
   const openFrontSession = (
     bot: Bot,
     resume: boolean,
     chat: () => Chat,
   ): FrontSession | undefined => {
-    if (bot.chatMode !== "double_loop") return undefined;
+    if (bot.chatMode !== "background_tasks") return undefined;
     const hooks = sessionHooks(bot, chat);
     return openFront({ ...deps, hostServers: deps.frontServers }, bot, {
       resume,
@@ -888,7 +888,7 @@ export function createChats(deps: ChatsDeps): Chats {
         chat.bot.model = model;
         await chat.thread.setModel(model);
         chat.front?.setAgentSettings({ model });
-        // A double-loop chat shows only the conversation; the setting is about its tasks, and the settings say where it stands.
+        // A background-tasks chat shows only the conversation; the setting is about its tasks, and the settings say where it stands.
         if (!chat.front) emit(chat, { type: "info", text: `model → ${model}` });
         announceBots();
       },

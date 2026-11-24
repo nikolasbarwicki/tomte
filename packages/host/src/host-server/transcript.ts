@@ -106,7 +106,7 @@ export function createTranscripts({
     const stamp = () => {
       while (stamps.length < out.length) stamps.push(at);
     };
-    // A double-loop front's messages carry a work state; its tool calls start and steer tasks, which the chat shows only as their reports.
+    // A background-tasks front's messages carry a work state; its tool calls start and steer tasks, which the chat shows only as their reports.
     let front = false;
     for (const m of await getSessionMessages(sessionId, { dir: cwd })) {
       stamp();
@@ -123,7 +123,7 @@ export function createTranscripts({
             : Array.isArray(content)
               ? content.flatMap((b) => (b.type === "text" ? [b.text] : []))
               : [];
-        // A double-loop front's messages end with the work state the app appended, which the user never saw. What the app itself wrote there (a queued task's dispatch, a restart notice) is not the user's text either; the cards its events and handoffs become still show.
+        // A background-tasks front's messages end with the work state the app appended, which the user never saw. What the app itself wrote there (a queued task's dispatch, a restart notice) is not the user's text either; the cards its events and handoffs become still show.
         const stripped = texts.map(withoutWorkState);
         const hadWorkState = stripped.some((t, i) => t !== texts[i]);
         front ||= hadWorkState;

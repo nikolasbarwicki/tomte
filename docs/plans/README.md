@@ -9,5 +9,5 @@ Good places to start:
 - [grok-bot-replacement-roadmap.md](grok-bot-replacement-roadmap.md): the plan that drove the project's first stage, with its parity table and decisions. Its later stages are ideas, not commitments; the public [roadmap](../roadmap.md) lists what is planned.
 - [unattended-parking/spec.md](unattended-parking/spec.md): how a routine waits for the owner's approval and resumes ([ADR-0009](../adr/0009-unattended-runs-park-on-durable-human-waits.md)).
 - [telegram-channel/spec.md](telegram-channel/spec.md): the phone channel ([ADR-0010](../adr/0010-channels-deliver-needs-you-items.md)).
-- [double-loop-chat.md](double-loop-chat.md): the chat that never blocks ([ADR-0011](../adr/0011-double-loop-chat-mode.md)).
+- [background-tasks-chat.md](background-tasks-chat.md): the chat that never blocks ([ADR-0011](../adr/0011-background-tasks-chat-mode.md)).
 - [cost-guards/spec.md](cost-guards/spec.md): limits that keep a looping routine from using up the owner's plan.

@@ -76,9 +76,9 @@ describe("composed system prompts", () => {
     ]);
   });
 
-  test("double-loop front, worker and researcher each receive core behavior once with expected ordering", async () => {
+  test("background-tasks front, worker and researcher each receive core behavior once with expected ordering", async () => {
     const id = host.createBot("Dev", "Builds small tools");
-    setChatMode(host.dataRoot, id, "double_loop");
+    setChatMode(host.dataRoot, id, "background_tasks");
     await host.ui("/api/instructions/update", { text: "Always answer in Polish." });
     await host.ui("/api/memory/update", { scope: "user", text: "Prefers TypeScript." });
     await host.ui("/api/memory/update", { scope: "bot", botId: id, text: "Use bun." });

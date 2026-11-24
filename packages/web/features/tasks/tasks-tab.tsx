@@ -24,7 +24,7 @@ const ENDED = {
   cancelled: [<ProhibitIcon key="i" />, "Stopped"],
 } as const;
 
-/** The Tasks section of a double-loop bot: what runs now with its status line and findings, what is queued and what waits for what, and what ended lately. */
+/** The Tasks section of a background-tasks bot: what runs now with its status line and findings, what is queued and what waits for what, and what ended lately. */
 export function TasksTab() {
   const { items } = useChat();
   const { running, queued, recent } = useMemo(() => groupTasks(items), [items]);

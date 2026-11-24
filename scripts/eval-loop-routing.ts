@@ -1,4 +1,4 @@
-// Routing eval for the double-loop front: what does it do with one user message, given a work state? Ported from the v3
+// Routing eval for the background-tasks front: what does it do with one user message, given a work state? Ported from the v3
 // prototype's eval/routing.ts, with the same 31 labelled cases and five scenarios.
 //
 //   bun run eval:loop-routing                  real model: 31 front turns, exits non-zero under 90% (EVAL_CONCURRENCY, default 4)

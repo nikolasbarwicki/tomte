@@ -1,5 +1,5 @@
 // The demo bots' scripts for the fake Claude CLI's `loop.json` (see the header of packages/host/src/testing/fake-claude.ts for the steps):
-// background tasks for the double-loop bot, a reply for the hero animation and the routine runs. A message takes the first unused script
+// background tasks for the background-tasks bot, a reply for the hero animation and the routine runs. A message takes the first unused script
 // whose `match` it contains, so the matches are distinctive and each script runs once.
 // What the fake CLI does per message: the replies, the background tasks and the routine runs.
 const usage = { input_tokens: 1, output_tokens: 1 };

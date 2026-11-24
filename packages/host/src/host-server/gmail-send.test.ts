@@ -110,9 +110,9 @@ const asks = (input: Record<string, unknown>) => [
   { result: "Denied." },
 ];
 
-async function openChat(mode: "standard" | "double_loop" = "standard") {
+async function openChat(mode: "standard" | "background_tasks" = "standard") {
   const id = host.createBot("Mail", "Writes the owner's mail");
-  if (mode === "double_loop") setChatMode(host.dataRoot, id, "double_loop");
+  if (mode === "background_tasks") setChatMode(host.dataRoot, id, "background_tasks");
   expect((await host.ui("/api/open", { id, botId: id })).status).toBe(200);
   return id;
 }
@@ -692,7 +692,7 @@ describe("a scheduled routine's send", () => {
   });
 });
 
-describe("a double-loop task's send", () => {
+describe("a background-tasks task's send", () => {
   const WORKER_CALL = {
     subagent_type: "worker",
     description: "reply to Anna",
@@ -703,7 +703,7 @@ describe("a double-loop task's send", () => {
 
   test("asks with a card naming the task, and the owner's allow sends once", async () => {
     await connectGmail();
-    const botId = await openChat("double_loop");
+    const botId = await openChat("background_tasks");
     allowTool(host.db, botId, SEND, Date.now());
     host.loopScript({
       match: "answer Anna",

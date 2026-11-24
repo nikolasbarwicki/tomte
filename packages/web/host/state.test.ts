@@ -191,7 +191,7 @@ test("presence follows the host's events, never a turn, and a new chat event cle
   expect(chatOf(typing).busy).toBe(false);
   expect(chatOf(typing).items).toEqual([]);
 
-  // A double-loop bot's messages and replies leave the presence the host last announced alone.
+  // A background-tasks bot's messages and replies leave the presence the host last announced alone.
   const talking = play(
     [
       { type: "user", text: "hi" },

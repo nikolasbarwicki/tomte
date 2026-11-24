@@ -2,7 +2,7 @@
 
 Superseded on 2026-11-17 by `docs/plans/chief-of-staff/spec.md`: the Chief of Staff is a switch on a regular bot, not a host-wide role. Kept as design history.
 
-Status: ready. Three grilling rounds settled on 2026-11-17 (see Open questions). The UI calls the role "Chief of Staff"; code and this spec say "primary". Roadmap row "A primary bot that coordinates the others" and "After the gate" item 2 in `grok-bot-replacement-roadmap.md`. Related: [ADR-0002](../adr/0002-bot-handoffs-are-async-a2a-tasks-on-a-host-endpoint.md) (handoffs), [ADR-0009](../adr/0009-unattended-runs-park-on-durable-human-waits.md) (parking), [ADR-0010](../adr/0010-channels-deliver-needs-you-items.md) (channels), [ADR-0011](../adr/0011-double-loop-chat-mode.md) (double-loop), `docs/roadmap.md` items 3 and 6b.
+Status: ready. Three grilling rounds settled on 2026-11-17 (see Open questions). The UI calls the role "Chief of Staff"; code and this spec say "primary". Roadmap row "A primary bot that coordinates the others" and "After the gate" item 2 in `grok-bot-replacement-roadmap.md`. Related: [ADR-0002](../adr/0002-bot-handoffs-are-async-a2a-tasks-on-a-host-endpoint.md) (handoffs), [ADR-0009](../adr/0009-unattended-runs-park-on-durable-human-waits.md) (parking), [ADR-0010](../adr/0010-channels-deliver-needs-you-items.md) (channels), [ADR-0011](../adr/0011-background-tasks-chat-mode.md) (background-tasks), `docs/roadmap.md` items 3 and 6b.
 
 ## Problem
 
@@ -15,7 +15,7 @@ Grok Bot solves this with a primary bot: "your main point of contact. It checks 
 | Piece                                                                                                                                                                 | Where                                        | Gap for a primary                                                                                      |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Handoffs: `list_bots`, `hand_off`, `complete_handoff`, `fail_handoff`, `cancel_handoff`, `handoff_message`, `list_handoffs`; depth 3, 5 open per requester, no cycles | `handoffs/`, `/mcp/bots`                     | `list_bots` gives only name, purpose and idle/working. No roles: any bot hands to any bot              |
-| Results arrive through `deliver()` into the requester's main session, or as a synthetic push into a double-loop front                                                 | `host-server/chats.ts`                       | A routine run that hands off ends before the result arrives; the result lands in the chat, not the run |
+| Results arrive through `deliver()` into the requester's main session, or as a synthetic push into a background-tasks front                                            | `host-server/chats.ts`                       | A routine run that hands off ends before the result arrives; the result lands in the chat, not the run |
 | Routine tools `create_routine`, `list_routines`, `update_routine`                                                                                                     | `/mcp/routines`                              | Self-only by design ("You can see and change only your own routines")                                  |
 | Bot creation `POST /api/bots/new` (name, purpose, avatar)                                                                                                             | `api/bots.ts`, `bots/index.ts`               | No tool creates a bot                                                                                  |
 | Host tools (`host`, `bots`, `routines`, `browser`) are always allowed by `createCanUseTool`                                                                           | `bots/session-kit.ts`                        | No approval path for a host tool                                                                       |
@@ -43,7 +43,7 @@ One host-wide pointer names the primary bot. Being primary changes four things: 
 
 - Pros:
   - The phone becomes a chat with my assistant, which is the Grok Bot feature I actually miss.
-  - Reuses handoffs, parking, cards and the double-loop front; the new code is a pointer, one read tool, one write tool and a channel route.
+  - Reuses handoffs, parking, cards and the background-tasks front; the new code is a pointer, one read tool, one write tool and a channel route.
   - Matches Grok Bot's model (a role, replaceable), so a Grok Bot importer (Stage 2) maps onto it.
 - Cons:
   - A new host concept that the UI, channels and prompts must all honour.
@@ -51,7 +51,7 @@ One host-wide pointer names the primary bot. Being primary changes four things: 
 
 ### C. Primary as an orchestrator whose background agents are bots
 
-Extend the double-loop front so its tasks are bots instead of `researcher` and `worker`: "start a task on Job scout" opens a handoff, the Tasks section shows handoffs, a handoff result is a report. Each handoff runs in its own session on the assignee, headless and parkable, like a double-loop routine run.
+Extend the background-tasks front so its tasks are bots instead of `researcher` and `worker`: "start a task on Job scout" opens a handoff, the Tasks section shows handoffs, a handoff result is a report. Each handoff runs in its own session on the assignee, headless and parkable, like a background-tasks routine run.
 
 - Pros:
   - The best experience: parallel, steerable, cancellable delegation in one chat, with reports instead of handoff cards.
@@ -106,7 +106,7 @@ The calls inside B:
 5. **`create_bot` always asks.** A fixed approval, never "always allow", refused in unattended runs.
 6. **No Autopilot.** The primary never answers another bot's approval. Roadmap Decision 3 rejected a model judging what is safe; a coordinator answering cards is the same thing.
 7. **A team report instead of fan-out.** "What's new" reads host data (runs, outputs, open items) in one synchronous call, so it works in a 07:00 routine run, where a handoff's result would arrive after the run ended.
-8. **Default to double-loop.** A coordinator should never block the composer while it waits on others. Not forced: the standard mode stays selectable.
+8. **Default to background-tasks.** A coordinator should never block the composer while it waits on others. Not forced: the standard mode stays selectable.
 
 ### Without a Chief of Staff
 
@@ -162,8 +162,8 @@ No `update_bot`, `delete_bot`, cross-bot routine or cross-bot memory tool.
   2. A message that starts with `@` and a bot's full name goes to that bot, with the name stripped. The match is case-insensitive, collapses runs of spaces and needs a space, `:`, `,` or the end after the name; the longest matching name wins, so `@Job scout` beats a bot named `Job`. A leading `@` that matches no bot gets a reply listing the bots' names. This works with or without a primary.
   3. With a primary set, a plain message goes to the primary. It is never taken as a card answer.
   4. With no primary, today's rule: one open card takes it, several ask for a reply. With no open card, one hint line: "To talk to a bot, start with @ and its name, for example @Job scout." (the example is the newest bot's name).
-- `chat.send` calls `Chats.send(botId, text, text, [])` with no `eventId`, the same function `/api/send` uses, so queueing and double-loop sends behave as in the web UI. Without an `eventId`, `Chats.send` never takes the ask-first path, so a message routed in steps 2 and 3 cannot answer a card or a pending `ask_user`. A `refused` outcome is sent back as the reply text.
-- Replies go back to the phone per bot. Each bot keeps the origin of the owner's latest message to it (`web` or a channel kind) in a `chat_origins` table (bot id, origin, set at), so a restart or a deploy while the laptop is closed does not silence the phone; `removeBot` deletes the bot's row. While the origin is a channel, that bot's messages and double-loop reports are sent with `Channels.send(kind, message)` to that channel's linked account, not as a notice: `noticeMessage` always links the Routines panel and notices are fire-and-forget. The message starts with the bot's name, so two bots replying close together stay apart, and carries a link button to the bot's chat (`/bots/<id>`, none on a loopback http public URL). Replies are sent whole and never edited. A failed send is retried with the notices' backoff, then logged. Writing to that bot in the web UI sets the origin back to `web`. Long replies are cut at Telegram's limit with the same link.
+- `chat.send` calls `Chats.send(botId, text, text, [])` with no `eventId`, the same function `/api/send` uses, so queueing and background-tasks sends behave as in the web UI. Without an `eventId`, `Chats.send` never takes the ask-first path, so a message routed in steps 2 and 3 cannot answer a card or a pending `ask_user`. A `refused` outcome is sent back as the reply text.
+- Replies go back to the phone per bot. Each bot keeps the origin of the owner's latest message to it (`web` or a channel kind) in a `chat_origins` table (bot id, origin, set at), so a restart or a deploy while the laptop is closed does not silence the phone; `removeBot` deletes the bot's row. While the origin is a channel, that bot's messages and background-tasks reports are sent with `Channels.send(kind, message)` to that channel's linked account, not as a notice: `noticeMessage` always links the Routines panel and notices are fire-and-forget. The message starts with the bot's name, so two bots replying close together stay apart, and carries a link button to the bot's chat (`/bots/<id>`, none on a loopback http public URL). Replies are sent whole and never edited. A failed send is retried with the notices' backoff, then logged. Writing to that bot in the web UI sets the origin back to `web`. Long replies are cut at Telegram's limit with the same link.
 
 ### Web
 
@@ -171,7 +171,7 @@ No `update_bot`, `delete_bot`, cross-bot routine or cross-bot memory tool.
 - A bot's context menu in the sidebar gets "Make Chief of Staff", and the primary's gets "Stop being Chief of Staff".
 - The sidebar shows the primary in its own group above the "Bots" group, not in the list: one row, a larger avatar, the bot's name with a small "Chief of Staff" caption, and its last message or "Working…" below, on a tinted card (`bg-sidebar-accent/40`, rounded, a border in `border-sidebar-border`). Its Needs-you badge counts its own items only. The "Bots" group lists every other bot exactly as today. With no primary the group is absent; there is no empty state or call to action.
 - Nothing else in the web UI changes: the app opens where it opens today, and every bot's chat works as before.
-- The bot form gets a "Chief of Staff" template (roadmap 6b's first template): purpose, a memory seed, double-loop on, the browser off, and "Make this my Chief of Staff" checked.
+- The bot form gets a "Chief of Staff" template (roadmap 6b's first template): purpose, a memory seed, background-tasks on, the browser off, and "Make this my Chief of Staff" checked.
 
 ## Slices
 
@@ -187,7 +187,7 @@ Each ends in a check.
 ## Risks
 
 - **Injection through the team report.** A scout's run output can carry page text that tells the primary to act. Mitigations: the report is wrapped as data; `create_bot` always asks; handoffs the primary starts run under the assignee's own tool policies, so a write still asks or parks. The `untrusted` flag (roadmap Decision 3) should also mark turns that read a team report, decided with the triggers milestone.
-- **Haiku as the router.** A double-loop primary's front is Haiku with thinking off. Routing among bots is unmeasured until slice 5's eval; if it misses, the primary runs standard mode on the bot's model.
+- **Haiku as the router.** A background-tasks primary's front is Haiku with thinking off. Routing among bots is unmeasured until slice 5's eval; if it misses, the primary runs standard mode on the bot's model.
 - **Handoff turns in assignee chats.** Every delegation adds a turn to the assignee's main session (ADR-0002), and the depth-3 and 5-open limits cap fan-out. Fine for five bots; approach C is the answer if it is not.
 - **Changed Telegram rule.** Today one open card takes a plain message. With a primary set, a plain message always goes to the primary, so an answer typed without "reply" becomes a chat message. The primary sees open cards only through `team_report`, never answers them. With no primary, nothing changes.
 
@@ -211,7 +211,7 @@ Grilled in rounds; answers are recorded here as they settle.
 | 6   | `create_bot` primary only, fixed ask, refused unattended, cap 20   | Agreed                            |
 | 7   | No Autopilot                                                       | Agreed                            |
 | 8   | Handoffs keep running in the assignee's main session               | Agreed                            |
-| 9   | The primary defaults to double-loop, standard selectable           | Agreed                            |
+| 9   | The primary defaults to background-tasks, standard selectable      | Agreed                            |
 
 ### Round 2 (settled 2026-11-17)
 

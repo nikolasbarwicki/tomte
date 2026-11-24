@@ -34,9 +34,9 @@ afterEach(async () => {
 });
 
 /** A bot with its chat open. */
-async function chief(mode: "standard" | "double_loop" = "standard", name = "Chief") {
+async function chief(mode: "standard" | "background_tasks" = "standard", name = "Chief") {
   const id = host.createBot(name, "Routes work");
-  if (mode === "double_loop") setChatMode(host.dataRoot, id, "double_loop");
+  if (mode === "background_tasks") setChatMode(host.dataRoot, id, "background_tasks");
   expect((await host.ui("/api/open", { id, botId: id })).status).toBe(200);
   return id;
 }
@@ -99,13 +99,13 @@ describe("create_bot in a standard chat", () => {
     );
   });
 
-  test("chat_mode double_loop starts the new bot in that mode", async () => {
+  test("chat_mode background_tasks starts the new bot in that mode", async () => {
     await chief();
-    createOn("make a coordinator", { ...ARGS, chat_mode: "double_loop" });
+    createOn("make a coordinator", { ...ARGS, chat_mode: "background_tasks" });
     await send("make a coordinator");
     expect((await answer((await approvalCard()).id, "allow")).status).toBe(200);
     await host.until(() => created().length === 1);
-    expect(created()[0]?.chatMode).toBe("double_loop");
+    expect(created()[0]?.chatMode).toBe("background_tasks");
   });
 
   test("denying creates nothing and the CLI makes no call", async () => {
@@ -185,8 +185,8 @@ describe("create_bot in a standard chat", () => {
 });
 
 describe("create_bot reaches every session kind", () => {
-  test("a double-loop front asks and creates after approval", async () => {
-    const id = await chief("double_loop");
+  test("a background-tasks front asks and creates after approval", async () => {
+    const id = await chief("background_tasks");
     createOn("make me an invoice bot");
     await send("make me an invoice bot");
     const card = await approvalCard();

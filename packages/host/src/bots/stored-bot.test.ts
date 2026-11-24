@@ -71,12 +71,12 @@ test("the chat mode round-trips through bot.json and survives a stale copy being
   const stale = createBot(dataRoot, "Ada", "tests");
   expect(JSON.parse(readFileSync(file(stale.id), "utf8")).chatMode).toBe("standard");
 
-  setChatMode(dataRoot, stale.id, "double_loop");
-  expect(getBot(dataRoot, stale.id)?.chatMode).toBe("double_loop");
+  setChatMode(dataRoot, stale.id, "background_tasks");
+  expect(getBot(dataRoot, stale.id)?.chatMode).toBe("background_tasks");
 
   newSession(dataRoot, stale);
-  expect(stale.chatMode).toBe("double_loop");
-  expect(getBot(dataRoot, stale.id)).toMatchObject({ chatMode: "double_loop" });
+  expect(stale.chatMode).toBe("background_tasks");
+  expect(getBot(dataRoot, stale.id)).toMatchObject({ chatMode: "background_tasks" });
   expect(getBot(dataRoot, stale.id)?.sessions).toHaveLength(2);
 });
 
@@ -134,4 +134,14 @@ test("a bot.json with an empty sessions list throws a ZodError rather than yield
     s.sessions = [];
   });
   expect(() => getBot(dataRoot, id)).toThrow(z.ZodError);
+});
+
+test("a bot.json from before the chat mode was renamed reads as background_tasks and is saved with the new name", () => {
+  const { id } = createBot(dataRoot, "Ada", "tests");
+  rewrite(id, (s) => {
+    s.chatMode = "double_loop";
+  });
+  expect(getBot(dataRoot, id)?.chatMode).toBe("background_tasks");
+  setChiefOfStaff(dataRoot, id, true);
+  expect(JSON.parse(readFileSync(file(id), "utf8")).chatMode).toBe("background_tasks");
 });

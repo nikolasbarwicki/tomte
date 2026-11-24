@@ -115,7 +115,7 @@ export interface HandoffHost {
   /** The text of each `ask_user`, `remember` or `callOnMessage` result the fake CLI got back from the host, oldest first. */
   toolResults(): string[];
   /**
-   * Scripts what the fake CLI emits per user message, as the double-loop front's query would (see the header of `fake-claude.ts`
+   * Scripts what the fake CLI emits per user message, as the background-tasks front's query would (see the header of `fake-claude.ts`
    * for the steps). Each script runs for one message; a message takes the first unused script whose `match` it contains.
    */
   loopScript(...scripts: { match?: string; steps: Record<string, unknown>[] }[]): void;

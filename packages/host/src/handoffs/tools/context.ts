@@ -24,7 +24,7 @@ export interface BotsToolContext {
   show(botId: string, card: HandoffCard): void;
   /** A bot's files folder. */
   filesDir(botId: string): string;
-  /** Whether the call comes from a scheduled run (a routine turn or a headless run) right now; checked on every call. Never true for an attended lease (a double-loop front). */
+  /** Whether the call comes from a scheduled run (a routine turn or a headless run) right now; checked on every call. Never true for an attended lease (a background-tasks front). */
   unattended(): boolean;
   /** Creates a bot the way the create-bot route does, with the memory seed written and the chat mode set; the browser is off. */
   createBot(spec: NewBotSpec): { id: string; name: string; chatMode: ChatMode };

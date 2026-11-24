@@ -96,7 +96,7 @@ export function Transcript({
   bot: BotSummary;
   bots: BotSummary[];
   items: Item[];
-  /** What the one presence line says: `typing` while a double-loop bot writes a reply, `working` while a turn or agents run, nothing when idle. */
+  /** What the one presence line says: `typing` while a background-tasks bot writes a reply, `working` while a turn or agents run, nothing when idle. */
   presence: Presence;
   onShowBrowser: () => void;
   onShowTasks: () => void;
@@ -126,10 +126,10 @@ export function Transcript({
       </Empty>
     );
   }
-  // A double-loop chat shows only the conversation: its tasks live in the bot panel's Tasks section, and their results arrive as messages.
-  const doubleLoop = bot.chatMode === "double_loop";
-  const rows = toRows(doubleLoop ? items.filter((i) => i.kind !== "task") : items);
-  const tasksRunning = doubleLoop
+  // A background-tasks chat shows only the conversation: its tasks live in the bot panel's Tasks section, and their results arrive as messages.
+  const backgroundTasks = bot.chatMode === "background_tasks";
+  const rows = toRows(backgroundTasks ? items.filter((i) => i.kind !== "task") : items);
+  const tasksRunning = backgroundTasks
     ? items.filter((i) => i.kind === "task" && i.state === "running").length
     : 0;
   const queued = items.filter((i): i is QueuedItem => i.kind === "queued");

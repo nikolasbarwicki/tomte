@@ -104,7 +104,13 @@ const LineAvatar = z.object({ face: z.string(), stroke: z.literal(COLOR_NAMES) }
 const StoredBot = Bot.extend({
   sessions: Bot.shape.sessions.min(1).optional(),
   avatar: z.union([BotAvatar, LineAvatar]).optional(),
-  chatMode: ChatMode.default("standard"),
+  chatMode: z
+    .preprocess(
+      // Builds before the rename wrote "double_loop"; the next save writes the new value.
+      (mode) => (mode === "double_loop" ? "background_tasks" : mode),
+      ChatMode,
+    )
+    .default("standard"),
   chiefOfStaff: z.boolean().default(false),
   model: BotModel.default(DEFAULT_MODEL),
   effort: EffortLevel.default(DEFAULT_EFFORT),
@@ -261,7 +267,7 @@ export function setProfile(
   return bot;
 }
 
-/** The model and effort the bot runs on: its standard turns, or the background tasks of its double-loop chat. */
+/** The model and effort the bot runs on: its standard turns, or the background tasks of its background-tasks chat. */
 export function setModelSettings(
   dataRoot: string,
   id: string,

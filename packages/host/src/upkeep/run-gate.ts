@@ -4,7 +4,7 @@
  */
 export interface RunGate {
   closed(): boolean;
-  /** Units of work still running: turns, double-loop fronts with work in flight and headless runs. */
+  /** Units of work still running: turns, background-tasks fronts with work in flight and headless runs. */
   active(): number;
   close(): void;
   /** Reopens the gate; what waited for it (routines that came due) is caught up. */

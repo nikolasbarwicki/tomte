@@ -6,7 +6,7 @@ import { NO_REFS, type Chats } from "./chats.ts";
 
 /**
  * What the card router needs to give words to a bot (ADR-0010, spec `docs/plans/chief-of-staff/spec.md`, "Phone: `@Name` and replies"): the
- * host's one chat send, with no item, so words from a channel queue on a busy bot, go to a double-loop front as a send and never answer a
+ * host's one chat send, with no item, so words from a channel queue on a busy bot, go to a background-tasks front as a send and never answer a
  * question or an approval. A send that reached the bot (or its queue) makes the channel the bot's origin, so its replies go back there.
  */
 export function createPhoneChat(d: {

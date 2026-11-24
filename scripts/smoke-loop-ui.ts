@@ -1,4 +1,4 @@
-// Browser smoke of the double-loop chat mode (ADR-0011):
+// Browser smoke of the background-tasks chat mode (ADR-0011):
 //   bun scripts/smoke-loop-ui.ts              (CHROME_PATH names a Chrome/Chromium binary; macOS's Google Chrome by default)
 // Same harness as the other smokes: a temporary web build served by the whole-host test harness (in-memory database and secrets,
 // temporary data root, `TOMTE_ASK_APPROVAL` on) driven by headless Chrome in a fresh profile. The "model" is the fake Claude
@@ -270,9 +270,9 @@ const box = page.getByRole("textbox", { name: "Message Loop", exact: true });
 const sendButton = page.getByRole("button", { name: "Send", exact: true });
 const rail = page.getByRole("navigation", { name: /panel$/ });
 const modelChip = page.getByRole("button", { name: "Model and chat" });
-const doubleLoopMode = page.getByRole("radio", { name: /^Double loop/ });
+const backgroundTasksMode = page.getByRole("radio", { name: /^Background tasks/ });
 const oneThreadMode = page.getByRole("radio", { name: /^One thread/ });
-const needsDoubleLoop = page.getByTestId("tasks-need-double-loop");
+const needsBackgroundTasks = page.getByTestId("tasks-need-background-tasks");
 const noTasksYet = page.getByText("No tasks yet", { exact: true });
 const limits = page.getByTestId("rate-limits");
 const presenceLine = (text: string) => page.getByRole("status").filter({ hasText: text });
@@ -297,7 +297,7 @@ const openSection = async (name: string) => {
 /** Opens the model chip's popover: the chat mode, the model and the effort. */
 const openModelChip = async () => {
   await modelChip.click();
-  await doubleLoopMode.waitFor();
+  await backgroundTasksMode.waitFor();
 };
 /** Waits until the chat mode can switch again: nothing runs and the bot is not replying. Leaves the popover open. */
 const waitIdle = async () => {
@@ -321,14 +321,14 @@ const shown = (text: string) => said(text).count();
 
 try {
   console.log(
-    "a standard bot shows no rate limit and its Tasks section says it needs double-loop chat",
+    "a standard bot shows no rate limit and its Tasks section says tasks need Background tasks mode",
   );
   await page.goto(`${host.clientUrl}/bots/${botId}`);
   await box.waitFor();
   check((await limits.count()) === 0, "no rate-limit indicator for a standard bot");
   await openSection("Tasks");
-  await needsDoubleLoop.waitFor();
-  check(true, "the Tasks section of a standard bot says background tasks need double-loop chat");
+  await needsBackgroundTasks.waitFor();
+  check(true, "the Tasks section of a standard bot says tasks run in Background tasks mode");
   check(
     (await modelChip.innerText()).includes("Sonnet") &&
       (await modelChip.locator("svg").count()) === 1,
@@ -342,8 +342,8 @@ try {
     "a standard bot's popover names its model",
   );
   check(await oneThreadMode.isChecked(), "One thread is the chosen chat mode");
-  await doubleLoopMode.click();
-  await page.getByRole("alertdialog").getByText("Switch to double-loop chat for Loop?").waitFor();
+  await backgroundTasksMode.click();
+  await page.getByRole("alertdialog").getByText("Switch Loop to Background tasks?").waitFor();
   await smoke.shot("confirm-switch");
   await page.getByRole("button", { name: "Switch and start new" }).click();
   await noTasksYet.waitFor();
@@ -352,7 +352,7 @@ try {
   check(sessionId !== botId, "switching started a new session");
   await openModelChip();
   await page.getByText("Background tasks run on", { exact: true }).waitFor();
-  check(true, "in double-loop mode the model and effort are the background tasks'");
+  check(true, "in background-tasks mode the model and effort are the background tasks'");
   const modelChoice = page.getByRole("group", { name: "Model" });
   await modelChoice.getByRole("button", { name: "Opus" }).click();
   await host.until(() => getBot(host.dataRoot, botId)?.model === "opus");
@@ -361,7 +361,7 @@ try {
   check((await modelChip.innerText()).includes("Opus"), "the chip follows the model");
   await smoke.shot("model-popover");
   await page.keyboard.press("Escape");
-  await doubleLoopMode.waitFor({ state: "detached" });
+  await backgroundTasksMode.waitFor({ state: "detached" });
 
   console.log("two messages a second apart");
   const first = await say("first message");
@@ -429,7 +429,7 @@ try {
   );
   await openModelChip();
   check(
-    (await doubleLoopMode.isDisabled()) && (await oneThreadMode.isDisabled()),
+    (await backgroundTasksMode.isDisabled()) && (await oneThreadMode.isDisabled()),
     "the chat mode is locked while a task runs",
   );
   await page.keyboard.press("Escape");
@@ -611,17 +611,17 @@ try {
   check(true, "the rate limit is still shown after the chat was rebuilt");
   await smoke.shot("rebuilt");
 
-  console.log("leaving double-loop mode once nothing runs");
+  console.log("leaving background-tasks mode once nothing runs");
   await waitIdle();
   await oneThreadMode.click();
-  await page.getByRole("alertdialog").getByText("Leave double-loop chat for Loop?").waitFor();
+  await page.getByRole("alertdialog").getByText("Switch Loop back to One thread?").waitFor();
   await page.getByRole("button", { name: "Switch and start new" }).click();
   await page.keyboard.press("Escape");
   await openSection("Tasks");
-  await needsDoubleLoop.waitFor();
+  await needsBackgroundTasks.waitFor();
   check(
     (await limits.count()) === 0,
-    "the Tasks section asks for double-loop chat and the rate-limit indicator is gone in standard mode",
+    "the Tasks section says tasks need Background tasks mode and the rate-limit indicator is gone in standard mode",
   );
 
   check(pageErrors.length === 0, `no page errors (${pageErrors.join("; ")})`);

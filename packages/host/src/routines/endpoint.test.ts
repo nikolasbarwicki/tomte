@@ -173,9 +173,9 @@ describe("what a session is launched with", () => {
     expect(res.status).toBe(200);
   });
 
-  test("a double-loop bot's front gets the routines lease as it gets the bots lease", async () => {
+  test("a background-tasks bot's front gets the routines lease as it gets the bots lease", async () => {
     const bot = host.createBot("Dev");
-    setChatMode(host.dataRoot, bot, "double_loop");
+    setChatMode(host.dataRoot, bot, "background_tasks");
     await message(bot, "hello");
     const launch = defined(host.launches()[0], "launch");
     expect(Object.keys(launch.mcpServers)).toEqual(["bots", "routines"]);

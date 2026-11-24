@@ -187,11 +187,11 @@ describe("remote mode shell isolation", () => {
     expect(disallowed).toContain(`Read(/${join(h.dataRoot, "claude")}/**)`);
   });
 
-  test("a double-loop bot without a sandbox has no shell tools either, but keeps TaskStop so its front can stop its agents", async () => {
+  test("a background-tasks bot without a sandbox has no shell tools either, but keeps TaskStop so its front can stop its agents", async () => {
     const h = await start(REMOTE);
     h.setSandboxAvailable(false);
     const ada = h.createBot("Ada");
-    setChatMode(h.dataRoot, ada, "double_loop");
+    setChatMode(h.dataRoot, ada, "background_tasks");
     const { sandbox, disallowed } = await launchOf(h, ada);
 
     expect(sandbox).toBeUndefined();

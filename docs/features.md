@@ -17,7 +17,7 @@ The single source of truth for the README's feature table; change both together.
 | Bot handoffs: one bot asks another                                                 | Stable  | [ADR-0002](adr/0002-bot-handoffs-are-async-a2a-tasks-on-a-host-endpoint.md)                          |
 | External events: scripts and CI post to a bot                                      | Stable  | [external events](external-events.md), [ADR-0007](adr/0007-external-events-route-and-event-token.md) |
 | Telegram: needs-you cards, routine results, `@Name` to talk to any bot             | Beta    | [ADR-0010](adr/0010-channels-deliver-needs-you-items.md)                                             |
-| Double-loop chat: a fast front that never blocks, with background agents           | Beta    | [ADR-0011](adr/0011-double-loop-chat-mode.md)                                                        |
+| Background-tasks chat: a fast front that never blocks, with background agents      | Beta    | [ADR-0011](adr/0011-background-tasks-chat-mode.md)                                                   |
 | Chief of Staff: one bot that can propose new bots                                  | Beta    | Every proposal needs your approval                                                                   |
 | Desktop app for macOS with tray, start at login and auto-update                    | Beta    | Unsigned until signing secrets exist                                                                 |
 | Linux server install with HTTPS (Caddy) or Tailscale                               | Beta    | [deploy kit](../deploy/README.md), [ADR-0006](adr/0006-remote-mode-is-linux-only.md)                 |

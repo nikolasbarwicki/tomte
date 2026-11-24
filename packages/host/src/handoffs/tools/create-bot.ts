@@ -36,10 +36,10 @@ export function registerCreateBot(mcp: McpServer, ctx: BotsToolContext) {
             `A seed for the new bot's own memory, at most ${MAX_MEMORY_LENGTH} characters: what it needs to know to start`,
           ),
         chat_mode: z
-          .enum(["standard", "double_loop"])
+          .enum(["standard", "background_tasks"])
           .optional()
           .describe(
-            "standard (the default) answers with the bot's own model; double_loop answers at once and runs heavy work in background agents",
+            "standard (the default) answers with the bot's own model; background_tasks answers at once and runs heavy work in background agents",
           ),
       },
     },

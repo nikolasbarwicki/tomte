@@ -1,4 +1,4 @@
-// Runs the browser smokes (the answer path, the double-loop chat mode, the transcript's scrolling, the channels page and file uploads) one after another and stops at the first one that fails, exiting with its status
+// Runs the browser smokes (the answer path, the background-tasks chat mode, the transcript's scrolling, the channels page and file uploads) one after another and stops at the first one that fails, exiting with its status
 // (a smoke killed by a signal counts as 1): no failure is swallowed into an overall pass.
 //   bun run smoke:ui                      all of them
 //   bun scripts/smoke-ui.ts a.ts b.ts     only these (paths relative to the working directory)

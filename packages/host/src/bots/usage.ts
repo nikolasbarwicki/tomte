@@ -125,7 +125,7 @@ export function deleteBotUsage(db: Database, botId: string, sessionIds: readonly
   })();
 }
 
-/** The sessions the database ties to a bot besides its chat sessions: those of its routine runs and its double-loop tasks and reports. */
+/** The sessions the database ties to a bot besides its chat sessions: those of its routine runs and its background-tasks tasks and reports. */
 export function sessionsOfBot(db: Database, botId: string): string[] {
   return db
     .query<{ session_id: string }, [string, string, string]>(

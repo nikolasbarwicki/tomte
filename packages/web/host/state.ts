@@ -25,12 +25,12 @@ export type HostEvent =
 
 export type ChatState = {
   items: Item[];
-  /** A standard bot's turn is running. A double-loop bot never sets it from a turn: it shows `presence`. */
+  /** A standard bot's turn is running. A background-tasks bot never sets it from a turn: it shows `presence`. */
   busy: boolean;
-  /** What a double-loop bot's presence line shows; `idle` for every other bot. */
+  /** What a background-tasks bot's presence line shows; `idle` for every other bot. */
   presence: Presence;
   context: ContextEvent | undefined;
-  /** The subscription's rate limit per window, as the host last reported it; only a double-loop bot is sent any. */
+  /** The subscription's rate limit per window, as the host last reported it; only a background-tasks bot is sent any. */
   rateLimits: Record<string, RateLimit>;
 };
 

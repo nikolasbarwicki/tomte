@@ -180,11 +180,11 @@ describe("the prompt", () => {
     expect(promptOf(1)).not.toContain(SECTION);
   });
 
-  test("a double-loop front gets the section", async () => {
+  test("a background-tasks front gets the section", async () => {
     const ada = host.createBot("Ada");
     expect((await host.ui("/api/open", { botId: ada })).status).toBe(200);
     expect(
-      (await host.ui("/api/bots/chat-mode", { botId: ada, chatMode: "double_loop" })).status,
+      (await host.ui("/api/bots/chat-mode", { botId: ada, chatMode: "background_tasks" })).status,
     ).toBe(200);
     expect((await setSwitch(ada, true)).status).toBe(200);
     host.loopScript({ steps: [{ result: "Hi." }] });

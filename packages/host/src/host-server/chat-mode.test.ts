@@ -59,14 +59,14 @@ test("switching persists the mode across a host restart, starts a new session an
   const bot = host.createBot("Ada");
   expect((await host.ui("/api/open", { botId: bot })).status).toBe(200);
 
-  expect((await setMode(bot, "double_loop")).status).toBe(200);
-  expect(modeOf(bot)).toBe("double_loop");
+  expect((await setMode(bot, "background_tasks")).status).toBe(200);
+  expect(modeOf(bot)).toBe("background_tasks");
   expect(sessionsOf(bot)).toBe(2);
-  expect((await summaryOf(bot)).chatMode).toBe("double_loop");
+  expect((await summaryOf(bot)).chatMode).toBe("background_tasks");
 
   await host.restart();
-  expect(modeOf(bot)).toBe("double_loop");
-  expect((await summaryOf(bot)).chatMode).toBe("double_loop");
+  expect(modeOf(bot)).toBe("background_tasks");
+  expect((await summaryOf(bot)).chatMode).toBe("background_tasks");
 
   expect((await setMode(bot, "standard")).status).toBe(200);
   expect(modeOf(bot)).toBe("standard");
@@ -78,8 +78,8 @@ test("switching a bot that has no open chat persists the mode and starts a new s
   const other = host.createBot("Other");
   expect((await host.ui("/api/open", { botId: shown })).status).toBe(200);
 
-  expect((await setMode(other, "double_loop")).status).toBe(200);
-  expect(modeOf(other)).toBe("double_loop");
+  expect((await setMode(other, "background_tasks")).status).toBe(200);
+  expect(modeOf(other)).toBe("background_tasks");
   expect(sessionsOf(other)).toBe(2);
 });
 
@@ -92,7 +92,7 @@ test("setting the mode a bot already has succeeds and keeps its conversation", a
 
 test("an unknown bot answers 404 and an unknown mode 400", async () => {
   const bot = host.createBot("Ada");
-  expect((await setMode("nope", "double_loop")).status).toBe(404);
+  expect((await setMode("nope", "background_tasks")).status).toBe(404);
   expect((await setMode(bot, "triple_loop")).status).toBe(400);
   expect(modeOf(bot)).toBe("standard");
 });
@@ -100,7 +100,7 @@ test("an unknown bot answers 404 and an unknown mode 400", async () => {
 test("a bot with running or queued background tasks refuses to switch, and nothing changes", async () => {
   const bot = host.createBot("Ada");
   expect((await host.ui("/api/open", { botId: bot })).status).toBe(200);
-  expect((await setMode(bot, "double_loop")).status).toBe(200);
+  expect((await setMode(bot, "background_tasks")).status).toBe(200);
   const session = defined(getBot(host.dataRoot, bot)?.sessions.at(-1), "session");
   const tasks = createLoopStore(host.db).session(bot, session);
   tasks.putTask({ taskId: "t1", goal: "research", status: "running", startedAt: 1 }, 1);
@@ -108,10 +108,10 @@ test("a bot with running or queued background tasks refuses to switch, and nothi
   const refused = await setMode(bot, "standard");
   expect(refused.status).toBe(409);
   expect(await refused.text()).toContain("stop the running tasks first");
-  expect(modeOf(bot)).toBe("double_loop");
+  expect(modeOf(bot)).toBe("background_tasks");
   expect(sessionsOf(bot)).toBe(2);
 
-  expect((await setMode(bot, "double_loop")).status).toBe(200);
+  expect((await setMode(bot, "background_tasks")).status).toBe(200);
 
   tasks.putTask({ taskId: "t1", goal: "research", status: "queued", startedAt: 1 }, 2);
   expect((await setMode(bot, "standard")).status).toBe(409);
@@ -127,7 +127,7 @@ test("a bot in the middle of a turn refuses to switch", async () => {
   expect((await host.ui("/api/send", { text: "work" })).status).toBe(200);
   await host.until(() => host.messagesOf(bot).length === 1);
 
-  expect((await setMode(bot, "double_loop")).status).toBe(409);
+  expect((await setMode(bot, "background_tasks")).status).toBe(409);
   expect(modeOf(bot)).toBe("standard");
   expect(sessionsOf(bot)).toBe(1);
   host.release();
@@ -136,8 +136,8 @@ test("a bot in the middle of a turn refuses to switch", async () => {
 test("a stale in-memory bot never overwrites the stored mode when its session is saved", async () => {
   const bot = host.createBot("Ada");
   expect((await host.ui("/api/open", { botId: bot })).status).toBe(200);
-  expect((await setMode(bot, "double_loop")).status).toBe(200);
+  expect((await setMode(bot, "background_tasks")).status).toBe(200);
   expect((await host.ui("/api/session/new", {})).status).toBe(200);
-  expect(modeOf(bot)).toBe("double_loop");
+  expect(modeOf(bot)).toBe("background_tasks");
   expect(sessionsOf(bot)).toBe(3);
 });

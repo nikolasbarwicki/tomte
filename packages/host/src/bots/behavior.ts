@@ -1,5 +1,5 @@
 /**
- * Shared core assistant behavior injected into every bot's system prompt across standard mode and double-loop mode
+ * Shared core assistant behavior injected into every bot's system prompt across standard mode and background-tasks mode
  * (front, researcher, worker). User instructions and bot memory appear after this block and override defaults when needed.
  */
 export const CORE_BEHAVIOR_INSTRUCTIONS = `## Core assistant behavior

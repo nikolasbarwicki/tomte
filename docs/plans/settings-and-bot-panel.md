@@ -22,10 +22,10 @@ Settings  /settings/<section>
 ├─ Credentials    stored logins (was /credentials; removed with the credential vault, 2026-11-17)
 └─ About          versions, Claude CLI, browser engine, updates (not yet available)
 Bot panel  /bots/<id>?panel=<tab>&section=<page>
-├─ Work · Tasks (double-loop only) · Files · Browser   live views, one tab each
+├─ Work · Tasks (background-tasks only) · Files · Browser   live views, one tab each
 └─ Settings        overview → nested pages
    ├─ Profile      name, purpose, avatar
-   ├─ Chat & model double-loop switch, model, effort
+   ├─ Chat & model background-tasks switch, model, effort
    ├─ Memory       About you (shared), this bot's directions (both editable)
    ├─ Routines
    ├─ Permissions  always-allowed tools

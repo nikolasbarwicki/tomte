@@ -43,7 +43,7 @@ const pages: EventsWatch[] = [];
 const savedConfig = process.env.CLAUDE_CONFIG_DIR;
 
 beforeEach(async () => {
-  scratch = mkdtempSync(join(tmpdir(), "double-loop-routines-"));
+  scratch = mkdtempSync(join(tmpdir(), "background-tasks-routines-"));
   process.env.CLAUDE_CONFIG_DIR = join(scratch, "claude-config");
   host = await startHandoffHost();
 });
@@ -71,7 +71,7 @@ type Run = {
   sessionId: string | null;
 };
 
-/** A double-loop bot with a routine, plus a second bot so the page can show either: the double-loop bot's chat exists only when `chatOpen`. */
+/** A background-tasks bot with a routine, plus a second bot so the page can show either: the background-tasks bot's chat exists only when `chatOpen`. */
 async function setup(
   chatOpen: boolean,
   schedule: object = { kind: "cron", expr: "0 3 * * *", tz: "UTC" },
@@ -86,7 +86,7 @@ async function setup(
     ).status,
   ).toBe(200);
   const botId = host.createBot("Planner");
-  setChatMode(host.dataRoot, botId, "double_loop");
+  setChatMode(host.dataRoot, botId, "background_tasks");
   const other = host.createBot("Other");
   const created = await host.ui("/api/routines/create", {
     botId,
@@ -135,7 +135,7 @@ const resultMessages = (sessionId: string) =>
 describe.each([
   ["open", true],
   ["closed", false],
-])("a double-loop bot's routine run, its chat %s", (_label, chatOpen) => {
+])("a background-tasks bot's routine run, its chat %s", (_label, chatOpen) => {
   test("an ask-policy tool parks the run; Allow resumes the run's own session and the front hears nothing of it", async () => {
     const { botId, other, routineId } = await setup(chatOpen);
     const page = await watch();
@@ -263,7 +263,7 @@ describe.each([
   });
 });
 
-describe("a double-loop bot's front while a routine run is parked", () => {
+describe("a background-tasks bot's front while a routine run is parked", () => {
   test("keeps answering, and a question it asks does not belong to the run", async () => {
     const { botId, routineId } = await setup(true);
     const page = await watch();
@@ -295,7 +295,7 @@ describe("a double-loop bot's front while a routine run is parked", () => {
   });
 });
 
-describe("a double-loop bot's routine run that asks for a takeover", () => {
+describe("a background-tasks bot's routine run that asks for a takeover", () => {
   test("parks under the run's id and own session, and a hand-back resumes the run", async () => {
     const { botId, routineId } = await setup(true);
     expect((await host.ui("/api/bots/browser", { botId, enabled: true })).status).toBe(200);

@@ -31,13 +31,13 @@ const MODES: { id: ChatMode; title: string; body: string }[] = [
     body: "Works through one thing at a time. You wait while it works.",
   },
   {
-    id: "double_loop",
-    title: "Double loop",
+    id: "background_tasks",
+    title: "Background tasks",
     body: "Replies at once and runs research and work as parallel background tasks.",
   },
 ];
 
-/** The chip in the message box that says what the bot runs on ("Sonnet · High", with a split arrow for a double-loop bot) and opens how it chats, what it runs on and how hard it thinks. */
+/** The chip in the message box that says what the bot runs on ("Sonnet · High", with a split arrow for a background-tasks bot) and opens how it chats, what it runs on and how hard it thinks. */
 export function ModelChip({ bot }: { bot: BotSummary }) {
   return (
     <Popover>
@@ -49,7 +49,7 @@ export function ModelChip({ bot }: { bot: BotSummary }) {
           />
         }
       >
-        {bot.chatMode === "double_loop" && <ArrowsSplitIcon className="size-3.5 opacity-70" />}
+        {bot.chatMode === "background_tasks" && <ArrowsSplitIcon className="size-3.5 opacity-70" />}
         <span>
           {MODEL_LABELS[bot.model]} · {EFFORT_LABELS[bot.effort]}
         </span>
@@ -65,16 +65,18 @@ export function ModelChip({ bot }: { bot: BotSummary }) {
 /** How the bot chats and what it runs on, saved with the bot. Switching mode starts a new conversation, so it asks first. */
 function ModelSettings({ bot }: { bot: BotSummary }) {
   const busy = livePresence(bot.chatMode, useChat()) !== "idle";
-  const doubleLoop = bot.chatMode === "double_loop";
+  const backgroundTasks = bot.chatMode === "background_tasks";
   const [switching, startSwitch] = useTransition();
   const [applying, startApply] = useTransition();
   // Model and effort apply to the chat the host streams, which is another bot's for a moment after switching.
   const streamed = useOpenBotId() === bot.id;
 
   const switchTo = async (mode: ChatMode) => {
-    const next = mode === "double_loop";
+    const next = mode === "background_tasks";
     const ok = await confirmAction({
-      title: `${next ? "Switch to" : "Leave"} double-loop chat for ${bot.name}?`,
+      title: next
+        ? `Switch ${bot.name} to Background tasks?`
+        : `Switch ${bot.name} back to One thread?`,
       description:
         "A new conversation starts and the bot forgets this one. Memory, files and routines are kept.",
       action: "Switch and start new",
@@ -120,13 +122,13 @@ function ModelSettings({ bot }: { bot: BotSummary }) {
         </RadioGroup>
         {busy && (
           <p className="text-muted-foreground text-xs">
-            {doubleLoop
+            {backgroundTasks
               ? "Switching is available once no task runs and the bot is not replying."
               : "Switching is available once the bot finishes its turn."}
           </p>
         )}
       </Section>
-      <Section title={doubleLoop ? "Background tasks run on" : "Model"}>
+      <Section title={backgroundTasks ? "Background tasks run on" : "Model"}>
         <Choice
           label="Model"
           options={BotModel.options}
@@ -144,7 +146,7 @@ function ModelSettings({ bot }: { bot: BotSummary }) {
           onChange={(effort) => startApply(async () => void (await setEffort(effort)))}
         />
         <p className="text-muted-foreground text-xs text-pretty">
-          {doubleLoop
+          {backgroundTasks
             ? "Replies come from Haiku, which answers in seconds. Applies from the next task."
             : "Applies from the next reply."}
         </p>

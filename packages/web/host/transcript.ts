@@ -81,7 +81,7 @@ export type Item =
       /** Whether the answer reached the sender's agent; only for items that name a reply target. */
       relay?: Relay | undefined;
     }
-  /** A background task of a double-loop bot: where it stands and, while it runs, its live status line; `findings` are what its agent verified, newest last, and `after` is the task a queued one waits for. */
+  /** A background task of a background-tasks bot: where it stands and, while it runs, its live status line; `findings` are what its agent verified, newest last, and `after` is the task a queued one waits for. */
   | {
       kind: "task";
       taskId: string;

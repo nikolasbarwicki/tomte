@@ -8,11 +8,11 @@ import type {
 
 import type { Item } from "@/host/transcript.ts";
 
-/** What the bot is doing for the chat: a double-loop bot says it itself, a standard bot is working while its turn runs. */
+/** What the bot is doing for the chat: a background-tasks bot says it itself, a standard bot is working while its turn runs. */
 export const livePresence = (
   mode: ChatMode,
   chat: { busy: boolean; presence: Presence },
-): Presence => (mode === "double_loop" ? chat.presence : chat.busy ? "working" : "idle");
+): Presence => (mode === "background_tasks" ? chat.presence : chat.busy ? "working" : "idle");
 
 type ItemKind = Exclude<SourceEvent["kind"], "progress">;
 

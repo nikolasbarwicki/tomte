@@ -2,7 +2,7 @@
 
 Status: ready-for-agent
 
-Supersedes `docs/plans/primary-bot.md` (approach B, "the primary is a role, and the front door") and the build on the `feat/primary-bot` branch, which is kept unmerged as a reference. Owner feedback on that build (2026-11-17): it was too complex and added too much UI. The Chief of Staff should be a regular bot that has an extra prompt section and knows it supervises the other bots. Every bot should be able to list, hand off to and create bots. The design returns to approach A of the design doc (a template-like bot plus `create_bot`) and adds one switch. Respect ADR-0002 (handoffs), ADR-0009 (parking), ADR-0010 (channels) and ADR-0011 (double-loop); none of them changes.
+Supersedes `docs/plans/primary-bot.md` (approach B, "the primary is a role, and the front door") and the build on the `feat/primary-bot` branch, which is kept unmerged as a reference. Owner feedback on that build (2026-11-17): it was too complex and added too much UI. The Chief of Staff should be a regular bot that has an extra prompt section and knows it supervises the other bots. Every bot should be able to list, hand off to and create bots. The design returns to approach A of the design doc (a template-like bot plus `create_bot`) and adds one switch. Respect ADR-0002 (handoffs), ADR-0009 (parking), ADR-0010 (channels) and ADR-0011 (background-tasks); none of them changes.
 
 ## Problem Statement
 
@@ -48,13 +48,13 @@ The previous design made the coordinator a host-wide role with its own table, ro
 ### The switch
 
 - `Bot.chiefOfStaff: boolean` in the contract (`events.ts`), so `BotSummary` carries it. `StoredBot` defaults it to `false` for older `bot.json` files. `save()` keeps the stored value like the other settings, so a stale in-memory copy never overwrites it.
-- One host function in `bots/index.ts`, `setChiefOfStaff(dataRoot, id, on)`, writes the flag. Turning it on clears it on every other bot. It returns the ids whose flag changed. Callers reconfigure those bots' open sessions with `chats.reconfigure(id, "chief of staff changed")`, as a profile change does: a busy chat reopens after its turn and a double-loop front reopens when idle. No new session, no change of chat mode.
+- One host function in `bots/index.ts`, `setChiefOfStaff(dataRoot, id, on)`, writes the flag. Turning it on clears it on every other bot. It returns the ids whose flag changed. Callers reconfigure those bots' open sessions with `chats.reconfigure(id, "chief of staff changed")`, as a profile change does: a busy chat reopens after its turn and a background-tasks front reopens when idle. No new session, no change of chat mode.
 - No new route. `BotProfileUpdate` gains `chiefOfStaff: boolean`, and `/api/bots/profile` applies it with the profile. `/api/bots/new` takes an optional `chiefOfStaff` (default false). A deleted bot takes its flag with it, so the delete cascade does nothing extra.
 - If an older host or a hand edit leaves the flag on more than one bot, the bots list shows every flagged bot as stored. The next save that turns it on for a bot clears it on the others.
 
 ### Prompt
 
-- `botIdentity` (`bots/index.ts`) appends `CHIEF_OF_STAFF_INSTRUCTIONS` when the bot's flag is on. That is the one place the standard thread, the double-loop front, its workers and routine runs read the persona from, and it is computed from `freshBot` when a session opens. A bot with the flag off has exactly today's prompt.
+- `botIdentity` (`bots/index.ts`) appends `CHIEF_OF_STAFF_INSTRUCTIONS` when the bot's flag is on. That is the one place the standard thread, the background-tasks front, its workers and routine runs read the persona from, and it is computed from `freshBot` when a session opens. A bot with the flag off has exactly today's prompt.
 - The section is fixed in code, adapted from the owner's reference prompt to Tomte's tools. The owner tailors the role through the bot's purpose, its memory and the global instructions; the section itself is not editable. Draft:
 
 ```
@@ -94,7 +94,7 @@ Port from `feat/primary-bot` (`b666cd8`, `e3110e7`), without the role gate:
 - `createBot(dataRoot, name, purpose, id, avatar, memory)` writes an optional memory seed to the new bot's memory file; blank writes nothing. The HTTP route does not take a memory field; no UI needs it.
 - `create_bot(name, purpose, memory?, chat_mode?)` on the bots MCP server, registered for every bot. `BotsToolContext` gains `unattended()` and `createBot(spec)`. Guards, in order: a scheduled run is refused (the routine tools' kind of text); name at most 80 characters, purpose required and at most 400, memory at most 1200 (this keeps the approval card under the size at which a channel card offers Deny only); refused at 20 bots on the host. The bot starts with the browser off. `chat_mode` defaults to `standard`, the new bot's `chiefOfStaff` is false, and the owner's open chat stays where it is. A bot cannot create a Chief of Staff.
 - `ALWAYS_ASK_TOOLS` (`waits/index.ts`) holds `mcp__bots__create_bot`. `createCanUseTool` checks it before `approveAll`, a stored allowance and the `mcp__bots__` allow prefix, so even a host that approves everything raises the normal approval card. `approvalActions` leaves out `allow_always` for it. Where nobody watches (`HostDelegate.attended()` false), it is denied at once with no card and no wait.
-- The double-loop front's bots lease is `attended` (`BotsEndpoint.lease(botId, { attended: true })`), like its routines lease.
+- The background-tasks front's bots lease is `attended` (`BotsEndpoint.lease(botId, { attended: true })`), like its routines lease.
 - `BOTS_INSTRUCTIONS` gains one line for `create_bot`: propose a bot only when none fits, say why, and wait for the owner's approval.
 - `PRIMARY_INSTRUCTIONS`, `botsInstructions(primary)`, `isPrimary()` and `team_report` are not ported.
 
@@ -110,7 +110,7 @@ Port `f69ce82` (Telegram `@Name`, `chat_origins`, replies to origin) without the
 
 - The card router's injected `CardChat` is `send(botId, text, channel)` and `bots()` (newest first), with no `primary()`. Decision order for words from the linked account: a reply to a card goes to its source; `@Name` goes to that bot (the `leadingMention` rules), with an unknown name answered by the list of names; otherwise one open card takes the message, several ask for a reply, and with none the owner gets "To talk to a bot, start with @ and its name, for example @<newest bot's name>."
 - `chat_origins` is the next schema step (`SCHEMA_V29`). `/api/send` sets `web`, and a routed Telegram message sets `telegram`, neither for a refused send. `removeBot` deletes the row.
-- `ChatsDeps.botSaid` forwards a standard turn's final text, a double-loop front's reply and each report to `Channels.say` while the origin is a channel. Scheduled run turns are not forwarded.
+- `ChatsDeps.botSaid` forwards a standard turn's final text, a background-tasks front's reply and each report to `Channels.say` while the origin is a channel. Scheduled run turns are not forwarded.
 - Plain-message routing to the Chief of Staff (old ticket 05) is not ported. The origin rule is transport-independent, so a future mobile app, which picks the bot in its own UI, reuses it without an implicit target. Routing plain Telegram messages to the Chief of Staff later is a small router change: one more `CardChat` member read from the flag.
 
 ## Testing Decisions
@@ -119,7 +119,7 @@ Tests drive the host the way users do and assert what they observe, as in the pr
 
 1. Whole host over HTTP with the fake CLI and the fake Bot API:
    - Switch: on through `/api/bots/new` and `/api/bots/profile`; turning it on moves it from another bot; `BotSummary.chiefOfStaff` follows; an open session is reconfigured and its next turn's system prompt carries the section, which disappears when the switch is turned off; a bot with the flag off has no section.
-   - `create_bot` (port `handoffs/create-bot.test.ts`): any bot's call raises the card with the exact arguments and no always-allow; approve creates the bot with the seed and the browser off; deny creates nothing; a scheduled run is refused; a chat-hosted routine turn and a headless run are denied with no wait; the cap holds; argument limits; a double-loop front; the card on the fake Bot API.
+   - `create_bot` (port `handoffs/create-bot.test.ts`): any bot's call raises the card with the exact arguments and no always-allow; approve creates the bot with the seed and the browser off; deny creates nothing; a scheduled run is refused; a chat-hosted routine turn and a headless run are denied with no wait; the cap holds; argument limits; a background-tasks front; the card on the fake Bot API.
    - Phone (port `phone-chat.test.ts` without the "a Chief of Staff" blocks): `@Name` reaching the bot and the reply reaching the phone in both chat modes; replies stopping after a web send; the origin surviving a restart; the hint; the origin row removed with the bot.
 2. Unit: the card router's decision order and `@Name` edge cases with the fake channel and a fake chat (`channels/cards/cards.test.ts`); `can-use-tool.test.ts` for the fixed ask; `channels.test.ts` for `say`.
 3. Web: no new pure model. The sidebar badge and the forms are covered by `smoke:channels-ui` (below) or a screenshot in the PR.

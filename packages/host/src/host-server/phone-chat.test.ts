@@ -37,7 +37,7 @@ afterEach(async () => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-type Mode = "standard" | "double_loop";
+type Mode = "standard" | "background_tasks";
 
 /** A host linked to a fake Telegram account, with the owner's side of the conversation as helpers. */
 async function start() {
@@ -64,13 +64,13 @@ async function start() {
   const bot = async (name: string, mode: Mode = "standard") => {
     nextMillisecond();
     const id = host.createBot(name);
-    if (mode === "double_loop") setChatMode(host.dataRoot, id, "double_loop");
+    if (mode === "background_tasks") setChatMode(host.dataRoot, id, "background_tasks");
     return id;
   };
   /** What a bot said to the phone: the messages that start with its name and a blank line. */
   const repliesOf = (name: string) => tg.texts().filter((t) => t.startsWith(`${name}\n\n`));
   const say = (text: string) => handled(tg.message(owner, text));
-  /** The bot got the message (a double-loop front's carries the work state after it). */
+  /** The bot got the message (a background-tasks front's carries the work state after it). */
   const received = (botId: string, text: string) =>
     host.messagesOf(botId).some((m) => m.startsWith(text));
   const idle = (botId: string) => host.until(() => !host.server.isWorking(botId));
@@ -94,7 +94,7 @@ async function start() {
   return { tg, host, handled, bot, repliesOf, say, received, idle, notify };
 }
 
-describe.each<Mode>(["standard", "double_loop"])(
+describe.each<Mode>(["standard", "background_tasks"])(
   "a bot in %s mode, talked to from the phone",
   (mode) => {
     test("@Name sends the rest to that bot only, and its reply comes back with its name first and no link on a loopback URL", async () => {
@@ -221,7 +221,7 @@ describe("a standard bot", () => {
   });
 });
 
-describe("a double-loop bot", () => {
+describe("a background-tasks bot", () => {
   const usage = { input_tokens: 1, output_tokens: 1 };
   const AGENT_CALL = {
     subagent_type: "researcher",
@@ -291,7 +291,7 @@ describe("a double-loop bot", () => {
 
   test("an agent's report reaches the phone as the bot's message, after the front's own reply", async () => {
     const t = await start();
-    const botId = await t.bot("Dev", "double_loop");
+    const botId = await t.bot("Dev", "background_tasks");
     t.host.loopScript(researchScript);
 
     await t.say("@Dev research X");
@@ -305,7 +305,7 @@ describe("a double-loop bot", () => {
 
   test("a message is sent to the front, never queued, even while an agent runs", async () => {
     const t = await start();
-    const botId = await t.bot("Dev", "double_loop");
+    const botId = await t.bot("Dev", "background_tasks");
     t.host.loopScript(researchScript);
 
     await t.say("@Dev research X");

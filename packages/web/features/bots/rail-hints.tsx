@@ -35,7 +35,7 @@ export function RailHint({
     case "work":
       return <WorkHint bot={bot} />;
     case "tasks":
-      if (bot.chatMode !== "double_loop") return "Needs double-loop chat";
+      if (bot.chatMode !== "background_tasks") return "Needs Background tasks mode";
       return tasks.running + tasks.queued === 0
         ? "Idle"
         : `${tasks.running} running${tasks.queued ? `, ${tasks.queued} queued` : ""}`;

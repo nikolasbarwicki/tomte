@@ -127,7 +127,7 @@ export interface HostServerOptions {
   notices?: { retryMs?: number };
   /** The clock device auth reads for pairing code expiry and human waits read for their 24-hour expiry, in epoch milliseconds; the system clock when omitted. */
   now?: () => number;
-  /** How long an idle double-loop front stays open; 10 minutes when omitted. */
+  /** How long an idle background-tasks front stays open; 10 minutes when omitted. */
   frontIdleMs?: number;
   /** How often the absence check runs; an hour when omitted. */
   absenceCheckMs?: number;
@@ -164,7 +164,7 @@ export interface HostServer {
   /** The channels and their links, so a caller can feed an update in or send to the linked account. */
   channels: Channels;
   currentBotId: () => string | undefined;
-  /** Whether the bot is working (a turn, a busy double-loop front or a headless run): deleting it, a new session and a mode switch are refused then. */
+  /** Whether the bot is working (a turn, a busy background-tasks front or a headless run): deleting it, a new session and a mode switch are refused then. */
   isWorking: (botId: string) => boolean;
   /** Whether the Claude CLI is signed in, as the last check reported; `unknown` until one has answered. */
   signInState: () => ClaudeState;
@@ -294,7 +294,7 @@ export async function createHostServer(o: HostServerOptions): Promise<HostServer
       isolation(botId),
     ]);
   /**
-   * A double-loop front only talks, hands off and manages routines: no browser, and the same isolation as the bot's own thread.
+   * A background-tasks front only talks, hands off and manages routines: no browser, and the same isolation as the bot's own thread.
    * It is never a scheduled run, so its routines lease is attended: a routine run of the bot (headless, in a session of its own)
    * does not stop the owner creating routines from the front's chat.
    */

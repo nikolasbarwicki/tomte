@@ -28,7 +28,7 @@ export interface WaitSpec<K extends WaitKind = WaitKind> {
   actions: WaitAction[];
   /** The routine run the wait belongs to; omitted to take the run the bot's unattended turn belongs to now, if any, and null for a wait that belongs to no run. */
   runId?: string | null;
-  /** The session the wait belongs to; omitted to take the one the context names (a double-loop routine run's own session while it runs, else the bot's current one). */
+  /** The session the wait belongs to; omitted to take the one the context names (a background-tasks routine run's own session while it runs, else the bot's current one). */
   sessionId?: string | undefined;
 }
 

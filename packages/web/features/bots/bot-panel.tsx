@@ -74,7 +74,7 @@ function Section({
     case "events":
       return slots[section];
     case "tasks":
-      return bot.chatMode === "double_loop" ? slots.tasks : <NeedsDoubleLoop />;
+      return bot.chatMode === "background_tasks" ? slots.tasks : <NeedsBackgroundTasks />;
     case "routines":
       return <Loaded bot={bot}>{slots.routines}</Loaded>;
     case "files":
@@ -98,17 +98,17 @@ function Loaded({ bot, children }: { bot: BotSummary; children: ReactNode }) {
   );
 }
 
-function NeedsDoubleLoop() {
+function NeedsBackgroundTasks() {
   return (
-    <Empty className="border border-dashed p-6" data-testid="tasks-need-double-loop">
+    <Empty className="border border-dashed p-6" data-testid="tasks-need-background-tasks">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <ListChecksIcon />
         </EmptyMedia>
-        <EmptyTitle className="text-sm">Background tasks need double-loop chat</EmptyTitle>
+        <EmptyTitle className="text-sm">Tasks run in Background tasks mode</EmptyTitle>
         <EmptyDescription className="text-xs">
-          In double-loop chat the bot replies at once and runs research and work as tasks, which
-          this section follows. Switch with the model chip in the message box.
+          In Background tasks mode the bot replies at once and runs research and work as tasks,
+          which this section follows. Switch with the model chip in the message box.
         </EmptyDescription>
       </EmptyHeader>
     </Empty>

@@ -49,7 +49,7 @@ export TOMTE_DATA_ROOT=/tmp/tomte-dev/data
 bun run dev
 ```
 
-Write another answer into `$FAKE_CLAUDE_DIR/result.txt` to change what it says. The header of `fake-claude.ts` lists every file that scripts it (approvals, questions, tool calls, a whole double-loop session in `loop.json`). Anything that depends on what a real model does still needs the real CLI.
+Write another answer into `$FAKE_CLAUDE_DIR/result.txt` to change what it says. The header of `fake-claude.ts` lists every file that scripts it (approvals, questions, tool calls, a whole background-tasks session in `loop.json`). Anything that depends on what a real model does still needs the real CLI.
 
 ## Checks
 
@@ -70,7 +70,7 @@ The hooks run on their own once `bun install` has installed them: pre-commit for
 
 ### Browser smokes
 
-Some flows are checked end to end in headless Chrome against the built web UI and the fake CLI. They are not in `bun run check`. Run `bun run smoke:ui` when you change the answer path, the relay, the double-loop chat mode, the transcript's scrolling or the Channels page. [docs/smoke.md](docs/smoke.md) lists each smoke, what it covers and its prerequisites. A failed smoke keeps its run directory (screenshots, logs) and prints where it is.
+Some flows are checked end to end in headless Chrome against the built web UI and the fake CLI. They are not in `bun run check`. Run `bun run smoke:ui` when you change the answer path, the relay, the background-tasks chat mode, the transcript's scrolling or the Channels page. [docs/smoke.md](docs/smoke.md) lists each smoke, what it covers and its prerequisites. A failed smoke keeps its run directory (screenshots, logs) and prints where it is.
 
 The desktop smokes (`smoke:desktop*`) need a packaged macOS app; AGENTS.md describes them. You only need them when you change `packages/desktop/`.
 

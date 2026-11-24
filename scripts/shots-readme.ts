@@ -132,8 +132,8 @@ const ops = await profile(
   "teal",
 );
 check(
-  (await host.ui("/api/bots/chat-mode", { botId: research, chatMode: "double_loop" })).ok,
-  "Research is a double-loop bot",
+  (await host.ui("/api/bots/chat-mode", { botId: research, chatMode: "background_tasks" })).ok,
+  "Research is a background-tasks bot",
 );
 
 host.loopScript(...DEMO_SCRIPTS);
@@ -323,7 +323,7 @@ try {
   await shoot("chief-of-staff");
   await open(inbox);
   await page.getByRole("button", { name: "Model and chat" }).click();
-  await page.getByRole("radio", { name: /^Double loop/ }).waitFor();
+  await page.getByRole("radio", { name: /^Background tasks/ }).waitFor();
   await shoot("model-chip");
 
   console.log("hero.gif");

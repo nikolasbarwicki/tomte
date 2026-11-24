@@ -32,7 +32,7 @@ The rule that shaped the rest: **the code does not guess which tools are dangero
 
 ### A chat that never blocks
 
-A standard chat is turn-based: while a bot researches for four minutes, you wait. The double-loop mode puts a fast front session in charge of every message and runs heavy work in background agents that the front starts, steers and stops ([ADR-0011](adr/0011-double-loop-chat-mode.md)). It was built as a throwaway prototype first and ported only after the prototype showed front replies in 0.7 to 3.4 seconds with agents running. The front's routing is checked by a labelled evaluation of 31 cases against the real model, gated at 90%. The last recorded run scored 30 of 31, and the miss is written up in the ADR.
+A standard chat is turn-based: while a bot researches for four minutes, you wait. The background-tasks mode puts a fast front session in charge of every message and runs heavy work in background agents that the front starts, steers and stops ([ADR-0011](adr/0011-background-tasks-chat-mode.md)). It was built as a throwaway prototype first and ported only after the prototype showed front replies in 0.7 to 3.4 seconds with agents running. The front's routing is checked by a labelled evaluation of 31 cases against the real model, gated at 90%. The last recorded run scored 30 of 31, and the miss is written up in the ADR.
 
 ### Guard the owner's plan, not just their data
 
@@ -66,7 +66,7 @@ What leaves the owner's machine, and when, is listed in [docs/privacy.md](privac
 `bun run check` is the gate on every push. It runs, in order: the formatter, a type-aware linter, a dead-code check (knip), the TypeScript compiler, dependency-cruiser (which enforces the layering of [ADR-0003](adr/0003-feature-modules-and-dependency-rules.md): no import cycles, no feature reaching into another's private files, the web and desktop packages importing only the shared contract) and about 2,500 tests in 200 files (`bun test` prints the count), with a coverage floor per file.
 
 - **Whole-host tests against fakes.** Most host tests start a whole host, with its HTTP listeners, database and composition root, against a fake Claude CLI, a fake Telegram Bot API, a fake Google and a fake release feed, all on loopback. No test touches the real network, and each fake records what it was sent, so tests assert what crossed the wire rather than mocking internals.
-- **Browser smokes.** Eight smokes drive the real web UI in headless Chrome: answering from the UI, the double-loop chat, scrolling, Telegram linking, file uploads. Desktop smokes drive the packaged Electron app, including `kill -9` with nothing left running.
+- **Browser smokes.** Eight smokes drive the real web UI in headless Chrome: answering from the UI, the background-tasks chat, scrolling, Telegram linking, file uploads. Desktop smokes drive the packaged Electron app, including `kill -9` with nothing left running.
 - **Release integrity.** Releases ship an Ed25519-signed `SHA256SUMS`, and the installer and update helper verify it against a key pinned in the repository.
 - **Honest status.** [docs/features.md](features.md) marks each feature Stable, Beta or Planned, and keeps a list of claims that have never been run, such as the Windows installer.
 
@@ -81,12 +81,12 @@ Tomte is built by one person with AI coding agents, and the process is part of t
 
 ## Where to look
 
-| To see                                      | Read                                                                                                                   |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| What it does today, and what is unverified  | [features.md](features.md)                                                                                             |
-| How it compares, and who should not pick it | [compare.md](compare.md)                                                                                               |
-| A full feature spec with user stories       | [plans/unattended-parking/spec.md](plans/unattended-parking/spec.md)                                                   |
-| A decision with options and evaluation      | [ADR-0011](adr/0011-double-loop-chat-mode.md), [ADR-0012](adr/0012-gmail-is-a-built-in-integration-on-the-rest-api.md) |
-| Security boundaries and known gaps          | [threat-model.md](threat-model.md)                                                                                     |
-| What leaves the machine                     | [privacy.md](privacy.md)                                                                                               |
-| What is next, and what is not planned       | [roadmap.md](roadmap.md)                                                                                               |
+| To see                                      | Read                                                                                                                        |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| What it does today, and what is unverified  | [features.md](features.md)                                                                                                  |
+| How it compares, and who should not pick it | [compare.md](compare.md)                                                                                                    |
+| A full feature spec with user stories       | [plans/unattended-parking/spec.md](plans/unattended-parking/spec.md)                                                        |
+| A decision with options and evaluation      | [ADR-0011](adr/0011-background-tasks-chat-mode.md), [ADR-0012](adr/0012-gmail-is-a-built-in-integration-on-the-rest-api.md) |
+| Security boundaries and known gaps          | [threat-model.md](threat-model.md)                                                                                          |
+| What leaves the machine                     | [privacy.md](privacy.md)                                                                                                    |
+| What is next, and what is not planned       | [roadmap.md](roadmap.md)                                                                                                    |

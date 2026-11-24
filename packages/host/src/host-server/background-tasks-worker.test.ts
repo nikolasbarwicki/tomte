@@ -14,7 +14,7 @@ let scratch: string;
 const savedConfig = process.env.CLAUDE_CONFIG_DIR;
 
 async function start(flags: string[] = [], env: Record<string, string> = {}) {
-  scratch = realpathSync(mkdtempSync(join(tmpdir(), "double-loop-worker-")));
+  scratch = realpathSync(mkdtempSync(join(tmpdir(), "background-tasks-worker-")));
   process.env.CLAUDE_CONFIG_DIR = join(scratch, "claude-config");
   host = await startHandoffHost(
     ["--data-root", join(scratch, "state"), ...flags],
@@ -33,9 +33,9 @@ afterEach(async () => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-async function doubleLoopBot(h: HandoffHost) {
+async function backgroundTasksBot(h: HandoffHost) {
   const id = h.createBot("Dev");
-  setChatMode(h.dataRoot, id, "double_loop");
+  setChatMode(h.dataRoot, id, "background_tasks");
   expect((await h.ui("/api/open", { id, botId: id })).status).toBe(200);
   return id;
 }
@@ -111,7 +111,7 @@ const hooked = (h: HandoffHost, tool: string) =>
 describe("a worker's file tools", () => {
   test("work in the workspace and the bot's files folder, and a path outside them is refused and logged for the task", async () => {
     const h = await start();
-    const bot = await doubleLoopBot(h);
+    const bot = await backgroundTasksBot(h);
     const inside = [join(h.cwd, "notes.md"), join(botFilesPath(h.dataRoot, bot), "invoices.csv")];
     const outside = [
       "/etc/passwd",
@@ -149,7 +149,7 @@ describe("a worker's file tools", () => {
 
   test("the front's own calls are not held to the boundary", async () => {
     const h = await start();
-    await doubleLoopBot(h);
+    await backgroundTasksBot(h);
     h.loopScript({
       match: "read it",
       steps: [preToolUse("tu-r", "Read", { file_path: "/etc/hosts" }), { result: "Read it." }],
@@ -164,7 +164,7 @@ describe("a worker's file tools", () => {
 describe("TaskStop", () => {
   test("stops an agent of the chat, and is refused for an id that is not one", async () => {
     const h = await start();
-    const bot = await doubleLoopBot(h);
+    const bot = await backgroundTasksBot(h);
     h.loopScript(startsWorker("tidy", [{ waitFor: "end" }]), {
       match: "stop things",
       steps: [
@@ -191,7 +191,7 @@ describe("TaskStop", () => {
       "/etc/tomte-test/secrets.key",
     ]);
     h.setSandboxAvailable(false);
-    const bot = await doubleLoopBot(h);
+    const bot = await backgroundTasksBot(h);
     h.loopScript({ steps: [] });
     expect((await h.ui("/api/send", { text: "hello" })).status).toBe(200);
     await h.until(() => h.messagesOf(bot).length === 1);
@@ -212,7 +212,7 @@ describe("TaskStop", () => {
 describe("the agent definitions a launch carries", () => {
   test("the worker has the shell where the bot has one and the front is denied every agent tool", async () => {
     const h = await start();
-    const bot = await doubleLoopBot(h);
+    const bot = await backgroundTasksBot(h);
     h.loopScript({ steps: [] });
     expect((await h.ui("/api/send", { text: "hello" })).status).toBe(200);
     await h.until(() => h.messagesOf(bot).length === 1);
@@ -233,7 +233,7 @@ describe("the agent definitions a launch carries", () => {
 describe("a worker's question", () => {
   test("is a card that names the task, and the answer goes back to the worker; one from the front is a plain card", async () => {
     const h = await start();
-    await doubleLoopBot(h);
+    await backgroundTasksBot(h);
     const watch = await watchEvents(h);
     const ask = (tool_use_id: string, question: string) => ({
       mcp: { server: "host", tool: "ask_user", args: { question }, tool_use_id },
@@ -271,7 +271,7 @@ describe("approvals asked of a worker", () => {
 
   test("become a card that names the task while the front keeps answering, and the worker goes on once the user allows it", async () => {
     const h = await start([], { TOMTE_ASK_APPROVAL: "1" });
-    const bot = await doubleLoopBot(h);
+    const bot = await backgroundTasksBot(h);
     const watch = await watchEvents(h);
     h.loopScript(
       startsWorker("tidy", [
@@ -340,7 +340,7 @@ describe("approvals asked of a worker", () => {
 
   test("a declined approval is denied to the worker, which then carries on", async () => {
     const h = await start([], { TOMTE_ASK_APPROVAL: "1" });
-    await doubleLoopBot(h);
+    await backgroundTasksBot(h);
     const watch = await watchEvents(h);
     h.loopScript(
       startsWorker("tidy", [

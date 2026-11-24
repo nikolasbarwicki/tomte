@@ -14,7 +14,7 @@ let scratch: string;
 const savedConfig = process.env.CLAUDE_CONFIG_DIR;
 
 beforeEach(async () => {
-  scratch = mkdtempSync(join(tmpdir(), "double-loop-"));
+  scratch = mkdtempSync(join(tmpdir(), "background-tasks-"));
   process.env.CLAUDE_CONFIG_DIR = join(scratch, "claude-config");
   host = await startHandoffHost();
 });
@@ -54,10 +54,10 @@ const statusOf = (events: Streamed[], botId: string) =>
     events.find((e) => e.type === "bots") as { bots: { id: string; status: string }[] } | undefined
   )?.bots.find((b) => b.id === botId)?.status;
 
-/** A bot that is already in double-loop mode on its first session, which is the session id the fake CLI reports for it. */
-async function doubleLoopBot(name = "Dev") {
+/** A bot that is already in background-tasks mode on its first session, which is the session id the fake CLI reports for it. */
+async function backgroundTasksBot(name = "Dev") {
   const id = host.createBot(name);
-  setChatMode(host.dataRoot, id, "double_loop");
+  setChatMode(host.dataRoot, id, "background_tasks");
   expect((await host.ui("/api/open", { id, botId: id })).status).toBe(200);
   return id;
 }
@@ -77,9 +77,9 @@ async function settled(botId: string) {
   return events;
 }
 
-describe("a double-loop bot's front session", () => {
+describe("a background-tasks bot's front session", () => {
   test("two messages a second apart are both sent, never queued, and share one CLI process", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     host.hold();
 
     expect(await send("first")).toEqual({ ok: true, outcome: "sent" });
@@ -112,7 +112,7 @@ describe("a double-loop bot's front session", () => {
   });
 
   test("a message is sent to the front's session, which opens on haiku with the front's tools and the interrupted-turn flag", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     await send("hello");
     await host.until(() => host.messagesOf(bot).length === 1);
 
@@ -131,7 +131,7 @@ describe("a double-loop bot's front session", () => {
   });
 
   test("the front keeps memory through its host server", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     host.rememberOnMessage("bot", "Always answer in one line.");
     await send("keep this in mind");
     await host.until(() => readMemory(botMemoryPath(host.dataRoot, bot)).includes("one line"));
@@ -139,7 +139,7 @@ describe("a double-loop bot's front session", () => {
   });
 
   test("a rate limit the CLI reports reaches the page and is sent again to a page that connects later, for each window, and a standard bot's page is sent none", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     host.loopScript({
       steps: [
         {
@@ -184,7 +184,7 @@ describe("a double-loop bot's front session", () => {
   });
 
   test("an external event is delivered to the front as it comes, while a user message is still running", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     host.hold();
     await send("go");
     await host.until(() => host.messagesOf(bot).length === 1);
@@ -219,7 +219,7 @@ describe("a double-loop bot's front session", () => {
   });
 
   test("starting a new session closes the front, and the next message opens a fresh one", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     await send("one");
     await host.until(() => host.messagesOf(bot).length === 1);
     await settled(bot);
@@ -234,7 +234,7 @@ describe("a double-loop bot's front session", () => {
   });
 
   test("a new session is refused while the front is answering", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     host.hold();
     await send("go");
     await host.until(() => host.messagesOf(bot).length === 1);
@@ -244,7 +244,7 @@ describe("a double-loop bot's front session", () => {
   });
 
   test("a CLI that dies is reported, and the next message resumes the session", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     host.askOnMessage("anything?", undefined, { afterHold: true, crash: true });
     host.hold();
     await send("go");
@@ -269,7 +269,7 @@ describe("a double-loop bot's front session", () => {
   });
 
   test("a routine run goes headless in a session of its own: the front gets nothing and the run reports through its output", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     const created = await host.ui("/api/routines/create", {
       botId: bot,
       name: "nightly",
@@ -299,13 +299,13 @@ describe("a double-loop bot's front session", () => {
   });
 });
 
-describe("a double-loop bot's reloaded transcript", () => {
+describe("a background-tasks bot's reloaded transcript", () => {
   const state =
     "<work_state>\nrunning (0 of 3 slots): (none)\nqueued: (none)\nrecent (last 3 ended): (none)\n</work_state>";
 
   test("shows what the user typed and what the bot said, without the work state, the app's own messages or the front's tool calls", async () => {
     const id = host.createBot("Dev");
-    setChatMode(host.dataRoot, id, "double_loop");
+    setChatMode(host.dataRoot, id, "background_tasks");
     writeSession(host, id, [
       { role: "user", text: `what is up?\n\n${state}`, extra: { origin: { kind: "human" } } },
       {

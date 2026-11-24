@@ -111,12 +111,12 @@ async function connectGmail() {
 const ASK_TOOLS = ["create_draft", "update_draft", "modify_labels", "trash_thread"];
 
 /** Connects Gmail, switches the Ask tools to Auto so a script can call them without an owner, and opens a chat. */
-async function setUp(mode: "standard" | "double_loop" = "standard") {
+async function setUp(mode: "standard" | "background_tasks" = "standard") {
   await connectGmail();
   for (const tool of ASK_TOOLS)
     await post("/api/integrations/set-policy", { id: "catalog:gmail", tool, policy: "auto" });
   const id = host.createBot("Mail", "Handles the owner's mail");
-  if (mode === "double_loop") setChatMode(host.dataRoot, id, "double_loop");
+  if (mode === "background_tasks") setChatMode(host.dataRoot, id, "background_tasks");
   expect((await host.ui("/api/open", { id, botId: id })).status).toBe(200);
   return id;
 }
@@ -454,8 +454,8 @@ describe("attachments", () => {
     expect(missing?.text).toContain("part_id 9");
   });
 
-  test("a double-loop bot's background task saves into the same files folder", async () => {
-    const id = await setUp("double_loop");
+  test("a background-tasks bot's background task saves into the same files folder", async () => {
+    const id = await setUp("background_tasks");
     const [saved] = await callTools(
       id,
       [{ tool: "get_attachment", args: { message_id: "a1", part_id: "2" } }],

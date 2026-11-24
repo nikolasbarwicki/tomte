@@ -11,7 +11,7 @@ let scratch: string;
 const savedConfig = process.env.CLAUDE_CONFIG_DIR;
 
 beforeEach(async () => {
-  scratch = mkdtempSync(join(tmpdir(), "double-loop-usage-"));
+  scratch = mkdtempSync(join(tmpdir(), "background-tasks-usage-"));
   process.env.CLAUDE_CONFIG_DIR = join(scratch, "claude-config");
   host = await startHandoffHost();
 });
@@ -37,10 +37,10 @@ const markOf = (sessionId: string) =>
     )
     .get(sessionId);
 
-/** A double-loop bot with a routine, plus a second bot so a chat is open; the front's session id is the bot's id. */
+/** A background-tasks bot with a routine, plus a second bot so a chat is open; the front's session id is the bot's id. */
 async function setup() {
   const botId = host.createBot("Planner");
-  setChatMode(host.dataRoot, botId, "double_loop");
+  setChatMode(host.dataRoot, botId, "background_tasks");
   const other = host.createBot("Other");
   const created = await host.ui("/api/routines/create", {
     botId,
@@ -95,7 +95,7 @@ test("front chat turns keep the front session's mark at the CLI's running totals
   expect(markOf(botId)).toEqual({ cost_usd: 1.1, input_tokens: 2100, output_tokens: 210 });
 });
 
-test("a double-loop routine run after front chat turns is charged only its own usage, in a session of its own", async () => {
+test("a background-tasks routine run after front chat turns is charged only its own usage, in a session of its own", async () => {
   const { botId, routineId } = await setup();
 
   host.setUsage({ cost: 2, input: 9000, output: 900 });

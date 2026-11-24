@@ -2,7 +2,7 @@ import type { Item } from "@/host/transcript.ts";
 
 export type TaskRow = Extract<Item, { kind: "task" }>;
 
-/** The tasks of the open double-loop chat as the Tasks section lists them. */
+/** The tasks of the open background-tasks chat as the Tasks section lists them. */
 export interface TaskGroups {
   /** Every task that holds a slot, oldest start first; an interrupted one (a host restart cut it off) is listed here too. */
   running: TaskRow[];

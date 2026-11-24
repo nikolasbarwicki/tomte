@@ -41,7 +41,7 @@ export interface RoutinesEndpoint {
   handle(req: IncomingMessage, res: ServerResponse): Promise<void>;
   /**
    * A token and URL for one live harness session; every bot gets one. An `attended` lease belongs to a session that is never a
-   * scheduled run (a double-loop bot's front), so `unattended` is not asked for its calls: the bot's routine runs go headless in
+   * scheduled run (a background-tasks bot's front), so `unattended` is not asked for its calls: the bot's routine runs go headless in
    * sessions of their own, with leases that are not attended, and must not stop the owner creating routines from the front's chat.
    */
   lease(botId: string, o?: { attended?: boolean }): HostServerLease;

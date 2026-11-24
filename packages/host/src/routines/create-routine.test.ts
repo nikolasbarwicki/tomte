@@ -266,10 +266,10 @@ async function callWhenIdle(call: BotCaller) {
   return r;
 }
 
-describe("a double-loop bot", () => {
+describe("a background-tasks bot", () => {
   test("its front creates routines while a routine run of the bot is in progress; the run's own session is refused", async () => {
     const id = host.createBot("Dev");
-    setChatMode(host.dataRoot, id, "double_loop");
+    setChatMode(host.dataRoot, id, "background_tasks");
     expect((await host.ui("/api/open", { id, botId: id })).status).toBe(200);
     expect((await host.ui("/api/send", { text: "hello" })).status).toBe(200);
     await host.until(() => host.messagesOf(id).length === 1);

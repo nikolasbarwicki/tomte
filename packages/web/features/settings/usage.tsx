@@ -34,7 +34,7 @@ const BAR: Record<Tone, string> = {
 
 /**
  * The Claude subscription's session and weekly limits as bars, asked of the host when the page opens, on every refresh of it
- * (`revision` changes) and each minute while the tab is visible. Bots on a double-loop chat spend them fastest.
+ * (`revision` changes) and each minute while the tab is visible. Bots on a background-tasks chat spend them fastest.
  */
 export function PlanUsage({ revision }: { revision: unknown }) {
   const [usage, setUsage] = useState<ClaudeUsage>();

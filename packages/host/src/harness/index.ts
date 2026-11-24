@@ -75,7 +75,7 @@ export interface IsolationProfile {
 /** The Claude Code tools that run a shell command, or start or stop one in the background. */
 const SHELL_TOOLS = ["Bash", "PowerShell", "Monitor", "TaskStop"];
 
-/** What `TaskStop` stops: a background shell, or a background agent, which a double-loop session needs even with no shell. */
+/** What `TaskStop` stops: a background shell, or a background agent, which a background-tasks session needs even with no shell. */
 const TASK_STOP = "TaskStop";
 
 /** The deny rules that keep the Read tool out of `path`, whether it is a file or a directory. */
@@ -96,7 +96,7 @@ interface HarnessLaunchInput {
   /** How the bot's shell is confined; absent for an unconfined bot. */
   isolation?: IsolationProfile | undefined;
   /**
-   * True for a session whose agents run in the background (the double-loop front): `TaskStop` stops those, so it stays
+   * True for a session whose agents run in the background (the background-tasks front): `TaskStop` stops those, so it stays
    * available when the shell is disabled.
    */
   stopsAgents?: boolean;

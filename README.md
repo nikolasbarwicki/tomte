@@ -48,7 +48,7 @@ It uses the Claude sign-in you already have (Pro or Max). No API key, no extra s
 <table>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/screens/chat-dark.png"><img alt="A bot answers in the chat; the sidebar shows what each bot is doing." src=".github/assets/screens/chat-light.png"></picture><br><sub>A bot answers in the chat; the sidebar shows what each bot is doing.</sub></td>
-<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/screens/tasks-dark.png"><img alt="Double-loop chat: a fast front and background tasks you can follow." src=".github/assets/screens/tasks-light.png"></picture><br><sub>Double-loop chat: a fast front and background tasks you can follow.</sub></td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/screens/tasks-dark.png"><img alt="Background-tasks chat: a fast front and background tasks you can follow." src=".github/assets/screens/tasks-light.png"></picture><br><sub>Background-tasks chat: a fast front and background tasks you can follow.</sub></td>
 </tr>
 <tr>
 <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/assets/screens/work-dark.png"><img alt="Needs you: questions and approvals wait for your answer." src=".github/assets/screens/work-light.png"></picture><br><sub>Needs you: questions and approvals wait for your answer.</sub></td>
@@ -81,7 +81,7 @@ Regenerate the images with `bun run shots:readme`.
 | Bot handoffs: one bot asks another                                                 | Stable  |
 | External events: scripts and CI post to a bot ([docs](docs/external-events.md))    | Stable  |
 | Telegram: needs-you cards, routine results, `@Name` to talk to any bot             | Beta    |
-| Double-loop chat: a fast front that never blocks, with background agents           | Beta    |
+| Background-tasks chat: a fast front that never blocks, with background agents      | Beta    |
 | Chief of Staff: one bot that can propose new bots                                  | Beta    |
 | Desktop app for macOS with tray, start at login and auto-update                    | Beta    |
 | Linux server install with HTTPS (Caddy) or Tailscale                               | Beta    |

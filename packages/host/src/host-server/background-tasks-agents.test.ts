@@ -15,7 +15,7 @@ let scratch: string;
 const savedConfig = process.env.CLAUDE_CONFIG_DIR;
 
 beforeEach(async () => {
-  scratch = mkdtempSync(join(tmpdir(), "double-loop-agents-"));
+  scratch = mkdtempSync(join(tmpdir(), "background-tasks-agents-"));
   process.env.CLAUDE_CONFIG_DIR = join(scratch, "claude-config");
   host = await startHandoffHost(["--data-root", join(scratch, "state")]);
 });
@@ -28,9 +28,9 @@ afterEach(async () => {
 
 type Streamed = { type: string; [k: string]: unknown };
 
-async function doubleLoopBot() {
+async function backgroundTasksBot() {
   const id = host.createBot("Dev");
-  setChatMode(host.dataRoot, id, "double_loop");
+  setChatMode(host.dataRoot, id, "background_tasks");
   expect((await host.ui("/api/open", { id, botId: id })).status).toBe(200);
   return id;
 }
@@ -43,7 +43,7 @@ const send = async (text: string) => {
 /** What a page connecting now is sent. */
 async function pageEvents(): Promise<Streamed[]> {
   const watch = await watchEvents(host);
-  // The snapshot of a double-loop bot ends with its presence.
+  // The snapshot of a background-tasks bot ends with its presence.
   await host.until(() => watch.events().some((e) => e.type === "presence"));
   watch.stop();
   return watch.events();
@@ -170,9 +170,9 @@ const reportsIn = (events: Streamed[]) => events.filter((e) => e.type === "repor
 const taskStates = (events: Streamed[]) =>
   events.filter((e) => e.type === "task").map((e) => e.state);
 
-describe("a double-loop bot's researcher", () => {
+describe("a background-tasks bot's researcher", () => {
   test("research starts a task, moves its status line, attributes findings and posts one report", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     const watch = await watchEvents(host);
     host.loopScript(researchScript);
     await send("research X");
@@ -260,7 +260,7 @@ describe("a double-loop bot's researcher", () => {
   });
 
   test("a model and effort picked while the chat is open are saved and reach the next task, without a line in the chat", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     const watch = await watchEvents(host);
     expect((await host.ui("/api/model", { model: "opus" })).status).toBe(200);
     expect((await host.ui("/api/effort", { effort: "high" })).status).toBe(200);
@@ -282,7 +282,7 @@ describe("a double-loop bot's researcher", () => {
   });
 
   test("the front opens as the front agent with every agent's tools in the session and three agent slots", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     host.loopScript({ steps: [] });
     await send("hello");
     await host.until(() => host.messagesOf(bot).length === 1);
@@ -297,7 +297,7 @@ describe("a double-loop bot's researcher", () => {
   });
 
   test("a reloaded transcript shows the report once, between the messages written before and after it", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     host.loopScript(researchScript);
     await send("research X");
     await host.until(() => host.loopCalls().length === 1);
@@ -338,7 +338,7 @@ describe("a double-loop bot's researcher", () => {
   });
 
   test("a host that goes down with an agent running marks the task interrupted and does not block a mode switch", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     host.loopScript(researchScript);
     await send("research X");
     const log = createLoopStore(host.db).session(bot, bot);
@@ -508,9 +508,9 @@ const parallelScripts = [
   },
 ];
 
-describe("a double-loop bot's parallel tasks", () => {
+describe("a background-tasks bot's parallel tasks", () => {
   test("two tasks run in parallel, one is steered and one cancelled, and a queued task is started by the front when its blocker ends", async () => {
-    const bot = await doubleLoopBot();
+    const bot = await backgroundTasksBot();
     const watch = await watchEvents(host);
     host.loopScript(...parallelScripts);
     const log = createLoopStore(host.db).session(bot, bot);

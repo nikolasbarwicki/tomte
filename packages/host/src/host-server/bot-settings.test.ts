@@ -216,10 +216,10 @@ describe("instructions", () => {
     );
   });
 
-  test("reach a double-loop bot's front and its worker", async () => {
+  test("reach a background-tasks bot's front and its worker", async () => {
     await host.ui("/api/instructions/update", { text: "Always answer in Polish." });
     const id = host.createBot("Dev");
-    setChatMode(host.dataRoot, id, "double_loop");
+    setChatMode(host.dataRoot, id, "background_tasks");
     host.loopScript({ steps: [] });
     await chatWith(id, "hello", 1);
 

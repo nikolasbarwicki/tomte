@@ -121,7 +121,7 @@ type Live = {
 };
 
 /**
- * One long-lived Claude Code session per double-loop bot. Shaped like `Thread`, but a pump consumes the query's messages for
+ * One long-lived Claude Code session per background-tasks bot. Shaped like `Thread`, but a pump consumes the query's messages for
  * the session's whole life instead of one turn at a time, and messages are pushed as they come: `priority: "next"` makes the
  * CLI take a message mid-turn instead of waiting for the turn to end.
  */

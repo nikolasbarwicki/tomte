@@ -9,7 +9,7 @@
 - [x] `Bot.chiefOfStaff: boolean` in the contract; `StoredBot` defaults it to false; `save()` keeps the stored value.
 - [x] `setChiefOfStaff(dataRoot, id, on)` in `bots/index.ts`: turning it on clears every other bot's flag; it returns the changed ids, and the caller reconfigures each one's open session and announces the bots.
 - [x] `BotProfileUpdate` carries `chiefOfStaff`, applied by `/api/bots/profile`; `/api/bots/new` takes an optional `chiefOfStaff`. No other route.
-- [x] `botIdentity` appends `CHIEF_OF_STAFF_INSTRUCTIONS` (the spec's draft) when the flag is on, so the thread, the double-loop front, its workers and routine runs all get it; with the flag off the prompt is unchanged.
+- [x] `botIdentity` appends `CHIEF_OF_STAFF_INSTRUCTIONS` (the spec's draft) when the flag is on, so the thread, the background-tasks front, its workers and routine runs all get it; with the flag off the prompt is unchanged.
 - [x] Sidebar: a muted "Chief of Staff" pill beside the name of the flagged bot (`data-chief-of-staff`), the name truncating first; one list, nothing else changes.
 - [x] Profile page: the switch, saved with the profile, with a description of the role and "Turning this on removes it from <name>." when another bot holds it.
 - [x] New bot form: a "Chief of Staff" checkbox with the same description.

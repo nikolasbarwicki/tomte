@@ -217,7 +217,7 @@ ALTER TABLE external_events ADD COLUMN relay_error TEXT;
 ALTER TABLE external_events ADD COLUMN relay_answer TEXT;
 `;
 
-// The double-loop chat mode's task log (ADR-0011), keyed by bot and Claude Code session. `loop_tasks` holds each background
+// The background-tasks chat mode's task log (ADR-0011), keyed by bot and Claude Code session. `loop_tasks` holds each background
 // task's current state; `loop_events` is the append-only log beside it: progress and findings, activity, steers and the reports
 // that never enter the front's CLI session, so a transcript replay reads them from here.
 const SCHEMA_V14 = `
@@ -469,7 +469,7 @@ CREATE TABLE IF NOT EXISTS presence (
 );
 `;
 
-// Whose session a usage mark is, so deleting a bot can remove its marks. A mark is backfilled from the routine runs and double-loop
+// Whose session a usage mark is, so deleting a bot can remove its marks. A mark is backfilled from the routine runs and background-tasks
 // rows that name its session; a chat session's mark stays null and is found through the bot's own session list when the bot is deleted.
 const SCHEMA_V26 = (db: Database) => {
   const have = db.query<{ name: string }, []>("PRAGMA table_info(session_usage_marks)").all();
