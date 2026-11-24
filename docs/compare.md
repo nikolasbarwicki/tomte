@@ -22,7 +22,7 @@ Tomte's own column describes this repository and links the doc behind each claim
 ## Where Tomte differs
 
 - **Nothing runs on someone else's computer.** There is no Tomte cloud or account, and Tomte itself sends no telemetry ([what leaves your machine](privacy.md)).
-- **Open license, stated plainly.** AGPL-3.0, so a hosted fork stays open; the name and logo are reserved ([TRADEMARKS.md](../TRADEMARKS.md)). Several alternatives are source-available or closed.
+- **Open license, stated plainly.** AGPL-3.0, so a hosted fork stays open. Several alternatives are source-available or closed.
 - **Approvals designed for unattended work.** A routine that meets an `ask` tool does not guess: it waits, you answer from the app or Telegram, and it resumes where it stopped.
 - **Secrets stay out of the bot's reach.** Bots run in a sandbox that cannot read the Claude sign-in, the secrets store or other bots' folders on Linux ([threat model](threat-model.md)).
 - **Narrower on purpose.** One owner, Telegram as the only channel, no hosted tier, no team features. If you need Slack, a team workspace or a managed box, use one of the projects above.

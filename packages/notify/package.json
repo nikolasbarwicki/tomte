@@ -1,7 +1,7 @@
 {
   "name": "@tomte/notify",
   "private": true,
-  "license": "SEE LICENSE IN ../../LICENSE",
+  "license": "AGPL-3.0-only",
   "bin": {
     "tomte-notify": "src/main.ts"
   },

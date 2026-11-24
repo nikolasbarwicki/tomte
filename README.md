@@ -19,7 +19,7 @@
 
 **Install with your AI assistant:** [Claude](https://claude.ai/new?q=Read%20https%3A//raw.githubusercontent.com/nikolasbarwicki/tomte/master/INSTALL.md%20and%20follow%20it%20step%20by%20step%20to%20install%20Tomte%20on%20my%20computer.%20Ask%20me%20before%20anything%20it%20marks%20ASK.) · [ChatGPT](https://chatgpt.com/?q=Read%20https%3A//raw.githubusercontent.com/nikolasbarwicki/tomte/master/INSTALL.md%20and%20follow%20it%20step%20by%20step%20to%20install%20Tomte%20on%20my%20computer.%20Ask%20me%20before%20anything%20it%20marks%20ASK.) · or paste the link to [INSTALL.md](INSTALL.md) into any agent.
 
-Tomte is not affiliated with xAI or Anthropic. "Claude" is a trademark of Anthropic; "Grok" is a trademark of xAI.
+Tomte is not affiliated with xAI or Anthropic.
 
 > [!WARNING]
 > Bots act on your behalf. They can run shell commands, browse the web, read and write files in their folder, call the integrations you connect and message you on Telegram. Each integration tool has an `off` / `ask` / `auto` policy; creating a new bot always asks you, even when everything else is approved, and nothing that asks is ever approved by a scheduled run that nobody watches. On a Linux server, shells and the browser run in a bubblewrap sandbox that fails closed. Read [where your data goes](#your-data) before connecting accounts you care about.
@@ -221,4 +221,4 @@ Issues and Discussions are welcome. Pull requests need the [CLA](CLA.md) (a bot 
 
 ## License
 
-[AGPL-3.0-only](LICENSE) with an additional permission for the Claude Agent SDK and the Claude Code CLI ([NOTICE](NOTICE), [ADR-0013](docs/adr/0013-agpl-license-cla-and-reserved-name.md)). The name and logo are reserved: [TRADEMARKS.md](TRADEMARKS.md).
+[AGPL-3.0-only](LICENSE) ([NOTICE](NOTICE), [ADR-0013](docs/adr/0013-agpl-license-cla-and-reserved-name.md)).

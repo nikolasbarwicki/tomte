@@ -1,7 +1,7 @@
 {
   "name": "@tomte/contract",
   "private": true,
-  "license": "SEE LICENSE IN ../../LICENSE",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "exports": {
     "./bot-order": "./src/bot-order.ts",

@@ -184,7 +184,7 @@ Connection profiles (`profiles.json` in the user-data folder; `connections.ts`, 
 
 ## Licensing
 
-Tomte is AGPL-3.0-only with an additional permission for the Claude Agent SDK and the Claude Code CLI (`LICENSE`, `NOTICE`, ADR-0013). Contributions need the CLA (`CLA.md`, `.github/workflows/cla.yml`); the name and logo are reserved (`TRADEMARKS.md`). `bun scripts/third-party-licenses.ts <dir>` writes `LICENSE`, `NOTICE` and `THIRD-PARTY-LICENSES.txt` (every npm package reachable from the host, web, desktop and contract workspaces' runtime dependencies, plus the vendored texts in `licenses/`, such as agent-browser's); `package:desktop` ships that folder as `Resources/licenses` and the release's `publish` job attaches it beside the host binaries. A new bundled component that is not an npm package gets its license text in `licenses/<name>.txt` and a line in `NOTICE`.
+Tomte is AGPL-3.0-only (`LICENSE`, `NOTICE`, ADR-0013). Contributions need the CLA (`CLA.md`, `.github/workflows/cla.yml`). `bun scripts/third-party-licenses.ts <dir>` writes `LICENSE`, `NOTICE` and `THIRD-PARTY-LICENSES.txt` (every npm package reachable from the host, web, desktop and contract workspaces' runtime dependencies, plus the vendored texts in `licenses/`, such as agent-browser's); `package:desktop` ships that folder as `Resources/licenses` and the release's `publish` job attaches it beside the host binaries. A new bundled component that is not an npm package gets its license text in `licenses/<name>.txt` and a line in `NOTICE`.
 
 ## Releasing
 
