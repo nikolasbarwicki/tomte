@@ -9,23 +9,15 @@
 
 [![CI](https://github.com/nikolasbarwicki/tomte/actions/workflows/ci.yml/badge.svg)](https://github.com/nikolasbarwicki/tomte/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/nikolasbarwicki/tomte?include_prereleases)](https://github.com/nikolasbarwicki/tomte/releases)
-[![Stars](https://img.shields.io/github/stars/nikolasbarwicki/tomte)](https://github.com/nikolasbarwicki/tomte/stargazers)
-[![Discussions](https://img.shields.io/github/discussions/nikolasbarwicki/tomte)](https://github.com/nikolasbarwicki/tomte/discussions)
 
-<!-- TODO(release): point each button at its installer under releases/latest/download/<file>. Installer names carry the version (Tomte-Setup-<version>.exe, Tomte-<version>-arm64.dmg), so for now every button opens the latest release page. -->
+**Why it exists and the decisions behind it:** [docs/case-study.md](docs/case-study.md).
 
-<p>
-  <a href="https://github.com/nikolasbarwicki/tomte/releases/latest"><img alt="Download for macOS" src=".github/assets/download-macos.svg" height="44"></a>
-  <a href="https://github.com/nikolasbarwicki/tomte/releases/latest"><img alt="Download for Windows" src=".github/assets/download-windows.svg" height="44"></a>
-  <a href="https://github.com/nikolasbarwicki/tomte/releases/latest"><img alt="Download for Linux" src=".github/assets/download-linux.svg" height="44"></a>
-</p>
+> [!NOTE]
+> There is no release yet. The first one is being prepared (signed installers, a signed server release). Until then, run Tomte [from source](#from-source).
 
-**Server:** `curl -fsSL https://github.com/nikolasbarwicki/tomte/releases/latest/download/install.sh | sudo bash`
+<!-- After the first release, restore the Release badge, the download buttons (.github/assets/download-*.svg, linking releases/latest) and the server one-liner `curl -fsSL https://github.com/nikolasbarwicki/tomte/releases/latest/download/install.sh | sudo bash`. Installer names carry the version, so the buttons link the release page, not a file. -->
 
 **Install with your AI assistant:** [Claude](https://claude.ai/new?q=Read%20https%3A//raw.githubusercontent.com/nikolasbarwicki/tomte/master/INSTALL.md%20and%20follow%20it%20step%20by%20step%20to%20install%20Tomte%20on%20my%20computer.%20Ask%20me%20before%20anything%20it%20marks%20ASK.) · [ChatGPT](https://chatgpt.com/?q=Read%20https%3A//raw.githubusercontent.com/nikolasbarwicki/tomte/master/INSTALL.md%20and%20follow%20it%20step%20by%20step%20to%20install%20Tomte%20on%20my%20computer.%20Ask%20me%20before%20anything%20it%20marks%20ASK.) · or paste the link to [INSTALL.md](INSTALL.md) into any agent.
-
-> Which Mac do I have? Apple menu → About This Mac. "Chip: Apple M…" means Apple silicon (`arm64`); "Processor: Intel" means Intel (`x64`).
 
 Tomte is not affiliated with xAI or Anthropic. "Claude" is a trademark of Anthropic; "Grok" is a trademark of xAI.
 
@@ -102,28 +94,9 @@ Stable: in daily use and covered by tests. Beta: works, rough edges, or not yet 
 
 ## Quick start
 
-### Desktop (macOS, Windows, Linux)
-
-1. Download the installer for your system from the [latest release](https://github.com/nikolasbarwicki/tomte/releases/latest) and open it.
-2. Builds are not signed yet. On macOS, right-click Tomte.app → Open the first time; on Windows, SmartScreen → More info → Run anyway.
-3. The app installs the Claude CLI on first launch. Sign in from Settings → Models with your Claude account.
-4. Create a bot and say hello.
-
-### Linux server
-
-Remote mode runs on systemd Linux only ([ADR-0006](docs/adr/0006-remote-mode-is-linux-only.md)).
-
-```sh
-curl -fsSL https://github.com/nikolasbarwicki/tomte/releases/latest/download/install.sh | sudo bash
-```
-
-The installer prints a pairing code to enter at your server's URL and the exact `tomte-host auth-login` command that signs the Claude CLI in.
-
-HTTPS with Caddy, Tailscale, Ubuntu's AppArmor note and every option: [deploy/README.md](deploy/README.md).
-
 ### From source
 
-Needs [Bun](https://bun.sh) (version in `.bun-version`).
+Needs [Bun](https://bun.sh) (version in `.bun-version`) on macOS, Windows or Linux.
 
 ```sh
 git clone https://github.com/nikolasbarwicki/tomte.git && cd tomte
@@ -133,7 +106,23 @@ bun run build:web          # the web UI the host serves
 bun run ui                 # starts the host and prints its URL
 ```
 
-`bun run check` runs every gate (format, lint, types, layering, tests). See [AGENTS.md](AGENTS.md) for the layout.
+Open the URL, sign in to Claude under Settings → Models, create a bot and say hello. `bun run check` runs every gate (format, lint, types, layering, tests).
+
+### Desktop app (from the first release)
+
+1. Download the installer for your system from the [releases page](https://github.com/nikolasbarwicki/tomte/releases) and open it. On macOS, pick `arm64` for Apple silicon (Apple menu → About This Mac shows "Chip: Apple M…") and `x64` for Intel.
+2. Until builds are signed: on macOS, right-click Tomte.app → Open the first time; on Windows, SmartScreen → More info → Run anyway.
+3. The app installs the Claude CLI on first launch. Sign in from Settings → Models with your Claude account.
+
+### Linux server (from the first release)
+
+Remote mode runs on systemd Linux only ([ADR-0006](docs/adr/0006-remote-mode-is-linux-only.md)).
+
+```sh
+curl -fsSL https://github.com/nikolasbarwicki/tomte/releases/latest/download/install.sh | sudo bash
+```
+
+The installer checks the release's signature, prints a pairing code to enter at your server's URL and the exact `tomte-host auth-login` command that signs the Claude CLI in. HTTPS with Caddy, Tailscale, Ubuntu's AppArmor note and every option: [deploy/README.md](deploy/README.md).
 
 ## How it works
 
@@ -170,20 +159,25 @@ flowchart LR
 - **Channels**: Telegram delivers needs-you cards and routine results and routes your answers back ([ADR-0010](docs/adr/0010-channels-deliver-needs-you-items.md)).
 - **Relay**: passes an answer back to the program that asked, through a fixed program you configure ([docs](docs/relay.md)).
 
-Design decisions are recorded in [docs/adr/](docs/adr/).
+Design decisions are recorded in [docs/adr/](docs/adr/); the reasoning behind the product is in [docs/case-study.md](docs/case-study.md).
+
+Tomte is built with AI coding agents. [AGENTS.md](AGENTS.md) is their working contract: where each subsystem lives, which tests cover it and which checks must pass. It doubles as the most detailed map of the code.
 
 ## Your data
 
 Local-first, not offline-only. Everything Tomte stores (bots, memory, chats, routines, secrets) stays in its data root on your machine; there is no Tomte server and no telemetry. Data leaves your machine only to:
 
-| To                              | What                                                       | When                               |
-| ------------------------------- | ---------------------------------------------------------- | ---------------------------------- |
-| Anthropic                       | Your messages, the bot's files and tool results it reads   | Every bot turn (the Claude CLI)    |
-| Telegram                        | Needs-you cards, routine results, the bots' replies to you | Only after you link a Telegram bot |
-| Integration providers           | Whatever the bot's tool call sends (e.g. Gmail, GitHub)    | Only for integrations you connect  |
-| Websites                        | Page requests                                              | When a browser bot browses         |
-| GitHub                          | An update check                                            | Desktop app, every 6 hours         |
-| A custom provider you configure | The same as Anthropic                                      | Only if you set one instead        |
+| To                              | What                                                       | When                                           |
+| ------------------------------- | ---------------------------------------------------------- | ---------------------------------------------- |
+| Anthropic                       | Your messages, the bot's files and tool results it reads   | Every bot turn (the Claude CLI)                |
+| Telegram                        | Needs-you cards, routine results, the bots' replies to you | Only after you link a Telegram bot             |
+| Integration providers           | Whatever the bot's tool call sends (e.g. Gmail, GitHub)    | Only for integrations you connect              |
+| Websites                        | Page requests                                              | When a browser bot browses                     |
+| GitHub                          | An update check                                            | Desktop app and server installs, every 6 hours |
+| npm and GitHub                  | The Claude CLI and the browser engine                      | When Tomte installs them                       |
+| A custom provider you configure | The same as Anthropic                                      | Only if you set one instead                    |
+
+Every connection, the code that makes it and where each kind of data is stored on each platform: [docs/privacy.md](docs/privacy.md).
 
 ## Compared with
 
@@ -206,7 +200,7 @@ Every answer, with links to the docs behind it, and a troubleshooting list: [doc
 
 **Is it an open source Grok Bot alternative?** Yes: bots that run routines, ask before risky actions and reach you on your phone, but on your machine, under an open source license, with their context, tool calls, permissions and memory in view instead of hidden.
 
-**Does it run when my laptop sleeps?** No. A sleeping computer runs nothing; routines that were due run when it wakes if "catch up" is on. For always-on bots, use a Linux server.
+**Does it run when my laptop sleeps?** No. A sleeping computer runs nothing. When Tomte starts again after being closed, a routine with "catch up" on runs its latest missed time if it fell within the last 12 hours, and anything older is recorded as missed. Waking from sleep with Tomte still open has no handling of its own and has not been tested. For always-on bots, use a Linux server.
 
 **Does it work on Windows and Linux?** The host runs on macOS, Windows and Linux. Server (remote) mode is Linux only. The Windows and Linux desktop installers are built by CI but have not been run yet.
 
@@ -216,8 +210,10 @@ Every answer, with links to the docs behind it, and a troubleshooting list: [doc
 
 ## Uninstall
 
-- **macOS**: quit Tomte from the tray, delete Tomte.app, then `~/Library/Application Support/Tomte Desktop` (the app) and `~/Library/Application Support/tomte` (the host's data root: bots, chats, secrets).
-- **Linux server**: `sudo systemctl disable --now tomte`, then remove `/usr/local/bin/tomte-host`, `/etc/tomte`, `/etc/credstore.encrypted/tomte.secrets-key` and `/var/lib/tomte` (see [deploy/README.md](deploy/README.md)).
+- **macOS**: quit Tomte from the tray, delete Tomte.app, then `~/Library/Application Support/Tomte Desktop` (the app) and `~/Library/Application Support/tomte` (the host's data root: bots, chats, memory). Secrets are login keychain items with the service name `tomte`; delete them in Keychain Access.
+- **Windows** (the installer has not been run yet; paths from the code): quit Tomte from the tray, uninstall it from Settings → Apps, then delete `%APPDATA%\Tomte Desktop` and `%APPDATA%\tomte`. Secrets are Windows Credential Manager entries named `tomte`.
+- **Linux desktop** (not run yet either): quit Tomte, remove the AppImage or the `.deb` package, then delete `~/.config/Tomte Desktop` and `~/.local/share/tomte`. Secrets are in the desktop's secret service (for example GNOME Keyring) under `tomte`.
+- **Linux server**: the commands are in [deploy/README.md](deploy/README.md#operate-the-service) under "Uninstall"; they keep the data root `/var/lib/tomte` unless you also remove it.
 
 ## Contributing
 
@@ -226,7 +222,3 @@ Issues and Discussions are welcome. Pull requests need the [CLA](CLA.md) (a bot 
 ## License
 
 [AGPL-3.0-only](LICENSE) with an additional permission for the Claude Agent SDK and the Claude Code CLI ([NOTICE](NOTICE), [ADR-0013](docs/adr/0013-agpl-license-cla-and-reserved-name.md)). The name and logo are reserved: [TRADEMARKS.md](TRADEMARKS.md).
-
-## Star History
-
-[![Star History](https://api.star-history.com/svg?repos=nikolasbarwicki/tomte&type=Date)](https://star-history.com/#nikolasbarwicki/tomte&Date)

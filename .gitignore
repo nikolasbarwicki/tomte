@@ -5,3 +5,7 @@ dist
 .env
 .scratch
 coverage
+
+# Local only
+.DS_Store
+todo.md

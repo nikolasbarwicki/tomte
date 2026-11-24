@@ -18,6 +18,8 @@ Ask which of these the person wants (**ASK** if unclear):
 | B. Linux server | An always-on host reachable from a phone; systemd Linux only |
 | C. From source  | Contributors                                                 |
 
+There is no release yet. Until the first one is published, paths A and B have nothing to download: tell the person so and use path C.
+
 Detect the platform: `uname -sm` (macOS/Linux) or `$env:OS` (Windows).
 
 ## A. Desktop app

@@ -9,7 +9,7 @@ The single source of truth for the README's feature table; change both together.
 | Feature                                                                            | Status  | Notes and where to read more                                                                         |
 | ---------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------- |
 | Bots with their own folder, memory, model and effort                               | Stable  | Model and effort per bot; background tasks use the same                                              |
-| Routines on a schedule, run headless, with a run history                           | Stable  | "Catch up" runs due routines when the computer wakes ([unverified for long sleeps](#unverified))     |
+| Routines on a schedule, run headless, with a run history                           | Stable  | "Catch up" runs what came due while Tomte was closed ([sleep is unverified](#unverified))            |
 | Needs-you inbox: questions, approvals, browser takeovers                           | Stable  | [ADR-0009](adr/0009-unattended-runs-park-on-durable-human-waits.md)                                  |
 | Unattended runs park on an approval and resume where they stopped (up to 24 hours) | Stable  | [ADR-0009](adr/0009-unattended-runs-park-on-durable-human-waits.md)                                  |
 | Per-tool `off` / `ask` / `auto` policies on integrations                           | Stable  | [custom integrations](custom-integrations.md)                                                        |
@@ -34,3 +34,4 @@ Claims we have not run, so you know where the edges are:
 - Code signing and notarization have been tested against fixtures only.
 - Whether a sandboxed bot on macOS can read the Claude sign-in from the keychain was never probed ([threat model](threat-model.md#known-gaps)).
 - macOS auto-update of an unsigned app is not expected to work.
+- What a routine does when the computer wakes from sleep with Tomte still open. Catch up runs only when the host starts or an update drain ends (`routines/index.ts`, `catchUpDue`); nothing handles a wake, and no test covers one.

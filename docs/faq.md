@@ -14,7 +14,7 @@
 
 **Can I use other models?** Any Claude model your plan allows, chosen per bot. Other providers work through a custom Anthropic-compatible gateway. A second harness is on the [roadmap](roadmap.md).
 
-**Does it run when my laptop sleeps?** No: a sleeping computer runs nothing. When it wakes, a routine with "catch up" on runs its latest missed occurrence if one was due within the last 12 hours; anything older is recorded as skipped ("missed while offline"). For always-on bots use a Linux server ([deploy kit](../deploy/README.md)).
+**Does it run when my laptop sleeps?** No: a sleeping computer runs nothing. When Tomte starts again after being closed, a routine with "catch up" on runs its latest missed occurrence if one was due within the last 12 hours; anything older is recorded as skipped ("missed while offline"). Waking from sleep with Tomte still open has no handling of its own and is [unverified](features.md#unverified). For always-on bots use a Linux server ([deploy kit](../deploy/README.md)).
 
 **How is it different from Claude Code?** Claude Code is the engine each bot runs on. Tomte adds what a bot needs to work without you watching: schedules, a needs-you inbox, approvals that wait for you, a browser, phone delivery and a desktop app.
 
