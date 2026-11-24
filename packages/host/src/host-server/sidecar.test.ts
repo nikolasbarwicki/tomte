@@ -234,8 +234,10 @@ describe("a host started with --sidecar", () => {
     const newBot = { name: "Ada", shape: "ball", color: "ink" };
     expect((await post(clientUrl, "/api/bots/new", bearer(token), newBot)).status).toBe(200);
     expect((await post(clientUrl, "/api/send", bearer(token), { text: "hello" })).status).toBe(200);
+    // The sign-in check is a fake CLI process too and exits at once; the turn's process is the one that records the message.
+    const received = join(stateDir, "messages.jsonl");
     const deadline = Date.now() + 15_000;
-    while (!live(stateDir) && Date.now() < deadline) await Bun.sleep(50);
+    while (!existsSync(received) && Date.now() < deadline) await Bun.sleep(50);
     expect(live(stateDir)).toBe(true);
 
     await proc.stdin.end();
