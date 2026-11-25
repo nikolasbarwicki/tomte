@@ -72,7 +72,7 @@ The hooks run on their own once `bun install` has installed them: pre-commit for
 
 Some flows are checked end to end in headless Chrome against the built web UI and the fake CLI. They are not in `bun run check`. Run `bun run smoke:ui` when you change the answer path, the relay, the background-tasks chat mode, the transcript's scrolling or the Channels page. [docs/smoke.md](docs/smoke.md) lists each smoke, what it covers and its prerequisites. A failed smoke keeps its run directory (screenshots, logs) and prints where it is.
 
-The desktop smokes (`smoke:desktop*`) need a packaged macOS app; AGENTS.md describes them. You only need them when you change `packages/desktop/`.
+The desktop smokes (`smoke:desktop*`) need a packaged macOS app; [packages/desktop/AGENTS.md](packages/desktop/AGENTS.md) describes them. You only need them when you change `packages/desktop/`.
 
 ## Conventions
 
@@ -94,7 +94,7 @@ The maintainer reviews when they can; a PR that is green and small gets merged f
 
 ## An agent-friendly repository
 
-[AGENTS.md](AGENTS.md) is written for coding agents (Claude Code, Codex, Cursor and the like) and is also the most complete map of the code for people: every subsystem, its files, its tests and its invariants. Agents load it automatically. `.agents/skills/` holds skills (prompted workflows) shared with agents working in this repo; `skills-lock.json` pins where each came from. Maintainer planning lives in `.scratch/`; public work is tracked in GitHub Issues.
+[AGENTS.md](AGENTS.md) is the entry point for coding agents (Claude Code, Codex, Cursor and the like): commands, repo-wide rules, and pointers to package-level `AGENTS.md` files (`packages/host/`, `packages/desktop/`, `packages/web/`) and `docs/`. `.agents/skills/` holds skills (prompted workflows) shared with agents working in this repo; `skills-lock.json` pins where each came from. Maintainer planning lives in `.scratch/`; public work is tracked in GitHub Issues.
 
 AI-assisted pull requests are welcome on these terms:
 

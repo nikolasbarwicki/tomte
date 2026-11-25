@@ -1,6 +1,6 @@
 name: Release
 
-# Pushing a v* tag publishes a GitHub Release. Cut one as AGENTS.md ("Releasing") describes.
+# Pushing a v* tag publishes a GitHub Release. Cut one as docs/release/releasing.md describes.
 #
 # verify   the tag is vMAJOR.MINOR.PATCH[-prerelease] and names the host's VERSION (scripts/release.ts tag)
 # host     per target, on a native runner: build the host binary, smoke-run it, upload it as `release-host-<target>`
@@ -11,7 +11,7 @@ name: Release
 #          (macOS) notarized when that OS's signing secrets exist, check that the host in every app is that binary, upload
 #          installers + update metadata as `release-desktop-<os>`
 #
-# Signing (scripts/signing.ts, scripts/signing-kit.ts; AGENTS.md "Releasing"): `verify` decides per platform from which
+# Signing (scripts/signing.ts, scripts/signing-kit.ts; docs/release/releasing.md): `verify` decides per platform from which
 # secrets exist; the macOS and Windows host jobs sign their binary before the smoke run; the desktop job signs the app and
 # installers with the same certificate and checks the result. Without secrets the release is unsigned and says so in the
 # job summary, unless the repository variable TOMTE_REQUIRE_SIGNING is `true`, which fails the release instead.
@@ -60,7 +60,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: bun scripts/release.ts tag "$TAG"
 
-      # Decides, per platform, whether this release is signed, from which signing secrets exist (AGENTS.md, "Releasing"
+      # Decides, per platform, whether this release is signed, from which signing secrets exist (docs/release/releasing.md
       # lists them). Only whether each is set reaches the step, never a value. All of a platform's secrets: signed; none:
       # unsigned and the job summary says so; some: the release fails. With the repository variable
       # TOMTE_REQUIRE_SIGNING=true a platform without secrets fails the release too, before anything is built.

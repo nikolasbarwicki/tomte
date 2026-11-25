@@ -31,7 +31,7 @@ The owner's public key is pinned in `deploy/install.sh` (steps 1 and 3 below, do
 
 3. Pin the public key: put the printed value between the quotes of `RELEASE_PUBLIC_KEY="…"` in `deploy/install.sh` (replacing the old value on a rotation), run `bun run check`, commit and merge.
 4. Check the setup before tagging: `RELEASE_SIGNING_KEY_SET=set bun scripts/release.ts signing-ready` exits 0 once the pin is a valid key. That the secret really is this key's pair is checked by the release itself (below).
-5. Cut a pre-release (`v0.2.0-rc.1`, AGENTS.md "Releasing"), download it with `gh release download v0.2.0-rc.1 -R OWNER/REPO -D <dir>` and run `bun scripts/release.ts verify-release <dir> 0.2.0-rc.1`.
+5. Cut a pre-release (`v0.2.0-rc.1`, see [`releasing.md`](releasing.md)), download it with `gh release download v0.2.0-rc.1 -R OWNER/REPO -D <dir>` and run `bun scripts/release.ts verify-release <dir> 0.2.0-rc.1`.
 
 ## What the release workflow does
 

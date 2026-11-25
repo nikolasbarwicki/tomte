@@ -2,7 +2,7 @@
 
 `bun scripts/sign-local.ts` (alias `bun run sign:local`) signs and notarizes an **arm64** Tomte build on this Mac, with a Developer ID Application certificate and an App Store Connect API key (a `.p8` file, or a saved `asc` profile) that you hold. It produces a signed, notarized, stapled DMG, a signed update zip and a signed bundled host. Nothing is installed, published or pushed.
 
-It is a separate route from the release workflow. CI keeps using `scripts/signing.ts` and `package-desktop.ts --sign` with the `CSC_LINK` secrets exactly as before (AGENTS.md, "Signing and notarization"); this route never runs in CI and refuses when `CI` is set.
+It is a separate route from the release workflow. CI keeps using `scripts/signing.ts` and `package-desktop.ts --sign` with the `CSC_LINK` secrets exactly as before ([`releasing.md`](releasing.md)); this route never runs in CI and refuses when `CI` is set.
 
 **Status: built and tested against fakes, never run for real.** No command in this guide has been executed against a real keychain, certificate or Apple service by the people who wrote it. "Verified" below means "read from the source of the tool or its manual page", not "observed".
 

@@ -161,7 +161,7 @@ flowchart LR
 
 Design decisions are recorded in [docs/adr/](docs/adr/); the reasoning behind the product is in [docs/case-study.md](docs/case-study.md).
 
-Tomte is built with AI coding agents. [AGENTS.md](AGENTS.md) is their working contract: where each subsystem lives, which tests cover it and which checks must pass. It doubles as the most detailed map of the code.
+Tomte is built with AI coding agents. [AGENTS.md](AGENTS.md) is their entry point: commands, repo-wide rules, and pointers to package-level `AGENTS.md` files and `docs/`.
 
 ## Your data
 
